@@ -22,17 +22,35 @@ function getConfiguredDebugPort(vscode) {
   return Number.isInteger(value) ? value : DEFAULT_DEBUG_PORT;
 }
 
+async function loadGetPort() {
+  try {
+    const module = await import("get-port");
+    return module.default || module;
+  } catch {
+    return ({ port }) => port;
+  }
+}
+
+async function resolveDebugPort(preferredPort, getPort) {
+  const portResolver = getPort || await loadGetPort();
+  return portResolver({ port: preferredPort });
+}
+
 function createGaugeDebugger(options = {}) {
   let vscode = options.vscode;
   const projectRoot = options.projectRoot;
   const language = options.language || "kotlin";
   const baseEnv = options.baseEnv || process.env;
-  const debugPortProvider = options.debugPortProvider || (async () => getConfiguredDebugPort(vscode));
+  const debugPortProvider = options.debugPortProvider;
+  const getPort = options.getPort;
   let debugPort = options.debugPort;
   let processId;
 
   async function addDebugEnv(env = baseEnv) {
-    debugPort = await debugPortProvider(debugPort);
+    const preferredPort = debugPort || getConfiguredDebugPort(vscode);
+    debugPort = debugPortProvider
+      ? await debugPortProvider(preferredPort)
+      : await resolveDebugPort(preferredPort, getPort);
     const debugEnv = {
       ...env,
       DEBUGGING: true,

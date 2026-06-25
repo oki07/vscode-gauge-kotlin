@@ -105,6 +105,10 @@ test("GaugeDebugger uses the configured Gauge debug port by default", async () =
     projectRoot: "/workspace",
     language: "kotlin",
     baseEnv: { PATH: "/bin" },
+    async getPort(options) {
+      assert.deepEqual(options, { port: 6006 });
+      return 6006;
+    },
   });
 
   const env = await debuggerSession.addDebugEnv();
@@ -112,4 +116,40 @@ test("GaugeDebugger uses the configured Gauge debug port by default", async () =
   assert.equal(env.DEBUG_PORT, 6006);
   assert.equal(env.GAUGE_DEBUG_OPTS, 6006);
   assert.equal(debuggerSession.getDebuggerConfiguration().port, 6006);
+});
+
+test("GaugeDebugger resolves the configured debug port to an available port", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const getPortCalls = [];
+  const vscode = {
+    workspace: {
+      getConfiguration(section) {
+        assert.equal(section, "gauge");
+        return {
+          get(key) {
+            assert.equal(key, "execution.debugPort");
+            return 6006;
+          },
+        };
+      },
+    },
+  };
+
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    baseEnv: { PATH: "/bin" },
+    async getPort(options) {
+      getPortCalls.push(options);
+      return 6010;
+    },
+  });
+
+  const env = await debuggerSession.addDebugEnv();
+
+  assert.deepEqual(getPortCalls, [{ port: 6006 }]);
+  assert.equal(env.DEBUG_PORT, 6010);
+  assert.equal(env.GAUGE_DEBUG_OPTS, 6010);
+  assert.equal(debuggerSession.getDebuggerConfiguration().port, 6010);
 });
