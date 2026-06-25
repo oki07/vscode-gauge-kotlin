@@ -299,6 +299,35 @@ test("createSpecification asks for project and spec directory when multiple choi
   });
 });
 
+test("createSpecification reports spec directory provider failures", async () => {
+  const { createSpecification } = require("../src/specification");
+  const errors = [];
+  const failure = new Error("LSP unavailable");
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+    },
+    window: {
+      async showErrorMessage(message) {
+        errors.push(message);
+      },
+    },
+  };
+
+  await assert.doesNotReject(() => createSpecification({
+    fileSystem: {},
+    pathModule: path.posix,
+    specDirsProvider() {
+      throw failure;
+    },
+    vscode,
+  }));
+
+  assert.deepEqual(errors, [
+    "Unable to generate specification. Error: LSP unavailable",
+  ]);
+});
+
 test("createConcept writes a concept file under the workspace specs directory", async () => {
   const { createConcept } = require("../src/specification");
   const writes = new Map();

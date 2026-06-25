@@ -169,44 +169,48 @@ function showGenerationError(vscode, kind, message) {
 
 async function createSpecification(options = {}) {
   const vscode = options.vscode || require("vscode");
-  const fileSystem = options.fileSystem || nodeFs;
-  const promises = fileSystem.promises || fileSystem;
-  const pathModule = options.pathModule || nodePath;
-  const eol = options.eol || nodeOs.EOL;
-  const projectRoot = await selectProjectRoot(vscode, pathModule, options);
+  try {
+    const fileSystem = options.fileSystem || nodeFs;
+    const promises = fileSystem.promises || fileSystem;
+    const pathModule = options.pathModule || nodePath;
+    const eol = options.eol || nodeOs.EOL;
+    const projectRoot = await selectProjectRoot(vscode, pathModule, options);
 
-  if (!projectRoot) {
-    return showError(vscode, "No workspace folder is open.");
+    if (!projectRoot) {
+      return showError(vscode, "No workspace folder is open.");
+    }
+
+    const specDir = await selectSpecDirectory(vscode, pathModule, projectRoot, options);
+    if (!specDir) {
+      return undefined;
+    }
+
+    const file = await vscode.window.showInputBox({ placeHolder: "Enter the file name" });
+    if (!file) {
+      return undefined;
+    }
+
+    const filename = pathModule.join(specDir, `${file}.spec`);
+
+    if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
+      return showError(vscode, `File${filename} already exists.`);
+    }
+
+    const document = buildSpecificationDocument({
+      withHelp: getWithHelpSetting(vscode),
+      eol,
+    });
+
+    await promises.mkdir(specDir, { recursive: true });
+    await promises.writeFile(filename, document.text, "utf8");
+
+    const textDocument = await vscode.workspace.openTextDocument(filename);
+    return vscode.window.showTextDocument(textDocument, {
+      selection: toRange(vscode, document.selection),
+    });
+  } catch (error) {
+    return showError(vscode, error);
   }
-
-  const specDir = await selectSpecDirectory(vscode, pathModule, projectRoot, options);
-  if (!specDir) {
-    return undefined;
-  }
-
-  const file = await vscode.window.showInputBox({ placeHolder: "Enter the file name" });
-  if (!file) {
-    return undefined;
-  }
-
-  const filename = pathModule.join(specDir, `${file}.spec`);
-
-  if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
-    return showError(vscode, `File${filename} already exists.`);
-  }
-
-  const document = buildSpecificationDocument({
-    withHelp: getWithHelpSetting(vscode),
-    eol,
-  });
-
-  await promises.mkdir(specDir, { recursive: true });
-  await promises.writeFile(filename, document.text, "utf8");
-
-  const textDocument = await vscode.workspace.openTextDocument(filename);
-  return vscode.window.showTextDocument(textDocument, {
-    selection: toRange(vscode, document.selection),
-  });
 }
 
 async function createConcept(options = {}) {
