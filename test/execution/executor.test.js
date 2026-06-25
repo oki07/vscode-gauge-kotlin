@@ -324,6 +324,36 @@ test("execute scenarios lets the user pick one provider scenario", async () => {
   ]);
 });
 
+test("execute scenario reports scenario provider failures", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, errors } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async scenariosProvider() {
+      throw new Error("missing client");
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await assert.doesNotReject(() => controller.handleCommand("gauge.execute.scenario"));
+
+  assert.deepEqual(errors, [
+    "found some problems in /workspace/specs/example.spec. Fix all problems before running scenarios.",
+  ]);
+  assert.deepEqual(calls, []);
+});
+
 test("report command opens the last generated html report", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const opened = [];

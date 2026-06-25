@@ -350,12 +350,19 @@ function createGaugeExecutionController(options = {}) {
     const position = atCursor
       ? (context.editor.selection && context.editor.selection.active)
       : { line: 1, character: 1 };
-    const scenarios = await scenariosProvider({
-      projectRoot: context.projectRoot,
-      spec: context.spec,
-      position,
-      atCursor,
-    });
+    let scenarios;
+    try {
+      scenarios = await scenariosProvider({
+        projectRoot: context.projectRoot,
+        spec: context.spec,
+        position,
+        atCursor,
+      });
+    } catch (_error) {
+      return vscode.window.showErrorMessage(
+        `found some problems in ${context.spec}. Fix all problems before running scenarios.`,
+      );
+    }
 
     if (atCursor && !Array.isArray(scenarios)) {
       return executeScenarioIdentifier(scenarios.executionIdentifier);

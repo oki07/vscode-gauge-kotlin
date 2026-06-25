@@ -110,3 +110,22 @@ test("Gauge scenario provider requests all scenarios from the document start", a
     position: { line: 1, character: 1 },
   });
 });
+
+test("Gauge scenario provider rejects when no client exists for the specification", async () => {
+  const { createGaugeScenariosProvider } = require("../../src/execution/scenarioProvider");
+  const vscode = createFakeVscode();
+  const provider = createGaugeScenariosProvider({
+    get() {
+      return undefined;
+    },
+  }, { vscode });
+
+  await assert.rejects(
+    () => provider({
+      atCursor: true,
+      position: { line: 8, character: 2 },
+      spec: "/workspace/specs/example.spec",
+    }),
+    /No Gauge language client available for \/workspace\/specs\/example\.spec/,
+  );
+});

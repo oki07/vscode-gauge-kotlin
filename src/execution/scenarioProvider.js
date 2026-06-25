@@ -43,18 +43,22 @@ function resolveClientsMap(clientsMap) {
   return clientsMap;
 }
 
+function missingClientError(spec) {
+  return new Error(`No Gauge language client available for ${spec}.`);
+}
+
 function createGaugeScenariosProvider(clientsMap, options = {}) {
   const vscode = getVscode(options.vscode);
   return async function provideGaugeScenarios(request = {}) {
     const editor = vscode.window && vscode.window.activeTextEditor;
     const resolvedClientsMap = resolveClientsMap(clientsMap);
     if (!resolvedClientsMap || typeof resolvedClientsMap.get !== "function") {
-      return [];
+      throw missingClientError(request.spec);
     }
 
     const entry = resolvedClientsMap.get(documentFsPath(editor, request.spec));
     if (!entry || !entry.client) {
-      return [];
+      throw missingClientError(request.spec);
     }
 
     if (typeof entry.client.start === "function") {
