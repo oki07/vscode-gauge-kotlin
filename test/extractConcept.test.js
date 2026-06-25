@@ -294,6 +294,78 @@ test("ExtractConceptCommandProvider parameterizes selected inline tables", async
   );
 });
 
+test("ExtractConceptCommandProvider formats selected table parameters like Gauge", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Compare users",
+    "|id|name|",
+    "|--|----|",
+    "|1 |hello <foo> |",
+    "|2 |bar |",
+    "* Done",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "",
+    },
+    document,
+    inputResponses: ["Shared comparison <table1>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 15 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/example.spec",
+  );
+  assert.equal(
+    sourceReplacement.newText,
+    [
+      "* Shared comparison",
+      "",
+      "   |id|name       |",
+      "   |--|-----------|",
+      "   |1 |hello <foo>|",
+      "   |2 |bar        |",
+      "",
+    ].join("\n"),
+  );
+
+  const conceptReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
+  );
+  assert.equal(
+    conceptReplacement.newText,
+    [
+      "# Shared comparison <table1>",
+      "* Compare users <table1>",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("ExtractConceptCommandProvider promotes table dynamic arguments to concept usage", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];

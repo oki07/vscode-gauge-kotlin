@@ -192,6 +192,51 @@ function tableKey(tableLines) {
   return tableLines.join("\n");
 }
 
+function tableCells(line) {
+  const trimmed = (line || "").trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+    return undefined;
+  }
+  return trimmed.slice(1, -1).split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparator(cells) {
+  return cells && cells.length > 0 && cells.every((cell) => /^-+$/.test(cell));
+}
+
+function formatGaugeTableLines(tableLines) {
+  if (!Array.isArray(tableLines) || tableLines.length < 2) {
+    return tableLines;
+  }
+
+  const rows = tableLines.map(tableCells);
+  if (
+    rows.some((row) => !row)
+    || !isTableSeparator(rows[1])
+    || rows.some((row) => row.length !== rows[0].length)
+  ) {
+    return tableLines;
+  }
+
+  const headers = rows[0];
+  const dataRows = rows.slice(2);
+  const widths = headers.map((header, index) => {
+    const cellWidths = dataRows.map((row) => Array.from(row[index]).length);
+    return Math.max(Array.from(header).length, ...cellWidths);
+  });
+  const formatRow = (cells) => `   |${cells.map((cell, index) => {
+    const padding = widths[index] - Array.from(cell).length;
+    return `${cell}${" ".repeat(Math.max(0, padding))}`;
+  }).join("|")}|`;
+
+  return [
+    "",
+    formatRow(headers),
+    formatRow(widths.map((width) => "-".repeat(width))),
+    ...dataRows.map(formatRow),
+  ];
+}
+
 function tableParameterMap(steps) {
   const tables = new Map();
   let count = 0;
@@ -304,13 +349,13 @@ function buildParameterizedExtraction(extraction, conceptName, eol) {
       conceptLines.push(`${conceptStep} <${tableName}>`);
       parameterizedNames.add(tableName);
       if (!sourceTableKeys.has(key)) {
-        sourceTables.push(...step.tableLines);
+        sourceTables.push(...formatGaugeTableLines(step.tableLines));
         sourceTableKeys.add(key);
       }
     } else {
       conceptLines.push(
         applyStaticArgumentParameters(step.text, staticParameters),
-        ...step.tableLines,
+        ...formatGaugeTableLines(step.tableLines),
       );
       tableDynamicParameters.push(...dynamicParametersInLines(step.tableLines));
     }
