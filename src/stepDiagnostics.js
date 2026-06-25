@@ -441,6 +441,89 @@ function countKotlinParameters(parameterText) {
     .length;
 }
 
+function findTopLevelDot(text) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let dotIndex = -1;
+  let quote;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'") {
+      quote = char;
+    } else if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      char === "."
+      && angleDepth === 0
+      && bracketDepth === 0
+      && parenDepth === 0
+    ) {
+      dotIndex = index;
+    }
+  }
+
+  return dotIndex;
+}
+
+function stripLeadingTypeParameters(header) {
+  const trimmed = header.trim();
+  if (!trimmed.startsWith("<")) {
+    return trimmed;
+  }
+
+  let depth = 0;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+    if (char === "<") {
+      depth += 1;
+    } else if (char === ">") {
+      depth -= 1;
+      if (depth === 0) {
+        return trimmed.slice(index + 1).trim();
+      }
+    }
+  }
+
+  return trimmed;
+}
+
+function isKotlinFunctionName(name) {
+  return /^[A-Za-z_]\w*$/.test(name) || /^`[^`\r\n]+`$/.test(name);
+}
+
+function isKotlinFunctionHeader(header) {
+  const trimmed = stripLeadingTypeParameters(header);
+  const dotIndex = findTopLevelDot(trimmed);
+  const receiver = dotIndex === -1 ? undefined : trimmed.slice(0, dotIndex).trim();
+  const name = dotIndex === -1 ? trimmed : trimmed.slice(dotIndex + 1).trim();
+
+  return Boolean(
+    isKotlinFunctionName(name)
+    && (receiver === undefined || receiver.length > 0),
+  );
+}
+
 function findNextFunction(text, startIndex) {
   const funPattern = /\bfun\b/g;
   funPattern.lastIndex = startIndex;
@@ -451,7 +534,7 @@ function findNextFunction(text, startIndex) {
       return undefined;
     }
     const header = text.slice(funPattern.lastIndex, openParen);
-    if (/^\s+(?:<[^\r\n]+>\s+)?(?:[A-Za-z_][\w<>]*\.)?(?:[A-Za-z_]\w*|`[^`\r\n]+`)\s*$/.test(header)) {
+    if (isKotlinFunctionHeader(header)) {
       const closeParen = findMatchingParen(text, openParen);
       if (closeParen !== -1) {
         return {
