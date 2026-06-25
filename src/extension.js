@@ -56,6 +56,9 @@ const SEMANTIC_TOKEN_COLOR_KEYS = [
 
 const GAUGE_COMMANDS = [
   "gauge.createProject",
+  "gauge.execute",
+  "gauge.debug",
+  "gauge.execute.inParallel",
   "gauge.create.specification",
   "gauge.create.concept",
   "gauge.config.saveRecommended",

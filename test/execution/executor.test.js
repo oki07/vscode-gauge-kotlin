@@ -137,6 +137,55 @@ test("execute specification resolves the project root from the active Gauge file
   ]);
 });
 
+test("execute in parallel runs the Gauge code lens target", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        fileName: "/workspace/specs/example.spec",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || filename === "/workspace/build.gradle.kts";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand(
+    "gauge.execute.inParallel",
+    "/workspace/specs/example.spec",
+  );
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    {
+      command: "gradle",
+      args: [
+        "clean",
+        "gauge",
+        "-PinParallel=true",
+        "-PadditionalFlags=--hide-suggestion --simple-console",
+        "-PspecsDir=specs/example.spec",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/specs/example.spec",
+    },
+  ]);
+});
+
 test("execute failed asks for a project and runs failed scenarios there", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

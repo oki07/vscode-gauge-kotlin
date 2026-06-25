@@ -15,6 +15,9 @@ const { createProjectFactory } = require("../project/projectFactory");
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 
 const EXECUTION_COMMANDS = new Set([
+  "gauge.execute",
+  "gauge.debug",
+  "gauge.execute.inParallel",
   "gauge.stopExecution",
   "gauge.execute.failed",
   "gauge.execute.repeat",
@@ -438,8 +441,33 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
+  async function executeCodeLensTarget(spec, flags = {}) {
+    if (!spec) {
+      return undefined;
+    }
+    const projectRoot = getProjectRootForSpec(
+      vscode,
+      getScenarioSpecPath(spec),
+      pathModule,
+      projectFactory,
+    );
+    if (!projectRoot) {
+      return vscode.window.showErrorMessage("No workspace folder is open.");
+    }
+    return executeInProject(projectRoot, spec, {
+      ...flags,
+      status: spec,
+    });
+  }
+
   function handleCommand(command, argument) {
     switch (command) {
+      case "gauge.execute":
+        return executeCodeLensTarget(argument);
+      case "gauge.debug":
+        return executeCodeLensTarget(argument, { debug: true });
+      case "gauge.execute.inParallel":
+        return executeCodeLensTarget(argument, { parallel: true });
       case "gauge.execute.specification":
         return executeActiveSpecification();
       case "gauge.execute.specification.all":

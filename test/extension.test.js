@@ -10,6 +10,11 @@ const PROVIDER_COMMANDS = new Set([
   "gauge.specexplorer.runNode",
   "gauge.specexplorer.switchProject",
 ]);
+const INTERNAL_EXECUTION_COMMANDS = [
+  "gauge.execute",
+  "gauge.debug",
+  "gauge.execute.inParallel",
+];
 
 function createFakeVscode(overrides = {}) {
   const registeredCommands = [];
@@ -139,6 +144,7 @@ test("activation registers core contributed Gauge commands", () => {
     registeredCommands.map((entry) => entry.command),
     [
       "gauge.createProject",
+      ...INTERNAL_EXECUTION_COMMANDS,
       ...manifest.contributes.commands
         .map((entry) => entry.command)
         .filter((command) => !PROVIDER_COMMANDS.has(command)),
@@ -146,7 +152,8 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 1,
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 1
+      + INTERNAL_EXECUTION_COMMANDS.length,
   );
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
 });
