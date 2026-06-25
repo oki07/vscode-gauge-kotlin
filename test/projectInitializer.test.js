@@ -159,3 +159,64 @@ test("ProjectInitializer creates a Gauge project from the selected template", as
     },
   ]);
 });
+
+test("ProjectInitializer removes the project directory when Gauge init fails", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    errors,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const mkdirs = [];
+  const removes = [];
+  const child = createChildProcess();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn() {
+          setImmediate(() => child.emit("close", 1));
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/shop");
+        return false;
+      },
+      mkdirSync(filename) {
+        mkdirs.push(filename);
+      },
+      removeSync(filename) {
+        removes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await assert.rejects(
+    () => command.handler(),
+    /Failed to initialize project\./,
+  );
+
+  assert.deepEqual(mkdirs, ["/workspace/shop"]);
+  assert.deepEqual(removes, ["/workspace/shop"]);
+  assert.deepEqual(errors, ["Failed to initialize project."]);
+});

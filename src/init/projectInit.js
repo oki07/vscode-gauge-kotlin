@@ -152,7 +152,11 @@ class ProjectInitializer {
     }
     child.on("close", (code) => {
       if (code !== 0) {
-        progressHandler.cancel("Failed to initialize project.");
+        this.handleError(
+          progressHandler,
+          "Failed to initialize project.",
+          projectFolder.fsPath,
+        );
         return;
       }
       progressHandler.end(projectFolder);
