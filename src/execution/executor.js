@@ -141,11 +141,24 @@ function commandForProjectKind(projectKind, options) {
   return options.gaugeCommand || "gauge";
 }
 
-function getLaunchConfigurations(vscode) {
+function getWorkspaceFolderForProject(vscode, projectRoot) {
+  if (!vscode.workspace || typeof vscode.workspace.getWorkspaceFolder !== "function") {
+    return undefined;
+  }
+  const uri = vscode.Uri && typeof vscode.Uri.file === "function"
+    ? vscode.Uri.file(projectRoot)
+    : { fsPath: projectRoot, path: projectRoot };
+  return vscode.workspace.getWorkspaceFolder(uri);
+}
+
+function getLaunchConfigurations(vscode, projectRoot) {
   if (!vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
     return [];
   }
-  const configuration = vscode.workspace.getConfiguration("launch");
+  const workspaceFolder = projectRoot
+    ? getWorkspaceFolderForProject(vscode, projectRoot)
+    : undefined;
+  const configuration = vscode.workspace.getConfiguration("launch", workspaceFolder);
   if (!configuration || typeof configuration.get !== "function") {
     return [];
   }
@@ -332,7 +345,7 @@ function createGaugeExecutionController(options = {}) {
 
     const projectKind = detectProjectKind(projectRoot, fileSystem, pathModule);
     const option = {
-      ...extractGaugeRunOption(getLaunchConfigurations(vscode)),
+      ...extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
       failed: Boolean(flags.failed),
       repeat: Boolean(flags.repeat),
       parallel: Boolean(flags.parallel),

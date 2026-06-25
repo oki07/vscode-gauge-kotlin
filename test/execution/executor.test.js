@@ -258,6 +258,77 @@ test("execute failed asks for a project and runs failed scenarios there", async 
   ]);
 });
 
+test("execute all specs reads launch options from the selected workspace folder", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const configurationRequests = [];
+  const workspaceFolderRequests = [];
+  const workspaceFolder = { uri: { fsPath: "/workspace/admin" }, name: "admin" };
+  const vscode = {
+    Uri: {
+      file(fsPath) {
+        return { fsPath };
+      },
+    },
+    workspace: {
+      workspaceFolders: [
+        { uri: { fsPath: "/workspace/shop" } },
+        workspaceFolder,
+      ],
+      getWorkspaceFolder(uri) {
+        workspaceFolderRequests.push(uri);
+        return uri.fsPath === "/workspace/admin" ? workspaceFolder : undefined;
+      },
+      getConfiguration(section, scope) {
+        configurationRequests.push({ section, scope });
+        return {
+          get(key) {
+            assert.equal(key, "configurations");
+            return scope === workspaceFolder
+              ? [{ type: "gauge", request: "test", name: "Gauge", tags: "admin" }]
+              : [];
+          },
+        };
+      },
+    },
+    window: {
+      async showQuickPick(items) {
+        return items[1];
+      },
+      async showErrorMessage() {},
+    },
+  };
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all");
+
+  assert.deepEqual(workspaceFolderRequests, [{ fsPath: "/workspace/admin" }]);
+  assert.deepEqual(configurationRequests, [
+    { section: "launch", scope: workspaceFolder },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--hide-suggestion", "--simple-console", "--tags", "admin"],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/All specs",
+    },
+  ]);
+});
+
 test("spec explorer run all executes the active project without prompting", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
