@@ -15,6 +15,7 @@ const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
 const JAVA_RUNNER = "java";
+const KOTLIN_RUNNER = "kotlin";
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
 const RESTART_ACTION = "Restart Now";
@@ -319,10 +320,14 @@ class GaugeWorkspace {
   }
 
   clientOptionsFor(project, folder) {
+    const documentSelector = [
+      { scheme: "file", language: "gauge", pattern: `${project.root()}/**/*` },
+    ];
+    if (project.language() === KOTLIN_RUNNER) {
+      documentSelector.push({ scheme: "file", language: KOTLIN_RUNNER, pattern: `${project.root()}/**/*` });
+    }
     return {
-      documentSelector: [
-        { scheme: "file", language: "gauge", pattern: `${project.root()}/**/*` },
-      ],
+      documentSelector,
       diagnosticCollectionName: "gauge",
       outputChannel: this.outputChannel,
       revealOutputChannelOn: this.revealOutputChannelOnNever,
