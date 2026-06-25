@@ -82,7 +82,42 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept dynamic arguments"
   assert.deepEqual(labels(items), ["item", "user", "u"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores non-dynamic argument positions", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments inside quotes", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Login as \"admin\"",
+    "",
+    "## Successful checkout",
+    "* Confirm \"a\"",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(4, 12));
+
+  assert.deepEqual(labels(items), ["admin", "a"]);
+  assert.equal(items[0].kind, "variable");
+  assert.deepEqual({ ...items[0].range.start }, { line: 4, character: 11 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 12 });
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests concept static arguments inside quotes", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Shared checkout <item>",
+    "* Select \"cart\"",
+    "* Confirm \"c\"",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(2, 12));
+
+  assert.deepEqual(labels(items), ["cart", "c"]);
+});
+
+test("GaugeDynamicArgumentCompletionProvider ignores non-argument positions", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -91,8 +126,10 @@ test("GaugeDynamicArgumentCompletionProvider ignores non-dynamic argument positi
     "| user |",
     "| ---- |",
     "* Login as <user>",
+    "* Confirm \"user\"",
   ].join("\n"));
 
   assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(3, 3)), []);
   assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(3, 17)), []);
+  assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(4, 16)), []);
 });

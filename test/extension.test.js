@@ -838,7 +838,7 @@ test("activation registers dynamic argument completions for Gauge documents", ()
 
   assert.equal(completionProviders.length, 1);
   assert.deepEqual(completionProviders[0].selector, { language: "gauge" });
-  assert.deepEqual(completionProviders[0].triggerCharacters, ["<"]);
+  assert.deepEqual(completionProviders[0].triggerCharacters, ["<", "\""]);
   assert.equal(completionProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(completionProviders[0].disposable), true);
 });

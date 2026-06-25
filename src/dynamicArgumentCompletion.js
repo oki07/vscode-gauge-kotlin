@@ -51,6 +51,25 @@ function dynamicArgumentRange(line, position) {
   };
 }
 
+function staticArgumentRange(line, position) {
+  let openIndex = line.indexOf("\"");
+  while (openIndex !== -1) {
+    const closeIndex = line.indexOf("\"", openIndex + 1);
+    if (position.character > openIndex && (closeIndex === -1 || position.character <= closeIndex)) {
+      return {
+        end: closeIndex === -1 ? position.character : closeIndex,
+        start: openIndex + 1,
+      };
+    }
+    if (closeIndex === -1) {
+      return undefined;
+    }
+    openIndex = line.indexOf("\"", closeIndex + 1);
+  }
+
+  return undefined;
+}
+
 function isScenarioHeading(line) {
   return line.trimStart().startsWith("##");
 }
@@ -114,6 +133,25 @@ function conceptDynamicArguments(text) {
   return unique(values);
 }
 
+function staticArguments(text) {
+  const values = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.trimStart().startsWith("*")) {
+      continue;
+    }
+    const pattern = /"([^"\r\n]*)"/g;
+    let match = pattern.exec(line);
+    while (match) {
+      if (match[1]) {
+        values.push(match[1]);
+      }
+      match = pattern.exec(line);
+    }
+  }
+  return unique(values);
+}
+
 function completionItem(vscode, label, range) {
   const kind = vscode.CompletionItemKind && vscode.CompletionItemKind.Variable;
   const item = typeof vscode.CompletionItem === "function"
@@ -131,14 +169,20 @@ class GaugeDynamicArgumentCompletionProvider {
   provideCompletionItems(document, position) {
     const line = document.lineAt(position.line).text;
     const argumentRange = dynamicArgumentRange(line, position);
-    if (!argumentRange) {
+    const quotedArgumentRange = staticArgumentRange(line, position);
+    if (!argumentRange && !quotedArgumentRange) {
       return [];
     }
 
-    const labels = isConceptDocument(document)
-      ? conceptDynamicArguments(document.getText())
-      : specDataTableHeaders(document.getText());
-    const range = createRange(this.vscode, position.line, argumentRange.start, argumentRange.end);
+    const labels = argumentRange
+      ? (
+        isConceptDocument(document)
+          ? conceptDynamicArguments(document.getText())
+          : specDataTableHeaders(document.getText())
+      )
+      : staticArguments(document.getText());
+    const targetRange = argumentRange || quotedArgumentRange;
+    const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     return labels.map((label) => completionItem(this.vscode, label, range));
   }
 }
@@ -147,4 +191,5 @@ module.exports = {
   GaugeDynamicArgumentCompletionProvider,
   conceptDynamicArguments,
   specDataTableHeaders,
+  staticArguments,
 };

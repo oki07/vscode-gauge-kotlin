@@ -228,6 +228,7 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
     { language: "gauge" },
     provider,
     "<",
+    "\"",
   );
   if (disposable) {
     context.subscriptions.push(disposable);
