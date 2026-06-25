@@ -29,6 +29,51 @@ function createLineEmitter(callback) {
   };
 }
 
+function loadProcessTree() {
+  try {
+    return require("ps-tree");
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizePid(pid) {
+  const value = Number(pid);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function killPid(pid, killProcess) {
+  const value = normalizePid(pid);
+  if (!value) {
+    return;
+  }
+  try {
+    killProcess(value);
+  } catch (error) {
+    if (!error || error.code !== "ESRCH") {
+      throw error;
+    }
+  }
+}
+
+function terminateWindowsProcessTree(child, processTree, killProcess) {
+  if (!child || !child.pid) {
+    return;
+  }
+  if (!processTree) {
+    killPid(child.pid, killProcess);
+    return;
+  }
+  processTree(child.pid, (error, children) => {
+    if (!error && Array.isArray(children)) {
+      for (const processInfo of children) {
+        killPid(processInfo.PID || processInfo.pid, killProcess);
+      }
+    }
+    killPid(child.pid, killProcess);
+  });
+}
+
 function createGaugeProcessRunner(options = {}) {
   const vscode = options.vscode || { window: {} };
   const spawn = options.spawn || childProcess.spawn;
@@ -36,6 +81,9 @@ function createGaugeProcessRunner(options = {}) {
   const processOutputLine = options.processOutputLine || (() => {});
   const baseEnv = options.env || process.env;
   const outputChannel = options.outputChannel || createDefaultOutputChannel(vscode);
+  const platform = options.platform || process.platform;
+  const processTree = options.processTree || loadProcessTree();
+  const killProcess = options.killProcess || process.kill;
 
   return function runGaugeProcess(command) {
     let child;
@@ -52,7 +100,7 @@ function createGaugeProcessRunner(options = {}) {
 
       child = spawn(command.command, command.args, {
         cwd: command.cwd,
-        detached: process.platform !== "win32",
+        detached: platform !== "win32",
         env: command.env || baseEnv,
       });
       child.stdout.on("data", emitStdoutLine);
@@ -67,7 +115,9 @@ function createGaugeProcessRunner(options = {}) {
 
     run.cancel = function cancel() {
       aborted = true;
-      if (child && !child.killed && typeof child.kill === "function") {
+      if (child && !child.killed && platform === "win32") {
+        terminateWindowsProcessTree(child, processTree, killProcess);
+      } else if (child && !child.killed && typeof child.kill === "function") {
         child.kill("SIGTERM");
       } else if (settle) {
         settle(false);

@@ -21,6 +21,7 @@ class FakeOutputChannel {
 
 function createChildProcess() {
   const child = new EventEmitter();
+  child.pid = 2468;
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.killed = false;
@@ -130,5 +131,45 @@ test("process runner cancel kills the active child and reports an aborted run", 
 
   assert.equal(await run, false);
   assert.deepEqual(child.killCalls, ["SIGTERM"]);
+  assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
+});
+
+test("process runner cancel terminates Windows child process trees", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const treeLookups = [];
+  const killed = [];
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    platform: "win32",
+    processTree(pid, callback) {
+      treeLookups.push(pid);
+      callback(null, [
+        { PID: "3001" },
+        { PID: 3002 },
+      ]);
+    },
+    killProcess(pid) {
+      killed.push(pid);
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run"],
+    cwd: "/workspace",
+  });
+
+  run.cancel();
+  child.emit("exit", null);
+
+  assert.equal(await run, false);
+  assert.deepEqual(treeLookups, [2468]);
+  assert.deepEqual(killed, [3001, 3002, 2468]);
+  assert.deepEqual(child.killCalls, []);
   assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
 });
