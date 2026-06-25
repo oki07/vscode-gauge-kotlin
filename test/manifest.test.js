@@ -234,7 +234,19 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   const languageConfiguration = JSON.parse(
     fs.readFileSync(path.join(root, language.configuration), "utf8"),
   );
-  assert.equal(languageConfiguration.comments.lineComment, "//");
+  assert.deepEqual(languageConfiguration, {
+    comments: {
+      lineComment: "//",
+    },
+    autoClosingPairs: [
+      ["<", ">"],
+      ["\"", "\""],
+    ],
+    surroundingPairs: [
+      ["<", ">"],
+      ["\"", "\""],
+    ],
+  });
 
   const snippets = JSON.parse(
     fs.readFileSync(path.join(root, manifest.contributes.snippets[0].path), "utf8"),
