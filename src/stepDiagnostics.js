@@ -248,7 +248,8 @@ function findNextFunction(text, startIndex) {
   return undefined;
 }
 
-function unqualifiedStepImport(text) {
+function stepAnnotationImports(text) {
+  const imports = new Map();
   const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
   let match = importPattern.exec(text);
   while (match) {
@@ -256,44 +257,49 @@ function unqualifiedStepImport(text) {
     const alias = match[2];
     const importedParts = importedName.split(".");
     const exposedName = alias || importedParts[importedParts.length - 1];
-    if (exposedName !== "Step") {
-      match = importPattern.exec(text);
-      continue;
+    if (importedParts[importedParts.length - 1] === "Step") {
+      imports.set(exposedName, importedName);
     }
-    return importedName;
+    match = importPattern.exec(text);
   }
-  return undefined;
+  return imports;
 }
 
-function isStepAnnotationAllowed(annotationName, importedStep) {
+function isStepAnnotationAllowed(annotationName, stepImports) {
   if (annotationName === GAUGE_STEP_ANNOTATION) {
     return true;
   }
   if (annotationName.includes(".")) {
     return false;
   }
-  return !importedStep || importedStep === GAUGE_STEP_ANNOTATION;
+  if (stepImports.has(annotationName)) {
+    return stepImports.get(annotationName) === GAUGE_STEP_ANNOTATION;
+  }
+  return annotationName === "Step";
 }
 
 function findStepFunctions(text) {
   const entries = [];
-  const annotationPattern = /@(?:[A-Za-z_]\w*\.)*Step\b/g;
-  const importedStep = unqualifiedStepImport(text);
+  const annotationPattern = /@((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\b/g;
+  const stepImports = stepAnnotationImports(text);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
-    const annotationName = annotationMatch[0].slice(1);
-    const openParen = text.indexOf("(", annotationPattern.lastIndex);
-    if (openParen === -1) {
-      break;
+    const annotationName = annotationMatch[1];
+    if (!isStepAnnotationAllowed(annotationName, stepImports)) {
+      annotationMatch = annotationPattern.exec(text);
+      continue;
+    }
+    let openParen = annotationPattern.lastIndex;
+    while (/\s/.test(text[openParen])) {
+      openParen += 1;
+    }
+    if (text[openParen] !== "(") {
+      annotationMatch = annotationPattern.exec(text);
+      continue;
     }
     const closeParen = findMatchingParen(text, openParen);
     if (closeParen === -1) {
       annotationPattern.lastIndex = openParen + 1;
-      annotationMatch = annotationPattern.exec(text);
-      continue;
-    }
-    if (!isStepAnnotationAllowed(annotationName, importedStep)) {
-      annotationPattern.lastIndex = closeParen + 1;
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
