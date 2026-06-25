@@ -21,6 +21,7 @@ function createFakeVscode(overrides = {}) {
   const activeEditorListeners = [];
   const configurationChangeListeners = [];
   const contexts = [];
+  const errors = [];
   const outputChannels = [];
   const quickPicks = [];
   const warnings = [];
@@ -62,13 +63,17 @@ function createFakeVscode(overrides = {}) {
         },
         showQuickPick(items, options) {
           quickPicks.push({ items, options });
+          if (overrides.quickPickError) {
+            return Promise.reject(overrides.quickPickError);
+          }
           return Promise.resolve(overrides.quickPickSelection || items[0]);
         },
         showWarningMessage(message, ...actions) {
           warnings.push({ message, actions });
           return Promise.resolve(overrides.warningSelection || actions[0]);
         },
-        showErrorMessage() {
+        showErrorMessage(message, reason) {
+          errors.push({ message, reason });
           return Promise.resolve(undefined);
         },
       },
@@ -102,6 +107,7 @@ function createFakeVscode(overrides = {}) {
     configurationChangeListeners,
     configurations,
     outputChannels,
+    errors,
     warnings,
     workspaceFolderListeners,
   };
@@ -340,6 +346,39 @@ test("GaugeWorkspace lets users choose among known projects", async () => {
         { label: "two", description: "/workspace/two" },
       ],
       options: { canPickMany: false, placeHolder: "Choose a project" },
+    },
+  ]);
+});
+
+test("GaugeWorkspace reports project selection failures", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/one/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+  });
+  const quickPickError = new Error("picker failed");
+  const { errors, vscode } = createFakeVscode({
+    quickPickError,
+    workspaceFolders: [{ uri: { fsPath: "/workspace/one" } }],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  await assert.doesNotReject(() => workspace.showProjectOptions(() => "unused"));
+  assert.deepEqual(errors, [
+    {
+      message: "Unable to select project.",
+      reason: quickPickError,
     },
   ]);
 });

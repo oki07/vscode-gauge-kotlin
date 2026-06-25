@@ -165,14 +165,18 @@ class GaugeWorkspace {
         label: this.pathModule.basename(projectRoot),
         description: projectRoot,
       }));
-    const selected = await this.vscode.window.showQuickPick(projectItems, {
-      canPickMany: false,
-      placeHolder: "Choose a project",
-    });
-    if (!selected) {
-      return undefined;
+    try {
+      const selected = await this.vscode.window.showQuickPick(projectItems, {
+        canPickMany: false,
+        placeHolder: "Choose a project",
+      });
+      if (!selected) {
+        return undefined;
+      }
+      return onChange(selected.description);
+    } catch (error) {
+      return this.vscode.window.showErrorMessage("Unable to select project.", error);
     }
-    return onChange(selected.description);
   }
 
   async setMultiProjectContext() {
