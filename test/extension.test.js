@@ -170,6 +170,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeGaugeState {
+    constructor(receivedContext) {
+      this.context = receivedContext;
+      created.state = this;
+    }
+  }
+
   extension.activate(context, fakeVscode, {
     createCli(options) {
       created.cliOptions = options;
@@ -179,6 +186,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       return { handleCommand() {} };
     },
     GaugeClients: FakeGaugeClients,
+    GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     ReferenceProvider: FakeReferenceProvider,
     projectFactory: {
@@ -194,6 +202,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.deepEqual(versions, ["0.9.6"]);
   assert.equal(created.workspace.options.cli, cli);
   assert.equal(created.workspace.options.clientsMap, created.clientsMap);
+  assert.equal(created.workspace.options.state, created.state);
+  assert.equal(created.state.context, context);
   assert.equal(created.workspace.options.vscode, fakeVscode);
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);

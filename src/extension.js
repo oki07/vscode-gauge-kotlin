@@ -4,6 +4,7 @@ const { CLI } = require("./cli");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
 const { GaugeClients } = require("./gaugeClients");
 const { ReferenceProvider } = require("./gaugeReference");
+const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
 const { createProjectFactory } = require("./project/projectFactory");
 const { createSpecification } = require("./specification");
@@ -135,6 +136,8 @@ function startGaugeServices(context, vscode, options = {}) {
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
+  const GaugeStateCtor = options.GaugeState || GaugeState;
+  const state = options.state || new GaugeStateCtor(context);
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
   const gaugeWorkspace = new GaugeWorkspaceCtor({
@@ -147,7 +150,7 @@ function startGaugeServices(context, vscode, options = {}) {
     pathModule: options.pathModule,
     projectFactory,
     RevealOutputChannelOn: options.RevealOutputChannelOn,
-    state: options.state,
+    state,
     vscode,
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, { vscode });
