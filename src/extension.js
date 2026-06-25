@@ -3,7 +3,11 @@
 const { CLI } = require("./cli");
 const { GaugeArgumentCodeActionProvider } = require("./argumentCodeActions");
 const { ConfigProvider } = require("./config/configProvider");
-const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
+const {
+  EXECUTION_COMMANDS,
+  createGaugeExecutionController,
+  createGaugeExecutionStatusProvider,
+} = require("./execution/executor");
 const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
 const { ExtractConceptCommandProvider } = require("./extractConcept");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
@@ -404,6 +408,10 @@ function activate(context, vscodeApi, options = {}) {
   const state = createGaugeState(context, options);
   const executionController = (options.createExecutionController || createGaugeExecutionController)({
     vscode,
+    executionStatusProvider: options.executionStatusProvider || createGaugeExecutionStatusProvider(
+      () => activeClientsMap,
+      { vscode },
+    ),
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     runner: options.runner,

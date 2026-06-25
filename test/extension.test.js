@@ -604,6 +604,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.deepEqual(welcomeCalls, [{ context, vscode: fakeVscode }]);
   assert.equal(created.executionOptions.state, created.state);
   assert.equal(typeof created.executionOptions.scenariosProvider, "function");
+  assert.equal(typeof created.executionOptions.executionStatusProvider, "function");
   assert.equal(created.workspace.options.cli, cli);
   assert.equal(created.workspace.options.clientsMap, created.clientsMap);
   assert.equal(created.workspace.options.state, created.state);

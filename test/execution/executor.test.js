@@ -5,13 +5,18 @@ const test = require("node:test");
 function createFakeVscode(overrides = {}) {
   const errors = [];
   const quickPicks = [];
+  const statusBarItems = [];
   const workspaceFolders = overrides.workspaceFolders || [
     { uri: { fsPath: "/workspace" } },
   ];
   return {
     errors,
     quickPicks,
+    statusBarItems,
     vscode: {
+      StatusBarAlignment: {
+        Left: "left",
+      },
       workspace: {
         workspaceFolders,
         getConfiguration(section) {
@@ -38,6 +43,27 @@ function createFakeVscode(overrides = {}) {
         async showErrorMessage(message) {
           errors.push(message);
           return undefined;
+        },
+        createStatusBarItem(alignment, priority) {
+          const item = {
+            alignment,
+            command: undefined,
+            color: undefined,
+            hideCalls: 0,
+            priority,
+            showCalls: 0,
+            text: undefined,
+            tooltip: undefined,
+            dispose() {},
+            hide() {
+              this.hideCalls += 1;
+            },
+            show() {
+              this.showCalls += 1;
+            },
+          };
+          statusBarItems.push(item);
+          return item;
         },
       },
     },
@@ -298,6 +324,89 @@ test("executor rejects a new run while another run is in progress", async () => 
 
   assert.equal(secondRun, undefined);
   assert.deepEqual(errors, ["A Specification or Scenario is still running!"]);
+});
+
+test("executor shows a stop status bar item while a run is active", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  let finish;
+  const { statusBarItems, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner() {
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    },
+  });
+
+  const run = controller.handleCommand("gauge.execute.specification.all");
+  await Promise.resolve();
+
+  const stopItem = statusBarItems[0];
+  assert.equal(stopItem.alignment, "left");
+  assert.equal(stopItem.priority, 2);
+  assert.equal(stopItem.command, "gauge.stopExecution");
+  assert.equal(stopItem.tooltip, "Click to Stop Run");
+  assert.equal(stopItem.text, "$(primitive-square) Running /workspace/All specs");
+  assert.equal(stopItem.showCalls, 1);
+
+  finish(true);
+  await run;
+
+  assert.equal(stopItem.hideCalls, 1);
+});
+
+test("executor shows the last execution status in the status bar", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const statusRequests = [];
+  const { statusBarItems, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionStatusProvider(projectRoot) {
+      statusRequests.push(projectRoot);
+      return Promise.resolve({
+        sceExecuted: 6,
+        sceFailed: 1,
+        scePassed: 2,
+        sceSkipped: 3,
+        specsExecuted: 2,
+        specsFailed: 1,
+        specsPassed: 1,
+        specsSkipped: 0,
+      });
+    },
+    runner() {
+      return Promise.resolve(true);
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all");
+
+  const executionStatus = statusBarItems[1];
+  assert.deepEqual(statusRequests, ["/workspace"]);
+  assert.equal(executionStatus.command, "gauge.report.html");
+  assert.equal(executionStatus.color, "#E73E48");
+  assert.equal(executionStatus.text, "$(check) 2  $(x) 1  $(issue-opened) 3");
+  assert.equal(
+    executionStatus.tooltip,
+    "Specs : 2 Executed, 1 Passed, 1 Failed, 0 Skipped\n"
+      + "Scenarios : 6 Executed, 2 Passed, 1 Failed, 3 Skipped",
+  );
+  assert.equal(executionStatus.showCalls, 1);
 });
 
 test("execute scenario at cursor runs the provider scenario and ignores launch filters", async () => {

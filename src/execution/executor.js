@@ -12,7 +12,10 @@ const { createGaugeProcessRunner } = require("./processRunner");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
 const { createProjectFactory } = require("../project/projectFactory");
 
+const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
+const SHOW_REPORT_COMMAND = "gauge.report.html";
+const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
 
 const EXECUTION_COMMANDS = new Set([
   "gauge.execute",
@@ -30,6 +33,35 @@ const EXECUTION_COMMANDS = new Set([
   "gauge.execute.scenarios",
   "gauge.report.html",
 ]);
+
+function createToken(vscode) {
+  if (typeof vscode.CancellationTokenSource === "function") {
+    return new vscode.CancellationTokenSource().token;
+  }
+  return undefined;
+}
+
+function resolveClientsMap(getClientsMap) {
+  return typeof getClientsMap === "function" ? getClientsMap() : getClientsMap;
+}
+
+function createGaugeExecutionStatusProvider(getClientsMap, options = {}) {
+  const vscode = options.vscode || {};
+  return function executionStatusProvider(projectRoot) {
+    const clientsMap = resolveClientsMap(getClientsMap);
+    const projectClient = clientsMap && typeof clientsMap.get === "function"
+      ? clientsMap.get(projectRoot)
+      : undefined;
+    if (!projectClient || !projectClient.client || typeof projectClient.client.sendRequest !== "function") {
+      return undefined;
+    }
+    return projectClient.client.sendRequest(
+      EXECUTION_STATUS_REQUEST,
+      {},
+      createToken(vscode),
+    );
+  };
+}
 
 function getWorkspaceRoots(vscode) {
   const folders = vscode.workspace && vscode.workspace.workspaceFolders;
@@ -120,6 +152,89 @@ function getLaunchConfigurations(vscode) {
   return configuration.get("configurations") || [];
 }
 
+function statusBarAlignment(vscode) {
+  return vscode.StatusBarAlignment && vscode.StatusBarAlignment.Left !== undefined
+    ? vscode.StatusBarAlignment.Left
+    : 1;
+}
+
+function createStatusBarItem(vscode, priority) {
+  if (!vscode.window || typeof vscode.window.createStatusBarItem !== "function") {
+    return undefined;
+  }
+  return vscode.window.createStatusBarItem(statusBarAlignment(vscode), priority);
+}
+
+function formatExecutionTooltip(status) {
+  return `Specs : ${status.specsExecuted} Executed, ${status.specsPassed} Passed, `
+    + `${status.specsFailed} Failed, ${status.specsSkipped} Skipped\n`
+    + `Scenarios : ${status.sceExecuted} Executed, ${status.scePassed} Passed, `
+    + `${status.sceFailed} Failed, ${status.sceSkipped} Skipped`;
+}
+
+function executionStatusColor(status) {
+  if (status.sceFailed > 0) {
+    return "#E73E48";
+  }
+  if (status.scePassed > 0) {
+    return "#66ff66";
+  }
+  return "#999999";
+}
+
+function createExecutionStatusBar(vscode, executionStatusProvider) {
+  const stopExecution = createStatusBarItem(vscode, 2);
+  const executionStatus = createStatusBarItem(vscode, 1);
+  if (!stopExecution || !executionStatus) {
+    return {
+      afterExecute() {
+        return undefined;
+      },
+      beforeExecute() {},
+    };
+  }
+
+  stopExecution.command = STOP_EXECUTION_COMMAND;
+  stopExecution.tooltip = "Click to Stop Run";
+  executionStatus.command = SHOW_REPORT_COMMAND;
+
+  return {
+    beforeExecute(command) {
+      executionStatus.hide();
+      if (command.env && command.env.DEBUGGING) {
+        return;
+      }
+      stopExecution.text = `$(primitive-square) Running ${command.status}`;
+      stopExecution.show();
+    },
+    async afterExecute(projectRoot, aborted) {
+      stopExecution.hide();
+      if (aborted) {
+        executionStatus.hide();
+        return undefined;
+      }
+      if (typeof executionStatusProvider !== "function") {
+        return undefined;
+      }
+      let status;
+      try {
+        status = await executionStatusProvider(projectRoot);
+      } catch (_error) {
+        return undefined;
+      }
+      if (!status) {
+        return undefined;
+      }
+      executionStatus.color = executionStatusColor(status);
+      executionStatus.text = `$(check) ${status.scePassed}  $(x) ${status.sceFailed}`
+        + `  $(issue-opened) ${status.sceSkipped}`;
+      executionStatus.tooltip = formatExecutionTooltip(status);
+      executionStatus.show();
+      return undefined;
+    },
+  };
+}
+
 function buildArgs(projectKind, projectRoot, spec, option, pathModule) {
   const relativeSpec = spec ? pathModule.relative(projectRoot, spec) : null;
   if (projectKind === "gradle") {
@@ -177,6 +292,7 @@ function createGaugeExecutionController(options = {}) {
   const debuggerFactory = options.debuggerFactory || createGaugeDebugger;
   const opener = options.opener || defaultOpener(vscode);
   const reportState = options.state || memoryReportState(options.reportPath);
+  const executionStatusBar = createExecutionStatusBar(vscode, options.executionStatusProvider);
   let executing = false;
   let activeRun;
   let activeDebugger;
@@ -245,10 +361,14 @@ function createGaugeExecutionController(options = {}) {
     }
 
     executing = true;
+    executionStatusBar.beforeExecute(command);
+    let result;
     try {
       activeRun = runner(command);
-      return await activeRun;
+      result = await activeRun;
+      return result;
     } finally {
+      await executionStatusBar.afterExecute(projectRoot, result === false);
       executing = false;
       activeRun = undefined;
       activeDebugger = undefined;
@@ -512,5 +632,6 @@ function createGaugeExecutionController(options = {}) {
 
 module.exports = {
   EXECUTION_COMMANDS,
+  createGaugeExecutionStatusProvider,
   createGaugeExecutionController,
 };
