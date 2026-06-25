@@ -87,6 +87,28 @@ test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables"
   assert.deepEqual(labels(items), []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores non-step spec arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout <u>",
+    "| user | role |",
+    "| ---- | ---- |",
+    "* Login as \"admin\"",
+    "// keep \"a\" as a note",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideCompletionItems(document, new vscode.Position(0, 12)),
+    [],
+  );
+  assert.deepEqual(
+    provider.provideCompletionItems(document, new vscode.Position(4, 10)),
+    [],
+  );
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests concept dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

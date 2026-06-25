@@ -78,6 +78,11 @@ function isStepLine(line) {
   return line.trimStart().startsWith("*");
 }
 
+function isConceptHeading(line) {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith("#") && !trimmed.startsWith("##");
+}
+
 function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
@@ -159,6 +164,17 @@ function staticArguments(text) {
   return unique(values);
 }
 
+function allowsDynamicArgumentCompletion(line, document) {
+  if (isConceptDocument(document) && isConceptHeading(line)) {
+    return true;
+  }
+  return isStepLine(line) || isTableLine(line);
+}
+
+function allowsStaticArgumentCompletion(line) {
+  return isStepLine(line);
+}
+
 function completionItem(vscode, label, range) {
   const kind = vscode.CompletionItemKind && vscode.CompletionItemKind.Variable;
   const item = typeof vscode.CompletionItem === "function"
@@ -178,6 +194,12 @@ class GaugeDynamicArgumentCompletionProvider {
     const argumentRange = dynamicArgumentRange(line, position);
     const quotedArgumentRange = staticArgumentRange(line, position);
     if (!argumentRange && !quotedArgumentRange) {
+      return [];
+    }
+    if (argumentRange && !allowsDynamicArgumentCompletion(line, document)) {
+      return [];
+    }
+    if (quotedArgumentRange && !allowsStaticArgumentCompletion(line)) {
       return [];
     }
 
