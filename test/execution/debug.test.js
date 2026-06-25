@@ -83,3 +83,33 @@ test("GaugeDebugger starts VS Code Java attach debugging", async () => {
     ],
   ]);
 });
+
+test("GaugeDebugger uses the configured Gauge debug port by default", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const vscode = {
+    workspace: {
+      getConfiguration(section) {
+        assert.equal(section, "gauge");
+        return {
+          get(key) {
+            assert.equal(key, "execution.debugPort");
+            return 6006;
+          },
+        };
+      },
+    },
+  };
+
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    baseEnv: { PATH: "/bin" },
+  });
+
+  const env = await debuggerSession.addDebugEnv();
+
+  assert.equal(env.DEBUG_PORT, 6006);
+  assert.equal(env.GAUGE_DEBUG_OPTS, 6006);
+  assert.equal(debuggerSession.getDebuggerConfiguration().port, 6006);
+});

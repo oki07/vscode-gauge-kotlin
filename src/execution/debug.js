@@ -2,9 +2,24 @@
 
 const DEBUGGER_NAME = "Gauge Debugger";
 const REQUEST_TYPE = "attach";
+const DEFAULT_DEBUG_PORT = 9229;
 
 function javaLike(language) {
   return language === "java" || language === "kotlin";
+}
+
+function getConfiguredDebugPort(vscode) {
+  if (!vscode || !vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
+    return DEFAULT_DEBUG_PORT;
+  }
+
+  const configuration = vscode.workspace.getConfiguration("gauge");
+  if (!configuration || typeof configuration.get !== "function") {
+    return DEFAULT_DEBUG_PORT;
+  }
+
+  const value = configuration.get("execution.debugPort");
+  return Number.isInteger(value) ? value : DEFAULT_DEBUG_PORT;
 }
 
 function createGaugeDebugger(options = {}) {
@@ -12,7 +27,7 @@ function createGaugeDebugger(options = {}) {
   const projectRoot = options.projectRoot;
   const language = options.language || "kotlin";
   const baseEnv = options.baseEnv || process.env;
-  const debugPortProvider = options.debugPortProvider || (async () => 9229);
+  const debugPortProvider = options.debugPortProvider || (async () => getConfiguredDebugPort(vscode));
   let debugPort = options.debugPort;
   let processId;
 
