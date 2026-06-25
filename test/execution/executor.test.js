@@ -434,6 +434,43 @@ test("executor shows a stop status bar item while a run is active", async () => 
   assert.equal(stopItem.hideCalls, 1);
 });
 
+test("executor reports stop failures without rejecting the command", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  let finish;
+  const { errors, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner() {
+      const run = new Promise((resolve) => {
+        finish = resolve;
+      });
+      run.cancel = () => {
+        throw new Error("kill failed");
+      };
+      return run;
+    },
+  });
+
+  const run = controller.handleCommand("gauge.execute.specification.all");
+  await Promise.resolve();
+
+  try {
+    await assert.doesNotReject(() => controller.handleCommand("gauge.stopExecution"));
+  } finally {
+    finish(false);
+    await run;
+  }
+
+  assert.deepEqual(errors, ["Failed to Stop Run: kill failed"]);
+});
+
 test("executor shows the last execution status in the status bar", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const statusRequests = [];
