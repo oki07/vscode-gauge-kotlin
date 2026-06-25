@@ -102,6 +102,10 @@ function isTableLine(text) {
   return /^\s*\|.*\|\s*$/.test(text);
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function selectedEndLine(document, selection) {
   let endLine = selection.end.line;
   if (selection.end.character === 0 && endLine > selection.start.line) {
@@ -123,6 +127,7 @@ function buildExtractSelection(document, selection) {
   }
 
   const blocks = [];
+  const steps = [];
   let line = startLine;
   let expandedEndLine = endLine;
   while (line <= endLine) {
@@ -131,14 +136,19 @@ function buildExtractSelection(document, selection) {
       return undefined;
     }
 
-    const block = [text.trim()];
+    const stepText = text.trim();
+    const tableLines = [];
+    const block = [stepText];
     let nextLine = line + 1;
     while (nextLine < document.lineCount && isTableLine(lineText(document, nextLine))) {
-      block.push(lineText(document, nextLine).trim());
+      const tableLine = lineText(document, nextLine).trim();
+      tableLines.push(tableLine);
+      block.push(tableLine);
       nextLine += 1;
     }
 
     blocks.push(block);
+    steps.push({ tableLines, text: stepText });
     expandedEndLine = Math.max(expandedEndLine, nextLine - 1);
     line = nextLine;
   }
@@ -151,6 +161,7 @@ function buildExtractSelection(document, selection) {
     endLine: expandedEndLine,
     lines: blocks.flat(),
     startLine,
+    steps,
   };
 }
 
@@ -175,6 +186,72 @@ function extractConceptHeadings(text) {
 
 function buildConceptDefinition(conceptName, lines, eol) {
   return [`# ${conceptName}`, ...lines].join(eol) + eol;
+}
+
+function tableKey(tableLines) {
+  return tableLines.join("\n");
+}
+
+function tableParameterMap(steps) {
+  const tables = new Map();
+  let count = 0;
+  for (const step of steps || []) {
+    if (!step.tableLines || step.tableLines.length === 0) {
+      continue;
+    }
+    const key = tableKey(step.tableLines);
+    if (!tables.has(key)) {
+      count += 1;
+      tables.set(key, `table${count}`);
+    }
+  }
+  return tables;
+}
+
+function conceptHasTableParameter(conceptName, tableName) {
+  return new RegExp(`<${escapeRegExp(tableName)}>`).test(conceptName);
+}
+
+function removeTableParameters(conceptName, tableNames) {
+  let usageName = conceptName;
+  for (const tableName of tableNames) {
+    usageName = usageName.replace(new RegExp(`\\s*<${escapeRegExp(tableName)}>`, "g"), "");
+  }
+  return usageName.trim().replace(/\s+/g, " ");
+}
+
+function buildParameterizedExtraction(extraction, conceptName, eol) {
+  const tables = tableParameterMap(extraction.steps);
+  const sourceTables = [];
+  const sourceTableKeys = new Set();
+  const conceptLines = [];
+  const parameterizedNames = new Set();
+
+  for (const step of extraction.steps || []) {
+    if (!step.tableLines || step.tableLines.length === 0) {
+      conceptLines.push(step.text);
+      continue;
+    }
+
+    const key = tableKey(step.tableLines);
+    const tableName = tables.get(key);
+    if (tableName && conceptHasTableParameter(conceptName, tableName)) {
+      conceptLines.push(`${step.text} <${tableName}>`);
+      parameterizedNames.add(tableName);
+      if (!sourceTableKeys.has(key)) {
+        sourceTables.push(...step.tableLines);
+        sourceTableKeys.add(key);
+      }
+    } else {
+      conceptLines.push(step.text, ...step.tableLines);
+    }
+  }
+
+  const usageName = removeTableParameters(conceptName, parameterizedNames);
+  return {
+    conceptLines: conceptLines.length > 0 ? conceptLines : extraction.lines,
+    sourceText: [`* ${usageName}`, ...sourceTables].join(eol),
+  };
 }
 
 function appendConcept(existingText, conceptDefinition, eol) {
@@ -356,7 +433,12 @@ class ExtractConceptCommandProvider {
   async createWorkspaceEdit(document, extraction, conceptName, conceptFile) {
     const sourceText = typeof document.getText === "function" ? document.getText() : "";
     const eol = detectEol(sourceText);
-    const conceptDefinition = buildConceptDefinition(conceptName, extraction.lines, eol);
+    const parameterizedExtraction = buildParameterizedExtraction(extraction, conceptName, eol);
+    const conceptDefinition = buildConceptDefinition(
+      conceptName,
+      parameterizedExtraction.conceptLines,
+      eol,
+    );
     const sourceUri = document.uri;
     const conceptUri = createUri(this.vscode, conceptFile.path);
     const edit = createWorkspaceEdit(this.vscode);
@@ -365,7 +447,7 @@ class ExtractConceptCommandProvider {
     edit.replace(
       sourceUri,
       createRange(this.vscode, extraction.startLine, 0, sourceEnd.line, sourceEnd.character),
-      `* ${conceptName}${sourceEnd.needsTrailingEol ? eol : ""}`,
+      `${parameterizedExtraction.sourceText}${sourceEnd.needsTrailingEol ? eol : ""}`,
     );
 
     if (conceptFile.isNew) {

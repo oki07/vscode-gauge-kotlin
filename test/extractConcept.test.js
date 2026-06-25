@@ -225,7 +225,7 @@ test("ExtractConceptCommandProvider extracts selected Gauge steps into an existi
   );
 });
 
-test("ExtractConceptCommandProvider expands selected steps to include inline table rows", async () => {
+test("ExtractConceptCommandProvider parameterizes selected inline tables", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
   const document = createDocument([
@@ -246,7 +246,7 @@ test("ExtractConceptCommandProvider expands selected steps to include inline tab
       "/workspace/gauge/specs/concepts.cpt": "",
     },
     document,
-    inputResponses: ["Shared comparison"],
+    inputResponses: ["Shared comparison <table1>"],
     quickPickSelection: {
       label: "concepts.cpt",
       description: "specs",
@@ -271,7 +271,15 @@ test("ExtractConceptCommandProvider expands selected steps to include inline tab
   );
   assert.deepEqual({ ...sourceReplacement.range.start }, { line: 3, character: 0 });
   assert.deepEqual({ ...sourceReplacement.range.end }, { line: 6, character: 0 });
-  assert.equal(sourceReplacement.newText, "* Shared comparison\n");
+  assert.equal(
+    sourceReplacement.newText,
+    [
+      "* Shared comparison",
+      "|name|age|",
+      "|Ada|42|",
+      "",
+    ].join("\n"),
+  );
 
   const conceptReplacement = appliedEdits[0].replacements.find(
     (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
@@ -279,10 +287,8 @@ test("ExtractConceptCommandProvider expands selected steps to include inline tab
   assert.equal(
     conceptReplacement.newText,
     [
-      "# Shared comparison",
-      "* Compare users",
-      "|name|age|",
-      "|Ada|42|",
+      "# Shared comparison <table1>",
+      "* Compare users <table1>",
       "",
     ].join("\n"),
   );
