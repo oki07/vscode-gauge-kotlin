@@ -118,6 +118,7 @@ class SpecNodeProvider {
       this.activeFolder = this.gaugeWorkspace.getDefaultFolder();
       this.registerRefreshListeners();
       this.registerCommands();
+      this.registerProjectChangeListener();
       this.activation = this.activateTreeDataProvider(this.activeFolder);
     }
   }
@@ -276,6 +277,16 @@ class SpecNodeProvider {
       OPEN_COMMAND,
       (node) => this.openNode(node),
     ));
+  }
+
+  registerProjectChangeListener() {
+    if (typeof this.gaugeWorkspace.onDidChangeProjects !== "function") {
+      return;
+    }
+    addDisposable(
+      this.disposables,
+      this.gaugeWorkspace.onDidChangeProjects((projectPath) => this.changeClient(projectPath)),
+    );
   }
 
   runAllActiveProjectSpecs() {

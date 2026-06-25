@@ -141,8 +141,8 @@ function createFakeVscode(overrides = {}) {
   };
 }
 
-function createFakeWorkspace(client) {
-  const clientsMap = new Map([
+function createFakeWorkspace(client, overrides = {}) {
+  const clientsMap = overrides.clientsMap || new Map([
     [
       "/workspace/gauge",
       {
@@ -155,8 +155,10 @@ function createFakeWorkspace(client) {
       },
     ],
   ]);
+  const projectChangeListeners = [];
   return {
     changes: [],
+    projectChangeListeners,
     getClientsMap() {
       return {
         get(filename) {
@@ -165,7 +167,14 @@ function createFakeWorkspace(client) {
       };
     },
     getDefaultFolder() {
+      if (overrides.getDefaultFolder) {
+        return overrides.getDefaultFolder();
+      }
       return "/workspace/gauge";
+    },
+    onDidChangeProjects(listener) {
+      projectChangeListeners.push(listener);
+      return { dispose() {} };
     },
     showProjectOptions(onChange) {
       this.changes.push("showProjectOptions");
@@ -300,4 +309,59 @@ test("SpecNodeProvider registers explorer commands", async () => {
   assert.deepEqual(workspace.changes, ["showProjectOptions"]);
   assert.deepEqual(documents, ["/workspace/gauge/specs/checkout.spec"]);
   assert.equal(shownDocuments[0].options.selection.start.line, 0);
+});
+
+test("SpecNodeProvider changes client when workspace projects change", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const firstClient = createFakeClient();
+  const secondClient = createFakeClient();
+  let defaultFolder = "/workspace/one";
+  const clientsMap = new Map([
+    [
+      "/workspace/one",
+      {
+        client: firstClient,
+        project: {
+          root() {
+            return "/workspace/one";
+          },
+        },
+      },
+    ],
+    [
+      "/workspace/two",
+      {
+        client: secondClient,
+        project: {
+          root() {
+            return "/workspace/two";
+          },
+        },
+      },
+    ],
+  ]);
+  const { vscode } = createFakeVscode();
+  const workspace = createFakeWorkspace(firstClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return defaultFolder;
+    },
+  });
+
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    vscode,
+  });
+  await provider.ready();
+
+  assert.equal(firstClient.started, 1);
+  assert.equal(workspace.projectChangeListeners.length, 1);
+
+  defaultFolder = "/workspace/two";
+  await workspace.projectChangeListeners[0](defaultFolder);
+
+  assert.equal(secondClient.started, 1);
+  const specs = await provider.getChildren();
+  assert.equal(specs.length, 1);
+  assert.deepEqual(secondClient.requests.map((request) => request.method), ["gauge/specs"]);
 });

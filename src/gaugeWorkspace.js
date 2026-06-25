@@ -96,6 +96,7 @@ class GaugeWorkspace {
       vscode: this.vscode,
     });
     this.disposables = [];
+    this.projectChangeListeners = new Set();
     this.launchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
     this.registerActiveEditorChanges();
     this.registerWorkspaceFolderChanges();
@@ -142,6 +143,18 @@ class GaugeWorkspace {
 
   getDefaultFolder() {
     return [...this.clientsMap.keys()].sort((left, right) => (left > right ? 1 : -1))[0];
+  }
+
+  onDidChangeProjects(listener) {
+    this.projectChangeListeners.add(listener);
+    return {
+      dispose: () => this.projectChangeListeners.delete(listener),
+    };
+  }
+
+  async notifyProjectsChanged() {
+    const defaultFolder = this.getDefaultFolder();
+    await Promise.all([...this.projectChangeListeners].map((listener) => listener(defaultFolder)));
   }
 
   async showProjectOptions(onChange) {
@@ -259,6 +272,9 @@ class GaugeWorkspace {
       await this.stopServerFor(folder.uri.fsPath);
     }
     await this.setMultiProjectContext();
+    if (removed.length > 0) {
+      await this.notifyProjectsChanged();
+    }
   }
 
   async stopServerFor(folder) {
