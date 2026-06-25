@@ -15,6 +15,9 @@ const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
 const JAVA_RUNNER = "java";
+const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
+const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
+const RESTART_ACTION = "Restart Now";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -93,8 +96,10 @@ class GaugeWorkspace {
       vscode: this.vscode,
     });
     this.disposables = [];
+    this.launchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
     this.registerActiveEditorChanges();
     this.registerWorkspaceFolderChanges();
+    this.registerConfigurationChanges();
     this.startup = this.startWorkspaceProjects();
   }
 
@@ -166,6 +171,13 @@ class GaugeWorkspace {
     }
   }
 
+  getWorkspaceConfiguration(section) {
+    if (!this.vscode.workspace || typeof this.vscode.workspace.getConfiguration !== "function") {
+      return undefined;
+    }
+    return this.vscode.workspace.getConfiguration(section);
+  }
+
   registerWorkspaceFolderChanges() {
     if (!this.vscode.workspace || typeof this.vscode.workspace.onDidChangeWorkspaceFolders !== "function") {
       return;
@@ -188,6 +200,35 @@ class GaugeWorkspace {
     if (disposable) {
       this.disposables.push(disposable);
     }
+  }
+
+  registerConfigurationChanges() {
+    if (!this.vscode.workspace || typeof this.vscode.workspace.onDidChangeConfiguration !== "function") {
+      return;
+    }
+    const disposable = this.vscode.workspace.onDidChangeConfiguration(
+      () => this.onConfigurationChanged(),
+    );
+    if (disposable) {
+      this.disposables.push(disposable);
+    }
+  }
+
+  onConfigurationChanged() {
+    const newLaunchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
+    const oldDebugLogs = this.launchConfig && this.launchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
+    const newDebugLogs = newLaunchConfig && newLaunchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
+    this.launchConfig = newLaunchConfig;
+    if (oldDebugLogs === newDebugLogs) {
+      return undefined;
+    }
+    return this.vscode.window.showWarningMessage(RESTART_MESSAGE, RESTART_ACTION)
+      .then((selection) => {
+        if (selection === RESTART_ACTION) {
+          return this.vscode.commands.executeCommand(RELOAD_WINDOW_COMMAND);
+        }
+        return undefined;
+      });
   }
 
   async startServerForActiveGaugeDocument(editor) {
@@ -234,7 +275,8 @@ class GaugeWorkspace {
   serverOptionsFor(project) {
     const command = this.cli.gaugeCommand();
     const args = command.argsForSpawnType(["daemon", "--lsp", "--dir", project.root()]);
-    const launchConfig = this.vscode.workspace.getConfiguration(GAUGE_LAUNCH_CONFIG);
+    const launchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
+    this.launchConfig = launchConfig;
     if (launchConfig && launchConfig.get(DEBUG_LOG_LEVEL_CONFIG)) {
       args.push("-l", "debug");
     }

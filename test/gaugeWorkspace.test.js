@@ -19,8 +19,10 @@ function createFakeFileSystem(entries) {
 
 function createFakeVscode(overrides = {}) {
   const activeEditorListeners = [];
+  const configurationChangeListeners = [];
   const contexts = [];
   const quickPicks = [];
+  const warnings = [];
   const workspaceFolderListeners = [];
   const configurations = overrides.configurations || {};
   const workspaceFolders = overrides.workspaceFolders || [
@@ -59,6 +61,10 @@ function createFakeVscode(overrides = {}) {
           quickPicks.push({ items, options });
           return Promise.resolve(overrides.quickPickSelection || items[0]);
         },
+        showWarningMessage(message, ...actions) {
+          warnings.push({ message, actions });
+          return Promise.resolve(overrides.warningSelection || actions[0]);
+        },
         showErrorMessage() {
           return Promise.resolve(undefined);
         },
@@ -69,7 +75,7 @@ function createFakeVscode(overrides = {}) {
           return workspaceFolders.find((folder) => folder.uri.fsPath === uri.fsPath);
         },
         getConfiguration(section) {
-          const values = configurations[section] || {};
+          const values = { ...(configurations[section] || {}) };
           return {
             get(key) {
               return values[key];
@@ -83,12 +89,16 @@ function createFakeVscode(overrides = {}) {
           workspaceFolderListeners.push(listener);
           return { dispose() {} };
         },
-        onDidChangeConfiguration() {
+        onDidChangeConfiguration(listener) {
+          configurationChangeListeners.push(listener);
           return { dispose() {} };
         },
       },
     },
     activeEditorListeners,
+    configurationChangeListeners,
+    configurations,
+    warnings,
     workspaceFolderListeners,
   };
 }
@@ -422,6 +432,48 @@ test("GaugeWorkspace starts a client when the active editor changes to Gauge", a
   });
 
   assert.equal(clients.get("/workspace/gauge/specs/login.spec").client.started, true);
+});
+
+test("GaugeWorkspace asks users to restart when Gauge launch debug logs change", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    configurations,
+    contexts,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(configurationChangeListeners.length, 1);
+
+  configurations["gauge.launch"] = { enableDebugLogs: true };
+  await configurationChangeListeners[0]({});
+
+  assert.deepEqual(warnings, [
+    {
+      message: "Gauge Language Server configuration changed, please restart VS Code.",
+      actions: ["Restart Now"],
+    },
+  ]);
+  assert.deepEqual(contexts.at(-1), {
+    command: "workbench.action.reloadWindow",
+    key: undefined,
+    value: undefined,
+  });
 });
 
 test("GaugeWorkspace stores the last html report path in state", async () => {
