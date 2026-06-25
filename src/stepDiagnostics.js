@@ -201,12 +201,61 @@ function findTopLevelChar(text, target) {
   return -1;
 }
 
-function parseStringLiteralTerm(text) {
+function appendStringTemplateValue(result, name, constants) {
+  if (!/^[A-Za-z_]\w*$/.test(name) || !constants.has(name)) {
+    return undefined;
+  }
+  return `${result}${constants.get(name)}`;
+}
+
+function interpolateStringTemplate(value, constants) {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char !== "$") {
+      result += char;
+      continue;
+    }
+
+    if (value[index + 1] === "{") {
+      const closeIndex = value.indexOf("}", index + 2);
+      if (closeIndex === -1) {
+        return undefined;
+      }
+      const nextResult = appendStringTemplateValue(
+        result,
+        value.slice(index + 2, closeIndex).trim(),
+        constants,
+      );
+      if (nextResult === undefined) {
+        return undefined;
+      }
+      result = nextResult;
+      index = closeIndex;
+      continue;
+    }
+
+    const match = /^[A-Za-z_]\w*/.exec(value.slice(index + 1));
+    if (!match) {
+      result += char;
+      continue;
+    }
+    const nextResult = appendStringTemplateValue(result, match[0], constants);
+    if (nextResult === undefined) {
+      return undefined;
+    }
+    result = nextResult;
+    index += match[0].length;
+  }
+  return result;
+}
+
+function parseStringLiteralTerm(text, constants) {
   const trimmed = text.trim();
   if (trimmed.startsWith("\"\"\"")) {
     const end = trimmed.indexOf("\"\"\"", 3);
     if (end !== -1 && trimmed.slice(end + 3).trim() === "") {
-      return trimmed.slice(3, end);
+      return interpolateStringTemplate(trimmed.slice(3, end), constants);
     }
     return undefined;
   }
@@ -219,14 +268,23 @@ function parseStringLiteralTerm(text) {
     const char = trimmed[index];
     if (char === "\\") {
       if (index + 1 < trimmed.length) {
-        value += trimmed[index + 1];
+        const escaped = trimmed[index + 1];
+        if (escaped === "$") {
+          value += "\u0000";
+        } else {
+          value += escaped;
+        }
         index += 1;
         continue;
       }
       return undefined;
     }
     if (char === "\"") {
-      return trimmed.slice(index + 1).trim() === "" ? value : undefined;
+      if (trimmed.slice(index + 1).trim() !== "") {
+        return undefined;
+      }
+      const templateValue = interpolateStringTemplate(value, constants);
+      return templateValue === undefined ? undefined : templateValue.replace(/\u0000/g, "$");
     }
     value += char;
   }
@@ -242,7 +300,7 @@ function evaluateStringExpression(expression, constants) {
     return constants.get(trimmed);
   }
 
-  const literal = parseStringLiteralTerm(trimmed);
+  const literal = parseStringLiteralTerm(trimmed, constants);
   if (literal !== undefined) {
     return literal;
   }
