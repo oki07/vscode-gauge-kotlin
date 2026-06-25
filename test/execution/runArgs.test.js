@@ -1,0 +1,184 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+
+test("buildRunArgs.forGauge ignores other args when failed flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGauge("my.spec:123", { failed: true, tags: "should be ignored" }).join(" "),
+    "run --failed",
+  );
+});
+
+test("buildRunArgs.forGauge ignores other args when repeat flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGauge("my.spec:123", { repeat: true, tags: "should be ignored" }).join(" "),
+    "run --repeat",
+  );
+});
+
+test("buildRunArgs.forGauge formats standard run options", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGauge("my.spec:123", {
+      tags: "foo bar",
+      n: 3,
+      env: ["a", "b", "c"],
+      parallel: true,
+      failed: null,
+      repeat: false,
+      "retry-only": null,
+    }).join(" "),
+    "run --hide-suggestion --tags foo bar --n 3 --env a,b,c --parallel my.spec:123",
+  );
+});
+
+test("buildRunArgs.forGauge omits simple-console when parallel flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGauge("my.spec:123", { parallel: true }).join(" "),
+    "run --hide-suggestion --parallel my.spec:123",
+  );
+});
+
+test("buildRunArgs.forGauge allows default flags to be unset", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGauge(null, { "hide-suggestion": false, "simple-console": false }).join(" "),
+    "run",
+  );
+});
+
+test("buildRunArgs.forGradle ignores other args when failed flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", { failed: true }).join(" "),
+    "clean gauge -PadditionalFlags=--failed",
+  );
+});
+
+test("buildRunArgs.forGradle ignores other args when repeat flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", { repeat: true }).join(" "),
+    "clean gauge -PadditionalFlags=--repeat",
+  );
+});
+
+test("buildRunArgs.forGradle formats standard run options", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", {
+      tags: "foo bar",
+      env: ["a", "b", "c"],
+      parallel: true,
+      n: 3,
+      failed: null,
+      repeat: false,
+      "retry-only": null,
+    }).join(" "),
+    "clean gauge -PinParallel=true -Pnodes=3 -Ptags=foo bar -Penv=a,b,c -PadditionalFlags=--hide-suggestion --simple-console -PspecsDir=my.spec:123",
+  );
+});
+
+test("buildRunArgs.forGradle allows default flags to be unset", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle(null, { "hide-suggestion": false, "simple-console": false }).join(" "),
+    "clean gauge",
+  );
+});
+
+test("buildRunArgs.forMaven ignores other args when failed flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", { failed: true }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--failed",
+  );
+});
+
+test("buildRunArgs.forMaven ignores other args when repeat flag is set", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", { repeat: true }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--repeat",
+  );
+});
+
+test("buildRunArgs.forMaven formats standard run options", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", {
+      tags: "foo bar",
+      env: ["a", "b", "c"],
+      parallel: true,
+      n: 3,
+      failed: null,
+      repeat: false,
+      "retry-only": null,
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -DinParallel=true -Dnodes=3 -Dtags=foo bar -Denv=a,b,c -Dflags=--hide-suggestion,--simple-console -DspecsDir=my.spec:123",
+  );
+});
+
+test("buildRunArgs.forMaven allows default flags to be unset", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven(null, { "hide-suggestion": false, "simple-console": false }).join(" "),
+    "-q clean compile test-compile gauge:execute",
+  );
+});
+
+test("extractGaugeRunOption picks first gauge test entry and removes launch attributes", () => {
+  const { extractGaugeRunOption } = require("../../src/execution/runArgs");
+
+  const configs = [
+    { type: "foo", name: "1", request: "launch", tags: "fail" },
+    { type: "bar", name: "2", request: "test", tags: "fail" },
+    { type: "gauge", name: "3", request: "attach", tags: "fail" },
+    {
+      type: "gauge",
+      name: "4",
+      request: "test",
+      tags: "hit",
+      unknown: "attributes are also available",
+    },
+    { type: "gauge", name: "5", request: "test", tags: "fail" },
+  ];
+
+  assert.deepEqual(extractGaugeRunOption(configs), {
+    tags: "hit",
+    unknown: "attributes are also available",
+  });
+});
+
+test("extractGaugeRunOption returns empty object when no gauge test entry is found", () => {
+  const { extractGaugeRunOption } = require("../../src/execution/runArgs");
+
+  const configs = [
+    { type: "foo", name: "1", request: "launch" },
+    { type: "bar", name: "2", request: "test" },
+    { type: "gauge", name: "3", request: "attach" },
+  ];
+
+  assert.deepEqual(extractGaugeRunOption(configs), {});
+});
+
+test("extractGaugeRunOption returns empty object for null", () => {
+  const { extractGaugeRunOption } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(extractGaugeRunOption(null), {});
+});
