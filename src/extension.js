@@ -1,5 +1,7 @@
 "use strict";
 
+const { createSpecification } = require("./specification");
+
 const GAUGE_COMMANDS = [
   "gauge.createProject",
   "gauge.create.specification",
@@ -30,9 +32,16 @@ function notify(vscode, message) {
   return undefined;
 }
 
-function createCommandHandler(command, vscode) {
+function createCommandHandler(command, vscode, options = {}) {
   return function handleGaugeCommand() {
     switch (command) {
+      case "gauge.create.specification":
+        return (options.createSpecification || createSpecification)({
+          vscode,
+          fileSystem: options.fileSystem,
+          pathModule: options.pathModule,
+          eol: options.eol,
+        });
       case "gauge.config.saveRecommended":
         return notify(vscode, "Gauge recommended settings are not available yet.");
       case "gauge.stopExecution":
@@ -43,7 +52,7 @@ function createCommandHandler(command, vscode) {
   };
 }
 
-function activate(context, vscodeApi) {
+function activate(context, vscodeApi, options = {}) {
   const vscode = getVscode(vscodeApi);
 
   if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
@@ -53,7 +62,7 @@ function activate(context, vscodeApi) {
   for (const command of GAUGE_COMMANDS) {
     const disposable = vscode.commands.registerCommand(
       command,
-      createCommandHandler(command, vscode),
+      createCommandHandler(command, vscode, options),
     );
     context.subscriptions.push(disposable);
   }

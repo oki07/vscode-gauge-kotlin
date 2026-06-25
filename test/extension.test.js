@@ -33,3 +33,42 @@ test("activation registers every contributed Gauge command", () => {
   assert.equal(context.subscriptions.length, manifest.contributes.commands.length);
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
 });
+
+test("create specification command delegates to the specification creator", () => {
+  const extension = require("../src/extension");
+
+  let receivedOptions;
+  const registeredCommands = [];
+  const context = { subscriptions: [] };
+  const fakeVscode = {
+    commands: {
+      executeCommand() {
+        return undefined;
+      },
+      registerCommand(command, handler) {
+        registeredCommands.push({ command, handler });
+        return { dispose() {} };
+      },
+    },
+    window: {
+      showInformationMessage() {
+        return undefined;
+      },
+    },
+  };
+
+  extension.activate(context, fakeVscode, {
+    createSpecification(options) {
+      receivedOptions = options;
+      return "created";
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.create.specification",
+  );
+
+  assert.ok(command);
+  assert.equal(command.handler(), "created");
+  assert.equal(receivedOptions.vscode, fakeVscode);
+});
