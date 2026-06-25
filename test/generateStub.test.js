@@ -4,15 +4,49 @@ const test = require("node:test");
 
 function createFakeVscode(overrides = {}) {
   const commands = [];
+  const appliedEdits = [];
   const errors = [];
   const information = [];
+  const openedDocuments = [];
   const quickPicks = [];
+  const shownDocuments = [];
+  class Position {
+    constructor(line, character) {
+      this.line = line;
+      this.character = character;
+    }
+  }
+
+  class Range {
+    constructor(start, end) {
+      this.start = start;
+      this.end = end;
+    }
+  }
+
+  class WorkspaceEdit {
+    constructor() {
+      this.entriesList = [];
+    }
+
+    set(uri, edits) {
+      this.entriesList.push([uri, edits]);
+    }
+
+    entries() {
+      return this.entriesList;
+    }
+  }
+
   const vscode = {
     CancellationTokenSource: class CancellationTokenSource {
       constructor() {
         this.token = { cancelled: false };
       }
     },
+    Position,
+    Range,
+    WorkspaceEdit,
     commands: {
       registerCommand(command, handler) {
         commands.push({ command, handler });
@@ -49,13 +83,33 @@ function createFakeVscode(overrides = {}) {
         quickPicks.push(items);
         return Promise.resolve(overrides.quickPickSelection || items[2]);
       },
+      showTextDocument(document, options) {
+        shownDocuments.push({ document, options });
+        return Promise.resolve({ document, options });
+      },
+    },
+    workspace: {
+      applyEdit(edit) {
+        appliedEdits.push(edit);
+        return Promise.resolve(true);
+      },
+      openTextDocument(filename) {
+        openedDocuments.push(filename);
+        return Promise.resolve({
+          fileName: filename,
+          uri: { fsPath: filename },
+        });
+      },
     },
   };
   return {
+    appliedEdits,
     commands,
     errors,
     information,
+    openedDocuments,
     quickPicks,
+    shownDocuments,
     vscode,
   };
 }
@@ -243,4 +297,116 @@ test("GenerateStubCommandProvider writes a selected concept through Gauge LSP", 
     },
   ]);
   assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});
+
+test("GenerateStubCommandProvider creates missing files before applying generated edits", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const requests = [];
+  const madeDirectories = [];
+  const writes = [];
+  const existing = new Set();
+  const filename = "/workspace/src/test/kotlin/NewSteps.kt";
+  const textEdits = [
+    {
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 0 },
+      },
+      newText: "fun generatedStep() {}\n",
+    },
+  ];
+  const {
+    appliedEdits,
+    commands,
+    openedDocuments,
+    quickPicks,
+    shownDocuments,
+    vscode,
+  } = createFakeVscode({
+    quickPickSelection: {
+      label: "New File",
+      description: "Create a new file",
+      value: "New File",
+    },
+  });
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const fileSystem = {
+    existsSync(candidate) {
+      return existing.has(candidate);
+    },
+    mkdirSync(directory, options) {
+      madeDirectories.push({ directory, options });
+      existing.add(directory);
+    },
+    writeFileSync(candidate, content, options) {
+      writes.push({ content, filename: candidate, options });
+      existing.add(candidate);
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        assert.equal(edit.id, "raw-edit");
+        return Promise.resolve({
+          entries() {
+            return [[{ fsPath: filename }, textEdits]];
+          },
+        });
+      },
+    },
+    sendRequest(method, params) {
+      requests.push({ method, params });
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve([]);
+      }
+      if (method === "gauge/putStubImpl") {
+        return Promise.resolve({ id: "raw-edit" });
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/specs/example.spec");
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("fun generatedStep() {}");
+
+  assert.deepEqual(quickPicks[0], [
+    { label: "New File", description: "Create a new file", value: "New File" },
+    { label: "Copy To Clipboard", description: "", value: "Copy To Clipboard" },
+  ]);
+  assert.deepEqual(requests[1], {
+    method: "gauge/putStubImpl",
+    params: {
+      implementationFilePath: "New File",
+      codes: ["fun generatedStep() {}"],
+    },
+  });
+  assert.deepEqual(madeDirectories, [
+    { directory: "/workspace/src/test/kotlin", options: { recursive: true } },
+  ]);
+  assert.deepEqual(writes, [
+    {
+      content: "",
+      filename,
+      options: { encoding: "utf8" },
+    },
+  ]);
+  assert.deepEqual(openedDocuments, [filename]);
+  assert.deepEqual(shownDocuments[0].options.selection.start, new vscode.Position(0, 0));
+  assert.deepEqual(appliedEdits[0].entries(), [[{ fsPath: filename }, textEdits]]);
 });

@@ -1,6 +1,7 @@
 "use strict";
 
 const nodePath = require("node:path");
+const { WorkspaceEditor } = require("../refactor/workspaceEditor");
 
 const ADD_STUB_REQUEST = "gauge/putStubImpl";
 const COPY_TO_CLIPBOARD = "Copy To Clipboard";
@@ -21,15 +22,12 @@ function createToken(vscode) {
   return undefined;
 }
 
-function defaultWorkspaceEditorFactory(vscode, edit) {
-  return {
-    applyChanges() {
-      if (vscode.workspace && typeof vscode.workspace.applyEdit === "function") {
-        return vscode.workspace.applyEdit(edit);
-      }
-      return Promise.resolve(undefined);
-    },
-  };
+function defaultWorkspaceEditorFactory(vscode, edit, options = {}) {
+  return new WorkspaceEditor(edit, {
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    vscode,
+  });
 }
 
 class GenerateStubCommandProvider {
@@ -37,8 +35,12 @@ class GenerateStubCommandProvider {
     this.clients = clients;
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
+    this.fileSystem = options.fileSystem;
     this.workspaceEditorFactory = options.workspaceEditorFactory
-      || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit));
+      || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit, {
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+      }));
     this.disposables = [];
     this.registerCommands();
   }
