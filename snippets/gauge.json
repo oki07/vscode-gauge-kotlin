@@ -2,81 +2,85 @@
   "Specification": {
     "prefix": "spec",
     "body": [
-      "# ${1:Specification heading}",
-      "",
-      "## ${2:Scenario heading}",
-      "* ${3:Step text}"
+      "# ${1:SPECIFICATION_HEADING}",
+      "$0"
     ],
-    "description": "Create a Gauge specification with one scenario."
+    "description": "New Specification"
   },
   "Scenario": {
     "prefix": "sce",
     "body": [
-      "## ${1:Scenario heading}",
-      "* ${2:Step text}"
+      "## ${1:Scenario Heading}",
+      "* $0"
     ],
-    "description": "Create a Gauge scenario."
+    "description": "New Scenario"
   },
   "Concept": {
     "prefix": "cpt",
     "body": [
-      "# ${1:Concept heading}",
-      "* ${2:Step text}"
+      "# ${1:Concept Heading}",
+      "* $0"
     ],
-    "description": "Create a Gauge concept."
+    "description": "New Concept"
   },
   "Table with one column": {
     "prefix": "table:1",
     "body": [
-      "|${1:column}|",
-      "|-------|",
-      "|${2:value}|"
+      "|${1:HEADER}|",
+      "|------|",
+      "|${2:value}|",
+      "|${3:value}$0|"
     ],
-    "description": "Create a Gauge table with one column."
+    "description": "table with 1 column"
   },
   "Table with two columns": {
     "prefix": "table:2",
     "body": [
-      "|${1:first}|${2:second}|",
-      "|-------|--------|",
-      "|${3:value}|${4:value}|"
+      "|${1:HEADER}|${2:HEADER}|",
+      "|------|------|",
+      "|${3:value}|${4:value}|",
+      "|${5:value}|${6:value}$0|"
     ],
-    "description": "Create a Gauge table with two columns."
+    "description": "table with 2 columns"
   },
   "Table with three columns": {
     "prefix": "table:3",
     "body": [
-      "|${1:first}|${2:second}|${3:third}|",
-      "|-------|--------|-------|",
-      "|${4:value}|${5:value}|${6:value}|"
+      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|",
+      "|------|------|------|",
+      "|${4:value}|${5:value}|${6:value}|",
+      "|${7:value}|${8:value}|${9:value}$0|"
     ],
-    "description": "Create a Gauge table with three columns."
+    "description": "table with 3 columns"
   },
   "Table with four columns": {
     "prefix": "table:4",
     "body": [
-      "|${1:first}|${2:second}|${3:third}|${4:fourth}|",
-      "|-------|--------|-------|--------|",
-      "|${5:value}|${6:value}|${7:value}|${8:value}|"
+      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|",
+      "|------|------|------|------|",
+      "|${5:value}|${6:value}|${7:value}|${8:value}|",
+      "|${9:value}|${10:value}|${11:value}|${12:value}$0|"
     ],
-    "description": "Create a Gauge table with four columns."
+    "description": "table with 4 columns"
   },
   "Table with five columns": {
     "prefix": "table:5",
     "body": [
-      "|${1:first}|${2:second}|${3:third}|${4:fourth}|${5:fifth}|",
-      "|-------|--------|-------|--------|-------|",
-      "|${6:value}|${7:value}|${8:value}|${9:value}|${10:value}|"
+      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|",
+      "|------|------|------|------|------|",
+      "|${6:value}|${7:value}|${8:value}|${9:value}|${10:value}|",
+      "|${11:value}|${12:value}|${13:value}|${14:value}|${15:value}$0|"
     ],
-    "description": "Create a Gauge table with five columns."
+    "description": "table with 5 columns"
   },
   "Table with six columns": {
     "prefix": "table:6",
     "body": [
-      "|${1:first}|${2:second}|${3:third}|${4:fourth}|${5:fifth}|${6:sixth}|",
-      "|-------|--------|-------|--------|-------|-------|",
-      "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|"
+      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|${6:HEADER}|",
+      "|------|------|------|------|------|------|",
+      "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
+      "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|"
     ],
-    "description": "Create a Gauge table with six columns."
+    "description": "table with 6 columns"
   }
 }
