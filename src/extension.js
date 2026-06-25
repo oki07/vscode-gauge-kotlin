@@ -3,6 +3,7 @@
 const { CLI } = require("./cli");
 const { ConfigProvider } = require("./config/configProvider");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
+const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeClients } = require("./gaugeClients");
@@ -294,6 +295,10 @@ function activate(context, vscodeApi, options = {}) {
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     runner: options.runner,
+    scenariosProvider: options.scenariosProvider || createGaugeScenariosProvider(
+      () => activeClientsMap,
+      { vscode },
+    ),
     state,
   });
   const ProjectInitializerCtor = options.ProjectInitializer || ProjectInitializer;
