@@ -111,6 +111,34 @@ test("GaugeStepDiagnosticsProvider only inspects Gauge Step annotations", () => 
   );
 });
 
+test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "* ",
+    "* Pay with card",
+    "",
+    "## Successful checkout",
+    "  *",
+    "// *",
+  ].join("\n"), "gauge");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Step should not be blank",
+      "Step should not be blank",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 5, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 5, character: 3 });
+});
+
 test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const opened = [];

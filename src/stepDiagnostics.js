@@ -1,7 +1,9 @@
 "use strict";
 
 const COLLECTION_NAME = "gauge-kotlin";
+const GAUGE_LANGUAGE = "gauge";
 const KOTLIN_LANGUAGE = "kotlin";
+const BLANK_STEP_MESSAGE = "Step should not be blank";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 
 function getVscode(vscode) {
@@ -117,6 +119,40 @@ function extractStringLiterals(text) {
 function countStepParameters(stepText) {
   const matches = stepText.match(/<[^>\r\n]+>/g);
   return matches ? matches.length : 0;
+}
+
+function findBlankGaugeSteps(text) {
+  const entries = [];
+  let line = 0;
+  let lineStart = 0;
+
+  while (lineStart <= text.length) {
+    let lineEnd = text.indexOf("\n", lineStart);
+    if (lineEnd === -1) {
+      lineEnd = text.length;
+    }
+
+    const rawLine = text.slice(lineStart, lineEnd).replace(/\r$/, "");
+    const marker = rawLine.search(/\S/);
+    if (
+      marker !== -1
+      && rawLine[marker] === "*"
+      && rawLine.slice(marker + 1).trim() === ""
+    ) {
+      entries.push({
+        end: { line, character: rawLine.length },
+        start: { line, character: marker },
+      });
+    }
+
+    if (lineEnd === text.length) {
+      break;
+    }
+    line += 1;
+    lineStart = lineEnd + 1;
+  }
+
+  return entries;
 }
 
 function splitTopLevelParameters(text) {
@@ -266,7 +302,7 @@ class GaugeStepDiagnosticsProvider {
   shouldDiagnose(document) {
     return Boolean(
       document
-      && document.languageId === KOTLIN_LANGUAGE
+      && (document.languageId === KOTLIN_LANGUAGE || document.languageId === GAUGE_LANGUAGE)
       && typeof document.getText === "function"
       && this.isGaugeProjectDocument(document),
     );
@@ -279,6 +315,17 @@ class GaugeStepDiagnosticsProvider {
 
     const text = document.getText();
     const diagnostics = [];
+    if (document.languageId === GAUGE_LANGUAGE) {
+      for (const entry of findBlankGaugeSteps(text)) {
+        diagnostics.push(createDiagnostic(
+          this.vscode,
+          createRange(this.vscode, entry.start, entry.end),
+          BLANK_STEP_MESSAGE,
+        ));
+      }
+      return diagnostics;
+    }
+
     for (const entry of findStepFunctions(text)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart);
