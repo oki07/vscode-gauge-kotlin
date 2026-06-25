@@ -265,6 +265,35 @@ test("preview command delegates to the Gauge preview creator", () => {
   assert.equal(receivedOptions.projectFactory, projectFactory);
 });
 
+test("format command delegates to VS Code document formatting for Gauge files", () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const { contexts, fakeVscode, registeredCommands } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge",
+      },
+    },
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return undefined;
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.format",
+  );
+
+  assert.ok(command);
+  command.handler();
+  assert.deepEqual(contexts, [
+    { command: "editor.action.formatDocument", key: undefined, value: undefined },
+  ]);
+});
+
 test("create specification command provides Gauge LSP spec directories", async () => {
   const extension = require("../src/extension");
 

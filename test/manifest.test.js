@@ -40,6 +40,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "gauge.create.specification",
     "gauge.create.concept",
     "gauge.extract.concept",
+    "gauge.format",
     "gauge.preview",
     "gauge.config.saveRecommended",
     "gauge.stopExecution",
@@ -62,6 +63,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   );
   assert.ok(commandPaletteIds.includes("gauge.create.concept"));
   assert.ok(commandPaletteIds.includes("gauge.extract.concept"));
+  assert.ok(commandPaletteIds.includes("gauge.format"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
 
   const configuration = manifest.contributes.configuration.properties;

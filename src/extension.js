@@ -33,6 +33,7 @@ const {
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
+const FORMAT_DOCUMENT_COMMAND = "editor.action.formatDocument";
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
@@ -68,6 +69,7 @@ const GAUGE_COMMANDS = [
   "gauge.create.specification",
   "gauge.create.concept",
   "gauge.extract.concept",
+  "gauge.format",
   "gauge.preview",
   "gauge.config.saveRecommended",
   "gauge.stopExecution",
@@ -94,6 +96,16 @@ function getVscode(vscodeApi) {
 function notify(vscode, message) {
   if (vscode.window && typeof vscode.window.showInformationMessage === "function") {
     return vscode.window.showInformationMessage(message);
+  }
+  return undefined;
+}
+
+function formatActiveGaugeDocument(vscode) {
+  if (!hasActiveGaugeDocument(vscode)) {
+    return notify(vscode, "No Gauge file is active.");
+  }
+  if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
+    return vscode.commands.executeCommand(FORMAT_DOCUMENT_COMMAND);
   }
   return undefined;
 }
@@ -284,6 +296,8 @@ function createCommandHandler(command, vscode, executionController, options = {}
           projectFactory: options.projectFactory,
           tempDirProvider: options.tempDirProvider,
         });
+      case "gauge.format":
+        return (options.formatDocument || formatActiveGaugeDocument)(vscode);
       case "gauge.config.saveRecommended":
         return notify(vscode, "Gauge recommended settings are not available yet.");
       case "gauge.stopExecution":

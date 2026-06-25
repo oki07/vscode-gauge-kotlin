@@ -89,6 +89,11 @@
         "category": "Gauge"
       },
       {
+        "command": "gauge.format",
+        "title": "Format Gauge File",
+        "category": "Gauge"
+      },
+      {
         "command": "gauge.preview",
         "title": "Preview Gauge File",
         "category": "Gauge"
@@ -184,6 +189,10 @@
           "when": "gauge:activated && editorLangId == gauge"
         },
         {
+          "command": "gauge.format",
+          "when": "gauge:activated && editorLangId == gauge"
+        },
+        {
           "command": "gauge.preview",
           "when": "gauge:activated"
         },
@@ -247,6 +256,11 @@
       "editor/context": [
         {
           "command": "gauge.extract.concept",
+          "when": "gauge:activated && editorLangId == gauge",
+          "group": "1_modification"
+        },
+        {
+          "command": "gauge.format",
           "when": "gauge:activated && editorLangId == gauge",
           "group": "1_modification"
         }
