@@ -4,6 +4,7 @@ const test = require("node:test");
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
+  "gauge.extract.concept",
   "gauge.showReferences.atCursor",
   "gauge.specexplorer.debugNode",
   "gauge.specexplorer.runAllActiveProjectSpecs",
@@ -465,6 +466,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeExtractConceptCommandProvider {
+    constructor(clients, options) {
+      this.clients = clients;
+      this.options = options;
+      created.extractConceptProvider = this;
+    }
+
+    dispose() {}
+  }
+
   class FakeSpecNodeProvider {
     constructor(workspace, options) {
       this.workspace = workspace;
@@ -537,6 +548,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     ConfigProvider: FakeConfigProvider,
+    ExtractConceptCommandProvider: FakeExtractConceptCommandProvider,
     GenerateStubCommandProvider: FakeGenerateStubCommandProvider,
     SpecNodeProvider: FakeSpecNodeProvider,
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
@@ -572,6 +584,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
   assert.equal(created.configProvider.context, context);
   assert.equal(created.configProvider.options.vscode, fakeVscode);
+  assert.equal(created.extractConceptProvider.clients, created.clientsMap);
+  assert.equal(created.extractConceptProvider.options.vscode, fakeVscode);
   assert.equal(created.generateStubProvider.clients, created.clientsMap);
   assert.equal(created.generateStubProvider.options.vscode, fakeVscode);
   assert.equal(created.specNodeProvider.workspace, created.workspace);
@@ -581,6 +595,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);
+  assert.equal(context.subscriptions.includes(created.extractConceptProvider), true);
   assert.equal(context.subscriptions.includes(created.generateStubProvider), true);
   assert.equal(context.subscriptions.includes(created.specNodeProvider), true);
   assert.equal(context.subscriptions.includes(created.projectInitializer), true);

@@ -5,6 +5,7 @@ const { GaugeArgumentCodeActionProvider } = require("./argumentCodeActions");
 const { ConfigProvider } = require("./config/configProvider");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
 const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
+const { ExtractConceptCommandProvider } = require("./extractConcept");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
@@ -35,6 +36,7 @@ const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configur
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
+  "gauge.extract.concept",
   "gauge.showReferences.atCursor",
   "gauge.specexplorer.debugNode",
   "gauge.specexplorer.runAllActiveProjectSpecs",
@@ -65,6 +67,7 @@ const GAUGE_COMMANDS = [
   "gauge.execute.inParallel",
   "gauge.create.specification",
   "gauge.create.concept",
+  "gauge.extract.concept",
   "gauge.preview",
   "gauge.config.saveRecommended",
   "gauge.stopExecution",
@@ -341,6 +344,8 @@ function startGaugeServices(context, vscode, options = {}) {
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
   const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
+  const ExtractConceptCommandProviderCtor = options.ExtractConceptCommandProvider
+    || ExtractConceptCommandProvider;
   const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
   const SpecNodeProviderCtor = options.SpecNodeProvider || SpecNodeProvider;
   const gaugeWorkspace = new GaugeWorkspaceCtor({
@@ -358,6 +363,10 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, { vscode });
   const configProvider = new ConfigProviderCtor(context, { vscode });
+  const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
+    pathModule: options.pathModule,
+    vscode,
+  });
   const generateStubProvider = new GenerateStubCommandProviderCtor(clientsMap, { vscode });
   const specNodeProvider = new SpecNodeProviderCtor(gaugeWorkspace, {
     executionController: options.executionController,
@@ -369,6 +378,7 @@ function startGaugeServices(context, vscode, options = {}) {
     gaugeWorkspace,
     referenceProvider,
     configProvider,
+    extractConceptProvider,
     generateStubProvider,
     specNodeProvider,
   );

@@ -84,6 +84,11 @@
         "category": "Gauge"
       },
       {
+        "command": "gauge.extract.concept",
+        "title": "Extract to Concept",
+        "category": "Gauge"
+      },
+      {
         "command": "gauge.preview",
         "title": "Preview Gauge File",
         "category": "Gauge"
@@ -175,6 +180,10 @@
           "when": "gauge:activated"
         },
         {
+          "command": "gauge.extract.concept",
+          "when": "gauge:activated && editorLangId == gauge"
+        },
+        {
           "command": "gauge.preview",
           "when": "gauge:activated"
         },
@@ -233,6 +242,13 @@
         {
           "command": "gauge.specexplorer.debugNode",
           "when": "config.noExists"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "gauge.extract.concept",
+          "when": "gauge:activated && editorLangId == gauge",
+          "group": "1_modification"
         }
       ],
       "view/title": [
