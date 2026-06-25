@@ -398,58 +398,111 @@
           "test": {
             "properties": {
               "env": {
-                "description": "[Gauge] Specifies the environment to use.",
+                "description": "[Gauge] Specifies the environment to use (default \"default\")",
                 "type": "array",
                 "items": {
                   "type": "string"
                 },
                 "default": []
               },
+              "fail-safe": {
+                "description": "[Gauge] Force return 0 exit code, even in case of failures.",
+                "type": "boolean",
+                "default": false
+              },
               "failed": {
-                "description": "[Gauge] Runs only scenarios that failed in the previous run.",
+                "description": "[Gauge] Run only the scenarios failed in previous run. This cannot be used in conjunction with any other argument",
+                "type": "boolean",
+                "default": false
+              },
+              "group": {
+                "description": "[Gauge] Specify which group of specification to execute based on -n flag (default -1)",
+                "type": "number",
+                "default": -1
+              },
+              "hide-suggestion": {
+                "description": "[Gauge] Hide step implementation stub for every unimplemented step",
+                "type": "boolean",
+                "default": false
+              },
+              "install-plugins": {
+                "description": "[Gauge] Install All Missing Plugins (default true)",
+                "type": "boolean",
+                "default": true
+              },
+              "max-retries-count": {
+                "description": "[Gauge] Max count of iterations for failed scenario (default 1)",
+                "type": "number",
+                "default": 1
+              },
+              "n": {
+                "description": "[Gauge] Specify number of parallel execution streams (default 8)",
+                "type": "number",
+                "default": 8
+              },
+              "parallel": {
+                "description": "[Gauge] Execute specs in parallel",
                 "type": "boolean",
                 "default": false
               },
               "repeat": {
-                "description": "[Gauge] Repeats the last run.",
+                "description": "[Gauge] Repeat last run. This cannot be used in conjunction with any other argument",
                 "type": "boolean",
                 "default": false
               },
+              "retry-only": {
+                "description": "[Gauge] Retries the specs and scenarios tagged with given tags",
+                "type": "string",
+                "default": ""
+              },
               "scenario": {
-                "description": "[Gauge] Runs the named scenarios.",
+                "description": "[Gauge] Set scenarios for running specs with scenario name",
                 "type": "array",
                 "items": {
                   "type": "string"
                 },
                 "default": []
               },
-              "tags": {
-                "description": "[Gauge] Runs specs and scenarios tagged with the given expression.",
-                "type": "string",
-                "default": ""
-              },
-              "parallel": {
-                "description": "[Gauge] Runs specs in parallel.",
+              "simple-console": {
+                "description": "[Gauge] Removes colouring and simplifies the console output",
                 "type": "boolean",
                 "default": false
               },
-              "n": {
-                "description": "[Gauge] Number of parallel execution streams.",
-                "type": "number",
-                "default": 8
+              "sort": {
+                "description": "[Gauge] Run specs in Alphabetical Order",
+                "type": "boolean",
+                "default": false
               },
-              "simple-console": {
-                "description": "[Gauge] Simplifies console output.",
+              "strategy": {
+                "description": "[Gauge] Set the parallelization strategy for execution. Possible options are: eager,lazy (default \"lazy\")",
+                "enum": [
+                  "eager",
+                  "lazy"
+                ],
+                "default": "lazy"
+              },
+              "table-rows": {
+                "description": "[Gauge] Executes the specs and scenarios only for the selected rows. It can be specified by range as 2_4 or as list 2,4",
+                "type": "string",
+                "default": ""
+              },
+              "tags": {
+                "description": "[Gauge] Executes the specs and scenarios tagged with given tags",
+                "type": "string",
+                "default": ""
+              },
+              "verbose": {
+                "description": "[Gauge] Enable step level reporting on console, default being scenario level",
                 "type": "boolean",
                 "default": false
               },
               "dir": {
-                "description": "[Gauge] Working directory for the command.",
+                "description": "[Gauge] Set the working directory for the current command, accepts a path relative to current directory (default \".\")",
                 "type": "string",
                 "default": "."
               },
               "log-level": {
-                "description": "[Gauge] Log level.",
+                "description": "[Gauge] Set level of logging to debug, info, warning, error or critical (default \"info\")",
                 "enum": [
                   "debug",
                   "info",
@@ -460,7 +513,7 @@
                 "default": "info"
               },
               "machine-readable": {
-                "description": "[Gauge] Prints output in JSON format.",
+                "description": "[Gauge] Prints output in JSON format",
                 "type": "boolean",
                 "default": false
               }
