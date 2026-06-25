@@ -426,3 +426,30 @@ test("SpecNodeProvider changes client when workspace projects change", async () 
   assert.equal(specs.length, 1);
   assert.deepEqual(secondClient.requests.map((request) => request.method), ["gauge/specs"]);
 });
+
+test("SpecNodeProvider disables the activated context when spec explorer is disabled", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  const {
+    commands,
+    contexts,
+    treeProviders,
+    vscode,
+    watcherListeners,
+  } = createFakeVscode({ enabled: false });
+  const workspace = createFakeWorkspace(client);
+
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    vscode,
+  });
+  await provider.ready();
+
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:activated", value: false },
+  ]);
+  assert.deepEqual(treeProviders, []);
+  assert.deepEqual(commands, []);
+  assert.deepEqual(watcherListeners, []);
+  assert.equal(client.started, 0);
+});

@@ -109,8 +109,8 @@ class SpecNodeProvider {
     this.onDidChangeTreeDataEmitter = new this.vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
+    setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
     if (isSpecExplorerEnabled(this.vscode)) {
-      setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
       addDisposable(
         this.disposables,
         this.vscode.window.registerTreeDataProvider(SPEC_EXPLORER_VIEW, this),
