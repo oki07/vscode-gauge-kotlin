@@ -173,6 +173,48 @@ test("ProjectInitializer creates a Gauge project from the selected template", as
   ]);
 });
 
+test("ProjectInitializer reports official install guidance when Gauge is unavailable", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    errorActions,
+    errors,
+    inputs,
+    openDialogs,
+    quickPicks,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const cli = {
+    isGaugeInstalled() {
+      return false;
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+      removeSync() {},
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(errors, [
+    "Please install gauge to create a new Gauge project.For more info please refer the [install intructions](https://docs.gauge.org/getting_started/installing-gauge.html).",
+  ]);
+  assert.deepEqual(errorActions, [[]]);
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(openDialogs, []);
+  assert.deepEqual(inputs, []);
+});
+
 test("ProjectInitializer removes the project directory when Gauge init fails", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {

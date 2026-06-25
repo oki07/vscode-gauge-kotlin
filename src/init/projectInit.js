@@ -102,7 +102,7 @@ class ProjectInitializer {
     const cli = this.getCli();
     if (!cli || !cli.isGaugeInstalled()) {
       return this.vscode.window.showErrorMessage(
-        `Please install gauge to create a new Gauge project. For more info please refer the [install instructions](${INSTALL_INSTRUCTION_URI}).`,
+        `Please install gauge to create a new Gauge project.For more info please refer the [install intructions](${INSTALL_INSTRUCTION_URI}).`,
       );
     }
 
