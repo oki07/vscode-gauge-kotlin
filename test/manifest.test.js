@@ -24,6 +24,10 @@ function comparableConfigurationSchema(configuration) {
   };
 }
 
+function commandById(manifest, commandId) {
+  return manifest.contributes.commands.find((entry) => entry.command === commandId);
+}
+
 test("extension manifest exposes the core Gauge VS Code surface for Kotlin projects", () => {
   const manifest = readPackageJson();
 
@@ -321,4 +325,21 @@ test("extension manifest preserves the official Gauge configuration schema", () 
       ]),
     ),
   );
+});
+
+test("extension manifest preserves official spec explorer command icons", () => {
+  const manifest = readPackageJson();
+  const referenceManifest = readReferencePackageJson();
+
+  for (const commandId of [
+    "gauge.specexplorer.runAllActiveProjectSpecs",
+    "gauge.specexplorer.switchProject",
+  ]) {
+    const command = commandById(manifest, commandId);
+    const referenceCommand = commandById(referenceManifest, commandId);
+
+    assert.deepEqual(command.icon, referenceCommand.icon);
+    assert.equal(fs.existsSync(path.join(root, command.icon.light)), true, command.icon.light);
+    assert.equal(fs.existsSync(path.join(root, command.icon.dark)), true, command.icon.dark);
+  }
 });
