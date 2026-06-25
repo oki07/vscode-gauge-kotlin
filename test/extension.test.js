@@ -213,6 +213,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   const created = {};
   const checkedProjects = [];
   const versions = [];
+  const welcomeCalls = [];
   const context = { subscriptions: [] };
   const {
     contexts,
@@ -322,6 +323,9 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
     semanticTokensLegend: { id: "legend" },
+    showWelcomeNotification(receivedContext, receivedVscode) {
+      welcomeCalls.push({ context: receivedContext, vscode: receivedVscode });
+    },
     projectFactory: {
       isGaugeProject(folder) {
         checkedProjects.push(folder);
@@ -333,6 +337,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.deepEqual(checkedProjects, ["/workspace/gauge"]);
   assert.equal(created.cliOptions.vscode, fakeVscode);
   assert.deepEqual(versions, ["0.9.6"]);
+  assert.deepEqual(welcomeCalls, [{ context, vscode: fakeVscode }]);
   assert.equal(created.workspace.options.cli, cli);
   assert.equal(created.workspace.options.clientsMap, created.clientsMap);
   assert.equal(created.workspace.options.state, created.state);
@@ -403,4 +408,44 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   });
   assert.equal(editorUpdates.length, 2);
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.showReferences.atCursor"), false);
+});
+
+test("activation shows install guidance when Gauge is unavailable", () => {
+  const extension = require("../src/extension");
+
+  const installCalls = [];
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const cli = {
+    isGaugeInstalled() {
+      return false;
+    },
+    isGaugeVersionGreaterOrEqual() {
+      return true;
+    },
+  };
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return cli;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showInstallGaugeNotification(vscode) {
+      installCalls.push(vscode);
+    },
+  });
+
+  assert.deepEqual(installCalls, [fakeVscode]);
 });

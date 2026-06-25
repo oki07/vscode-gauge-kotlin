@@ -15,6 +15,10 @@ const {
   createLegend,
 } = require("./semanticTokensProvider");
 const { createSpecification } = require("./specification");
+const {
+  showInstallGaugeNotification,
+  showWelcomeNotification,
+} = require("./welcomeNotifications");
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
@@ -219,9 +223,10 @@ function startGaugeServices(context, vscode, options = {}) {
     return undefined;
   }
   if (!cli.isGaugeInstalled() || !cli.isGaugeVersionGreaterOrEqual(MINIMUM_SUPPORTED_GAUGE_VERSION)) {
-    return notify(vscode, "Gauge is not installed or does not meet the minimum supported version.");
+    return (options.showInstallGaugeNotification || showInstallGaugeNotification)(vscode);
   }
 
+  (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
