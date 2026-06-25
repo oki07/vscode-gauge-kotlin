@@ -36,9 +36,9 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(line) {
+function createDocument(line, fsPath = "/workspace/specs/example.spec") {
   return {
-    uri: { fsPath: "/workspace/specs/example.spec" },
+    uri: { fsPath },
     lineAt() {
       return { text: line };
     },
@@ -78,14 +78,14 @@ test("GaugeArgumentCodeActionProvider converts dynamic arguments to static param
   const provider = new GaugeArgumentCodeActionProvider({ vscode });
 
   const actions = provider.provideCodeActions(
-    createDocument("# Shared checkout <item>"),
+    createDocument("# Shared checkout <item>", "/workspace/specs/concepts/shared.cpt"),
     createRange(0, 20),
   );
 
   assert.equal(actions.length, 1);
   assert.equal(actions[0].title, "Convert to Static Parameter");
   const replacement = actions[0].edit.replacements[0];
-  assert.deepEqual(replacement.uri, { fsPath: "/workspace/specs/example.spec" });
+  assert.deepEqual(replacement.uri, { fsPath: "/workspace/specs/concepts/shared.cpt" });
   assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 18 });
   assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 24 });
   assert.equal(replacement.newText, "\"item\"");
@@ -97,6 +97,20 @@ test("GaugeArgumentCodeActionProvider ignores non-step text", () => {
 
   assert.deepEqual(
     provider.provideCodeActions(createDocument('Note "cart"'), createRange(0, 7)),
+    [],
+  );
+});
+
+test("GaugeArgumentCodeActionProvider ignores specification and scenario headings", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+
+  assert.deepEqual(
+    provider.provideCodeActions(createDocument("# Specification <name>"), createRange(0, 17)),
+    [],
+  );
+  assert.deepEqual(
+    provider.provideCodeActions(createDocument("## Scenario <name>"), createRange(0, 14)),
     [],
   );
 });

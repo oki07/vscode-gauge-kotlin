@@ -44,9 +44,23 @@ function createCodeAction(vscode, title, edit) {
   return action;
 }
 
-function isGaugeStepOrHeading(line) {
+function documentPath(document) {
+  const uri = document && document.uri;
+  return (uri && (uri.fsPath || uri.path)) || document.fileName || "";
+}
+
+function isConceptDocument(document) {
+  return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
+function isGaugeStepOrConceptHeading(line, document) {
   const trimmed = line.trimStart();
-  return trimmed.startsWith("*") || trimmed.startsWith("#");
+  if (trimmed.startsWith("*")) {
+    return true;
+  }
+  return isConceptDocument(document)
+    && trimmed.startsWith("#")
+    && !trimmed.startsWith("##");
 }
 
 function rangeIntersectsArgument(range, start, end) {
@@ -79,7 +93,7 @@ class GaugeArgumentCodeActionProvider {
 
   provideCodeActions(document, range) {
     const line = document.lineAt(range.start.line).text;
-    if (!isGaugeStepOrHeading(line)) {
+    if (!isGaugeStepOrConceptHeading(line, document)) {
       return [];
     }
 
