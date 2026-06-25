@@ -226,6 +226,37 @@ test("create concept command delegates to the concept creator", () => {
   assert.equal(receivedOptions.vscode, fakeVscode);
 });
 
+test("preview command delegates to the Gauge preview creator", () => {
+  const extension = require("../src/extension");
+
+  let receivedOptions;
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+  const projectFactory = {};
+
+  extension.activate(context, fakeVscode, {
+    env: { PATH: "/bin" },
+    fileSystem: { id: "fs" },
+    pathModule: { id: "path" },
+    projectFactory,
+    createPreview(options) {
+      receivedOptions = options;
+      return "previewed";
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.preview",
+  );
+
+  assert.ok(command);
+  assert.equal(command.handler(), "previewed");
+  assert.equal(receivedOptions.vscode, fakeVscode);
+  assert.equal(receivedOptions.fileSystem.id, "fs");
+  assert.equal(receivedOptions.pathModule.id, "path");
+  assert.equal(receivedOptions.projectFactory, projectFactory);
+});
+
 test("create specification command provides Gauge LSP spec directories", async () => {
   const extension = require("../src/extension");
 

@@ -25,6 +25,7 @@
   },
   "activationEvents": [
     "onCommand:gauge.createProject",
+    "onCommand:gauge.preview",
     "workspaceContains:manifest.json",
     "onLanguage:gauge",
     "onDebugResolve:gauge"
@@ -80,6 +81,11 @@
       {
         "command": "gauge.create.concept",
         "title": "Create New Concept",
+        "category": "Gauge"
+      },
+      {
+        "command": "gauge.preview",
+        "title": "Preview Gauge File",
         "category": "Gauge"
       },
       {
@@ -166,6 +172,10 @@
         },
         {
           "command": "gauge.create.concept",
+          "when": "gauge:activated"
+        },
+        {
+          "command": "gauge.preview",
           "when": "gauge:activated"
         },
         {

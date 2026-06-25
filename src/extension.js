@@ -13,6 +13,7 @@ const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
 const { ProjectInitializer } = require("./init/projectInit");
+const { previewGaugeDocument } = require("./preview");
 const { createProjectFactory } = require("./project/projectFactory");
 const {
   GaugeSemanticTokensProvider,
@@ -63,6 +64,7 @@ const GAUGE_COMMANDS = [
   "gauge.execute.inParallel",
   "gauge.create.specification",
   "gauge.create.concept",
+  "gauge.preview",
   "gauge.config.saveRecommended",
   "gauge.stopExecution",
   "gauge.execute.failed",
@@ -254,6 +256,17 @@ function createCommandHandler(command, vscode, executionController, options = {}
             () => activeClientsMap,
             { vscode },
           ),
+        });
+      case "gauge.preview":
+        return (options.createPreview || previewGaugeDocument)({
+          vscode,
+          cli: options.cli,
+          createCli: options.createCli,
+          env: options.env,
+          fileSystem: options.fileSystem,
+          pathModule: options.pathModule,
+          projectFactory: options.projectFactory,
+          tempDirProvider: options.tempDirProvider,
         });
       case "gauge.config.saveRecommended":
         return notify(vscode, "Gauge recommended settings are not available yet.");
