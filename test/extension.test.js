@@ -22,6 +22,7 @@ function createFakeVscode(overrides = {}) {
   const debugProviders = [];
   const editorUpdates = [];
   const codeActionProviders = [];
+  const diagnosticCollections = [];
   const foldingRangeProviders = [];
   const languageConfigurations = [];
   const configurationListeners = [];
@@ -84,6 +85,11 @@ function createFakeVscode(overrides = {}) {
         });
         return disposable;
       },
+      createDiagnosticCollection(name) {
+        const disposable = { dispose() {} };
+        diagnosticCollections.push({ name, disposable });
+        return disposable;
+      },
       registerDocumentSemanticTokensProvider(selector, provider, legend) {
         const disposable = { dispose() {} };
         semanticTokenProviders.push({
@@ -143,6 +149,7 @@ function createFakeVscode(overrides = {}) {
     configurationListeners,
     contexts,
     codeActionProviders,
+    diagnosticCollections,
     debugProviders,
     editorUpdates,
     fakeVscode,
@@ -498,6 +505,18 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeStepDiagnosticsProvider {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      created.stepDiagnosticsProvider = this;
+    }
+
+    register() {
+      return this.disposable;
+    }
+  }
+
   class FakeGaugeState {
     constructor(receivedContext) {
       this.context = receivedContext;
@@ -523,6 +542,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
     GaugeFoldingRangeProvider: FakeFoldingRangeProvider,
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
+    GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
     semanticTokensLegend: { id: "legend" },
@@ -567,6 +587,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(codeActionProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   assert.equal(debugProviders[0].type, "gauge");
   assert.throws(
@@ -605,6 +626,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
   ]);
   assert.equal(created.argumentCodeActionProvider.options.vscode, fakeVscode);
+  assert.equal(created.stepDiagnosticsProvider.options.vscode, fakeVscode);
+  assert.equal(created.stepDiagnosticsProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(context.subscriptions.includes(configurationListeners[0].disposable), true);
   assert.deepEqual(editorUpdates[0], {
     key: "semanticTokenColorCustomizations",
