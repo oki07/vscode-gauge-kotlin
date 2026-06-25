@@ -71,9 +71,10 @@ class GenerateStubCommandProvider {
           return undefined;
         }
         if (selected.value === COPY_TO_CLIPBOARD) {
-          return this.vscode.env.clipboard.writeText(code).then(() => (
-            this.vscode.window.showInformationMessage("Step Implementation copied to clipboard")
-          ));
+          return this.vscode.env.clipboard.writeText(code).then(
+            () => this.vscode.window.showInformationMessage("Step Implementation copied to clipboard"),
+            (reason) => this.handleError(reason),
+          );
         }
         return this.generateInFile(
           ADD_STUB_REQUEST,

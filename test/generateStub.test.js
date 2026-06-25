@@ -22,6 +22,9 @@ function createFakeVscode(overrides = {}) {
     env: {
       clipboard: {
         writeText(text) {
+          if (overrides.writeClipboard) {
+            return overrides.writeClipboard(text);
+          }
           return Promise.resolve(text);
         },
       },
@@ -121,4 +124,46 @@ test("GenerateStubCommandProvider writes a selected step stub through Gauge LSP"
     },
   });
   assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});
+
+test("GenerateStubCommandProvider reports clipboard copy failures", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const { commands, errors, vscode } = createFakeVscode({
+    quickPickSelection: {
+      label: "Copy To Clipboard",
+      description: "",
+      value: "Copy To Clipboard",
+    },
+    writeClipboard() {
+      return Promise.reject(new Error("Clipboard unavailable"));
+    },
+  });
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const client = {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getImplFiles");
+      return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+    },
+  };
+  const clients = {
+    get() {
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+
+  await assert.doesNotReject(() => command.handler("fun step() {}"));
+  assert.deepEqual(errors, [
+    "Unable to generate implementation. Error: Clipboard unavailable",
+  ]);
 });
