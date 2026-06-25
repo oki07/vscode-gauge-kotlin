@@ -55,6 +55,16 @@ function createFakeVscode(overrides = {}) {
     },
     workspace: {
       workspaceFolders: overrides.workspaceFolders || [{ uri: { fsPath: "/workspace" } }],
+      getConfiguration(section) {
+        return {
+          get(key) {
+            if (section === "gauge.kotlin" && key === "template") {
+              return overrides.kotlinTemplate;
+            }
+            return undefined;
+          },
+        };
+      },
     },
   };
   return {
@@ -219,4 +229,57 @@ test("ProjectInitializer removes the project directory when Gauge init fails", a
   assert.deepEqual(mkdirs, ["/workspace/shop"]);
   assert.deepEqual(removes, ["/workspace/shop"]);
   assert.deepEqual(errors, ["Failed to initialize project."]);
+});
+
+test("ProjectInitializer prefers the configured Kotlin project template", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    quickPicks,
+    registered,
+    vscode,
+  } = createFakeVscode({ kotlinTemplate: "gradle" });
+  const spawns = [];
+  const child = createChildProcess();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn(args) {
+          spawns.push(args);
+          setImmediate(() => child.emit("close", 0));
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "java", Description: "Java", value: "java" },
+              { key: "kotlin_maven", Description: "Kotlin Maven", value: "kotlin_maven" },
+              { key: "kotlin_gradle", Description: "Kotlin Gradle", value: "kotlin_gradle" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+      removeSync() {},
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.equal(quickPicks[0][0].label, "kotlin_gradle");
+  assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });

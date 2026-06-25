@@ -8,6 +8,8 @@ const GAUGE_INIT_ARG = "init";
 const OPEN_FOLDER_COMMAND = "vscode.openFolder";
 const TEMPLATE_LIST_ARGS = ["template", "--list", "--machine-readable"];
 const INSTALL_INSTRUCTION_URI = "https://docs.gauge.org/getting_started/installing-gauge.html";
+const KOTLIN_TEMPLATE_CONFIGURATION = "gauge.kotlin";
+const TEMPLATE_CONFIGURATION_KEY = "template";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -21,6 +23,25 @@ function removeDirectory(fileSystem, dirname) {
   if (typeof fileSystem.rmSync === "function") {
     fileSystem.rmSync(dirname, { recursive: true, force: true });
   }
+}
+
+function templateText(template) {
+  return [
+    template.label,
+    template.description,
+    template.value,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function templateScore(template, preferredBuildTool) {
+  const text = templateText(template);
+  if (!text.includes("kotlin")) {
+    return 0;
+  }
+  if (preferredBuildTool && text.includes(preferredBuildTool)) {
+    return 2;
+  }
+  return 1;
 }
 
 class ProgressHandler {
@@ -122,6 +143,32 @@ class ProjectInitializer {
     });
   }
 
+  getPreferredKotlinTemplate() {
+    if (!this.vscode.workspace || typeof this.vscode.workspace.getConfiguration !== "function") {
+      return undefined;
+    }
+    const configuration = this.vscode.workspace.getConfiguration(KOTLIN_TEMPLATE_CONFIGURATION);
+    if (!configuration || typeof configuration.get !== "function") {
+      return undefined;
+    }
+    const value = configuration.get(TEMPLATE_CONFIGURATION_KEY);
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized || undefined;
+  }
+
+  sortTemplatesByPreference(templates) {
+    const preferredBuildTool = this.getPreferredKotlinTemplate();
+    if (!preferredBuildTool) {
+      return templates;
+    }
+    return templates.slice().sort((left, right) => (
+      templateScore(right, preferredBuildTool) - templateScore(left, preferredBuildTool)
+    ));
+  }
+
   createProjectInDir(cli, template, projectFolder) {
     const runner = (progress) => new Promise((resolve, reject) => {
       const progressHandler = new ProgressHandler(this.vscode, progress, resolve, reject);
@@ -166,11 +213,12 @@ class ProjectInitializer {
   async getTemplatesList(cli) {
     const result = cli.gaugeCommand().spawnSync(TEMPLATE_LIST_ARGS, { env: this.env });
     try {
-      return JSON.parse(result.stdout.toString()).map((template) => ({
+      const templates = JSON.parse(result.stdout.toString()).map((template) => ({
         label: template.key,
         description: template.Description,
         value: template.value,
       }));
+      return this.sortTemplatesByPreference(templates);
     } catch (_error) {
       await this.vscode.window.showErrorMessage(
         "Failed to get list of templates.",
