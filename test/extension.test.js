@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const PROVIDER_COMMANDS = new Set([
+  "gauge.createProject",
   "gauge.config.saveRecommended",
   "gauge.showReferences.atCursor",
 ]);
@@ -132,13 +133,16 @@ test("activation registers core contributed Gauge commands", () => {
 
   assert.deepEqual(
     registeredCommands.map((entry) => entry.command),
-    manifest.contributes.commands
-      .map((entry) => entry.command)
-      .filter((command) => !PROVIDER_COMMANDS.has(command)),
+    [
+      "gauge.createProject",
+      ...manifest.contributes.commands
+        .map((entry) => entry.command)
+        .filter((command) => !PROVIDER_COMMANDS.has(command)),
+    ],
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size,
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 1,
   );
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
 });
@@ -268,6 +272,15 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeProjectInitializer {
+    constructor(options) {
+      this.options = options;
+      created.projectInitializer = this;
+    }
+
+    dispose() {}
+  }
+
   class FakeSemanticTokensProvider {
     constructor(options) {
       this.options = options;
@@ -295,6 +308,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeWorkspace: FakeGaugeWorkspace,
     ConfigProvider: FakeConfigProvider,
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
+    ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
     semanticTokensLegend: { id: "legend" },
     projectFactory: {
@@ -317,9 +331,11 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
   assert.equal(created.configProvider.context, context);
   assert.equal(created.configProvider.options.vscode, fakeVscode);
+  assert.equal(created.projectInitializer.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);
+  assert.equal(context.subscriptions.includes(created.projectInitializer), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   assert.equal(debugProviders[0].type, "gauge");

@@ -7,6 +7,7 @@ const { GaugeClients } = require("./gaugeClients");
 const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
+const { ProjectInitializer } = require("./init/projectInit");
 const { createProjectFactory } = require("./project/projectFactory");
 const {
   GaugeSemanticTokensProvider,
@@ -17,6 +18,7 @@ const { createSpecification } = require("./specification");
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
 const PROVIDER_COMMANDS = new Set([
+  "gauge.createProject",
   "gauge.config.saveRecommended",
   "gauge.showReferences.atCursor",
 ]);
@@ -260,6 +262,15 @@ function activate(context, vscodeApi, options = {}) {
     pathModule: options.pathModule,
     runner: options.runner,
   });
+  const ProjectInitializerCtor = options.ProjectInitializer || ProjectInitializer;
+  context.subscriptions.push(new ProjectInitializerCtor({
+    cli: options.cli,
+    createCli: options.createCli || ((cliOptions) => CLI.instance(cliOptions)),
+    env: options.env,
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    vscode,
+  }));
 
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
