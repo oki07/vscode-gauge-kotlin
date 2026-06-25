@@ -215,6 +215,83 @@ test("ProjectInitializer reports official install guidance when Gauge is unavail
   assert.deepEqual(inputs, []);
 });
 
+test("ProjectInitializer reports an existing project directory without removing it", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    commands,
+    errors,
+    inputs,
+    openDialogs,
+    quickPicks,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const mkdirs = [];
+  const removes = [];
+  const spawns = [];
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn(args) {
+          spawns.push(args);
+          return createChildProcess();
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/shop");
+        return true;
+      },
+      mkdirSync(filename) {
+        mkdirs.push(filename);
+      },
+      removeSync(filename) {
+        removes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(quickPicks[0], [
+    { label: "kotlin", description: "Kotlin", value: "kotlin" },
+  ]);
+  assert.deepEqual(openDialogs[0], {
+    canSelectFolders: true,
+    openLabel: "Select a folder to create the project in",
+    canSelectMany: false,
+  });
+  assert.deepEqual(inputs[0], {
+    prompt: "Enter a name for your new project",
+    placeHolder: "gauge-tests",
+  });
+  assert.deepEqual(errors, [
+    "A folder named shop already exists in /workspace",
+  ]);
+  assert.deepEqual(mkdirs, []);
+  assert.deepEqual(removes, []);
+  assert.deepEqual(spawns, []);
+  assert.deepEqual(commands, []);
+});
+
 test("ProjectInitializer removes the project directory when Gauge init fails", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
