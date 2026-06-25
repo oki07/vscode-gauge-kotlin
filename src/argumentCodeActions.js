@@ -2,6 +2,8 @@
 
 const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
+const SELECT_ARGUMENT_RANGE_COMMAND = "gauge.selectArgumentRange";
+const SELECT_ARGUMENT_RANGE_TITLE = "Select Gauge Argument";
 const ARGUMENT_PATTERN = /"[^"\r\n]*"|<[^>\r\n]*>/g;
 
 function getVscode(vscode) {
@@ -35,12 +37,13 @@ function createWorkspaceEdit(vscode, uri, range, newText) {
   };
 }
 
-function createCodeAction(vscode, title, edit) {
+function createCodeAction(vscode, title, edit, command) {
   const kind = vscode.CodeActionKind && vscode.CodeActionKind.QuickFix;
   const action = typeof vscode.CodeAction === "function"
     ? new vscode.CodeAction(title, kind)
     : { title, kind };
   action.edit = edit;
+  action.command = command;
   return action;
 }
 
@@ -51,6 +54,10 @@ function documentPath(document) {
 
 function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
+function uriPath(uri) {
+  return (uri && (uri.fsPath || uri.path)) || "";
 }
 
 function isGaugeStepOrConceptHeading(line, document) {
@@ -108,12 +115,48 @@ class GaugeArgumentCodeActionProvider {
     const newText = isStatic ? `<${paramText}>` : `"${paramText}"`;
     const editRange = createRange(this.vscode, range.start.line, argument.start, argument.end);
     const edit = createWorkspaceEdit(this.vscode, document.uri, editRange, newText);
-    return [createCodeAction(this.vscode, title, edit)];
+    const selectionRange = createRange(
+      this.vscode,
+      range.start.line,
+      argument.start + 1,
+      argument.start + newText.length - 1,
+    );
+    const command = {
+      command: SELECT_ARGUMENT_RANGE_COMMAND,
+      title: SELECT_ARGUMENT_RANGE_TITLE,
+      arguments: [document.uri, selectionRange],
+    };
+    return [createCodeAction(this.vscode, title, edit, command)];
   }
+}
+
+function selectArgumentRange(vscode, uri, range) {
+  const editor = vscode.window && vscode.window.activeTextEditor;
+  if (!editor || uriPath(editor.document && editor.document.uri) !== uriPath(uri)) {
+    return undefined;
+  }
+  const selection = typeof vscode.Selection === "function"
+    ? new vscode.Selection(range.start, range.end)
+    : { start: range.start, end: range.end };
+  editor.selection = selection;
+  return selection;
+}
+
+function registerArgumentSelectionCommand(vscode) {
+  if (!vscode.commands || typeof vscode.commands.registerCommand !== "function") {
+    return undefined;
+  }
+  return vscode.commands.registerCommand(
+    SELECT_ARGUMENT_RANGE_COMMAND,
+    (uri, range) => selectArgumentRange(vscode, uri, range),
+  );
 }
 
 module.exports = {
   CONVERT_TO_DYNAMIC_TITLE,
   CONVERT_TO_STATIC_TITLE,
   GaugeArgumentCodeActionProvider,
+  SELECT_ARGUMENT_RANGE_COMMAND,
+  registerArgumentSelectionCommand,
+  selectArgumentRange,
 };

@@ -715,6 +715,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.showReferences.atCursor"), false);
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.specexplorer.runNode"), false);
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.specexplorer.debugNode"), false);
+  assert.equal(registeredCommands.some((entry) => entry.command === "gauge.selectArgumentRange"), true);
 });
 
 test("activation starts Gauge workspace services for an active Kotlin implementation document", () => {

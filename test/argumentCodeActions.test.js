@@ -70,6 +70,11 @@ test("GaugeArgumentCodeActionProvider converts static arguments to dynamic param
   assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 7 });
   assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 13 });
   assert.equal(replacement.newText, "<cart>");
+  assert.equal(actions[0].command.command, "gauge.selectArgumentRange");
+  assert.equal(actions[0].command.title, "Select Gauge Argument");
+  assert.deepEqual(actions[0].command.arguments[0], { fsPath: "/workspace/specs/example.spec" });
+  assert.deepEqual({ ...actions[0].command.arguments[1].start }, { line: 0, character: 8 });
+  assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 12 });
 });
 
 test("GaugeArgumentCodeActionProvider converts dynamic arguments to static parameters", () => {
@@ -113,4 +118,22 @@ test("GaugeArgumentCodeActionProvider ignores specification and scenario heading
     provider.provideCodeActions(createDocument("## Scenario <name>"), createRange(0, 14)),
     [],
   );
+});
+
+test("selectArgumentRange selects the converted Gauge argument body", () => {
+  const { selectArgumentRange } = require("../src/argumentCodeActions");
+  const vscode = createFakeVscode();
+  const activeTextEditor = {
+    document: { uri: { fsPath: "/workspace/specs/example.spec" } },
+    selection: undefined,
+  };
+  vscode.window = { activeTextEditor };
+
+  selectArgumentRange(vscode, { fsPath: "/workspace/specs/example.spec" }, {
+    start: new vscode.Position(0, 8),
+    end: new vscode.Position(0, 12),
+  });
+
+  assert.deepEqual({ ...activeTextEditor.selection.start }, { line: 0, character: 8 });
+  assert.deepEqual({ ...activeTextEditor.selection.end }, { line: 0, character: 12 });
 });

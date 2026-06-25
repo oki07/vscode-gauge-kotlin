@@ -1,7 +1,10 @@
 "use strict";
 
 const { CLI } = require("./cli");
-const { GaugeArgumentCodeActionProvider } = require("./argumentCodeActions");
+const {
+  GaugeArgumentCodeActionProvider,
+  registerArgumentSelectionCommand,
+} = require("./argumentCodeActions");
 const { ConfigProvider } = require("./config/configProvider");
 const {
   EXECUTION_COMMANDS,
@@ -206,6 +209,10 @@ function registerArgumentCodeActionProvider(context, vscode, options) {
   );
   if (disposable) {
     context.subscriptions.push(disposable);
+  }
+  const commandDisposable = registerArgumentSelectionCommand(vscode);
+  if (commandDisposable) {
+    context.subscriptions.push(commandDisposable);
   }
 }
 
