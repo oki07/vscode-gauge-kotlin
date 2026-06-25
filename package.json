@@ -302,32 +302,32 @@
             "newProjectLoad",
             "never"
           ],
-          "description": "Controls when the Gauge welcome notification is shown."
+          "description": "Shows gauge welcome page based on given value, defaulted to on upgrade."
         },
         "gauge.specExplorer.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enables the Gauge specifications explorer."
+          "description": "When true, gauge specs explorer will be alive and loaded."
         },
         "gauge.launch.enableDebugLogs": {
           "type": "boolean",
           "default": false,
-          "description": "Enables debug logs for communication with Gauge services."
+          "description": "When true, communication between vscode and gauge server will be logged."
         },
         "gauge.execution.debugPort": {
-          "type": "integer",
+          "type": "int",
           "default": 9229,
-          "description": "Default debug port for Gauge execution."
+          "description": "Default debug port."
         },
         "gauge.create.specification.withHelp": {
           "type": "boolean",
           "default": true,
-          "description": "Creates new specifications with starter help comments."
+          "description": "When true, create the specification with help comments."
         },
         "gauge.codeLenses.reference": {
           "type": "boolean",
           "default": true,
-          "description": "Shows reference code lenses in implementation files."
+          "description": "When true, reference codeLenses appers in implementation files."
         },
         "gauge.recommendedSettings.options": {
           "type": "string",
@@ -337,7 +337,7 @@
             "Remind me later",
             "Ignore"
           ],
-          "description": "Controls whether recommended Gauge settings are applied."
+          "description": "Gauge recommended settings are shown/ignored based on the given value."
         },
         "gauge.kotlin.template": {
           "type": "string",
@@ -356,7 +356,7 @@
         "gauge.semanticTokenColors.stepMarker": {
           "type": "string",
           "default": "#ffffff",
-          "description": "Color for step markers."
+          "description": "Color for the step marker '*'"
         },
         "gauge.semanticTokenColors.step": {
           "type": "string",
@@ -366,17 +366,17 @@
         "gauge.semanticTokenColors.table": {
           "type": "string",
           "default": "#ae81ff",
-          "description": "Color for table rows."
+          "description": "Color for table rows (cell data)."
         },
         "gauge.semanticTokenColors.tableHeaderSeparator": {
           "type": "string",
           "default": "#8349f0",
-          "description": "Color for table header separators."
+          "description": "Color for table separator dashes."
         },
         "gauge.semanticTokenColors.tableBorder": {
           "type": "string",
           "default": "#8349f0",
-          "description": "Color for table borders."
+          "description": "Color for table table borders."
         },
         "gauge.semanticTokenColors.tableKeyword": {
           "type": "string",
@@ -401,7 +401,7 @@
         "gauge.semanticTokenColors.specification": {
           "type": "string",
           "default": "#66d9ef",
-          "description": "Color for specification and concept headers."
+          "description": "Color for specification/concept headers."
         },
         "gauge.semanticTokenColors.scenario": {
           "type": "string",
@@ -421,7 +421,7 @@
         "gauge.formatting.skipEmptyLineInsertions": {
           "type": "boolean",
           "default": false,
-          "description": "Skips adding empty lines during formatting."
+          "description": "If true, skip adding empty lines during formatting."
         }
       }
     },

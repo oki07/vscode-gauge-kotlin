@@ -10,6 +10,20 @@ function readPackageJson() {
   return JSON.parse(fs.readFileSync(packagePath, "utf8"));
 }
 
+function readReferencePackageJson() {
+  const packagePath = path.join(root, "..", "references", "gauge-vscode", "package.json");
+  return JSON.parse(fs.readFileSync(packagePath, "utf8"));
+}
+
+function comparableConfigurationSchema(configuration) {
+  return {
+    type: configuration.type,
+    default: configuration.default,
+    enum: configuration.enum,
+    description: configuration.description,
+  };
+}
+
 test("extension manifest exposes the core Gauge VS Code surface for Kotlin projects", () => {
   const manifest = readPackageJson();
 
@@ -287,4 +301,24 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
     "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
   ]);
+});
+
+test("extension manifest preserves the official Gauge configuration schema", () => {
+  const manifest = readPackageJson();
+  const referenceManifest = readReferencePackageJson();
+  const configuration = manifest.contributes.configuration.properties;
+  const referenceConfiguration = referenceManifest.contributes.configuration.properties;
+  const sharedKeys = Object.keys(referenceConfiguration).filter((key) => configuration[key]);
+
+  assert.deepEqual(
+    Object.fromEntries(
+      sharedKeys.map((key) => [key, comparableConfigurationSchema(configuration[key])]),
+    ),
+    Object.fromEntries(
+      sharedKeys.map((key) => [
+        key,
+        comparableConfigurationSchema(referenceConfiguration[key]),
+      ]),
+    ),
+  );
 });
