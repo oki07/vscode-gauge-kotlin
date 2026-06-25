@@ -1,6 +1,7 @@
 "use strict";
 
 const { CLI } = require("./cli");
+const { ConfigProvider } = require("./config/configProvider");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
 const { GaugeClients } = require("./gaugeClients");
 const { ReferenceProvider } = require("./gaugeReference");
@@ -10,7 +11,10 @@ const { createProjectFactory } = require("./project/projectFactory");
 const { createSpecification } = require("./specification");
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
-const PROVIDER_COMMANDS = new Set(["gauge.showReferences.atCursor"]);
+const PROVIDER_COMMANDS = new Set([
+  "gauge.config.saveRecommended",
+  "gauge.showReferences.atCursor",
+]);
 const GAUGE_WORD_PATTERN = /^(?:[*])([^*].*)$/g;
 
 const GAUGE_COMMANDS = [
@@ -140,6 +144,7 @@ function startGaugeServices(context, vscode, options = {}) {
   const state = options.state || new GaugeStateCtor(context);
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
+  const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
     clientsMap,
@@ -154,8 +159,9 @@ function startGaugeServices(context, vscode, options = {}) {
     vscode,
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, { vscode });
+  const configProvider = new ConfigProviderCtor(context, { vscode });
   activeClientsMap = clientsMap;
-  context.subscriptions.push(gaugeWorkspace, referenceProvider);
+  context.subscriptions.push(gaugeWorkspace, referenceProvider, configProvider);
   return gaugeWorkspace;
 }
 

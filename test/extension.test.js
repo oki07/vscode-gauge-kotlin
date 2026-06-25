@@ -1,7 +1,10 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const PROVIDER_COMMANDS = new Set(["gauge.showReferences.atCursor"]);
+const PROVIDER_COMMANDS = new Set([
+  "gauge.config.saveRecommended",
+  "gauge.showReferences.atCursor",
+]);
 
 function createFakeVscode(overrides = {}) {
   const registeredCommands = [];
@@ -170,6 +173,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeConfigProvider {
+    constructor(receivedContext, options) {
+      this.context = receivedContext;
+      this.options = options;
+      created.configProvider = this;
+    }
+
+    dispose() {}
+  }
+
   class FakeGaugeState {
     constructor(receivedContext) {
       this.context = receivedContext;
@@ -188,6 +201,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeClients: FakeGaugeClients,
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
+    ConfigProvider: FakeConfigProvider,
     ReferenceProvider: FakeReferenceProvider,
     projectFactory: {
       isGaugeProject(folder) {
@@ -207,8 +221,11 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.workspace.options.vscode, fakeVscode);
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
+  assert.equal(created.configProvider.context, context);
+  assert.equal(created.configProvider.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
+  assert.equal(context.subscriptions.includes(created.configProvider), true);
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:activated", value: true },
   ]);
