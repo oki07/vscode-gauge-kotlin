@@ -93,8 +93,23 @@ function getProjectRootForSpec(vscode, spec, pathModule, projectFactory) {
   return roots.find((root) => isInside(root, spec, pathModule)) || roots[0];
 }
 
-async function selectProjectRoot(vscode, pathModule) {
+function selectableProjectRoots(vscode, projectFactory) {
   const roots = getWorkspaceRoots(vscode);
+  if (!projectFactory || typeof projectFactory.isGaugeProject !== "function") {
+    return roots;
+  }
+  const gaugeRoots = roots.filter((root) => {
+    try {
+      return projectFactory.isGaugeProject(root);
+    } catch (_error) {
+      return false;
+    }
+  });
+  return gaugeRoots.length > 0 ? gaugeRoots : roots;
+}
+
+async function selectProjectRoot(vscode, pathModule, projectFactory) {
+  const roots = selectableProjectRoots(vscode, projectFactory);
   if (roots.length === 0) {
     return undefined;
   }
@@ -426,7 +441,11 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function executeAllSpecifications(projectRoot) {
-    const selectedProjectRoot = projectRoot || (await selectProjectRoot(vscode, pathModule));
+    const selectedProjectRoot = projectRoot || (await selectProjectRoot(
+      vscode,
+      pathModule,
+      projectFactory,
+    ));
     if (!selectedProjectRoot) {
       return undefined;
     }
@@ -436,7 +455,7 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function executeFailed() {
-    const projectRoot = await selectProjectRoot(vscode, pathModule);
+    const projectRoot = await selectProjectRoot(vscode, pathModule, projectFactory);
     if (!projectRoot) {
       return undefined;
     }
@@ -447,7 +466,7 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function repeatExecution() {
-    const projectRoot = await selectProjectRoot(vscode, pathModule);
+    const projectRoot = await selectProjectRoot(vscode, pathModule, projectFactory);
     if (!projectRoot) {
       return undefined;
     }

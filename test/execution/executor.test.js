@@ -258,6 +258,47 @@ test("execute failed asks for a project and runs failed scenarios there", async 
   ]);
 });
 
+test("execute failed skips project prompt when only one workspace folder is a Gauge project", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/gauge" } },
+      { uri: { fsPath: "/workspace/docs" } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/gauge/manifest.json";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/gauge/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.failed");
+
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--failed"],
+      cwd: "/workspace/gauge",
+      status: "/workspace/gauge/failed scenarios",
+    },
+  ]);
+});
+
 test("execute all specs reads launch options from the selected workspace folder", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
