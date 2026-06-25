@@ -9,6 +9,7 @@ const PROVIDER_COMMANDS = new Set([
 function createFakeVscode(overrides = {}) {
   const registeredCommands = [];
   const contexts = [];
+  const debugProviders = [];
   const languageConfigurations = [];
   const fakeVscode = {
     commands: {
@@ -19,6 +20,13 @@ function createFakeVscode(overrides = {}) {
       registerCommand(command, handler) {
         registeredCommands.push({ command, handler });
         return { dispose() {} };
+      },
+    },
+    debug: {
+      registerDebugConfigurationProvider(type, provider) {
+        const disposable = { dispose() {} };
+        debugProviders.push({ type, provider, disposable });
+        return disposable;
       },
     },
     languages: {
@@ -39,6 +47,7 @@ function createFakeVscode(overrides = {}) {
   };
   return {
     contexts,
+    debugProviders,
     fakeVscode,
     languageConfigurations,
     registeredCommands,
@@ -134,7 +143,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   const checkedProjects = [];
   const versions = [];
   const context = { subscriptions: [] };
-  const { contexts, fakeVscode, languageConfigurations, registeredCommands } = createFakeVscode({
+  const {
+    contexts,
+    debugProviders,
+    fakeVscode,
+    languageConfigurations,
+    registeredCommands,
+  } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
   const cli = {
@@ -226,6 +241,12 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);
+  assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
+  assert.equal(debugProviders[0].type, "gauge");
+  assert.throws(
+    () => debugProviders[0].provider.resolveDebugConfiguration(),
+    /Starting with the Gauge debug configuration is not supported/,
+  );
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:activated", value: true },
   ]);

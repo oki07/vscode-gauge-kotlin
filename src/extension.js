@@ -11,6 +11,7 @@ const { createProjectFactory } = require("./project/projectFactory");
 const { createSpecification } = require("./specification");
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
+const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
 const PROVIDER_COMMANDS = new Set([
   "gauge.config.saveRecommended",
   "gauge.showReferences.atCursor",
@@ -88,6 +89,20 @@ function registerGaugeLanguageConfiguration(context, vscode) {
   }
 }
 
+function registerDebugConfigurationProvider(context, vscode) {
+  if (!vscode.debug || typeof vscode.debug.registerDebugConfigurationProvider !== "function") {
+    return;
+  }
+  const disposable = vscode.debug.registerDebugConfigurationProvider("gauge", {
+    resolveDebugConfiguration() {
+      throw new Error(DIRECT_DEBUG_CONFIGURATION_ERROR);
+    },
+  });
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function createCommandHandler(command, vscode, executionController, options = {}) {
   return function handleGaugeCommand(...args) {
     if (EXECUTION_COMMANDS.has(command)) {
@@ -137,6 +152,7 @@ function startGaugeServices(context, vscode, options = {}) {
 
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
+  registerDebugConfigurationProvider(context, vscode);
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
