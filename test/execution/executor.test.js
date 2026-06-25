@@ -86,6 +86,57 @@ test("execute specification uses Gradle Gauge args for Kotlin Gradle projects", 
   ]);
 });
 
+test("execute specification resolves the project root from the active Gauge file", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { errors, vscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        fileName: "/outside/gauge/specs/example.spec",
+        uri: { fsPath: "/outside/gauge/specs/example.spec" },
+      },
+    },
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", tags: "smoke" },
+    ],
+    workspaceFolders: [],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/outside/gauge/manifest.json"
+          || filename === "/outside/gauge/build.gradle.kts";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.specification");
+
+  assert.equal(result, true);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(calls, [
+    {
+      command: "gradle",
+      args: [
+        "clean",
+        "gauge",
+        "-Ptags=smoke",
+        "-PadditionalFlags=--hide-suggestion --simple-console",
+        "-PspecsDir=specs/example.spec",
+      ],
+      cwd: "/outside/gauge",
+      status: "/outside/gauge/specs/example.spec",
+    },
+  ]);
+});
+
 test("execute failed asks for a project and runs failed scenarios there", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

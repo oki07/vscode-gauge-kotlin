@@ -10,6 +10,7 @@ const {
 } = require("./lineProcessors");
 const { createGaugeProcessRunner } = require("./processRunner");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
+const { createProjectFactory } = require("../project/projectFactory");
 
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 
@@ -45,7 +46,14 @@ function isInside(root, filename, pathModule) {
   return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
 }
 
-function getProjectRootForSpec(vscode, spec, pathModule) {
+function getProjectRootForSpec(vscode, spec, pathModule, projectFactory) {
+  if (projectFactory && typeof projectFactory.getGaugeRootFromFilePath === "function") {
+    try {
+      return projectFactory.getGaugeRootFromFilePath(spec);
+    } catch (_error) {
+      // Fall back to workspace folders for non-Gauge files or lightweight tests.
+    }
+  }
   const roots = getWorkspaceRoots(vscode);
   return roots.find((root) => isInside(root, spec, pathModule)) || roots[0];
 }
@@ -157,6 +165,11 @@ function createGaugeExecutionController(options = {}) {
   const vscode = options.vscode || require("vscode");
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
+  const projectFactory = options.projectFactory || createProjectFactory({
+    fileSystem,
+    pathModule,
+    vscode,
+  });
   const scenariosProvider = options.scenariosProvider || (async () => []);
   const debuggerFactory = options.debuggerFactory || createGaugeDebugger;
   const opener = options.opener || defaultOpener(vscode);
@@ -254,7 +267,7 @@ function createGaugeExecutionController(options = {}) {
       };
     }
 
-    const projectRoot = getProjectRootForSpec(vscode, spec, pathModule);
+    const projectRoot = getProjectRootForSpec(vscode, spec, pathModule, projectFactory);
     if (!projectRoot) {
       return {
         error: "No workspace folder is open.",
@@ -317,7 +330,7 @@ function createGaugeExecutionController(options = {}) {
 
   async function executeScenarioIdentifier(executionIdentifier) {
     const specPath = getScenarioSpecPath(executionIdentifier);
-    const projectRoot = getProjectRootForSpec(vscode, specPath, pathModule);
+    const projectRoot = getProjectRootForSpec(vscode, specPath, pathModule, projectFactory);
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
@@ -410,7 +423,12 @@ function createGaugeExecutionController(options = {}) {
     if (!spec) {
       return undefined;
     }
-    const projectRoot = getProjectRootForSpec(vscode, getScenarioSpecPath(spec), pathModule);
+    const projectRoot = getProjectRootForSpec(
+      vscode,
+      getScenarioSpecPath(spec),
+      pathModule,
+      projectFactory,
+    );
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
