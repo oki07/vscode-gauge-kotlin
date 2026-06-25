@@ -272,6 +272,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeGenerateStubCommandProvider {
+    constructor(clients, options) {
+      this.clients = clients;
+      this.options = options;
+      created.generateStubProvider = this;
+    }
+
+    dispose() {}
+  }
+
   class FakeProjectInitializer {
     constructor(options) {
       this.options = options;
@@ -307,6 +317,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     ConfigProvider: FakeConfigProvider,
+    GenerateStubCommandProvider: FakeGenerateStubCommandProvider,
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
@@ -331,10 +342,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
   assert.equal(created.configProvider.context, context);
   assert.equal(created.configProvider.options.vscode, fakeVscode);
+  assert.equal(created.generateStubProvider.clients, created.clientsMap);
+  assert.equal(created.generateStubProvider.options.vscode, fakeVscode);
   assert.equal(created.projectInitializer.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);
+  assert.equal(context.subscriptions.includes(created.generateStubProvider), true);
   assert.equal(context.subscriptions.includes(created.projectInitializer), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);

@@ -3,6 +3,7 @@
 const { CLI } = require("./cli");
 const { ConfigProvider } = require("./config/configProvider");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
+const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeClients } = require("./gaugeClients");
 const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
@@ -234,6 +235,7 @@ function startGaugeServices(context, vscode, options = {}) {
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
   const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
+  const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
     clientsMap,
@@ -249,8 +251,9 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, { vscode });
   const configProvider = new ConfigProviderCtor(context, { vscode });
+  const generateStubProvider = new GenerateStubCommandProviderCtor(clientsMap, { vscode });
   activeClientsMap = clientsMap;
-  context.subscriptions.push(gaugeWorkspace, referenceProvider, configProvider);
+  context.subscriptions.push(gaugeWorkspace, referenceProvider, configProvider, generateStubProvider);
   return gaugeWorkspace;
 }
 
