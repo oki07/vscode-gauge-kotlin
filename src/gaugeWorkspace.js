@@ -97,6 +97,7 @@ class GaugeWorkspace {
     });
     this.disposables = [];
     this.projectChangeListeners = new Set();
+    this.outputChannel = this.vscode.window.createOutputChannel("gauge");
     this.launchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
     this.registerActiveEditorChanges();
     this.registerWorkspaceFolderChanges();
@@ -319,7 +320,7 @@ class GaugeWorkspace {
         { scheme: "file", language: "gauge", pattern: `${project.root()}/**/*` },
       ],
       diagnosticCollectionName: "gauge",
-      outputChannel: this.vscode.window.createOutputChannel("gauge"),
+      outputChannel: this.outputChannel,
       revealOutputChannelOn: this.revealOutputChannelOnNever,
       synchronize: {
         configurationSection: "gauge",

@@ -21,6 +21,7 @@ function createFakeVscode(overrides = {}) {
   const activeEditorListeners = [];
   const configurationChangeListeners = [];
   const contexts = [];
+  const outputChannels = [];
   const quickPicks = [];
   const warnings = [];
   const workspaceFolderListeners = [];
@@ -51,7 +52,9 @@ function createFakeVscode(overrides = {}) {
       window: {
         activeTextEditor: overrides.activeTextEditor,
         createOutputChannel() {
-          return { appendLine() {}, clear() {}, show() {} };
+          const channel = { appendLine() {}, clear() {}, name: "gauge", show() {} };
+          outputChannels.push(channel);
+          return channel;
         },
         onDidChangeActiveTextEditor(listener) {
           activeEditorListeners.push(listener);
@@ -98,6 +101,7 @@ function createFakeVscode(overrides = {}) {
     activeEditorListeners,
     configurationChangeListeners,
     configurations,
+    outputChannels,
     warnings,
     workspaceFolderListeners,
   };
@@ -198,6 +202,38 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:multipleProjects?", value: false },
   ]);
+});
+
+test("GaugeWorkspace shares one output channel across workspace project clients", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/one/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/two/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+  });
+  const { outputChannels, vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/one" } },
+      { uri: { fsPath: "/workspace/two" } },
+    ],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const firstChannel = clients.get("/workspace/one").client.clientOptions.outputChannel;
+  const secondChannel = clients.get("/workspace/two").client.clientOptions.outputChannel;
+  assert.equal(firstChannel, secondChannel);
+  assert.deepEqual(outputChannels.map((channel) => channel.name), ["gauge"]);
 });
 
 test("GaugeWorkspace generates Java config for non-Maven Java projects", async () => {
