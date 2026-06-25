@@ -4,6 +4,29 @@ const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
 
+const SPEC_DIRS_REQUEST = "gauge/specDirs";
+
+function createToken(vscode) {
+  if (typeof vscode.CancellationTokenSource === "function") {
+    return new vscode.CancellationTokenSource().token;
+  }
+  return undefined;
+}
+
+function createGaugeSpecDirsProvider(getClientsMap, options = {}) {
+  const vscode = options.vscode || {};
+  return function specDirsProvider(projectRoot) {
+    const clientsMap = typeof getClientsMap === "function" ? getClientsMap() : getClientsMap;
+    const projectClient = clientsMap && typeof clientsMap.get === "function"
+      ? clientsMap.get(projectRoot)
+      : undefined;
+    if (!projectClient || !projectClient.client || typeof projectClient.client.sendRequest !== "function") {
+      return undefined;
+    }
+    return projectClient.client.sendRequest(SPEC_DIRS_REQUEST, createToken(vscode));
+  };
+}
+
 function buildSpecificationDocument(options = {}) {
   const eol = options.eol || nodeOs.EOL;
   const withHelp = options.withHelp !== false;
@@ -177,5 +200,6 @@ async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}
 
 module.exports = {
   buildSpecificationDocument,
+  createGaugeSpecDirsProvider,
   createSpecification,
 };

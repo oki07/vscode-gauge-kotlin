@@ -16,7 +16,10 @@ const {
   GaugeSemanticTokensProvider,
   createLegend,
 } = require("./semanticTokensProvider");
-const { createSpecification } = require("./specification");
+const {
+  createGaugeSpecDirsProvider,
+  createSpecification,
+} = require("./specification");
 const {
   showInstallGaugeNotification,
   showWelcomeNotification,
@@ -198,6 +201,10 @@ function createCommandHandler(command, vscode, executionController, options = {}
           fileSystem: options.fileSystem,
           pathModule: options.pathModule,
           eol: options.eol,
+          specDirsProvider: options.specDirsProvider || createGaugeSpecDirsProvider(
+            () => activeClientsMap,
+            { vscode },
+          ),
         });
       case "gauge.config.saveRecommended":
         return notify(vscode, "Gauge recommended settings are not available yet.");
