@@ -1,0 +1,262 @@
+"use strict";
+
+const nodeFs = require("node:fs");
+const nodePath = require("node:path");
+const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
+
+const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
+
+const EXECUTION_COMMANDS = new Set([
+  "gauge.stopExecution",
+  "gauge.execute.failed",
+  "gauge.execute.repeat",
+  "gauge.execute.specification",
+  "gauge.execute.specification.all",
+  "gauge.specexplorer.runAllActiveProjectSpecs",
+  "gauge.specexplorer.runNode",
+  "gauge.specexplorer.debugNode",
+  "gauge.execute.scenario",
+  "gauge.execute.scenarios",
+]);
+
+function getWorkspaceRoots(vscode) {
+  const folders = vscode.workspace && vscode.workspace.workspaceFolders;
+  if (!folders) {
+    return [];
+  }
+  return folders
+    .map((folder) => {
+      const uri = folder.uri || {};
+      return uri.fsPath || uri.path;
+    })
+    .filter(Boolean);
+}
+
+function isInside(root, filename, pathModule) {
+  const relative = pathModule.relative(root, filename);
+  return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
+}
+
+function getProjectRootForSpec(vscode, spec, pathModule) {
+  const roots = getWorkspaceRoots(vscode);
+  return roots.find((root) => isInside(root, spec, pathModule)) || roots[0];
+}
+
+async function selectProjectRoot(vscode, pathModule) {
+  const roots = getWorkspaceRoots(vscode);
+  if (roots.length === 0) {
+    return undefined;
+  }
+  if (roots.length === 1 || !vscode.window.showQuickPick) {
+    return roots[0];
+  }
+
+  const items = roots.map((root) => ({
+    label: pathModule.basename(root),
+    description: root,
+  }));
+  const selected = await vscode.window.showQuickPick(items, {
+    canPickMany: false,
+    placeHolder: "Choose a project",
+  });
+  if (!selected) {
+    return undefined;
+  }
+  return selected.description || selected;
+}
+
+function detectProjectKind(projectRoot, fileSystem, pathModule) {
+  const exists = (relativePath) => (
+    typeof fileSystem.existsSync === "function"
+    && fileSystem.existsSync(pathModule.join(projectRoot, relativePath))
+  );
+
+  if (exists("build.gradle.kts") || exists("build.gradle") || exists("gradlew")) {
+    return "gradle";
+  }
+  if (exists("pom.xml")) {
+    return "maven";
+  }
+  return "gauge";
+}
+
+function commandForProjectKind(projectKind, options) {
+  if (projectKind === "gradle") {
+    return options.gradleCommand || "gradle";
+  }
+  if (projectKind === "maven") {
+    return options.mavenCommand || "mvn";
+  }
+  return options.gaugeCommand || "gauge";
+}
+
+function getLaunchConfigurations(vscode) {
+  if (!vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
+    return [];
+  }
+  const configuration = vscode.workspace.getConfiguration("launch");
+  if (!configuration || typeof configuration.get !== "function") {
+    return [];
+  }
+  return configuration.get("configurations") || [];
+}
+
+function buildArgs(projectKind, projectRoot, spec, option, pathModule) {
+  const relativeSpec = spec ? pathModule.relative(projectRoot, spec) : null;
+  if (projectKind === "gradle") {
+    return buildRunArgs.forGradle(relativeSpec, option);
+  }
+  if (projectKind === "maven") {
+    return buildRunArgs.forMaven(relativeSpec, option);
+  }
+  return buildRunArgs.forGauge(spec, option);
+}
+
+function defaultRunner(vscode) {
+  return async function runInTerminal(command) {
+    if (!vscode.window || typeof vscode.window.createTerminal !== "function") {
+      return undefined;
+    }
+    const terminal = vscode.window.createTerminal({
+      name: "Gauge",
+      cwd: command.cwd,
+    });
+    terminal.sendText([command.command, ...command.args].join(" "));
+    terminal.show();
+    return true;
+  };
+}
+
+function createGaugeExecutionController(options = {}) {
+  const vscode = options.vscode || require("vscode");
+  const pathModule = options.pathModule || nodePath;
+  const fileSystem = options.fileSystem || nodeFs;
+  const runner = options.runner || defaultRunner(vscode);
+  let executing = false;
+  let activeRun;
+
+  async function executeInProject(projectRoot, spec, flags = {}) {
+    if (executing) {
+      if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
+        await vscode.window.showErrorMessage("A Specification or Scenario is still running!");
+      }
+      return undefined;
+    }
+
+    const projectKind = detectProjectKind(projectRoot, fileSystem, pathModule);
+    const option = {
+      ...extractGaugeRunOption(getLaunchConfigurations(vscode)),
+      failed: Boolean(flags.failed),
+      repeat: Boolean(flags.repeat),
+      parallel: Boolean(flags.parallel),
+    };
+    const command = {
+      command: commandForProjectKind(projectKind, options),
+      args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
+      cwd: projectRoot,
+      status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
+    };
+
+    executing = true;
+    try {
+      activeRun = runner(command);
+      return await activeRun;
+    } finally {
+      executing = false;
+      activeRun = undefined;
+    }
+  }
+
+  async function executeActiveSpecification() {
+    const editor = vscode.window && vscode.window.activeTextEditor;
+    if (!editor || !editor.document) {
+      return vscode.window.showErrorMessage(
+        "A gauge specification file should be open to run this command.",
+      );
+    }
+
+    const spec = editor.document.fileName || (editor.document.uri && editor.document.uri.fsPath);
+    if (!SPEC_EXTENSIONS.has(pathModule.extname(spec))) {
+      return vscode.window.showErrorMessage(
+        "No specification found. Current file is not a gauge specification.",
+      );
+    }
+
+    const projectRoot = getProjectRootForSpec(vscode, spec, pathModule);
+    if (!projectRoot) {
+      return vscode.window.showErrorMessage("No workspace folder is open.");
+    }
+    return executeInProject(projectRoot, spec, { status: spec });
+  }
+
+  async function executeAllSpecifications() {
+    const projectRoot = await selectProjectRoot(vscode, pathModule);
+    if (!projectRoot) {
+      return undefined;
+    }
+    return executeInProject(projectRoot, null, {
+      status: pathModule.join(projectRoot, "All specs"),
+    });
+  }
+
+  async function executeFailed() {
+    const projectRoot = await selectProjectRoot(vscode, pathModule);
+    if (!projectRoot) {
+      return undefined;
+    }
+    return executeInProject(projectRoot, null, {
+      failed: true,
+      status: pathModule.join(projectRoot, "failed scenarios"),
+    });
+  }
+
+  async function repeatExecution() {
+    const projectRoot = await selectProjectRoot(vscode, pathModule);
+    if (!projectRoot) {
+      return undefined;
+    }
+    return executeInProject(projectRoot, null, {
+      repeat: true,
+      status: pathModule.join(projectRoot, "previous run"),
+    });
+  }
+
+  async function stopExecution() {
+    if (activeRun && typeof activeRun.cancel === "function") {
+      return activeRun.cancel();
+    }
+    return undefined;
+  }
+
+  function handleCommand(command) {
+    switch (command) {
+      case "gauge.execute.specification":
+        return executeActiveSpecification();
+      case "gauge.execute.specification.all":
+      case "gauge.specexplorer.runAllActiveProjectSpecs":
+        return executeAllSpecifications();
+      case "gauge.execute.failed":
+        return executeFailed();
+      case "gauge.execute.repeat":
+        return repeatExecution();
+      case "gauge.stopExecution":
+        return stopExecution();
+      default:
+        return undefined;
+    }
+  }
+
+  return {
+    executeActiveSpecification,
+    executeAllSpecifications,
+    executeFailed,
+    handleCommand,
+    repeatExecution,
+    stopExecution,
+  };
+}
+
+module.exports = {
+  EXECUTION_COMMANDS,
+  createGaugeExecutionController,
+};

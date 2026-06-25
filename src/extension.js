@@ -1,5 +1,6 @@
 "use strict";
 
+const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
 const { createSpecification } = require("./specification");
 
 const GAUGE_COMMANDS = [
@@ -32,8 +33,12 @@ function notify(vscode, message) {
   return undefined;
 }
 
-function createCommandHandler(command, vscode, options = {}) {
+function createCommandHandler(command, vscode, executionController, options = {}) {
   return function handleGaugeCommand() {
+    if (EXECUTION_COMMANDS.has(command)) {
+      return executionController.handleCommand(command);
+    }
+
     switch (command) {
       case "gauge.create.specification":
         return (options.createSpecification || createSpecification)({
@@ -54,6 +59,12 @@ function createCommandHandler(command, vscode, options = {}) {
 
 function activate(context, vscodeApi, options = {}) {
   const vscode = getVscode(vscodeApi);
+  const executionController = (options.createExecutionController || createGaugeExecutionController)({
+    vscode,
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    runner: options.runner,
+  });
 
   if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
     vscode.commands.executeCommand("setContext", "gauge:activated", true);
@@ -62,7 +73,7 @@ function activate(context, vscodeApi, options = {}) {
   for (const command of GAUGE_COMMANDS) {
     const disposable = vscode.commands.registerCommand(
       command,
-      createCommandHandler(command, vscode, options),
+      createCommandHandler(command, vscode, executionController, options),
     );
     context.subscriptions.push(disposable);
   }
