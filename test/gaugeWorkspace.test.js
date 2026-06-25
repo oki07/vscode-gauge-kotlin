@@ -180,6 +180,73 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   ]);
 });
 
+test("GaugeWorkspace generates Java config for non-Maven Java projects", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const generatedConfigs = [];
+  const env = { PATH: "/bin" };
+  const gaugeConfig = { id: "gaugeConfig" };
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "java",
+      Plugins: [{ name: "java" }],
+    }),
+  });
+  const { vscode } = createFakeVscode();
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [{ name: "java", version: "1.0.0" }],
+  });
+
+  class FakeJavaProjectConfig {
+    constructor(projectRoot, pluginVersion, receivedGaugeConfig) {
+      this.projectRoot = projectRoot;
+      this.pluginVersion = pluginVersion;
+      this.gaugeConfig = receivedGaugeConfig;
+    }
+
+    generate() {
+      generatedConfigs.push({
+        gaugeConfig: this.gaugeConfig,
+        pluginVersion: this.pluginVersion,
+        projectRoot: this.projectRoot,
+      });
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli,
+    clientsMap: clients,
+    env,
+    fileSystem,
+    JavaProjectConfig: FakeJavaProjectConfig,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    platform() {
+      return "darwin";
+    },
+    gaugeConfigFactory(platformName) {
+      assert.equal(platformName, "darwin");
+      return gaugeConfig;
+    },
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge");
+  assert.deepEqual(generatedConfigs, [
+    {
+      gaugeConfig,
+      pluginVersion: "1.0.0",
+      projectRoot: "/workspace/gauge",
+    },
+  ]);
+  assert.equal(env.SHOULD_BUILD_PROJECT, "false");
+  assert.equal(entry.client.serverOptions.options.env.SHOULD_BUILD_PROJECT, "false");
+});
+
 test("GaugeWorkspace lets users choose among known projects", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

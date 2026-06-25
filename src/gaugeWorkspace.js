@@ -1,8 +1,12 @@
 "use strict";
 
+const nodeOs = require("node:os");
 const nodePath = require("node:path");
+const { GaugeConfig } = require("./config/gaugeConfig");
+const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
 const { GaugeClients } = require("./gaugeClients");
 const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
+const { MavenProject } = require("./project/mavenProject");
 const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
@@ -10,6 +14,7 @@ const GAUGE_LAUNCH_CONFIG = "gauge.launch";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
+const JAVA_RUNNER = "java";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -68,6 +73,14 @@ class GaugeWorkspace {
     this.env = options.env || process.env;
     this.state = stateOrMemory(options.state);
     this.GaugeWorkspaceFeature = options.GaugeWorkspaceFeature || GaugeWorkspaceFeature;
+    this.JavaProjectConfig = options.JavaProjectConfig || GaugeJavaProjectConfig;
+    this.platform = options.platform || nodeOs.platform;
+    this.gaugeConfigFactory = options.gaugeConfigFactory || (
+      (platformName) => new GaugeConfig(platformName, {
+        env: this.env,
+        pathModule: this.pathModule,
+      })
+    );
     const languageClientModule = getLanguageClientModule(options);
     this.LanguageClient = languageClientModule.LanguageClient;
     this.revealOutputChannelOnNever = languageClientModule.RevealOutputChannelOn
@@ -198,6 +211,8 @@ class GaugeWorkspace {
       return this.clientsMap.get(project.root()).client;
     }
 
+    await this.installRunnerFor(project);
+    this.generateJavaConfig(project);
     const languageClient = new this.LanguageClient(
       "gauge",
       "Gauge",
@@ -205,7 +220,6 @@ class GaugeWorkspace {
       this.clientOptionsFor(project, folder),
     );
     this.clientsMap.set(project.root(), { project, client: languageClient });
-    await this.installRunnerFor(project);
     this.registerDynamicFeatures(languageClient);
     await languageClient.start();
     await this.setLanguageId(languageClient, project.root());
@@ -219,6 +233,21 @@ class GaugeWorkspace {
     languageClient.registerFeatures([
       new this.GaugeWorkspaceFeature(languageClient, { vscode: this.vscode }),
     ]);
+  }
+
+  generateJavaConfig(project) {
+    if (!project.isProjectLanguage(JAVA_RUNNER) || !this.cli.isPluginInstalled(JAVA_RUNNER)) {
+      return;
+    }
+    if (!(project instanceof MavenProject)) {
+      const gaugeConfig = this.gaugeConfigFactory(this.platform());
+      new this.JavaProjectConfig(
+        project.root(),
+        this.cli.getGaugePluginVersion(JAVA_RUNNER),
+        gaugeConfig,
+      ).generate();
+    }
+    this.env.SHOULD_BUILD_PROJECT = "false";
   }
 
   async installRunnerFor(project) {
