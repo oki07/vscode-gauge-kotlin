@@ -311,6 +311,67 @@ test("SpecNodeProvider registers explorer commands", async () => {
   assert.equal(shownDocuments[0].options.selection.start.line, 0);
 });
 
+test("SpecNodeProvider refreshes when active project spec files change", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  const activeEntry = {
+    client,
+    project: {
+      root() {
+        return "/workspace/gauge";
+      },
+    },
+  };
+  const otherEntry = {
+    client: createFakeClient(),
+    project: {
+      root() {
+        return "/workspace/other";
+      },
+    },
+  };
+  const { vscode, watcherListeners } = createFakeVscode();
+  const workspace = createFakeWorkspace(client, {
+    clientsMap: {
+      get(filename) {
+        if (filename === "/workspace/gauge" || filename.startsWith("/workspace/gauge/")) {
+          return activeEntry;
+        }
+        if (filename === "/workspace/other" || filename.startsWith("/workspace/other/")) {
+          return otherEntry;
+        }
+        return undefined;
+      },
+    },
+  });
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    vscode,
+  });
+  const refreshes = [];
+  provider.onDidChangeTreeData((value) => {
+    refreshes.push(value);
+  });
+  await provider.ready();
+  refreshes.length = 0;
+
+  const byEvent = new Map(watcherListeners.map((entry) => [entry.event, entry.listener]));
+  byEvent.get("save")({ uri: { fsPath: "/workspace/gauge/specs/saved.spec" } });
+  byEvent.get("close")({ uri: { fsPath: "/workspace/gauge/specs/closed.md" } });
+  byEvent.get("create")({ fsPath: "/workspace/gauge/specs/created.spec" });
+  byEvent.get("delete")({ fsPath: "/workspace/gauge/specs/deleted.md" });
+  byEvent.get("create")({ fsPath: "/workspace/gauge/specs/ignored.txt" });
+  byEvent.get("delete")({ fsPath: "/workspace/other/specs/other.spec" });
+
+  assert.deepEqual(watcherListeners.map((entry) => entry.event), [
+    "save",
+    "close",
+    "create",
+    "delete",
+  ]);
+  assert.deepEqual(refreshes, [undefined, undefined, undefined, undefined]);
+});
+
 test("SpecNodeProvider changes client when workspace projects change", async () => {
   const { SpecNodeProvider } = require("../src/explorer/specExplorer");
   const firstClient = createFakeClient();
