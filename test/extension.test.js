@@ -45,6 +45,7 @@ function createFakeVscode(overrides = {}) {
     disabledStep: "#228549",
     ...overrides.semanticTokenColors,
   };
+  const textDocumentListeners = [];
   const fakeVscode = {
     ConfigurationTarget: {
       Global: "global",
@@ -143,6 +144,11 @@ function createFakeVscode(overrides = {}) {
         configurationListeners.push({ listener, disposable });
         return disposable;
       },
+      onDidChangeTextDocument(listener) {
+        const disposable = { dispose() {} };
+        textDocumentListeners.push({ listener, disposable });
+        return disposable;
+      },
       workspaceFolders: overrides.workspaceFolders,
     },
   };
@@ -158,6 +164,7 @@ function createFakeVscode(overrides = {}) {
     languageConfigurations,
     registeredCommands,
     semanticTokenProviders,
+    textDocumentListeners,
   };
 }
 
@@ -436,6 +443,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     languageConfigurations,
     registeredCommands,
     semanticTokenProviders,
+    textDocumentListeners,
   } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
@@ -634,6 +642,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(textDocumentListeners[0].disposable), true);
   assert.equal(debugProviders[0].type, "gauge");
   assert.throws(
     () => debugProviders[0].provider.resolveDebugConfiguration(),
@@ -654,6 +663,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       disposable: semanticTokenProviders[0].disposable,
     },
   ]);
+  assert.equal(typeof textDocumentListeners[0].listener, "function");
   assert.equal(created.semanticTokensProvider.options.vscode, fakeVscode);
   assert.deepEqual(foldingRangeProviders, [
     {

@@ -14,6 +14,7 @@ const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
 const { GaugeClients } = require("./gaugeClients");
+const { GaugeEnterHandler } = require("./gaugeEnterHandler");
 const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
@@ -164,6 +165,15 @@ function registerGaugeLanguageConfiguration(context, vscode) {
   const disposable = vscode.languages.setLanguageConfiguration("gauge", {
     wordPattern: GAUGE_WORD_PATTERN,
   });
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
+function registerGaugeEnterHandler(context, vscode, options) {
+  const GaugeEnterHandlerCtor = options.GaugeEnterHandler || GaugeEnterHandler;
+  const handler = new GaugeEnterHandlerCtor({ vscode });
+  const disposable = typeof handler.register === "function" ? handler.register() : undefined;
   if (disposable) {
     context.subscriptions.push(disposable);
   }
@@ -362,6 +372,7 @@ function startGaugeServices(context, vscode, options = {}) {
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
+  registerGaugeEnterHandler(context, vscode, options);
   registerDebugConfigurationProvider(context, vscode);
   registerArgumentCodeActionProvider(context, vscode, options);
   registerFoldingRangeProvider(context, vscode, options);
