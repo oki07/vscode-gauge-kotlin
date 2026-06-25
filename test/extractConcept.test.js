@@ -294,6 +294,63 @@ test("ExtractConceptCommandProvider parameterizes selected inline tables", async
   );
 });
 
+test("ExtractConceptCommandProvider parameterizes selected static arguments", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login as \"Ada\" with <role>",
+    "",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "",
+    },
+    document,
+    inputResponses: ["Shared login \"Ada\" <role>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 28 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/example.spec",
+  );
+  assert.equal(sourceReplacement.newText, "* Shared login \"Ada\" <role>\n");
+
+  const conceptReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
+  );
+  assert.equal(
+    conceptReplacement.newText,
+    [
+      "# Shared login <Ada> <role>",
+      "* Login as <Ada> with <role>",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("ExtractConceptCommandProvider creates a new concept file from the selected steps", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
@@ -421,6 +478,51 @@ test("ExtractConceptCommandProvider rejects duplicate concept names", async () =
 
   assert.deepEqual(errors, [
     "Concept `Shared login` already present",
+  ]);
+  assert.deepEqual(appliedEdits, []);
+});
+
+test("ExtractConceptCommandProvider rejects duplicate parameterized static concept names", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login as \"Ada\" with <role>",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "# Shared login <Ada> <role>\n* Login\n",
+    },
+    document,
+    inputResponses: ["Shared login \"Ada\" <role>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 28 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(errors, [
+    "Concept `Shared login \"Ada\" <role>` already present",
   ]);
   assert.deepEqual(appliedEdits, []);
 });

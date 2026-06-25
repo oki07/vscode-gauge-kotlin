@@ -220,35 +220,77 @@ function removeTableParameters(conceptName, tableNames) {
   return usageName.trim().replace(/\s+/g, " ");
 }
 
+function toDynamicParameterName(value) {
+  return value.replace(/</g, "{").replace(/>/g, "}");
+}
+
+function staticArgumentParameters(conceptName) {
+  const parameters = [];
+  const quotedArgument = /"([^"]+)"/g;
+  let match = quotedArgument.exec(conceptName);
+  while (match) {
+    parameters.push({
+      dynamic: `<${toDynamicParameterName(match[1])}>`,
+      original: match[0],
+    });
+    match = quotedArgument.exec(conceptName);
+  }
+  return parameters;
+}
+
+function applyStaticArgumentParameters(text, parameters) {
+  let parameterized = text;
+  for (const parameter of parameters) {
+    parameterized = parameterized.replace(
+      new RegExp(escapeRegExp(parameter.original), "g"),
+      parameter.dynamic,
+    );
+  }
+  return parameterized;
+}
+
+function parameterizedConceptName(conceptName) {
+  return applyStaticArgumentParameters(
+    conceptName,
+    staticArgumentParameters(conceptName),
+  );
+}
+
 function buildParameterizedExtraction(extraction, conceptName, eol) {
   const tables = tableParameterMap(extraction.steps);
   const sourceTables = [];
   const sourceTableKeys = new Set();
   const conceptLines = [];
   const parameterizedNames = new Set();
+  const staticParameters = staticArgumentParameters(conceptName);
 
   for (const step of extraction.steps || []) {
     if (!step.tableLines || step.tableLines.length === 0) {
-      conceptLines.push(step.text);
+      conceptLines.push(applyStaticArgumentParameters(step.text, staticParameters));
       continue;
     }
 
     const key = tableKey(step.tableLines);
     const tableName = tables.get(key);
     if (tableName && conceptHasTableParameter(conceptName, tableName)) {
-      conceptLines.push(`${step.text} <${tableName}>`);
+      const conceptStep = applyStaticArgumentParameters(step.text, staticParameters);
+      conceptLines.push(`${conceptStep} <${tableName}>`);
       parameterizedNames.add(tableName);
       if (!sourceTableKeys.has(key)) {
         sourceTables.push(...step.tableLines);
         sourceTableKeys.add(key);
       }
     } else {
-      conceptLines.push(step.text, ...step.tableLines);
+      conceptLines.push(
+        applyStaticArgumentParameters(step.text, staticParameters),
+        ...step.tableLines,
+      );
     }
   }
 
   const usageName = removeTableParameters(conceptName, parameterizedNames);
   return {
+    conceptName: parameterizedConceptName(conceptName),
     conceptLines: conceptLines.length > 0 ? conceptLines : extraction.lines,
     sourceText: [`* ${usageName}`, ...sourceTables].join(eol),
   };
@@ -420,7 +462,7 @@ class ExtractConceptCommandProvider {
   }
 
   async ensureConceptNameAvailable(conceptName, conceptFiles) {
-    const wanted = normalizeConceptHeading(conceptName);
+    const wanted = normalizeConceptHeading(parameterizedConceptName(conceptName));
     for (const file of conceptFiles) {
       const document = await this.vscode.workspace.openTextDocument(createUri(this.vscode, file));
       const text = typeof document.getText === "function" ? document.getText() : "";
@@ -435,7 +477,7 @@ class ExtractConceptCommandProvider {
     const eol = detectEol(sourceText);
     const parameterizedExtraction = buildParameterizedExtraction(extraction, conceptName, eol);
     const conceptDefinition = buildConceptDefinition(
-      conceptName,
+      parameterizedExtraction.conceptName,
       parameterizedExtraction.conceptLines,
       eol,
     );
