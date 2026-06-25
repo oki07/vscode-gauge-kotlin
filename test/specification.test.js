@@ -417,3 +417,32 @@ test("createConcept writes a concept file under the workspace specs directory", 
     },
   });
 });
+
+test("createConcept reports spec directory provider failures", async () => {
+  const { createConcept } = require("../src/specification");
+  const errors = [];
+  const failure = new Error("LSP unavailable");
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+    },
+    window: {
+      async showErrorMessage(message) {
+        errors.push(message);
+      },
+    },
+  };
+
+  await assert.doesNotReject(() => createConcept({
+    fileSystem: {},
+    pathModule: path.posix,
+    specDirsProvider() {
+      throw failure;
+    },
+    vscode,
+  }));
+
+  assert.deepEqual(errors, [
+    "Unable to generate concept. Error: LSP unavailable",
+  ]);
+});

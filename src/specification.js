@@ -215,48 +215,52 @@ async function createSpecification(options = {}) {
 
 async function createConcept(options = {}) {
   const vscode = options.vscode || require("vscode");
-  const fileSystem = options.fileSystem || nodeFs;
-  const promises = fileSystem.promises || fileSystem;
-  const pathModule = options.pathModule || nodePath;
-  const eol = options.eol || nodeOs.EOL;
-  const projectRoot = await selectProjectRoot(vscode, pathModule, options);
+  try {
+    const fileSystem = options.fileSystem || nodeFs;
+    const promises = fileSystem.promises || fileSystem;
+    const pathModule = options.pathModule || nodePath;
+    const eol = options.eol || nodeOs.EOL;
+    const projectRoot = await selectProjectRoot(vscode, pathModule, options);
 
-  if (!projectRoot) {
-    return showGenerationError(vscode, "concept", "No workspace folder is open.");
+    if (!projectRoot) {
+      return showGenerationError(vscode, "concept", "No workspace folder is open.");
+    }
+
+    const conceptDir = await selectSpecDirectory(vscode, pathModule, projectRoot, {
+      ...options,
+      specDirPlaceHolder: "Choose the folder in which the concept should be created",
+    });
+    if (!conceptDir) {
+      return undefined;
+    }
+
+    const file = await vscode.window.showInputBox({ placeHolder: "Enter the concept file name" });
+    if (!file) {
+      return undefined;
+    }
+
+    const filename = pathModule.join(conceptDir, `${file}.cpt`);
+
+    if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
+      return showGenerationError(vscode, "concept", `File${filename} already exists.`);
+    }
+
+    const document = buildConceptDocument({
+      date: options.date,
+      eol,
+      user: options.user,
+    });
+
+    await promises.mkdir(conceptDir, { recursive: true });
+    await promises.writeFile(filename, document.text, "utf8");
+
+    const textDocument = await vscode.workspace.openTextDocument(filename);
+    return vscode.window.showTextDocument(textDocument, {
+      selection: toRange(vscode, document.selection),
+    });
+  } catch (error) {
+    return showGenerationError(vscode, "concept", error);
   }
-
-  const conceptDir = await selectSpecDirectory(vscode, pathModule, projectRoot, {
-    ...options,
-    specDirPlaceHolder: "Choose the folder in which the concept should be created",
-  });
-  if (!conceptDir) {
-    return undefined;
-  }
-
-  const file = await vscode.window.showInputBox({ placeHolder: "Enter the concept file name" });
-  if (!file) {
-    return undefined;
-  }
-
-  const filename = pathModule.join(conceptDir, `${file}.cpt`);
-
-  if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
-    return showGenerationError(vscode, "concept", `File${filename} already exists.`);
-  }
-
-  const document = buildConceptDocument({
-    date: options.date,
-    eol,
-    user: options.user,
-  });
-
-  await promises.mkdir(conceptDir, { recursive: true });
-  await promises.writeFile(filename, document.text, "utf8");
-
-  const textDocument = await vscode.workspace.openTextDocument(filename);
-  return vscode.window.showTextDocument(textDocument, {
-    selection: toRange(vscode, document.selection),
-  });
 }
 
 async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}) {
