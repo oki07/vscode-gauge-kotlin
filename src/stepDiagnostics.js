@@ -248,9 +248,37 @@ function findNextFunction(text, startIndex) {
   return undefined;
 }
 
+function unqualifiedStepImport(text) {
+  const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
+  let match = importPattern.exec(text);
+  while (match) {
+    const importedName = match[1];
+    const alias = match[2];
+    const importedParts = importedName.split(".");
+    const exposedName = alias || importedParts[importedParts.length - 1];
+    if (exposedName !== "Step") {
+      match = importPattern.exec(text);
+      continue;
+    }
+    return importedName;
+  }
+  return undefined;
+}
+
+function isStepAnnotationAllowed(annotationName, importedStep) {
+  if (annotationName === GAUGE_STEP_ANNOTATION) {
+    return true;
+  }
+  if (annotationName.includes(".")) {
+    return false;
+  }
+  return !importedStep || importedStep === GAUGE_STEP_ANNOTATION;
+}
+
 function findStepFunctions(text) {
   const entries = [];
   const annotationPattern = /@(?:[A-Za-z_]\w*\.)*Step\b/g;
+  const importedStep = unqualifiedStepImport(text);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     const annotationName = annotationMatch[0].slice(1);
@@ -264,7 +292,7 @@ function findStepFunctions(text) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
-    if (annotationName.includes(".") && annotationName !== GAUGE_STEP_ANNOTATION) {
+    if (!isStepAnnotationAllowed(annotationName, importedStep)) {
       annotationPattern.lastIndex = closeParen + 1;
       annotationMatch = annotationPattern.exec(text);
       continue;

@@ -122,6 +122,19 @@ test("GaugeStepDiagnosticsProvider ignores non-Gauge qualified Step annotations"
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores non-Gauge imported Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import io.cucumber.java.en.Step",
+    "",
+    "@Step(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
