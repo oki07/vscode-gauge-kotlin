@@ -20,6 +20,7 @@ function createFakeFileSystem(entries) {
 function createFakeVscode(overrides = {}) {
   const contexts = [];
   const quickPicks = [];
+  const workspaceFolderListeners = [];
   const configurations = overrides.configurations || {};
   const workspaceFolders = overrides.workspaceFolders || [
     { uri: { fsPath: "/workspace/gauge" } },
@@ -72,7 +73,8 @@ function createFakeVscode(overrides = {}) {
             },
           };
         },
-        onDidChangeWorkspaceFolders() {
+        onDidChangeWorkspaceFolders(listener) {
+          workspaceFolderListeners.push(listener);
           return { dispose() {} };
         },
         onDidChangeConfiguration() {
@@ -80,6 +82,7 @@ function createFakeVscode(overrides = {}) {
         },
       },
     },
+    workspaceFolderListeners,
   };
 }
 
@@ -285,6 +288,54 @@ test("GaugeWorkspace lets users choose among known projects", async () => {
       ],
       options: { canPickMany: false, placeHolder: "Choose a project" },
     },
+  ]);
+});
+
+test("GaugeWorkspace starts and stops clients as workspace folders change", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/one/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/two/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+  });
+  const { contexts, vscode, workspaceFolderListeners } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/one" } }],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(workspaceFolderListeners.length, 1);
+  const firstClient = clients.get("/workspace/one").client;
+
+  await workspaceFolderListeners[0]({
+    added: [{ uri: { fsPath: "/workspace/two" } }],
+    removed: [],
+  });
+
+  assert.equal(clients.get("/workspace/two").client.started, true);
+
+  await workspaceFolderListeners[0]({
+    added: [],
+    removed: [{ uri: { fsPath: "/workspace/one" } }],
+  });
+
+  assert.equal(clients.get("/workspace/one"), undefined);
+  assert.equal(firstClient.stopped, true);
+  assert.equal(clients.get("/workspace/two").client.stopped, false);
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
+    { command: "setContext", key: "gauge:multipleProjects?", value: true },
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
   ]);
 });
 

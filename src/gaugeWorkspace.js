@@ -93,6 +93,7 @@ class GaugeWorkspace {
       vscode: this.vscode,
     });
     this.disposables = [];
+    this.registerWorkspaceFolderChanges();
     this.startup = this.startWorkspaceProjects();
   }
 
@@ -160,6 +161,41 @@ class GaugeWorkspace {
         GAUGE_MULTI_PROJECT_CONTEXT,
         this.clientsMap.size > 1,
       );
+    }
+  }
+
+  registerWorkspaceFolderChanges() {
+    if (!this.vscode.workspace || typeof this.vscode.workspace.onDidChangeWorkspaceFolders !== "function") {
+      return;
+    }
+    const disposable = this.vscode.workspace.onDidChangeWorkspaceFolders(
+      (event) => this.onWorkspaceFoldersChanged(event),
+    );
+    if (disposable) {
+      this.disposables.push(disposable);
+    }
+  }
+
+  async onWorkspaceFoldersChanged(event) {
+    const added = event && event.added ? event.added : [];
+    const removed = event && event.removed ? event.removed : [];
+    for (const folder of added) {
+      await this.startServerFor(folder.uri.fsPath);
+    }
+    for (const folder of removed) {
+      await this.stopServerFor(folder.uri.fsPath);
+    }
+    await this.setMultiProjectContext();
+  }
+
+  async stopServerFor(folder) {
+    const projectClient = this.clientsMap.get(folder);
+    if (!projectClient) {
+      return;
+    }
+    this.clientsMap.delete(projectClient.project.root());
+    if (projectClient.client && typeof projectClient.client.stop === "function") {
+      await projectClient.client.stop();
     }
   }
 
