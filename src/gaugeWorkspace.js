@@ -2,6 +2,7 @@
 
 const nodePath = require("node:path");
 const { GaugeClients } = require("./gaugeClients");
+const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
 const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
@@ -66,6 +67,7 @@ class GaugeWorkspace {
     this.clientLanguageMap = new Map();
     this.env = options.env || process.env;
     this.state = stateOrMemory(options.state);
+    this.GaugeWorkspaceFeature = options.GaugeWorkspaceFeature || GaugeWorkspaceFeature;
     const languageClientModule = getLanguageClientModule(options);
     this.LanguageClient = languageClientModule.LanguageClient;
     this.revealOutputChannelOnNever = languageClientModule.RevealOutputChannelOn
@@ -204,9 +206,19 @@ class GaugeWorkspace {
     );
     this.clientsMap.set(project.root(), { project, client: languageClient });
     await this.installRunnerFor(project);
+    this.registerDynamicFeatures(languageClient);
     await languageClient.start();
     await this.setLanguageId(languageClient, project.root());
     return languageClient;
+  }
+
+  registerDynamicFeatures(languageClient) {
+    if (typeof languageClient.registerFeatures !== "function") {
+      return;
+    }
+    languageClient.registerFeatures([
+      new this.GaugeWorkspaceFeature(languageClient, { vscode: this.vscode }),
+    ]);
   }
 
   async installRunnerFor(project) {

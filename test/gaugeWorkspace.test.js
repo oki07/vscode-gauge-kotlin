@@ -172,6 +172,8 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   ]);
   assert.equal(entry.client.clientOptions.revealOutputChannelOn, 4);
   assert.equal(entry.client.clientOptions.workspaceFolder.uri.fsPath, "/workspace/gauge");
+  assert.equal(entry.client.features.length, 1);
+  assert.equal(entry.client.features[0].messages.method, "workspace/saveFiles");
   assert.equal(workspace.getClientLanguageMap().get("/workspace/gauge"), "kotlin");
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:multipleProjects?", value: false },
