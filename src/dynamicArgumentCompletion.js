@@ -74,6 +74,10 @@ function isScenarioHeading(line) {
   return line.trimStart().startsWith("##");
 }
 
+function isStepLine(line) {
+  return line.trimStart().startsWith("*");
+}
+
 function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
@@ -110,6 +114,9 @@ function specDataTableHeaders(text) {
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index];
     if (isScenarioHeading(line)) {
+      return [];
+    }
+    if (isStepLine(line)) {
       return [];
     }
     if (isTableLine(line) && isTableHeaderSeparator(lines[index + 1])) {
