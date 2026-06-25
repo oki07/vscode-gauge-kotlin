@@ -64,6 +64,23 @@ function findQuotedEnd(text, startIndex, quote) {
   return text.length;
 }
 
+function findBlockCommentEnd(text, startIndex) {
+  let depth = 1;
+  for (let index = startIndex + 2; index < text.length; index += 1) {
+    if (text.startsWith("/*", index)) {
+      depth += 1;
+      index += 1;
+    } else if (text.startsWith("*/", index)) {
+      depth -= 1;
+      index += 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return text.length;
+}
+
 function collectIgnoredKotlinRanges(text) {
   const ranges = [];
   let index = 0;
@@ -76,8 +93,7 @@ function collectIgnoredKotlinRanges(text) {
       continue;
     }
     if (text.startsWith("/*", index)) {
-      const closeIndex = text.indexOf("*/", index + 2);
-      const end = closeIndex === -1 ? text.length : closeIndex + 2;
+      const end = findBlockCommentEnd(text, index);
       ranges.push({ end, start: index });
       index = end;
       continue;

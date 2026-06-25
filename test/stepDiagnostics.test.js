@@ -165,6 +165,20 @@ test("GaugeStepDiagnosticsProvider ignores Step text in Kotlin comments and stri
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores Step text in nested Kotlin block comments", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "/*",
+    "  /* @Step(\"Nested <value>\") */",
+    "  @Step(\"Outer <value>\")",
+    "*/",
+    "fun notStep() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider accepts Gauge Step import aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
