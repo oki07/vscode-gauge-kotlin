@@ -256,6 +256,32 @@ function parameterizedConceptName(conceptName) {
   );
 }
 
+function dynamicParametersInLines(lines) {
+  const parameters = [];
+  const seen = new Set();
+  for (const line of lines || []) {
+    const matches = line.matchAll(/<[^>\r\n]+>/g);
+    for (const match of matches) {
+      if (!seen.has(match[0])) {
+        seen.add(match[0]);
+        parameters.push(match[0]);
+      }
+    }
+  }
+  return parameters;
+}
+
+function appendMissingParameters(name, parameters) {
+  let result = name.trim();
+  for (const parameter of parameters) {
+    if (new RegExp(escapeRegExp(parameter)).test(result)) {
+      continue;
+    }
+    result = `${result} ${parameter}`.trim();
+  }
+  return result.replace(/\s+/g, " ");
+}
+
 function buildParameterizedExtraction(extraction, conceptName, eol) {
   const tables = tableParameterMap(extraction.steps);
   const sourceTables = [];
@@ -263,6 +289,7 @@ function buildParameterizedExtraction(extraction, conceptName, eol) {
   const conceptLines = [];
   const parameterizedNames = new Set();
   const staticParameters = staticArgumentParameters(conceptName);
+  const tableDynamicParameters = [];
 
   for (const step of extraction.steps || []) {
     if (!step.tableLines || step.tableLines.length === 0) {
@@ -285,14 +312,21 @@ function buildParameterizedExtraction(extraction, conceptName, eol) {
         applyStaticArgumentParameters(step.text, staticParameters),
         ...step.tableLines,
       );
+      tableDynamicParameters.push(...dynamicParametersInLines(step.tableLines));
     }
   }
 
   const usageName = removeTableParameters(conceptName, parameterizedNames);
   return {
-    conceptName: parameterizedConceptName(conceptName),
+    conceptName: appendMissingParameters(
+      parameterizedConceptName(conceptName),
+      tableDynamicParameters,
+    ),
     conceptLines: conceptLines.length > 0 ? conceptLines : extraction.lines,
-    sourceText: [`* ${usageName}`, ...sourceTables].join(eol),
+    sourceText: [
+      `* ${appendMissingParameters(usageName, tableDynamicParameters)}`,
+      ...sourceTables,
+    ].join(eol),
   };
 }
 
