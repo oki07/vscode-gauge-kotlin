@@ -8,6 +8,10 @@ const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
 const { createProjectFactory } = require("./project/projectFactory");
+const {
+  GaugeSemanticTokensProvider,
+  createLegend,
+} = require("./semanticTokensProvider");
 const { createSpecification } = require("./specification");
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
@@ -103,6 +107,23 @@ function registerDebugConfigurationProvider(context, vscode) {
   }
 }
 
+function registerSemanticTokensProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerDocumentSemanticTokensProvider !== "function") {
+    return;
+  }
+  const SemanticTokensProviderCtor = options.GaugeSemanticTokensProvider || GaugeSemanticTokensProvider;
+  const legend = options.semanticTokensLegend || createLegend(vscode);
+  const provider = new SemanticTokensProviderCtor({ vscode, legend });
+  const disposable = vscode.languages.registerDocumentSemanticTokensProvider(
+    { language: "gauge" },
+    provider,
+    legend,
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function createCommandHandler(command, vscode, executionController, options = {}) {
   return function handleGaugeCommand(...args) {
     if (EXECUTION_COMMANDS.has(command)) {
@@ -153,6 +174,7 @@ function startGaugeServices(context, vscode, options = {}) {
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
+  registerSemanticTokensProvider(context, vscode, options);
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();

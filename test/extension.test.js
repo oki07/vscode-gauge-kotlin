@@ -11,6 +11,7 @@ function createFakeVscode(overrides = {}) {
   const contexts = [];
   const debugProviders = [];
   const languageConfigurations = [];
+  const semanticTokenProviders = [];
   const fakeVscode = {
     commands: {
       executeCommand(command, key, value) {
@@ -30,6 +31,16 @@ function createFakeVscode(overrides = {}) {
       },
     },
     languages: {
+      registerDocumentSemanticTokensProvider(selector, provider, legend) {
+        const disposable = { dispose() {} };
+        semanticTokenProviders.push({
+          selector,
+          provider,
+          legend,
+          disposable,
+        });
+        return disposable;
+      },
       setLanguageConfiguration(language, configuration) {
         languageConfigurations.push({ language, configuration });
         return { dispose() {} };
@@ -51,6 +62,7 @@ function createFakeVscode(overrides = {}) {
     fakeVscode,
     languageConfigurations,
     registeredCommands,
+    semanticTokenProviders,
   };
 }
 
@@ -149,6 +161,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     fakeVscode,
     languageConfigurations,
     registeredCommands,
+    semanticTokenProviders,
   } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
@@ -198,6 +211,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeSemanticTokensProvider {
+    constructor(options) {
+      this.options = options;
+      created.semanticTokensProvider = this;
+    }
+  }
+
   class FakeGaugeState {
     constructor(receivedContext) {
       this.context = receivedContext;
@@ -217,7 +237,9 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     ConfigProvider: FakeConfigProvider,
+    GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
     ReferenceProvider: FakeReferenceProvider,
+    semanticTokensLegend: { id: "legend" },
     projectFactory: {
       isGaugeProject(folder) {
         checkedProjects.push(folder);
@@ -242,6 +264,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   assert.equal(debugProviders[0].type, "gauge");
   assert.throws(
     () => debugProviders[0].provider.resolveDebugConfiguration(),
@@ -254,5 +277,14 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     languageConfigurations.map((entry) => entry.language),
     ["gauge"],
   );
+  assert.deepEqual(semanticTokenProviders, [
+    {
+      selector: { language: "gauge" },
+      provider: created.semanticTokensProvider,
+      legend: { id: "legend" },
+      disposable: semanticTokenProviders[0].disposable,
+    },
+  ]);
+  assert.equal(created.semanticTokensProvider.options.vscode, fakeVscode);
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.showReferences.atCursor"), false);
 });
