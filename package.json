@@ -28,6 +28,7 @@
     "onCommand:gauge.preview",
     "workspaceContains:manifest.json",
     "onLanguage:gauge",
+    "onLanguage:kotlin",
     "onDebugResolve:gauge"
   ],
   "main": "./src/extension.js",

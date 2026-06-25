@@ -38,6 +38,7 @@ const {
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
 const FORMAT_DOCUMENT_COMMAND = "editor.action.formatDocument";
+const KOTLIN_LANGUAGE = "kotlin";
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
@@ -126,12 +127,27 @@ function hasActiveGaugeDocument(vscode) {
   return Boolean(editor && editor.document && editor.document.languageId === "gauge");
 }
 
+function hasActiveKotlinGaugeDocument(vscode, projectFactory) {
+  const editor = vscode.window && vscode.window.activeTextEditor;
+  if (!editor || !editor.document || editor.document.languageId !== KOTLIN_LANGUAGE) {
+    return false;
+  }
+  try {
+    projectFactory.getGaugeRootFromFilePath(editor.document.uri.fsPath);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function hasGaugeProject(vscode, projectFactory) {
   return workspaceFolders(vscode).some((folder) => projectFactory.isGaugeProject(folder.uri.fsPath));
 }
 
 function shouldStartGaugeServices(vscode, projectFactory) {
-  return hasActiveGaugeDocument(vscode) || hasGaugeProject(vscode, projectFactory);
+  return hasActiveGaugeDocument(vscode)
+    || hasActiveKotlinGaugeDocument(vscode, projectFactory)
+    || hasGaugeProject(vscode, projectFactory);
 }
 
 function setActivatedContext(vscode) {

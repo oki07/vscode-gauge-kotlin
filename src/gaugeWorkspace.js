@@ -16,6 +16,7 @@ const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
 const JAVA_RUNNER = "java";
 const KOTLIN_RUNNER = "kotlin";
+const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
 const RESTART_ACTION = "Restart Now";
@@ -252,7 +253,11 @@ class GaugeWorkspace {
 
   async startServerForActiveGaugeDocument(editor) {
     const activeEditor = editor || (this.vscode.window && this.vscode.window.activeTextEditor);
-    if (!activeEditor || !activeEditor.document || activeEditor.document.languageId !== "gauge") {
+    if (
+      !activeEditor
+      || !activeEditor.document
+      || !ACTIVE_DOCUMENT_LANGUAGES.has(activeEditor.document.languageId)
+    ) {
       return undefined;
     }
     return this.startServerForSpecFile(activeEditor.document.uri.fsPath);

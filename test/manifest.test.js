@@ -25,6 +25,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "onCommand:gauge.preview",
     "workspaceContains:manifest.json",
     "onLanguage:gauge",
+    "onLanguage:kotlin",
     "onDebugResolve:gauge",
   ]);
 
