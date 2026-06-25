@@ -21,6 +21,7 @@ function createFakeVscode(overrides = {}) {
   const contexts = [];
   const debugProviders = [];
   const editorUpdates = [];
+  const foldingRangeProviders = [];
   const languageConfigurations = [];
   const configurationListeners = [];
   const semanticTokenProviders = [];
@@ -64,6 +65,15 @@ function createFakeVscode(overrides = {}) {
       },
     },
     languages: {
+      registerFoldingRangeProvider(selector, provider) {
+        const disposable = { dispose() {} };
+        foldingRangeProviders.push({
+          selector,
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
       registerDocumentSemanticTokensProvider(selector, provider, legend) {
         const disposable = { dispose() {} };
         semanticTokenProviders.push({
@@ -125,6 +135,7 @@ function createFakeVscode(overrides = {}) {
     debugProviders,
     editorUpdates,
     fakeVscode,
+    foldingRangeProviders,
     languageConfigurations,
     registeredCommands,
     semanticTokenProviders,
@@ -341,6 +352,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     debugProviders,
     editorUpdates,
     fakeVscode,
+    foldingRangeProviders,
     languageConfigurations,
     registeredCommands,
     semanticTokenProviders,
@@ -429,6 +441,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeFoldingRangeProvider {
+    constructor(options) {
+      this.options = options;
+      created.foldingRangeProvider = this;
+    }
+  }
+
   class FakeGaugeState {
     constructor(receivedContext) {
       this.context = receivedContext;
@@ -452,6 +471,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GenerateStubCommandProvider: FakeGenerateStubCommandProvider,
     SpecNodeProvider: FakeSpecNodeProvider,
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
+    GaugeFoldingRangeProvider: FakeFoldingRangeProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
     semanticTokensLegend: { id: "legend" },
@@ -494,6 +514,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(created.specNodeProvider), true);
   assert.equal(context.subscriptions.includes(created.projectInitializer), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   assert.equal(debugProviders[0].type, "gauge");
   assert.throws(
@@ -516,6 +537,14 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
   ]);
   assert.equal(created.semanticTokensProvider.options.vscode, fakeVscode);
+  assert.deepEqual(foldingRangeProviders, [
+    {
+      selector: { language: "gauge" },
+      provider: created.foldingRangeProvider,
+      disposable: foldingRangeProviders[0].disposable,
+    },
+  ]);
+  assert.equal(created.foldingRangeProvider.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(configurationListeners[0].disposable), true);
   assert.deepEqual(editorUpdates[0], {
     key: "semanticTokenColorCustomizations",

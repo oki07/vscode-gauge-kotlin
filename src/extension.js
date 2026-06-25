@@ -6,6 +6,7 @@ const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execut
 const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
+const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
 const { GaugeClients } = require("./gaugeClients");
 const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
@@ -143,6 +144,21 @@ function registerDebugConfigurationProvider(context, vscode) {
   }
 }
 
+function registerFoldingRangeProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerFoldingRangeProvider !== "function") {
+    return;
+  }
+  const FoldingRangeProviderCtor = options.GaugeFoldingRangeProvider || GaugeFoldingRangeProvider;
+  const provider = new FoldingRangeProviderCtor({ vscode });
+  const disposable = vscode.languages.registerFoldingRangeProvider(
+    { language: "gauge" },
+    provider,
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerSemanticTokensProvider(context, vscode, options) {
   if (!vscode.languages || typeof vscode.languages.registerDocumentSemanticTokensProvider !== "function") {
     return;
@@ -267,6 +283,7 @@ function startGaugeServices(context, vscode, options = {}) {
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
+  registerFoldingRangeProvider(context, vscode, options);
   registerSemanticTokensProvider(context, vscode, options);
   registerSemanticTokenColorUpdates(context, vscode);
 
