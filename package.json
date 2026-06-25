@@ -577,7 +577,7 @@
         "configurationSnippets": [
           {
             "label": "Gauge: Run Option",
-            "description": "Specify execution options for Gauge tests.",
+            "description": "Specify the execution options for the tests",
             "body": {
               "name": "Gauge Run Option",
               "type": "gauge",

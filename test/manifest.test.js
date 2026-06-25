@@ -28,6 +28,10 @@ function commandById(manifest, commandId) {
   return manifest.contributes.commands.find((entry) => entry.command === commandId);
 }
 
+function debuggerByType(manifest, type) {
+  return manifest.contributes.debuggers.find((entry) => entry.type === type);
+}
+
 test("extension manifest exposes the core Gauge VS Code surface for Kotlin projects", () => {
   const manifest = readPackageJson();
 
@@ -342,4 +346,14 @@ test("extension manifest preserves official spec explorer command icons", () => 
     assert.equal(fs.existsSync(path.join(root, command.icon.light)), true, command.icon.light);
     assert.equal(fs.existsSync(path.join(root, command.icon.dark)), true, command.icon.dark);
   }
+});
+
+test("extension manifest preserves official debugger configuration snippets", () => {
+  const manifest = readPackageJson();
+  const referenceManifest = readReferencePackageJson();
+
+  assert.deepEqual(
+    debuggerByType(manifest, "gauge").configurationSnippets,
+    debuggerByType(referenceManifest, "gauge").configurationSnippets,
+  );
 });
