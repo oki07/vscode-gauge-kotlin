@@ -93,6 +93,7 @@ class GaugeWorkspace {
       vscode: this.vscode,
     });
     this.disposables = [];
+    this.registerActiveEditorChanges();
     this.registerWorkspaceFolderChanges();
     this.startup = this.startWorkspaceProjects();
   }
@@ -114,6 +115,7 @@ class GaugeWorkspace {
     for (const folder of folders) {
       await this.startServerFor(folder.uri.fsPath);
     }
+    await this.startServerForActiveGaugeDocument();
     await this.setMultiProjectContext();
   }
 
@@ -174,6 +176,36 @@ class GaugeWorkspace {
     if (disposable) {
       this.disposables.push(disposable);
     }
+  }
+
+  registerActiveEditorChanges() {
+    if (!this.vscode.window || typeof this.vscode.window.onDidChangeActiveTextEditor !== "function") {
+      return;
+    }
+    const disposable = this.vscode.window.onDidChangeActiveTextEditor(
+      (editor) => this.startServerForActiveGaugeDocument(editor),
+    );
+    if (disposable) {
+      this.disposables.push(disposable);
+    }
+  }
+
+  async startServerForActiveGaugeDocument(editor) {
+    const activeEditor = editor || (this.vscode.window && this.vscode.window.activeTextEditor);
+    if (!activeEditor || !activeEditor.document || activeEditor.document.languageId !== "gauge") {
+      return undefined;
+    }
+    return this.startServerForSpecFile(activeEditor.document.uri.fsPath);
+  }
+
+  async startServerForSpecFile(file) {
+    let projectRoot;
+    try {
+      projectRoot = this.projectFactory.getGaugeRootFromFilePath(file);
+    } catch (error) {
+      return undefined;
+    }
+    return this.startServerFor(projectRoot);
   }
 
   async onWorkspaceFoldersChanged(event) {

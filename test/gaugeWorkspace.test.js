@@ -18,6 +18,7 @@ function createFakeFileSystem(entries) {
 }
 
 function createFakeVscode(overrides = {}) {
+  const activeEditorListeners = [];
   const contexts = [];
   const quickPicks = [];
   const workspaceFolderListeners = [];
@@ -46,8 +47,13 @@ function createFakeVscode(overrides = {}) {
         },
       },
       window: {
+        activeTextEditor: overrides.activeTextEditor,
         createOutputChannel() {
           return { appendLine() {}, clear() {}, show() {} };
+        },
+        onDidChangeActiveTextEditor(listener) {
+          activeEditorListeners.push(listener);
+          return { dispose() {} };
         },
         showQuickPick(items, options) {
           quickPicks.push({ items, options });
@@ -82,6 +88,7 @@ function createFakeVscode(overrides = {}) {
         },
       },
     },
+    activeEditorListeners,
     workspaceFolderListeners,
   };
 }
@@ -337,6 +344,84 @@ test("GaugeWorkspace starts and stops clients as workspace folders change", asyn
     { command: "setContext", key: "gauge:multipleProjects?", value: true },
     { command: "setContext", key: "gauge:multipleProjects?", value: false },
   ]);
+});
+
+test("GaugeWorkspace starts a client for the active Gauge document", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge",
+        uri: { fsPath: "/workspace/gauge/specs/login.spec" },
+      },
+    },
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(
+      new Command("gauge"),
+      { plugins: [{ name: "kotlin", version: "0.9.0" }] },
+      new Command("mvn"),
+      new Command("gradle"),
+    ),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(clients.get("/workspace/gauge/specs/login.spec").client.started, true);
+});
+
+test("GaugeWorkspace starts a client when the active editor changes to Gauge", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { activeEditorListeners, vscode } = createFakeVscode({
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(
+      new Command("gauge"),
+      { plugins: [{ name: "kotlin", version: "0.9.0" }] },
+      new Command("mvn"),
+      new Command("gradle"),
+    ),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(activeEditorListeners.length, 1);
+  assert.equal(clients.get("/workspace/gauge/specs/login.spec"), undefined);
+
+  await activeEditorListeners[0]({
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/login.spec" },
+    },
+  });
+
+  assert.equal(clients.get("/workspace/gauge/specs/login.spec").client.started, true);
 });
 
 test("GaugeWorkspace stores the last html report path in state", async () => {
