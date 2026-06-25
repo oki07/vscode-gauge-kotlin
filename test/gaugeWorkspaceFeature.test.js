@@ -36,3 +36,58 @@ test("GaugeWorkspaceFeature advertises and handles workspace saveFiles requests"
     registrations: false,
   });
 });
+
+test("GaugeWorkspaceFeature unregisters and disposes dynamic listeners", () => {
+  const { GaugeWorkspaceFeature } = require("../src/gaugeWorkspaceFeature");
+  const disposed = [];
+  const feature = new GaugeWorkspaceFeature({}, {
+    vscode: {
+      workspace: {
+        saveAll() {
+          return Promise.resolve(true);
+        },
+      },
+    },
+  });
+  feature.listeners.set("one", {
+    dispose() {
+      disposed.push("one");
+    },
+  });
+  feature.listeners.set("two", {
+    dispose() {
+      disposed.push("two");
+    },
+  });
+
+  feature.unregister("missing");
+
+  assert.deepEqual(disposed, []);
+  assert.equal(feature.listeners.size, 2);
+  assert.deepEqual(feature.getState(), {
+    kind: "workspace",
+    id: undefined,
+    registrations: true,
+  });
+
+  feature.unregister("one");
+
+  assert.deepEqual(disposed, ["one"]);
+  assert.equal(feature.listeners.has("one"), false);
+  assert.equal(feature.listeners.has("two"), true);
+  assert.deepEqual(feature.getState(), {
+    kind: "workspace",
+    id: undefined,
+    registrations: true,
+  });
+
+  feature.dispose();
+
+  assert.deepEqual(disposed, ["one", "two"]);
+  assert.equal(feature.listeners.size, 0);
+  assert.deepEqual(feature.getState(), {
+    kind: "workspace",
+    id: undefined,
+    registrations: false,
+  });
+});
