@@ -89,6 +89,28 @@ test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () 
   assert.deepEqual(provider.provideDiagnostics(createDocument("@Step(\"x\")\nfun x()", "javascript")), []);
 });
 
+test("GaugeStepDiagnosticsProvider only inspects Gauge Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+
+  assert.deepEqual(provider.provideDiagnostics(createDocument([
+    "@StepAlias(\"Alias <value>\")",
+    "fun alias() {}",
+  ].join("\n"))), []);
+
+  const diagnostics = provider.provideDiagnostics(createDocument([
+    "@com.thoughtworks.gauge.Step(\"Qualified <value>\")",
+    "fun qualified() {}",
+  ].join("\n")));
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Qualified <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const opened = [];

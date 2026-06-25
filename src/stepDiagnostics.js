@@ -213,19 +213,17 @@ function findNextFunction(text, startIndex) {
 
 function findStepFunctions(text) {
   const entries = [];
-  let searchIndex = 0;
-  while (searchIndex < text.length) {
-    const annotationIndex = text.indexOf("@Step", searchIndex);
-    if (annotationIndex === -1) {
-      break;
-    }
-    const openParen = text.indexOf("(", annotationIndex + 5);
+  const annotationPattern = /@(?:[A-Za-z_]\w*\.)*Step\b/g;
+  let annotationMatch = annotationPattern.exec(text);
+  while (annotationMatch) {
+    const openParen = text.indexOf("(", annotationPattern.lastIndex);
     if (openParen === -1) {
       break;
     }
     const closeParen = findMatchingParen(text, openParen);
     if (closeParen === -1) {
-      searchIndex = openParen + 1;
+      annotationPattern.lastIndex = openParen + 1;
+      annotationMatch = annotationPattern.exec(text);
       continue;
     }
     const aliases = extractStringLiterals(text.slice(openParen + 1, closeParen));
@@ -233,7 +231,8 @@ function findStepFunctions(text) {
     if (aliases.length > 0 && method) {
       entries.push({ aliases, ...method });
     }
-    searchIndex = closeParen + 1;
+    annotationPattern.lastIndex = closeParen + 1;
+    annotationMatch = annotationPattern.exec(text);
   }
   return entries;
 }
