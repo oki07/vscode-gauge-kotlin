@@ -1,0 +1,82 @@
+{
+  "Specification": {
+    "prefix": "spec",
+    "body": [
+      "# ${1:Specification heading}",
+      "",
+      "## ${2:Scenario heading}",
+      "* ${3:Step text}"
+    ],
+    "description": "Create a Gauge specification with one scenario."
+  },
+  "Scenario": {
+    "prefix": "sce",
+    "body": [
+      "## ${1:Scenario heading}",
+      "* ${2:Step text}"
+    ],
+    "description": "Create a Gauge scenario."
+  },
+  "Concept": {
+    "prefix": "cpt",
+    "body": [
+      "# ${1:Concept heading}",
+      "* ${2:Step text}"
+    ],
+    "description": "Create a Gauge concept."
+  },
+  "Table with one column": {
+    "prefix": "table:1",
+    "body": [
+      "|${1:column}|",
+      "|-------|",
+      "|${2:value}|"
+    ],
+    "description": "Create a Gauge table with one column."
+  },
+  "Table with two columns": {
+    "prefix": "table:2",
+    "body": [
+      "|${1:first}|${2:second}|",
+      "|-------|--------|",
+      "|${3:value}|${4:value}|"
+    ],
+    "description": "Create a Gauge table with two columns."
+  },
+  "Table with three columns": {
+    "prefix": "table:3",
+    "body": [
+      "|${1:first}|${2:second}|${3:third}|",
+      "|-------|--------|-------|",
+      "|${4:value}|${5:value}|${6:value}|"
+    ],
+    "description": "Create a Gauge table with three columns."
+  },
+  "Table with four columns": {
+    "prefix": "table:4",
+    "body": [
+      "|${1:first}|${2:second}|${3:third}|${4:fourth}|",
+      "|-------|--------|-------|--------|",
+      "|${5:value}|${6:value}|${7:value}|${8:value}|"
+    ],
+    "description": "Create a Gauge table with four columns."
+  },
+  "Table with five columns": {
+    "prefix": "table:5",
+    "body": [
+      "|${1:first}|${2:second}|${3:third}|${4:fourth}|${5:fifth}|",
+      "|-------|--------|-------|--------|-------|",
+      "|${6:value}|${7:value}|${8:value}|${9:value}|${10:value}|"
+    ],
+    "description": "Create a Gauge table with five columns."
+  },
+  "Table with six columns": {
+    "prefix": "table:6",
+    "body": [
+      "|${1:first}|${2:second}|${3:third}|${4:fourth}|${5:fifth}|${6:sixth}|",
+      "|-------|--------|-------|--------|-------|-------|",
+      "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|"
+    ],
+    "description": "Create a Gauge table with six columns."
+  }
+}
