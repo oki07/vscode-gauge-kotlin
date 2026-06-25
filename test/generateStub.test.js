@@ -167,3 +167,80 @@ test("GenerateStubCommandProvider reports clipboard copy failures", async () => 
     "Unable to generate implementation. Error: Clipboard unavailable",
   ]);
 });
+
+test("GenerateStubCommandProvider writes a selected concept through Gauge LSP", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const requests = [];
+  const appliedEdits = [];
+  const { commands, quickPicks, vscode } = createFakeVscode({
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/specs/concepts.cpt",
+    },
+  });
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method, params) {
+      requests.push({ method, params });
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve(["/workspace/specs/concepts.cpt"]);
+      }
+      if (method === "gauge/generateConcept") {
+        return Promise.resolve({ changes: [] });
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/specs/example.spec");
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.concept");
+  await command.handler({ conceptName: "# Checkout <arg0>\n* " });
+
+  assert.deepEqual(quickPicks[0], [
+    { label: "New File", description: "Create a new file", value: "New File" },
+    { label: "concepts.cpt", description: "specs", value: "/workspace/specs/concepts.cpt" },
+  ]);
+  assert.deepEqual(requests, [
+    {
+      method: "gauge/getImplFiles",
+      params: { concept: true },
+    },
+    {
+      method: "gauge/generateConcept",
+      params: {
+        conceptName: "# Checkout <arg0>\n* ",
+        conceptFile: "/workspace/specs/concepts.cpt",
+        dir: "/workspace/specs",
+      },
+    },
+  ]);
+  assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});
