@@ -37,6 +37,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(commandIds, [
     "gauge.createProject",
     "gauge.create.specification",
+    "gauge.create.concept",
     "gauge.config.saveRecommended",
     "gauge.stopExecution",
     "gauge.execute.failed",
@@ -52,6 +53,11 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "gauge.showReferences.atCursor",
     "gauge.specexplorer.switchProject",
   ]);
+
+  const commandPaletteIds = manifest.contributes.menus.commandPalette.map(
+    (entry) => entry.command,
+  );
+  assert.ok(commandPaletteIds.includes("gauge.create.concept"));
 
   const configuration = manifest.contributes.configuration.properties;
   assert.equal(configuration["gauge.specExplorer.enabled"].default, true);

@@ -55,6 +55,41 @@ function buildSpecificationDocument(options = {}) {
   };
 }
 
+function defaultUser() {
+  try {
+    return nodeOs.userInfo().username || "";
+  } catch (error) {
+    return process.env.USER || process.env.USERNAME || "";
+  }
+}
+
+function defaultDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildConceptDocument(options = {}) {
+  const eol = options.eol || nodeOs.EOL;
+  const user = options.user || defaultUser();
+  const date = options.date || defaultDate();
+  const heading = "Concept Heading";
+  const text = [
+    `Created by ${user} on ${date}`,
+    "",
+    "This is a concept file with following syntax for each concept.",
+    `# ${heading}`,
+    "* step1",
+    "* step2",
+  ].join(eol);
+
+  return {
+    text,
+    selection: {
+      start: { line: 3, character: 2 },
+      end: { line: 3, character: 2 + heading.length },
+    },
+  };
+}
+
 function getWorkspaceRoots(vscode) {
   const folders = vscode.workspace && vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
@@ -122,8 +157,12 @@ function toRange(vscode, selection) {
 }
 
 function showError(vscode, message) {
+  return showGenerationError(vscode, "specification", message);
+}
+
+function showGenerationError(vscode, kind, message) {
   if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
-    return vscode.window.showErrorMessage(`Unable to generate specification. ${message}`);
+    return vscode.window.showErrorMessage(`Unable to generate ${kind}. ${message}`);
   }
   return undefined;
 }
@@ -170,6 +209,52 @@ async function createSpecification(options = {}) {
   });
 }
 
+async function createConcept(options = {}) {
+  const vscode = options.vscode || require("vscode");
+  const fileSystem = options.fileSystem || nodeFs;
+  const promises = fileSystem.promises || fileSystem;
+  const pathModule = options.pathModule || nodePath;
+  const eol = options.eol || nodeOs.EOL;
+  const projectRoot = await selectProjectRoot(vscode, pathModule, options);
+
+  if (!projectRoot) {
+    return showGenerationError(vscode, "concept", "No workspace folder is open.");
+  }
+
+  const conceptDir = await selectSpecDirectory(vscode, pathModule, projectRoot, {
+    ...options,
+    specDirPlaceHolder: "Choose the folder in which the concept should be created",
+  });
+  if (!conceptDir) {
+    return undefined;
+  }
+
+  const file = await vscode.window.showInputBox({ placeHolder: "Enter the concept file name" });
+  if (!file) {
+    return undefined;
+  }
+
+  const filename = pathModule.join(conceptDir, `${file}.cpt`);
+
+  if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
+    return showGenerationError(vscode, "concept", `File${filename} already exists.`);
+  }
+
+  const document = buildConceptDocument({
+    date: options.date,
+    eol,
+    user: options.user,
+  });
+
+  await promises.mkdir(conceptDir, { recursive: true });
+  await promises.writeFile(filename, document.text, "utf8");
+
+  const textDocument = await vscode.workspace.openTextDocument(filename);
+  return vscode.window.showTextDocument(textDocument, {
+    selection: toRange(vscode, document.selection),
+  });
+}
+
 async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}) {
   if (options.specDir) {
     return pathModule.isAbsolute(options.specDir)
@@ -188,7 +273,8 @@ async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}
   if (specDirs.length > 1 && vscode.window.showQuickPick) {
     selected = await vscode.window.showQuickPick(specDirs, {
       canPickMany: false,
-      placeHolder: "Choose the folder in which the specification should be created",
+      placeHolder: options.specDirPlaceHolder
+        || "Choose the folder in which the specification should be created",
     });
   }
 
@@ -199,7 +285,9 @@ async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}
 }
 
 module.exports = {
+  buildConceptDocument,
   buildSpecificationDocument,
+  createConcept,
   createGaugeSpecDirsProvider,
   createSpecification,
 };

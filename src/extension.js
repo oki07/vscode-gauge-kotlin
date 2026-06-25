@@ -17,6 +17,7 @@ const {
   createLegend,
 } = require("./semanticTokensProvider");
 const {
+  createConcept,
   createGaugeSpecDirsProvider,
   createSpecification,
 } = require("./specification");
@@ -56,6 +57,7 @@ const SEMANTIC_TOKEN_COLOR_KEYS = [
 const GAUGE_COMMANDS = [
   "gauge.createProject",
   "gauge.create.specification",
+  "gauge.create.concept",
   "gauge.config.saveRecommended",
   "gauge.stopExecution",
   "gauge.execute.failed",
@@ -197,6 +199,17 @@ function createCommandHandler(command, vscode, executionController, options = {}
     switch (command) {
       case "gauge.create.specification":
         return (options.createSpecification || createSpecification)({
+          vscode,
+          fileSystem: options.fileSystem,
+          pathModule: options.pathModule,
+          eol: options.eol,
+          specDirsProvider: options.specDirsProvider || createGaugeSpecDirsProvider(
+            () => activeClientsMap,
+            { vscode },
+          ),
+        });
+      case "gauge.create.concept":
+        return (options.createConcept || createConcept)({
           vscode,
           fileSystem: options.fileSystem,
           pathModule: options.pathModule,

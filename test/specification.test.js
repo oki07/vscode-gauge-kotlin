@@ -51,6 +51,32 @@ test("buildSpecificationDocument can omit help comments", () => {
   });
 });
 
+test("buildConceptDocument matches the Gauge concept file template", () => {
+  const { buildConceptDocument } = require("../src/specification");
+
+  const document = buildConceptDocument({
+    date: "2026-06-26",
+    eol: "\n",
+    user: "Ada",
+  });
+
+  assert.equal(
+    document.text,
+    [
+      "Created by Ada on 2026-06-26",
+      "",
+      "This is a concept file with following syntax for each concept.",
+      "# Concept Heading",
+      "* step1",
+      "* step2",
+    ].join("\n"),
+  );
+  assert.deepEqual(document.selection, {
+    start: { line: 3, character: 2 },
+    end: { line: 3, character: 17 },
+  });
+});
+
 test("createSpecification writes a spec file under the workspace specs directory", async () => {
   const { createSpecification } = require("../src/specification");
   const writes = new Map();
@@ -269,6 +295,96 @@ test("createSpecification asks for project and spec directory when multiple choi
     document: { filename: "/workspace/admin/features/specs/Checkout.spec" },
     options: {
       selection: new Range(new Position(4, 2), new Position(4, 6)),
+    },
+  });
+});
+
+test("createConcept writes a concept file under the workspace specs directory", async () => {
+  const { createConcept } = require("../src/specification");
+  const writes = new Map();
+  const madeDirectories = [];
+  let openedDocument;
+  let shownDocument;
+
+  const fileSystem = {
+    existsSync() {
+      return false;
+    },
+    promises: {
+      async mkdir(directory, options) {
+        madeDirectories.push({ directory, options });
+      },
+      async writeFile(filename, content, encoding) {
+        writes.set(filename, { content, encoding });
+      },
+    },
+  };
+
+  class Position {
+    constructor(line, character) {
+      this.line = line;
+      this.character = character;
+    }
+  }
+
+  class Range {
+    constructor(start, end) {
+      this.start = start;
+      this.end = end;
+    }
+  }
+
+  const vscode = {
+    Position,
+    Range,
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+      async openTextDocument(filename) {
+        openedDocument = { filename };
+        return openedDocument;
+      },
+    },
+    window: {
+      async showInputBox(options) {
+        assert.equal(options.placeHolder, "Enter the concept file name");
+        return "Authentication";
+      },
+      async showTextDocument(document, options) {
+        shownDocument = { document, options };
+      },
+      async showErrorMessage(message) {
+        throw new Error(message);
+      },
+    },
+  };
+
+  await createConcept({
+    date: "2026-06-26",
+    eol: "\n",
+    fileSystem,
+    pathModule: path.posix,
+    user: "Ada",
+    vscode,
+  });
+
+  assert.deepEqual(madeDirectories, [
+    { directory: "/project/specs", options: { recursive: true } },
+  ]);
+  assert.deepEqual(writes.get("/project/specs/Authentication.cpt"), {
+    content: [
+      "Created by Ada on 2026-06-26",
+      "",
+      "This is a concept file with following syntax for each concept.",
+      "# Concept Heading",
+      "* step1",
+      "* step2",
+    ].join("\n"),
+    encoding: "utf8",
+  });
+  assert.deepEqual(shownDocument, {
+    document: openedDocument,
+    options: {
+      selection: new Range(new Position(3, 2), new Position(3, 17)),
     },
   });
 });

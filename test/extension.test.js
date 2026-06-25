@@ -174,6 +174,29 @@ test("create specification command delegates to the specification creator", () =
   assert.equal(receivedOptions.vscode, fakeVscode);
 });
 
+test("create concept command delegates to the concept creator", () => {
+  const extension = require("../src/extension");
+
+  let receivedOptions;
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+
+  extension.activate(context, fakeVscode, {
+    createConcept(options) {
+      receivedOptions = options;
+      return "created";
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.create.concept",
+  );
+
+  assert.ok(command);
+  assert.equal(command.handler(), "created");
+  assert.equal(receivedOptions.vscode, fakeVscode);
+});
+
 test("create specification command provides Gauge LSP spec directories", async () => {
   const extension = require("../src/extension");
 

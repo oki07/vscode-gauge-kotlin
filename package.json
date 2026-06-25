@@ -78,6 +78,11 @@
         "category": "Gauge"
       },
       {
+        "command": "gauge.create.concept",
+        "title": "Create New Concept",
+        "category": "Gauge"
+      },
+      {
         "command": "gauge.config.saveRecommended",
         "title": "Optimize VS Code configuration for Gauge",
         "category": "Gauge"
@@ -157,6 +162,10 @@
       "commandPalette": [
         {
           "command": "gauge.create.specification",
+          "when": "gauge:activated"
+        },
+        {
+          "command": "gauge.create.concept",
           "when": "gauge:activated"
         },
         {
