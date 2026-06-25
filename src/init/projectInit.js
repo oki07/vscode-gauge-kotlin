@@ -183,29 +183,37 @@ class ProjectInitializer {
   createFromCommandLine(cli, template, projectFolder, progressHandler) {
     const command = cli.gaugeCommand();
     progressHandler.report("Initializing project...");
+    let finished = false;
+    const fail = (message) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      this.handleError(
+        progressHandler,
+        message,
+        projectFolder.fsPath,
+      );
+    };
     const child = command.spawn([GAUGE_INIT_ARG, template.label], {
       cwd: projectFolder.fsPath,
       env: this.env,
     });
     child.addListener("error", (error) => {
-      this.handleError(
-        progressHandler,
-        `Failed to create template. ${error.message}`,
-        projectFolder.fsPath,
-      );
+      fail(`Failed to create template. ${error.message}`);
     });
     if (child.stdout && typeof child.stdout.on === "function") {
       child.stdout.on("data", () => {});
     }
     child.on("close", (code) => {
-      if (code !== 0) {
-        this.handleError(
-          progressHandler,
-          "Failed to initialize project.",
-          projectFolder.fsPath,
-        );
+      if (finished) {
         return;
       }
+      if (code !== 0) {
+        fail("Failed to initialize project.");
+        return;
+      }
+      finished = true;
       progressHandler.end(projectFolder);
     });
   }

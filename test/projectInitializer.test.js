@@ -231,6 +231,66 @@ test("ProjectInitializer removes the project directory when Gauge init fails", a
   assert.deepEqual(errors, ["Failed to initialize project."]);
 });
 
+test("ProjectInitializer does not open the project directory after Gauge init spawn errors", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    commands,
+    errors,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const removes = [];
+  const child = createChildProcess();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn() {
+          setImmediate(() => {
+            child.emit("error", new Error("spawn failed"));
+            child.emit("close", 0);
+          });
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+      removeSync(filename) {
+        removes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await assert.rejects(
+    () => command.handler(),
+    /Failed to create template\. spawn failed/,
+  );
+
+  assert.deepEqual(removes, ["/workspace/shop"]);
+  assert.deepEqual(errors, ["Failed to create template. spawn failed"]);
+  assert.deepEqual(commands, []);
+});
+
 test("ProjectInitializer prefers the configured Kotlin project template", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
