@@ -32,14 +32,46 @@ function buildSpecificationDocument(options = {}) {
   };
 }
 
-function getWorkspaceRoot(vscode) {
+function getWorkspaceRoots(vscode) {
   const folders = vscode.workspace && vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
-    return undefined;
+    return [];
   }
 
-  const uri = folders[0].uri || {};
-  return uri.fsPath || uri.path;
+  return folders
+    .map((folder) => {
+      const uri = folder.uri || {};
+      return uri.fsPath || uri.path;
+    })
+    .filter(Boolean);
+}
+
+async function selectProjectRoot(vscode, pathModule, options = {}) {
+  if (options.projectRoot) {
+    return options.projectRoot;
+  }
+
+  const projectRoots = options.projects || getWorkspaceRoots(vscode);
+  if (projectRoots.length === 0) {
+    return undefined;
+  }
+  if (projectRoots.length === 1 || !vscode.window.showQuickPick) {
+    return projectRoots[0];
+  }
+
+  const projectItems = projectRoots.map((projectRoot) => ({
+    label: pathModule.basename(projectRoot),
+    description: projectRoot,
+  }));
+  const selected = await vscode.window.showQuickPick(projectItems, {
+    canPickMany: false,
+    placeHolder: "Choose a project",
+  });
+
+  if (!selected) {
+    return undefined;
+  }
+  return selected.description || selected;
 }
 
 function getWithHelpSetting(vscode) {
@@ -79,10 +111,15 @@ async function createSpecification(options = {}) {
   const promises = fileSystem.promises || fileSystem;
   const pathModule = options.pathModule || nodePath;
   const eol = options.eol || nodeOs.EOL;
-  const projectRoot = options.projectRoot || getWorkspaceRoot(vscode);
+  const projectRoot = await selectProjectRoot(vscode, pathModule, options);
 
   if (!projectRoot) {
     return showError(vscode, "No workspace folder is open.");
+  }
+
+  const specDir = await selectSpecDirectory(vscode, pathModule, projectRoot, options);
+  if (!specDir) {
+    return undefined;
   }
 
   const file = await vscode.window.showInputBox({ placeHolder: "Enter the file name" });
@@ -90,7 +127,6 @@ async function createSpecification(options = {}) {
     return undefined;
   }
 
-  const specDir = options.specDir || pathModule.join(projectRoot, "specs");
   const filename = pathModule.join(specDir, `${file}.spec`);
 
   if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
@@ -109,6 +145,34 @@ async function createSpecification(options = {}) {
   return vscode.window.showTextDocument(textDocument, {
     selection: toRange(vscode, document.selection),
   });
+}
+
+async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}) {
+  if (options.specDir) {
+    return pathModule.isAbsolute(options.specDir)
+      ? options.specDir
+      : pathModule.join(projectRoot, options.specDir);
+  }
+
+  const relativeSpecDirs = options.specDirsProvider
+    ? await options.specDirsProvider(projectRoot)
+    : ["specs"];
+  const specDirs = relativeSpecDirs && relativeSpecDirs.length > 0
+    ? relativeSpecDirs
+    : ["specs"];
+
+  let selected = specDirs[0];
+  if (specDirs.length > 1 && vscode.window.showQuickPick) {
+    selected = await vscode.window.showQuickPick(specDirs, {
+      canPickMany: false,
+      placeHolder: "Choose the folder in which the specification should be created",
+    });
+  }
+
+  if (!selected) {
+    return undefined;
+  }
+  return pathModule.isAbsolute(selected) ? selected : pathModule.join(projectRoot, selected);
 }
 
 module.exports = {

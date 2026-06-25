@@ -147,3 +147,128 @@ test("createSpecification writes a spec file under the workspace specs directory
     },
   });
 });
+
+test("createSpecification asks for project and spec directory when multiple choices exist", async () => {
+  const { createSpecification } = require("../src/specification");
+  const writes = new Map();
+  const madeDirectories = [];
+  const quickPicks = [];
+  const specDirRequests = [];
+  let shownDocument;
+
+  const fileSystem = {
+    existsSync() {
+      return false;
+    },
+    promises: {
+      async mkdir(directory, options) {
+        madeDirectories.push({ directory, options });
+      },
+      async writeFile(filename, content, encoding) {
+        writes.set(filename, { content, encoding });
+      },
+    },
+  };
+
+  class Position {
+    constructor(line, character) {
+      this.line = line;
+      this.character = character;
+    }
+  }
+
+  class Range {
+    constructor(start, end) {
+      this.start = start;
+      this.end = end;
+    }
+  }
+
+  const vscode = {
+    Position,
+    Range,
+    workspace: {
+      workspaceFolders: [
+        { uri: { fsPath: "/workspace/shop" } },
+        { uri: { fsPath: "/workspace/admin" } },
+      ],
+      getConfiguration() {
+        return {
+          get() {
+            return false;
+          },
+        };
+      },
+      async openTextDocument(filename) {
+        return { filename };
+      },
+    },
+    window: {
+      async showQuickPick(items, options) {
+        quickPicks.push({ items, options });
+        if (quickPicks.length === 1) {
+          return items[1];
+        }
+        return "features/specs";
+      },
+      async showInputBox() {
+        return "Checkout";
+      },
+      async showTextDocument(document, options) {
+        shownDocument = { document, options };
+      },
+      async showErrorMessage(message) {
+        throw new Error(message);
+      },
+    },
+  };
+
+  await createSpecification({
+    vscode,
+    fileSystem,
+    pathModule: path.posix,
+    eol: "\n",
+    async specDirsProvider(projectRoot) {
+      specDirRequests.push(projectRoot);
+      return ["specs", "features/specs"];
+    },
+  });
+
+  assert.deepEqual(specDirRequests, ["/workspace/admin"]);
+  assert.deepEqual(quickPicks, [
+    {
+      items: [
+        { label: "shop", description: "/workspace/shop" },
+        { label: "admin", description: "/workspace/admin" },
+      ],
+      options: { canPickMany: false, placeHolder: "Choose a project" },
+    },
+    {
+      items: ["specs", "features/specs"],
+      options: {
+        canPickMany: false,
+        placeHolder: "Choose the folder in which the specification should be created",
+      },
+    },
+  ]);
+  assert.deepEqual(madeDirectories, [
+    { directory: "/workspace/admin/features/specs", options: { recursive: true } },
+  ]);
+  assert.deepEqual(writes.get("/workspace/admin/features/specs/Checkout.spec"), {
+    content: [
+      "# SPECIFICATION HEADING",
+      "",
+      "## SCENARIO HEADING",
+      "",
+      "* step",
+      "",
+    ].join("\n"),
+    encoding: "utf8",
+  });
+  assert.deepEqual(shownDocument, {
+    document: { filename: "/workspace/admin/features/specs/Checkout.spec" },
+    options: {
+      selection: new Range(new Position(4, 2), new Position(4, 6)),
+    },
+  });
+});
