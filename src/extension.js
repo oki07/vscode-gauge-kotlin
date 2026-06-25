@@ -3,6 +3,7 @@
 const { CLI } = require("./cli");
 const { ConfigProvider } = require("./config/configProvider");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
+const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeClients } = require("./gaugeClients");
 const { ReferenceProvider } = require("./gaugeReference");
@@ -26,6 +27,10 @@ const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
   "gauge.showReferences.atCursor",
+  "gauge.specexplorer.debugNode",
+  "gauge.specexplorer.runAllActiveProjectSpecs",
+  "gauge.specexplorer.runNode",
+  "gauge.specexplorer.switchProject",
 ]);
 const GAUGE_WORD_PATTERN = /^(?:[*])([^*].*)$/g;
 const SEMANTIC_TOKEN_COLOR_KEYS = [
@@ -241,6 +246,7 @@ function startGaugeServices(context, vscode, options = {}) {
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
   const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
   const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
+  const SpecNodeProviderCtor = options.SpecNodeProvider || SpecNodeProvider;
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
     clientsMap,
@@ -257,8 +263,19 @@ function startGaugeServices(context, vscode, options = {}) {
   const referenceProvider = new ReferenceProviderCtor(clientsMap, { vscode });
   const configProvider = new ConfigProviderCtor(context, { vscode });
   const generateStubProvider = new GenerateStubCommandProviderCtor(clientsMap, { vscode });
+  const specNodeProvider = new SpecNodeProviderCtor(gaugeWorkspace, {
+    executionController: options.executionController,
+    pathModule: options.pathModule,
+    vscode,
+  });
   activeClientsMap = clientsMap;
-  context.subscriptions.push(gaugeWorkspace, referenceProvider, configProvider, generateStubProvider);
+  context.subscriptions.push(
+    gaugeWorkspace,
+    referenceProvider,
+    configProvider,
+    generateStubProvider,
+    specNodeProvider,
+  );
   return gaugeWorkspace;
 }
 
@@ -288,7 +305,10 @@ function activate(context, vscodeApi, options = {}) {
     context.subscriptions.push(disposable);
   }
 
-  startGaugeServices(context, vscode, options);
+  startGaugeServices(context, vscode, {
+    ...options,
+    executionController,
+  });
 }
 
 function deactivate() {

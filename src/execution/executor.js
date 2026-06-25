@@ -263,13 +263,13 @@ function createGaugeExecutionController(options = {}) {
     return executeInProject(context.projectRoot, context.spec, { status: context.spec });
   }
 
-  async function executeAllSpecifications() {
-    const projectRoot = await selectProjectRoot(vscode, pathModule);
-    if (!projectRoot) {
+  async function executeAllSpecifications(projectRoot) {
+    const selectedProjectRoot = projectRoot || (await selectProjectRoot(vscode, pathModule));
+    if (!selectedProjectRoot) {
       return undefined;
     }
-    return executeInProject(projectRoot, null, {
-      status: pathModule.join(projectRoot, "All specs"),
+    return executeInProject(selectedProjectRoot, null, {
+      status: pathModule.join(selectedProjectRoot, "All specs"),
     });
   }
 
@@ -405,8 +405,9 @@ function createGaugeExecutionController(options = {}) {
       case "gauge.execute.specification":
         return executeActiveSpecification();
       case "gauge.execute.specification.all":
-      case "gauge.specexplorer.runAllActiveProjectSpecs":
         return executeAllSpecifications();
+      case "gauge.specexplorer.runAllActiveProjectSpecs":
+        return executeAllSpecifications(argument && argument.projectRoot);
       case "gauge.execute.failed":
         return executeFailed();
       case "gauge.execute.repeat":

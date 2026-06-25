@@ -5,6 +5,10 @@ const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
   "gauge.showReferences.atCursor",
+  "gauge.specexplorer.debugNode",
+  "gauge.specexplorer.runAllActiveProjectSpecs",
+  "gauge.specexplorer.runNode",
+  "gauge.specexplorer.switchProject",
 ]);
 
 function createFakeVscode(overrides = {}) {
@@ -190,7 +194,7 @@ test("execution commands delegate to the Gauge execution controller", () => {
   });
 
   const command = registeredCommands.find(
-    (entry) => entry.command === "gauge.specexplorer.debugNode",
+    (entry) => entry.command === "gauge.execute.specification",
   );
   const node = {
     file: "/workspace/specs/example.spec",
@@ -201,7 +205,7 @@ test("execution commands delegate to the Gauge execution controller", () => {
   assert.equal(command.handler(node), "executed");
   assert.deepEqual(handledCommands, [
     {
-      command: "gauge.specexplorer.debugNode",
+      command: "gauge.execute.specification",
       args: [node],
     },
   ]);
@@ -214,6 +218,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   const checkedProjects = [];
   const versions = [];
   const welcomeCalls = [];
+  const executionController = { handleCommand() {} };
   const context = { subscriptions: [] };
   const {
     contexts,
@@ -283,6 +288,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     dispose() {}
   }
 
+  class FakeSpecNodeProvider {
+    constructor(workspace, options) {
+      this.workspace = workspace;
+      this.options = options;
+      created.specNodeProvider = this;
+    }
+
+    dispose() {}
+  }
+
   class FakeProjectInitializer {
     constructor(options) {
       this.options = options;
@@ -312,13 +327,14 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       return cli;
     },
     createExecutionController() {
-      return { handleCommand() {} };
+      return executionController;
     },
     GaugeClients: FakeGaugeClients,
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     ConfigProvider: FakeConfigProvider,
     GenerateStubCommandProvider: FakeGenerateStubCommandProvider,
+    SpecNodeProvider: FakeSpecNodeProvider,
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
@@ -349,11 +365,15 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.configProvider.options.vscode, fakeVscode);
   assert.equal(created.generateStubProvider.clients, created.clientsMap);
   assert.equal(created.generateStubProvider.options.vscode, fakeVscode);
+  assert.equal(created.specNodeProvider.workspace, created.workspace);
+  assert.equal(created.specNodeProvider.options.vscode, fakeVscode);
+  assert.equal(created.specNodeProvider.options.executionController, executionController);
   assert.equal(created.projectInitializer.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);
   assert.equal(context.subscriptions.includes(created.generateStubProvider), true);
+  assert.equal(context.subscriptions.includes(created.specNodeProvider), true);
   assert.equal(context.subscriptions.includes(created.projectInitializer), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
@@ -408,6 +428,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   });
   assert.equal(editorUpdates.length, 2);
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.showReferences.atCursor"), false);
+  assert.equal(registeredCommands.some((entry) => entry.command === "gauge.specexplorer.runNode"), false);
+  assert.equal(registeredCommands.some((entry) => entry.command === "gauge.specexplorer.debugNode"), false);
 });
 
 test("activation shows install guidance when Gauge is unavailable", () => {

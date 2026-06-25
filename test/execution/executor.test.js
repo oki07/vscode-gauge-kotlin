@@ -132,6 +132,45 @@ test("execute failed asks for a project and runs failed scenarios there", async 
   ]);
 });
 
+test("spec explorer run all executes the active project without prompting", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/shop" } },
+      { uri: { fsPath: "/workspace/admin" } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.specexplorer.runAllActiveProjectSpecs", {
+    projectRoot: "/workspace/admin",
+  });
+
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--hide-suggestion", "--simple-console"],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/All specs",
+    },
+  ]);
+});
+
 test("executor rejects a new run while another run is in progress", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   let finish;
