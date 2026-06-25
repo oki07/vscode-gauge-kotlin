@@ -100,8 +100,8 @@ test("execution commands delegate to the Gauge execution controller", () => {
     createExecutionController(options) {
       assert.equal(options.vscode, fakeVscode);
       return {
-        handleCommand(command) {
-          handledCommands.push(command);
+        handleCommand(command, ...args) {
+          handledCommands.push({ command, args });
           return "executed";
         },
       };
@@ -109,10 +109,19 @@ test("execution commands delegate to the Gauge execution controller", () => {
   });
 
   const command = registeredCommands.find(
-    (entry) => entry.command === "gauge.execute.failed",
+    (entry) => entry.command === "gauge.specexplorer.debugNode",
   );
+  const node = {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  };
 
   assert.ok(command);
-  assert.equal(command.handler(), "executed");
-  assert.deepEqual(handledCommands, ["gauge.execute.failed"]);
+  assert.equal(command.handler(node), "executed");
+  assert.deepEqual(handledCommands, [
+    {
+      command: "gauge.specexplorer.debugNode",
+      args: [node],
+    },
+  ]);
 });

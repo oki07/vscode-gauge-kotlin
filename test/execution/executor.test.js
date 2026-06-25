@@ -324,3 +324,87 @@ test("report command shows an error when opening the html report fails", async (
 
   assert.deepEqual(errors, ["Can't open html report. Error: denied"]);
 });
+
+test("debug node executes with JVM debug env and starts debugger on runner readiness", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  let finish;
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    debuggerFactory(debugOptions) {
+      calls.push(["debugger", debugOptions.projectRoot, debugOptions.language]);
+      return {
+        async addDebugEnv(env) {
+          calls.push(["env", env.PATH]);
+          return {
+            ...env,
+            DEBUGGING: true,
+            DEBUG_PORT: 5005,
+            GAUGE_DEBUG_OPTS: 5005,
+          };
+        },
+        addProcessId(pid) {
+          calls.push(["pid", pid]);
+        },
+        startDebugger() {
+          calls.push(["start"]);
+          return Promise.resolve(true);
+        },
+        stopDebugger() {
+          calls.push(["stop"]);
+        },
+      };
+    },
+    env: { PATH: "/bin" },
+    runner(command) {
+      calls.push(["runner", command]);
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    },
+  });
+
+  const run = controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  });
+  await Promise.resolve();
+  controller.processOutputLine("Runner Ready for Debugging at Process ID 2468");
+  finish(true);
+
+  assert.equal(await run, true);
+  assert.deepEqual(calls, [
+    ["debugger", "/workspace", "kotlin"],
+    ["env", "/bin"],
+    [
+      "runner",
+      {
+        command: "gradle",
+        args: [
+          "clean",
+          "gauge",
+          "-PadditionalFlags=--hide-suggestion --simple-console",
+          "-PspecsDir=specs/example.spec:9",
+        ],
+        cwd: "/workspace",
+        status: "/workspace/specs/example.spec",
+        env: {
+          PATH: "/bin",
+          DEBUGGING: true,
+          DEBUG_PORT: 5005,
+          GAUGE_DEBUG_OPTS: 5005,
+        },
+      },
+    ],
+    ["pid", 2468],
+    ["start"],
+  ]);
+});

@@ -35,6 +35,9 @@ class DebuggerAttachedEventProcessor extends BaseProcessor {
     if (!this.canProcess(lineText)) {
       return Promise.resolve(undefined);
     }
+    if (!gaugeDebugger) {
+      return Promise.resolve(undefined);
+    }
 
     const pidText = lineText.replace(/^\D+/g, "");
     if (pidText) {

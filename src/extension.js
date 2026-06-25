@@ -34,9 +34,9 @@ function notify(vscode, message) {
 }
 
 function createCommandHandler(command, vscode, executionController, options = {}) {
-  return function handleGaugeCommand() {
+  return function handleGaugeCommand(...args) {
     if (EXECUTION_COMMANDS.has(command)) {
-      return executionController.handleCommand(command);
+      return executionController.handleCommand(command, ...args);
     }
 
     switch (command) {

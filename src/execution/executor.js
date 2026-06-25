@@ -2,7 +2,12 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
-const { ReportEventProcessor } = require("./lineProcessors");
+const { createGaugeDebugger } = require("./debug");
+const {
+  DebuggerAttachedEventProcessor,
+  DebuggerNotAttachedEventProcessor,
+  ReportEventProcessor,
+} = require("./lineProcessors");
 const { createGaugeProcessRunner } = require("./processRunner");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
 
@@ -140,9 +145,11 @@ function createGaugeExecutionController(options = {}) {
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
   const scenariosProvider = options.scenariosProvider || (async () => []);
+  const debuggerFactory = options.debuggerFactory || createGaugeDebugger;
   const opener = options.opener || defaultOpener(vscode);
   let executing = false;
   let activeRun;
+  let activeDebugger;
   let reportPath = options.reportPath;
 
   function setReportPath(nextReportPath) {
@@ -153,13 +160,11 @@ function createGaugeExecutionController(options = {}) {
     return reportPath;
   }
 
-  const lineProcessors = [
-    new ReportEventProcessor({ setReportPath }),
-  ];
+  let lineProcessors;
 
   function processOutputLine(lineText) {
     for (const processor of lineProcessors) {
-      processor.process(lineText);
+      processor.process(lineText, activeDebugger);
     }
   }
 
@@ -199,6 +204,17 @@ function createGaugeExecutionController(options = {}) {
       status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
     };
 
+    if (flags.debug) {
+      activeDebugger = debuggerFactory({
+        vscode,
+        projectRoot,
+        language: options.language || "kotlin",
+        baseEnv: options.env || process.env,
+        debugPortProvider: options.debugPortProvider,
+      });
+      command.env = await activeDebugger.addDebugEnv(options.env || process.env);
+    }
+
     executing = true;
     try {
       activeRun = runner(command);
@@ -206,6 +222,7 @@ function createGaugeExecutionController(options = {}) {
     } finally {
       executing = false;
       activeRun = undefined;
+      activeDebugger = undefined;
     }
   }
 
@@ -335,10 +352,19 @@ function createGaugeExecutionController(options = {}) {
 
   async function stopExecution() {
     if (activeRun && typeof activeRun.cancel === "function") {
+      if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
+        activeDebugger.stopDebugger();
+      }
       return activeRun.cancel();
     }
     return undefined;
   }
+
+  lineProcessors = [
+    new ReportEventProcessor({ setReportPath }),
+    new DebuggerAttachedEventProcessor({ cancel: stopExecution }, vscode),
+    new DebuggerNotAttachedEventProcessor({ cancel: stopExecution }, vscode),
+  ];
 
   async function openReport() {
     try {
@@ -348,7 +374,33 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
-  function handleCommand(command) {
+  function getNodeSpec(node) {
+    if (!node) {
+      return undefined;
+    }
+    return node.executionIdentifier || node.file;
+  }
+
+  function getNodeStatus(node, spec) {
+    return (node && node.file) || spec;
+  }
+
+  async function executeNode(node, debug) {
+    const spec = getNodeSpec(node);
+    if (!spec) {
+      return undefined;
+    }
+    const projectRoot = getProjectRootForSpec(vscode, getScenarioSpecPath(spec), pathModule);
+    if (!projectRoot) {
+      return vscode.window.showErrorMessage("No workspace folder is open.");
+    }
+    return executeInProject(projectRoot, spec, {
+      debug,
+      status: getNodeStatus(node, spec),
+    });
+  }
+
+  function handleCommand(command, argument) {
     switch (command) {
       case "gauge.execute.specification":
         return executeActiveSpecification();
@@ -363,6 +415,10 @@ function createGaugeExecutionController(options = {}) {
         return executeScenario(true);
       case "gauge.execute.scenarios":
         return executeScenario(false);
+      case "gauge.specexplorer.runNode":
+        return executeNode(argument, false);
+      case "gauge.specexplorer.debugNode":
+        return executeNode(argument, true);
       case "gauge.report.html":
         return openReport();
       case "gauge.stopExecution":

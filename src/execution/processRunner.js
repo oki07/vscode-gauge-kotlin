@@ -53,7 +53,7 @@ function createGaugeProcessRunner(options = {}) {
       child = spawn(command.command, command.args, {
         cwd: command.cwd,
         detached: process.platform !== "win32",
-        env: baseEnv,
+        env: command.env || baseEnv,
       });
       child.stdout.on("data", emitStdoutLine);
       child.stderr.on("data", (chunk) => channel.appendErrBuf(chunk.toString()));
