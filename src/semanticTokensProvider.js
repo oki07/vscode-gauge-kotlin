@@ -31,6 +31,15 @@ function fallbackLegend() {
   return { tokenTypes, tokenModifiers };
 }
 
+function documentPath(document) {
+  const uri = document && document.uri;
+  return (uri && (uri.fsPath || uri.path)) || document.fileName || "";
+}
+
+function isConceptDocument(document) {
+  return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
 class GaugeSemanticTokensProvider {
   constructor(options = {}) {
     this.vscode = options.vscode;
@@ -76,19 +85,27 @@ class GaugeSemanticTokensProvider {
 
       if (trimmedLine.startsWith("#")) {
         let lastIndex = line.search(/\S/);
+        const isScenarioHeading = trimmedLine.startsWith("##");
+        const headingToken = isScenarioHeading ? "scenario" : "specification";
+        if (isScenarioHeading || !isConceptDocument(document)) {
+          builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
+          index += 1;
+          continue;
+        }
+
         argumentRegex.lastIndex = 0;
         let match = argumentRegex.exec(line);
         while (match !== null) {
           const matchStart = match.index;
           if (matchStart > lastIndex) {
-            builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf("scenario"), 0);
+            builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf(headingToken), 0);
           }
           builder.push(index, matchStart, match[0].length, tokenTypes.indexOf("argument"), 0);
           lastIndex = argumentRegex.lastIndex;
           match = argumentRegex.exec(line);
         }
         if (lastIndex < line.length) {
-          builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf("scenario"), 0);
+          builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
         }
         index += 1;
       } else if (trimmedLine.toLowerCase().startsWith("table:")) {

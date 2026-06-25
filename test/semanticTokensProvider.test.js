@@ -67,3 +67,45 @@ test("GaugeSemanticTokensProvider tokenizes Gauge document elements", () => {
     "gaugeComment",
   ]);
 });
+
+test("GaugeSemanticTokensProvider distinguishes specification scenario and concept headings", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const specDocument = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "# Specification <name>",
+        "## Scenario <name>",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return "# Shared checkout <item> now";
+    },
+  };
+
+  const specTokens = provider.provideDocumentSemanticTokens(specDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  assert.deepEqual(specTokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "specification",
+  ]);
+  assert.deepEqual(specTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "scenario",
+  ]);
+
+  const conceptTokens = provider.provideDocumentSemanticTokens(conceptDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  assert.deepEqual(conceptTokens.map((entry) => entry.type), [
+    "specification",
+    "argument",
+    "specification",
+  ]);
+});
