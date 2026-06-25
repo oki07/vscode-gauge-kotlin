@@ -213,6 +213,14 @@ function createCli(vscode, options) {
   return cliFactory({ vscode });
 }
 
+function createGaugeState(context, options) {
+  if (options.state) {
+    return options.state;
+  }
+  const GaugeStateCtor = options.GaugeState || GaugeState;
+  return new GaugeStateCtor(context);
+}
+
 function startGaugeServices(context, vscode, options = {}) {
   const projectFactory = options.projectFactory || createProjectFactory({
     fileSystem: options.fileSystem,
@@ -240,8 +248,7 @@ function startGaugeServices(context, vscode, options = {}) {
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
-  const GaugeStateCtor = options.GaugeState || GaugeState;
-  const state = options.state || new GaugeStateCtor(context);
+  const state = createGaugeState(context, options);
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
   const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
@@ -281,11 +288,13 @@ function startGaugeServices(context, vscode, options = {}) {
 
 function activate(context, vscodeApi, options = {}) {
   const vscode = getVscode(vscodeApi);
+  const state = createGaugeState(context, options);
   const executionController = (options.createExecutionController || createGaugeExecutionController)({
     vscode,
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     runner: options.runner,
+    state,
   });
   const ProjectInitializerCtor = options.ProjectInitializer || ProjectInitializer;
   context.subscriptions.push(new ProjectInitializerCtor({
@@ -308,6 +317,7 @@ function activate(context, vscodeApi, options = {}) {
   startGaugeServices(context, vscode, {
     ...options,
     executionController,
+    state,
   });
 }
 

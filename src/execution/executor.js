@@ -140,6 +140,19 @@ function defaultOpener(vscode) {
   };
 }
 
+function memoryReportState(initialReportPath) {
+  let reportPath = initialReportPath;
+  return {
+    setReportPath(nextReportPath) {
+      reportPath = nextReportPath;
+      return undefined;
+    },
+    getReportPath() {
+      return reportPath;
+    },
+  };
+}
+
 function createGaugeExecutionController(options = {}) {
   const vscode = options.vscode || require("vscode");
   const pathModule = options.pathModule || nodePath;
@@ -147,17 +160,17 @@ function createGaugeExecutionController(options = {}) {
   const scenariosProvider = options.scenariosProvider || (async () => []);
   const debuggerFactory = options.debuggerFactory || createGaugeDebugger;
   const opener = options.opener || defaultOpener(vscode);
+  const reportState = options.state || memoryReportState(options.reportPath);
   let executing = false;
   let activeRun;
   let activeDebugger;
-  let reportPath = options.reportPath;
 
   function setReportPath(nextReportPath) {
-    reportPath = nextReportPath && nextReportPath.trim();
+    return reportState.setReportPath(nextReportPath && nextReportPath.trim());
   }
 
   function getReportPath() {
-    return reportPath;
+    return reportState.getReportPath();
   }
 
   let lineProcessors;

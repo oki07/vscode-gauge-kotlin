@@ -346,6 +346,41 @@ test("report command opens the last generated html report", async () => {
   assert.deepEqual(opened, ["/workspace/reports/html-report/index.html"]);
 });
 
+test("report command uses persistent Gauge state", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const opened = [];
+  const stored = [];
+  let reportPath;
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    state: {
+      setReportPath(nextReportPath) {
+        stored.push(nextReportPath);
+        reportPath = nextReportPath;
+        return Promise.resolve(undefined);
+      },
+      getReportPath() {
+        return reportPath;
+      },
+    },
+    opener(nextReportPath) {
+      opened.push(nextReportPath);
+      return Promise.resolve(true);
+    },
+  });
+
+  controller.processOutputLine(
+    "Successfully generated html-report to =>  /workspace/reports/html-report/index.html ",
+  );
+  await controller.handleCommand("gauge.report.html");
+
+  assert.deepEqual(stored, ["/workspace/reports/html-report/index.html"]);
+  assert.deepEqual(opened, ["/workspace/reports/html-report/index.html"]);
+});
+
 test("report command shows an error when opening the html report fails", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const { vscode, errors } = createFakeVscode();

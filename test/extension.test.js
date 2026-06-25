@@ -326,7 +326,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       created.cliOptions = options;
       return cli;
     },
-    createExecutionController() {
+    createExecutionController(options) {
+      created.executionOptions = options;
       return executionController;
     },
     GaugeClients: FakeGaugeClients,
@@ -354,6 +355,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.cliOptions.vscode, fakeVscode);
   assert.deepEqual(versions, ["0.9.6"]);
   assert.deepEqual(welcomeCalls, [{ context, vscode: fakeVscode }]);
+  assert.equal(created.executionOptions.state, created.state);
   assert.equal(created.workspace.options.cli, cli);
   assert.equal(created.workspace.options.clientsMap, created.clientsMap);
   assert.equal(created.workspace.options.state, created.state);
