@@ -77,44 +77,256 @@ function findMatchingParen(text, openIndex) {
   return -1;
 }
 
-function extractStringLiterals(text) {
-  const values = [];
+function splitTopLevel(text, separator) {
+  const parts = [];
+  let start = 0;
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
   for (let index = 0; index < text.length; index += 1) {
-    if (text.startsWith("\"\"\"", index)) {
-      const end = text.indexOf("\"\"\"", index + 3);
-      if (end === -1) {
-        return values;
-      }
-      values.push(text.slice(index + 3, end));
-      index = end + 2;
-      continue;
-    }
-
-    if (text[index] !== "\"") {
-      continue;
-    }
-
-    let value = "";
-    index += 1;
-    while (index < text.length) {
-      const char = text[index];
+    const char = text[index];
+    if (quote) {
       if (char === "\\") {
-        if (index + 1 < text.length) {
-          value += text[index + 1];
-          index += 2;
-          continue;
-        }
-        break;
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
       }
-      if (char === "\"") {
-        break;
-      }
-      value += char;
-      index += 1;
+      continue;
     }
-    values.push(value);
+
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      char === separator
+      && angleDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+    ) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
   }
-  return values;
+
+  parts.push(text.slice(start));
+  return parts;
+}
+
+function findTopLevelChar(text, target) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      char === target
+      && angleDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function parseStringLiteralTerm(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("\"\"\"")) {
+    const end = trimmed.indexOf("\"\"\"", 3);
+    if (end !== -1 && trimmed.slice(end + 3).trim() === "") {
+      return trimmed.slice(3, end);
+    }
+    return undefined;
+  }
+  if (!trimmed.startsWith("\"")) {
+    return undefined;
+  }
+
+  let value = "";
+  for (let index = 1; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+    if (char === "\\") {
+      if (index + 1 < trimmed.length) {
+        value += trimmed[index + 1];
+        index += 1;
+        continue;
+      }
+      return undefined;
+    }
+    if (char === "\"") {
+      return trimmed.slice(index + 1).trim() === "" ? value : undefined;
+    }
+    value += char;
+  }
+  return undefined;
+}
+
+function evaluateStringExpression(expression, constants) {
+  const trimmed = expression.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (/^[A-Za-z_]\w*$/.test(trimmed) && constants.has(trimmed)) {
+    return constants.get(trimmed);
+  }
+
+  const literal = parseStringLiteralTerm(trimmed);
+  if (literal !== undefined) {
+    return literal;
+  }
+
+  const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
+  if (parts.length > 1) {
+    const values = parts.map((part) => evaluateStringExpression(part, constants));
+    if (values.every((value) => value !== undefined)) {
+      return values.join("");
+    }
+  }
+
+  return undefined;
+}
+
+function expressionInsideCall(expression, callName) {
+  const trimmed = expression.trim();
+  if (!trimmed.startsWith(`${callName}(`)) {
+    return undefined;
+  }
+  const openParen = trimmed.indexOf("(");
+  const closeParen = findMatchingParen(trimmed, openParen);
+  if (closeParen !== trimmed.length - 1) {
+    return undefined;
+  }
+  return trimmed.slice(openParen + 1, closeParen);
+}
+
+function evaluateStepAliasExpression(expression, constants) {
+  const trimmed = expression.trim();
+  const arrayCall = expressionInsideCall(trimmed, "arrayOf");
+  if (arrayCall !== undefined) {
+    return splitTopLevelParameters(arrayCall)
+      .map((part) => evaluateStringExpression(part, constants))
+      .filter((value) => value !== undefined);
+  }
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return splitTopLevelParameters(trimmed.slice(1, -1))
+      .map((part) => evaluateStringExpression(part, constants))
+      .filter((value) => value !== undefined);
+  }
+
+  const value = evaluateStringExpression(trimmed, constants);
+  return value === undefined ? [] : [value];
+}
+
+function collectStringConstants(text) {
+  const constants = new Map();
+  const pattern = /^\s*(?:[A-Za-z_]\w*\s+)*const\s+val\s+([A-Za-z_]\w*)\s*(?::\s*String)?\s*=\s*(.+?)\s*$/gm;
+  let match = pattern.exec(text);
+  while (match) {
+    const value = evaluateStringExpression(match[2], constants);
+    if (value !== undefined) {
+      constants.set(match[1], value);
+    }
+    match = pattern.exec(text);
+  }
+  return constants;
+}
+
+function extractStepAliases(annotationText, constants) {
+  const args = splitTopLevelParameters(annotationText);
+  let valueExpression;
+
+  for (const arg of args) {
+    const equalsIndex = findTopLevelChar(arg, "=");
+    if (equalsIndex === -1) {
+      if (valueExpression === undefined) {
+        valueExpression = arg;
+      }
+      continue;
+    }
+
+    const name = arg.slice(0, equalsIndex).trim();
+    if (name === "value") {
+      valueExpression = arg.slice(equalsIndex + 1);
+      break;
+    }
+  }
+
+  if (valueExpression === undefined) {
+    return [];
+  }
+  return evaluateStepAliasExpression(valueExpression, constants);
 }
 
 function countStepParameters(stepText) {
@@ -157,59 +369,7 @@ function findBlankGaugeSteps(text) {
 }
 
 function splitTopLevelParameters(text) {
-  const parts = [];
-  let start = 0;
-  let angleDepth = 0;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  let parenDepth = 0;
-  let quote;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (quote) {
-      if (char === "\\") {
-        index += 1;
-      } else if (char === quote) {
-        quote = undefined;
-      }
-      continue;
-    }
-
-    if (char === "\"" || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === "<") {
-      angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
-      angleDepth -= 1;
-    } else if (char === "[") {
-      bracketDepth += 1;
-    } else if (char === "]" && bracketDepth > 0) {
-      bracketDepth -= 1;
-    } else if (char === "{") {
-      braceDepth += 1;
-    } else if (char === "}" && braceDepth > 0) {
-      braceDepth -= 1;
-    } else if (char === "(") {
-      parenDepth += 1;
-    } else if (char === ")" && parenDepth > 0) {
-      parenDepth -= 1;
-    } else if (
-      char === ","
-      && angleDepth === 0
-      && bracketDepth === 0
-      && braceDepth === 0
-      && parenDepth === 0
-    ) {
-      parts.push(text.slice(start, index));
-      start = index + 1;
-    }
-  }
-
-  parts.push(text.slice(start));
-  return parts;
+  return splitTopLevel(text, ",");
 }
 
 function countKotlinParameters(parameterText) {
@@ -281,6 +441,7 @@ function isStepAnnotationAllowed(annotationName, stepImports) {
 function findStepFunctions(text) {
   const entries = [];
   const annotationPattern = /@((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\b/g;
+  const constants = collectStringConstants(text);
   const stepImports = stepAnnotationImports(text);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
@@ -303,7 +464,7 @@ function findStepFunctions(text) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
-    const aliases = extractStringLiterals(text.slice(openParen + 1, closeParen));
+    const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
     const method = findNextFunction(text, closeParen + 1);
     if (aliases.length > 0 && method) {
       entries.push({ aliases, ...method });

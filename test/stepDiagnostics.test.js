@@ -191,6 +191,31 @@ test("GaugeStepDiagnosticsProvider accepts generic Kotlin step functions", () =>
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const step annotation values", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val LOGIN_STEP = \"Log in as <user>\"",
+    "private const val LOGOUT_STEP = \"Log out <user> from <tenant>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+    "",
+    "@Step(value = arrayOf(LOGOUT_STEP, \"Audit <event>\"))",
+    "fun audit(user: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Log out <user> from <tenant>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
