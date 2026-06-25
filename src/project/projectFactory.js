@@ -25,6 +25,11 @@ function invalidProjectError(pathname) {
 function createProjectFactory(options = {}) {
   const fileSystem = options.fileSystem || nodeFs;
   const pathModule = options.pathModule || nodePath;
+  const projectOptions = {
+    pathModule,
+    execSync: options.execSync,
+    vscode: options.vscode,
+  };
 
   function exists(relativeRoot, filename) {
     return fileSystem.existsSync(pathModule.join(relativeRoot, filename));
@@ -33,11 +38,11 @@ function createProjectFactory(options = {}) {
   const jvmProjectBuilders = [
     {
       predicate: (root) => exists(root, MAVEN_BUILD_FILE),
-      build: (root, manifest) => new MavenProject(root, manifest, { pathModule }),
+      build: (root, manifest) => new MavenProject(root, manifest, projectOptions),
     },
     {
       predicate: (root) => GRADLE_BUILD_FILES.some((filename) => exists(root, filename)),
-      build: (root, manifest) => new GradleProject(root, manifest, { pathModule }),
+      build: (root, manifest) => new GradleProject(root, manifest, projectOptions),
     },
   ];
 
@@ -62,7 +67,7 @@ function createProjectFactory(options = {}) {
         return builder.build(root, manifest);
       }
     }
-    return new GaugeProject(root, manifest, { pathModule });
+    return new GaugeProject(root, manifest, projectOptions);
   }
 
   function getGaugeRootFromFilePath(filepath) {

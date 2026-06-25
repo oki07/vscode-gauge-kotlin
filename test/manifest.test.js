@@ -17,6 +17,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.equal(manifest.displayName, "Gauge Kotlin");
   assert.equal(manifest.main, "./src/extension.js");
   assert.equal(manifest.scripts.check, "node --test");
+  assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");
   assert.deepEqual(manifest.categories, ["Programming Languages", "Testing"]);
 
   assert.deepEqual(manifest.activationEvents, [
