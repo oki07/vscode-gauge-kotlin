@@ -74,6 +74,13 @@ function terminateWindowsProcessTree(child, processTree, killProcess) {
   });
 }
 
+function terminateNonWindowsProcessTree(child, killProcess) {
+  if (!child || !child.pid) {
+    return;
+  }
+  killPid(-child.pid, killProcess);
+}
+
 function createGaugeProcessRunner(options = {}) {
   const vscode = options.vscode || { window: {} };
   const spawn = options.spawn || childProcess.spawn;
@@ -117,8 +124,8 @@ function createGaugeProcessRunner(options = {}) {
       aborted = true;
       if (child && !child.killed && platform === "win32") {
         terminateWindowsProcessTree(child, processTree, killProcess);
-      } else if (child && !child.killed && typeof child.kill === "function") {
-        child.kill("SIGTERM");
+      } else if (child && !child.killed) {
+        terminateNonWindowsProcessTree(child, killProcess);
       } else if (settle) {
         settle(false);
       }

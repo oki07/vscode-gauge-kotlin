@@ -109,12 +109,17 @@ test("process runner reports failed exits", async () => {
   assert.equal(outputChannel.lines.at(-1), "Error: Tests failed.");
 });
 
-test("process runner cancel kills the active child and reports an aborted run", async () => {
+test("process runner cancel reports an aborted run after process group termination", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();
   const outputChannel = new FakeOutputChannel();
+  const killed = [];
   const runner = createGaugeProcessRunner({
     outputChannel,
+    platform: "darwin",
+    killProcess(pid) {
+      killed.push(pid);
+    },
     spawn() {
       return child;
     },
@@ -130,7 +135,39 @@ test("process runner cancel kills the active child and reports an aborted run", 
   child.emit("exit", null);
 
   assert.equal(await run, false);
-  assert.deepEqual(child.killCalls, ["SIGTERM"]);
+  assert.deepEqual(killed, [-2468]);
+  assert.deepEqual(child.killCalls, []);
+  assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
+});
+
+test("process runner cancel ignores missing non-Windows process groups", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    platform: "darwin",
+    killProcess() {
+      const error = new Error("missing process");
+      error.code = "ESRCH";
+      throw error;
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run"],
+    cwd: "/workspace",
+  });
+
+  run.cancel();
+  child.emit("exit", null);
+
+  assert.equal(await run, false);
+  assert.deepEqual(child.killCalls, []);
   assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
 });
 
