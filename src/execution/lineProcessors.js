@@ -39,11 +39,7 @@ class DebuggerAttachedEventProcessor extends BaseProcessor {
       return Promise.resolve(undefined);
     }
 
-    const pidText = lineText.replace(/^\D+/g, "");
-    if (pidText) {
-      gaugeDebugger.addProcessId(Number(pidText));
-    }
-
+    gaugeDebugger.addProcessId(Number(lineText.replace(/^\D+/g, "")));
     return gaugeDebugger.startDebugger().catch((error) => {
       if (this.vscode && this.vscode.window) {
         this.vscode.window.showErrorMessage(`Failed to start debugger: ${error.message}`);

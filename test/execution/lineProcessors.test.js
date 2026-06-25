@@ -77,7 +77,7 @@ test("DebuggerAttachedEventProcessor starts debugger even without process id", a
 
   await processor.process("Runner Ready for Debugging", gaugeDebugger);
 
-  assert.deepEqual(calls, [["start"]]);
+  assert.deepEqual(calls, [["pid", 0], ["start"]]);
 });
 
 test("DebuggerNotAttachedEventProcessor reports and cancels execution", () => {
