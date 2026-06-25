@@ -363,14 +363,13 @@ function collectStringConstants(text) {
 
 function extractStepAliases(annotationText, constants) {
   const args = splitTopLevelParameters(annotationText);
+  const positionalExpressions = [];
   let valueExpression;
 
   for (const arg of args) {
     const equalsIndex = findTopLevelChar(arg, "=");
     if (equalsIndex === -1) {
-      if (valueExpression === undefined) {
-        valueExpression = arg;
-      }
+      positionalExpressions.push(arg);
       continue;
     }
 
@@ -381,10 +380,13 @@ function extractStepAliases(annotationText, constants) {
     }
   }
 
-  if (valueExpression === undefined) {
-    return [];
+  if (valueExpression !== undefined) {
+    return evaluateStepAliasExpression(valueExpression, constants);
   }
-  return evaluateStepAliasExpression(valueExpression, constants);
+
+  return positionalExpressions.flatMap((expression) => (
+    evaluateStepAliasExpression(expression, constants)
+  ));
 }
 
 function countStepParameters(stepText) {
