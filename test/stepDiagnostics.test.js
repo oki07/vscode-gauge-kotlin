@@ -111,6 +111,17 @@ test("GaugeStepDiagnosticsProvider only inspects Gauge Step annotations", () => 
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores non-Gauge qualified Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@io.cucumber.java.en.Step(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

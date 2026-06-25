@@ -5,6 +5,7 @@ const GAUGE_LANGUAGE = "gauge";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
+const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -252,6 +253,7 @@ function findStepFunctions(text) {
   const annotationPattern = /@(?:[A-Za-z_]\w*\.)*Step\b/g;
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
+    const annotationName = annotationMatch[0].slice(1);
     const openParen = text.indexOf("(", annotationPattern.lastIndex);
     if (openParen === -1) {
       break;
@@ -259,6 +261,11 @@ function findStepFunctions(text) {
     const closeParen = findMatchingParen(text, openParen);
     if (closeParen === -1) {
       annotationPattern.lastIndex = openParen + 1;
+      annotationMatch = annotationPattern.exec(text);
+      continue;
+    }
+    if (annotationName.includes(".") && annotationName !== GAUGE_STEP_ANNOTATION) {
+      annotationPattern.lastIndex = closeParen + 1;
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
