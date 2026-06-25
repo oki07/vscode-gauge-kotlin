@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { ReportEventProcessor } = require("./lineProcessors");
+const { createGaugeProcessRunner } = require("./processRunner");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
 
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
@@ -122,21 +123,6 @@ function getScenarioSpecPath(executionIdentifier) {
   return executionIdentifier.slice(0, separatorIndex);
 }
 
-function defaultRunner(vscode) {
-  return async function runInTerminal(command) {
-    if (!vscode.window || typeof vscode.window.createTerminal !== "function") {
-      return undefined;
-    }
-    const terminal = vscode.window.createTerminal({
-      name: "Gauge",
-      cwd: command.cwd,
-    });
-    terminal.sendText([command.command, ...command.args].join(" "));
-    terminal.show();
-    return true;
-  };
-}
-
 function defaultOpener(vscode) {
   return function openReportPath(reportPath) {
     if (vscode.env && typeof vscode.env.openExternal === "function") {
@@ -153,7 +139,6 @@ function createGaugeExecutionController(options = {}) {
   const vscode = options.vscode || require("vscode");
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
-  const runner = options.runner || defaultRunner(vscode);
   const scenariosProvider = options.scenariosProvider || (async () => []);
   const opener = options.opener || defaultOpener(vscode);
   let executing = false;
@@ -177,6 +162,15 @@ function createGaugeExecutionController(options = {}) {
       processor.process(lineText);
     }
   }
+
+  const runner = options.runner || createGaugeProcessRunner({
+    vscode,
+    pathModule,
+    outputChannel: options.outputChannel,
+    processOutputLine,
+    spawn: options.spawn,
+    env: options.env,
+  });
 
   async function executeInProject(projectRoot, spec, flags = {}) {
     if (executing) {
