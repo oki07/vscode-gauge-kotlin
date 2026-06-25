@@ -233,7 +233,7 @@ function findNextFunction(text, startIndex) {
       return undefined;
     }
     const header = text.slice(funPattern.lastIndex, openParen);
-    if (/^\s+(?:[A-Za-z_][\w<>]*\.)?(?:[A-Za-z_]\w*|`[^`\r\n]+`)\s*$/.test(header)) {
+    if (/^\s+(?:<[^\r\n]+>\s+)?(?:[A-Za-z_][\w<>]*\.)?(?:[A-Za-z_]\w*|`[^`\r\n]+`)\s*$/.test(header)) {
       const closeParen = findMatchingParen(text, openParen);
       if (closeParen !== -1) {
         return {

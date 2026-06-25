@@ -173,6 +173,24 @@ test("GaugeStepDiagnosticsProvider accepts backtick Kotlin step function names",
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts generic Kotlin step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Generic <value>\")",
+    "fun <T : List<String>> generic() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Generic <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
