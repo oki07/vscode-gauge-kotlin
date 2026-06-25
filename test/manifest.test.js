@@ -260,6 +260,10 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     comments: {
       lineComment: "//",
     },
+    brackets: [
+      ["<", ">"],
+      ["\"", "\""],
+    ],
     autoClosingPairs: [
       ["<", ">"],
       ["\"", "\""],

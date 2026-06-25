@@ -2,6 +2,16 @@
   "comments": {
     "lineComment": "//"
   },
+  "brackets": [
+    [
+      "<",
+      ">"
+    ],
+    [
+      "\"",
+      "\""
+    ]
+  ],
   "autoClosingPairs": [
     [
       "<",
