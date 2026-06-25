@@ -195,6 +195,47 @@ test("activation registers core contributed Gauge commands", () => {
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
 });
 
+test("activation defers CLI creation when Gauge services are not needed", () => {
+  const extension = require("../src/extension");
+
+  let createCliCalls = 0;
+  let projectInitializerOptions;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode();
+
+  class FakeProjectInitializer {
+    constructor(options) {
+      projectInitializerOptions = options;
+    }
+
+    dispose() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      createCliCalls += 1;
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    ProjectInitializer: FakeProjectInitializer,
+  });
+
+  assert.equal(createCliCalls, 0);
+  assert.equal(typeof projectInitializerOptions.createCli, "function");
+
+  projectInitializerOptions.createCli({ vscode: fakeVscode });
+  assert.equal(createCliCalls, 1);
+});
+
 test("create specification command delegates to the specification creator", () => {
   const extension = require("../src/extension");
 

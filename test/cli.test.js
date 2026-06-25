@@ -1,5 +1,8 @@
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const test = require("node:test");
+
+const commandFixturesPath = path.resolve(__dirname, "fixtures/commands");
 
 function createCli() {
   const { CLI, Command } = require("../src/cli");
@@ -12,6 +15,20 @@ function createCli() {
       { name: "java", version: "1.0.0" },
     ],
   }, new Command("mvn"), new Command("gradle"));
+}
+
+function withCommandFixturesPath(callback) {
+  const originalPath = process.env.PATH;
+  process.env.PATH = commandFixturesPath;
+  try {
+    return callback();
+  } finally {
+    process.env.PATH = originalPath;
+  }
+}
+
+function portableCommandCandidates(CLI, command) {
+  return CLI.getCommandCandidates(command).filter((entry) => entry.cmdSuffix !== ".exe");
 }
 
 test("CLI reports installed plugins and plugin versions", () => {
@@ -87,6 +104,41 @@ test("CLI checks command spawnability", () => {
       return { status: 0, error: new Error("nope") };
     },
   }), false);
+});
+
+test("CLI validates executable fixtures from PATH", () => {
+  const { CLI } = require("../src/cli");
+
+  withCommandFixturesPath(() => {
+    const invalidCandidates = portableCommandCandidates(CLI, "test_command")
+      .filter((candidate) => !CLI.isSpawnable(candidate))
+      .map((candidate) => candidate.command);
+    const validMissingCandidates = portableCommandCandidates(CLI, "test_command_not_found")
+      .filter((candidate) => CLI.isSpawnable(candidate))
+      .map((candidate) => candidate.command);
+
+    assert.deepEqual(invalidCandidates, []);
+    assert.deepEqual(validMissingCandidates, []);
+
+    for (const candidate of portableCommandCandidates(CLI, "test_command_needs_version_arg")) {
+      assert.equal(CLI.isSpawnable(candidate), false, `${candidate.command} should require --version`);
+      assert.equal(CLI.isSpawnable(candidate, ["--version"]), true);
+    }
+  });
+});
+
+test("Command spawns executable fixtures with arguments", () => {
+  const { CLI } = require("../src/cli");
+
+  withCommandFixturesPath(() => {
+    for (const candidate of portableCommandCandidates(CLI, "test_command")) {
+      const result = candidate.spawnSync(["Hello World"]);
+
+      assert.equal(result.status, 0, `${candidate.command} failed to spawn`);
+      assert.equal(result.error, undefined);
+      assert.equal(result.stdout.toString().trim(), "Success: \"Hello World\"");
+    }
+  });
 });
 
 test("Command quotes shell-mode arguments with spaces", () => {
