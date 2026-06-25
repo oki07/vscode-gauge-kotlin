@@ -47,6 +47,64 @@ function positionAt(text, offset) {
   return { line, character: offset - lineStart };
 }
 
+function findLineEnd(text, startIndex) {
+  const lineEnd = text.indexOf("\n", startIndex);
+  return lineEnd === -1 ? text.length : lineEnd;
+}
+
+function findQuotedEnd(text, startIndex, quote) {
+  for (let index = startIndex + 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "\\") {
+      index += 1;
+    } else if (char === quote) {
+      return index + 1;
+    }
+  }
+  return text.length;
+}
+
+function collectIgnoredKotlinRanges(text) {
+  const ranges = [];
+  let index = 0;
+
+  while (index < text.length) {
+    if (text.startsWith("//", index)) {
+      const end = findLineEnd(text, index);
+      ranges.push({ end, start: index });
+      index = end;
+      continue;
+    }
+    if (text.startsWith("/*", index)) {
+      const closeIndex = text.indexOf("*/", index + 2);
+      const end = closeIndex === -1 ? text.length : closeIndex + 2;
+      ranges.push({ end, start: index });
+      index = end;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      const closeIndex = text.indexOf("\"\"\"", index + 3);
+      const end = closeIndex === -1 ? text.length : closeIndex + 3;
+      ranges.push({ end, start: index });
+      index = end;
+      continue;
+    }
+    if (text[index] === "\"" || text[index] === "'") {
+      const end = findQuotedEnd(text, index, text[index]);
+      ranges.push({ end, start: index });
+      index = end;
+      continue;
+    }
+    index += 1;
+  }
+
+  return ranges;
+}
+
+function isInIgnoredRange(offset, ranges) {
+  return ranges.some((range) => offset >= range.start && offset < range.end);
+}
+
 function findMatchingParen(text, openIndex) {
   let depth = 0;
   let quote;
@@ -526,11 +584,15 @@ function isKotlinFunctionHeader(header) {
   );
 }
 
-function findNextFunction(text, startIndex) {
+function findNextFunction(text, startIndex, ignoredRanges = []) {
   const funPattern = /\bfun\b/g;
   funPattern.lastIndex = startIndex;
   let match = funPattern.exec(text);
   while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = funPattern.exec(text);
+      continue;
+    }
     const openParen = text.indexOf("(", funPattern.lastIndex);
     if (openParen === -1) {
       return undefined;
@@ -585,9 +647,14 @@ function findStepFunctions(text) {
   const entries = [];
   const annotationPattern = /@((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\b/g;
   const constants = collectStringConstants(text);
+  const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
+    if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
+      annotationMatch = annotationPattern.exec(text);
+      continue;
+    }
     const annotationName = annotationMatch[1];
     if (!isStepAnnotationAllowed(annotationName, stepImports)) {
       annotationMatch = annotationPattern.exec(text);
@@ -608,7 +675,7 @@ function findStepFunctions(text) {
       continue;
     }
     const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
-    const method = findNextFunction(text, closeParen + 1);
+    const method = findNextFunction(text, closeParen + 1, ignoredRanges);
     if (aliases.length > 0 && method) {
       entries.push({ aliases, ...method });
     }

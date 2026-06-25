@@ -153,6 +153,18 @@ test("GaugeStepDiagnosticsProvider ignores non-Gauge imported Step annotations",
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores Step text in Kotlin comments and strings", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "// @Step(\"Comment <value>\")",
+    "val sample = \"@Step(\\\"String <value>\\\")\"",
+    "fun notStep() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider accepts Gauge Step import aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
