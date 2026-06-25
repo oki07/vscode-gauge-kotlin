@@ -39,6 +39,19 @@ function flag(key) {
   return `--${key}`;
 }
 
+function flagTokens(key, value) {
+  if (typeof value === "boolean") {
+    return value ? [flag(key)] : [];
+  }
+  if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+    return [flag(key), value.join(",")];
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    return [flag(key), `${value}`];
+  }
+  return [];
+}
+
 function buildGaugeArgs(spec, option = {}) {
   const args = ["run"];
 
@@ -56,15 +69,7 @@ function buildGaugeArgs(spec, option = {}) {
   };
 
   for (const [key, value] of Object.entries(merged)) {
-    if (typeof value === "boolean") {
-      if (value) {
-        args.push(flag(key));
-      }
-    } else if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
-      args.push(flag(key), value.join(","));
-    } else if (typeof value === "string" || typeof value === "number") {
-      args.push(flag(key), `${value}`);
-    }
+    args.push(...flagTokens(key, value));
   }
 
   if (spec) {
@@ -92,10 +97,10 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
   const args = [];
 
   if (failed) {
-    return args.concat(prefixed(additionalFlags("failed")));
+    return args.concat(prefixed(additionalFlags(flag("failed"))));
   }
   if (repeat) {
-    return args.concat(prefixed(additionalFlags("repeat")));
+    return args.concat(prefixed(additionalFlags(flag("repeat"))));
   }
   if (parallel) {
     args.push(prefixed("inParallel=true"));
@@ -111,8 +116,7 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
   }
 
   const flags = Object.entries(rest)
-    .filter(([, value]) => typeof value === "boolean" && value)
-    .map(([key]) => key);
+    .flatMap(([key, value]) => flagTokens(key, value));
   if (flags.length > 0) {
     args.push(prefixed(additionalFlags(...flags)));
   }
@@ -124,12 +128,12 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
 }
 
 function buildGradleArgs(spec, option = {}) {
-  const additionalFlags = (...keys) => `additionalFlags=${keys.map(flag).join(" ")}`;
+  const additionalFlags = (...tokens) => `additionalFlags=${tokens.join(" ")}`;
   return ["clean", "gauge", ...buildJavaRunArgs(spec, option, "-P", additionalFlags)];
 }
 
 function buildMavenArgs(spec, option = {}) {
-  const additionalFlags = (...keys) => `flags=${keys.map(flag).join(",")}`;
+  const additionalFlags = (...tokens) => `flags=${tokens.join(",")}`;
   return [
     "-q",
     "clean",

@@ -89,6 +89,20 @@ test("buildRunArgs.forGradle formats standard run options", () => {
   );
 });
 
+test("buildRunArgs.forGradle forwards valued Gauge flags through additionalFlags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec", {
+      "retry-only": "smoke",
+      "table-rows": "1-3",
+      group: 2,
+      verbose: true,
+    }).join(" "),
+    "clean gauge -PadditionalFlags=--hide-suggestion --simple-console --retry-only smoke --table-rows 1-3 --group 2 --verbose -PspecsDir=my.spec",
+  );
+});
+
 test("buildRunArgs.forGradle allows default flags to be unset", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -130,6 +144,20 @@ test("buildRunArgs.forMaven formats standard run options", () => {
       "retry-only": null,
     }).join(" "),
     "-q clean compile test-compile gauge:execute -DinParallel=true -Dnodes=3 -Dtags=foo bar -Denv=a,b,c -Dflags=--hide-suggestion,--simple-console -DspecsDir=my.spec:123",
+  );
+});
+
+test("buildRunArgs.forMaven forwards valued Gauge flags through flags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec", {
+      "retry-only": "smoke",
+      "table-rows": "1-3",
+      group: 2,
+      verbose: true,
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--hide-suggestion,--simple-console,--retry-only,smoke,--table-rows,1-3,--group,2,--verbose -DspecsDir=my.spec",
   );
 });
 
