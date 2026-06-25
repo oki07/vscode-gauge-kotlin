@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { ReportEventProcessor } = require("./lineProcessors");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
 
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
@@ -17,6 +18,7 @@ const EXECUTION_COMMANDS = new Set([
   "gauge.specexplorer.debugNode",
   "gauge.execute.scenario",
   "gauge.execute.scenarios",
+  "gauge.report.html",
 ]);
 
 function getWorkspaceRoots(vscode) {
@@ -135,14 +137,46 @@ function defaultRunner(vscode) {
   };
 }
 
+function defaultOpener(vscode) {
+  return function openReportPath(reportPath) {
+    if (vscode.env && typeof vscode.env.openExternal === "function") {
+      if (vscode.Uri && typeof vscode.Uri.file === "function") {
+        return vscode.env.openExternal(vscode.Uri.file(reportPath));
+      }
+      return vscode.env.openExternal(reportPath);
+    }
+    return Promise.resolve(undefined);
+  };
+}
+
 function createGaugeExecutionController(options = {}) {
   const vscode = options.vscode || require("vscode");
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
   const runner = options.runner || defaultRunner(vscode);
   const scenariosProvider = options.scenariosProvider || (async () => []);
+  const opener = options.opener || defaultOpener(vscode);
   let executing = false;
   let activeRun;
+  let reportPath = options.reportPath;
+
+  function setReportPath(nextReportPath) {
+    reportPath = nextReportPath && nextReportPath.trim();
+  }
+
+  function getReportPath() {
+    return reportPath;
+  }
+
+  const lineProcessors = [
+    new ReportEventProcessor({ setReportPath }),
+  ];
+
+  function processOutputLine(lineText) {
+    for (const processor of lineProcessors) {
+      processor.process(lineText);
+    }
+  }
 
   async function executeInProject(projectRoot, spec, flags = {}) {
     if (executing) {
@@ -312,6 +346,14 @@ function createGaugeExecutionController(options = {}) {
     return undefined;
   }
 
+  async function openReport() {
+    try {
+      return await opener(getReportPath());
+    } catch (error) {
+      return vscode.window.showErrorMessage(`Can't open html report. ${error}`);
+    }
+  }
+
   function handleCommand(command) {
     switch (command) {
       case "gauge.execute.specification":
@@ -327,6 +369,8 @@ function createGaugeExecutionController(options = {}) {
         return executeScenario(true);
       case "gauge.execute.scenarios":
         return executeScenario(false);
+      case "gauge.report.html":
+        return openReport();
       case "gauge.stopExecution":
         return stopExecution();
       default:
@@ -339,8 +383,12 @@ function createGaugeExecutionController(options = {}) {
     executeAllSpecifications,
     executeFailed,
     executeScenario,
+    getReportPath,
     handleCommand,
+    openReport,
+    processOutputLine,
     repeatExecution,
+    setReportPath,
     stopExecution,
   };
 }

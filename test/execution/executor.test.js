@@ -284,3 +284,43 @@ test("execute scenarios lets the user pick one provider scenario", async () => {
     },
   ]);
 });
+
+test("report command opens the last generated html report", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const opened = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    opener(reportPath) {
+      opened.push(reportPath);
+      return Promise.resolve(true);
+    },
+  });
+
+  controller.processOutputLine(
+    "Successfully generated html-report to => /workspace/reports/html-report/index.html",
+  );
+  await controller.handleCommand("gauge.report.html");
+
+  assert.deepEqual(opened, ["/workspace/reports/html-report/index.html"]);
+});
+
+test("report command shows an error when opening the html report fails", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { vscode, errors } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    opener() {
+      return Promise.reject(new Error("denied"));
+    },
+  });
+
+  controller.setReportPath("/workspace/reports/html-report/index.html");
+  await controller.handleCommand("gauge.report.html");
+
+  assert.deepEqual(errors, ["Can't open html report. Error: denied"]);
+});
