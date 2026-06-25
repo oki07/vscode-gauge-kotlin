@@ -13,6 +13,7 @@ const {
 } = require("./execution/executor");
 const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
 const { ExtractConceptCommandProvider } = require("./extractConcept");
+const { GaugeDynamicArgumentCompletionProvider } = require("./dynamicArgumentCompletion");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
@@ -216,6 +217,23 @@ function registerArgumentCodeActionProvider(context, vscode, options) {
   }
 }
 
+function registerDynamicArgumentCompletionProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerCompletionItemProvider !== "function") {
+    return;
+  }
+  const CompletionProviderCtor = options.DynamicArgumentCompletionProvider
+    || GaugeDynamicArgumentCompletionProvider;
+  const provider = new CompletionProviderCtor({ vscode });
+  const disposable = vscode.languages.registerCompletionItemProvider(
+    { language: "gauge" },
+    provider,
+    "<",
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerFoldingRangeProvider(context, vscode, options) {
   if (!vscode.languages || typeof vscode.languages.registerFoldingRangeProvider !== "function") {
     return;
@@ -382,6 +400,7 @@ function startGaugeServices(context, vscode, options = {}) {
   registerGaugeEnterHandler(context, vscode, options);
   registerDebugConfigurationProvider(context, vscode);
   registerArgumentCodeActionProvider(context, vscode, options);
+  registerDynamicArgumentCompletionProvider(context, vscode, options);
   registerFoldingRangeProvider(context, vscode, options);
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
