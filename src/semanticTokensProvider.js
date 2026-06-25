@@ -40,6 +40,34 @@ function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
 }
 
+function pushToken(builder, line, start, length, tokenType) {
+  if (length <= 0) {
+    return;
+  }
+  builder.push(line, start, length, tokenTypes.indexOf(tokenType), 0);
+}
+
+function pushTableSegment(builder, lineNumber, line, start, end) {
+  let tokenStart = start;
+  let currentType;
+
+  for (let charIndex = start; charIndex < end; charIndex += 1) {
+    const tokenType = line[charIndex] === "|" ? "tableBorder" : "table";
+    if (!currentType) {
+      currentType = tokenType;
+      tokenStart = charIndex;
+    } else if (currentType !== tokenType) {
+      pushToken(builder, lineNumber, tokenStart, charIndex - tokenStart, currentType);
+      currentType = tokenType;
+      tokenStart = charIndex;
+    }
+  }
+
+  if (currentType) {
+    pushToken(builder, lineNumber, tokenStart, end - tokenStart, currentType);
+  }
+}
+
 class GaugeSemanticTokensProvider {
   constructor(options = {}) {
     this.vscode = options.vscode;
@@ -52,6 +80,7 @@ class GaugeSemanticTokensProvider {
     const builder = new this.SemanticTokensBuilder(this.legend);
     const lines = document.getText().split(/\r?\n/);
     const argumentRegex = /(?:"[^"]*"|<[^>]*>)/g;
+    const tableDynamicArgumentRegex = /<(?:\\[<>]|[^>\r\n])*>/g;
     const tableHeaderSeparatorRegex = /^\|\s*-+\s*(\|\s*-+\s*)+\|?$/;
 
     for (let index = 0; index < lines.length;) {
@@ -165,10 +194,16 @@ class GaugeSemanticTokensProvider {
             }
           }
         } else {
-          for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
-            const tokenType = line[charIndex] === "|" ? "tableBorder" : "table";
-            builder.push(index, charIndex, 1, tokenTypes.indexOf(tokenType), 0);
+          let lastIndex = 0;
+          tableDynamicArgumentRegex.lastIndex = 0;
+          let match = tableDynamicArgumentRegex.exec(line);
+          while (match !== null) {
+            pushTableSegment(builder, index, line, lastIndex, match.index);
+            pushToken(builder, index, match.index, match[0].length, "argument");
+            lastIndex = tableDynamicArgumentRegex.lastIndex;
+            match = tableDynamicArgumentRegex.exec(line);
           }
+          pushTableSegment(builder, index, line, lastIndex, line.length);
         }
         index += 1;
       } else {

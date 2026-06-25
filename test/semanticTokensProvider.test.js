@@ -109,3 +109,37 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
     "specification",
   ]);
 });
+
+test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "| name | role |",
+        "| ---- | ---- |",
+        "| <user> | admin |",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const argumentTokens = tokens.filter((entry) => entry.line === 2 && entry.type === "argument");
+
+  assert.deepEqual(argumentTokens, [
+    {
+      line: 2,
+      start: 2,
+      length: 6,
+      tokenType: tokenTypes.indexOf("argument"),
+      tokenModifiers: 0,
+      type: "argument",
+    },
+  ]);
+});
