@@ -1,6 +1,7 @@
 "use strict";
 
 const { CLI } = require("./cli");
+const { GaugeArgumentCodeActionProvider } = require("./argumentCodeActions");
 const { ConfigProvider } = require("./config/configProvider");
 const { EXECUTION_COMMANDS, createGaugeExecutionController } = require("./execution/executor");
 const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
@@ -139,6 +140,22 @@ function registerDebugConfigurationProvider(context, vscode) {
       throw new Error(DIRECT_DEBUG_CONFIGURATION_ERROR);
     },
   });
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
+function registerArgumentCodeActionProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerCodeActionsProvider !== "function") {
+    return;
+  }
+  const ArgumentCodeActionProviderCtor = options.GaugeArgumentCodeActionProvider
+    || GaugeArgumentCodeActionProvider;
+  const provider = new ArgumentCodeActionProviderCtor({ vscode });
+  const disposable = vscode.languages.registerCodeActionsProvider(
+    { language: "gauge" },
+    provider,
+  );
   if (disposable) {
     context.subscriptions.push(disposable);
   }
@@ -283,6 +300,7 @@ function startGaugeServices(context, vscode, options = {}) {
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
+  registerArgumentCodeActionProvider(context, vscode, options);
   registerFoldingRangeProvider(context, vscode, options);
   registerSemanticTokensProvider(context, vscode, options);
   registerSemanticTokenColorUpdates(context, vscode);
