@@ -21,6 +21,21 @@ const PROVIDER_COMMANDS = new Set([
   "gauge.showReferences.atCursor",
 ]);
 const GAUGE_WORD_PATTERN = /^(?:[*])([^*].*)$/g;
+const SEMANTIC_TOKEN_COLOR_KEYS = [
+  "argument",
+  "stepMarker",
+  "step",
+  "table",
+  "tableHeaderSeparator",
+  "tableBorder",
+  "tableKeyword",
+  "tableFileValue",
+  "tagKeyword",
+  "tagValue",
+  "specification",
+  "scenario",
+  "disabledStep",
+];
 
 const GAUGE_COMMANDS = [
   "gauge.createProject",
@@ -124,6 +139,39 @@ function registerSemanticTokensProvider(context, vscode, options) {
   }
 }
 
+function updateGaugeSemanticTokenColors(vscode) {
+  if (!vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
+    return undefined;
+  }
+  const gaugeConfig = vscode.workspace.getConfiguration("gauge.semanticTokenColors");
+  const rules = {};
+  for (const key of SEMANTIC_TOKEN_COLOR_KEYS) {
+    rules[key] = { foreground: gaugeConfig.get(key) };
+  }
+  rules.gaugeComment = { foreground: gaugeConfig.get("comment") };
+  const editorConfig = vscode.workspace.getConfiguration("editor");
+  return editorConfig.update(
+    "semanticTokenColorCustomizations",
+    { rules },
+    vscode.ConfigurationTarget && vscode.ConfigurationTarget.Global,
+  );
+}
+
+function registerSemanticTokenColorUpdates(context, vscode) {
+  updateGaugeSemanticTokenColors(vscode);
+  if (!vscode.workspace || typeof vscode.workspace.onDidChangeConfiguration !== "function") {
+    return;
+  }
+  const disposable = vscode.workspace.onDidChangeConfiguration((event) => {
+    if (event.affectsConfiguration("gauge.semanticTokenColors")) {
+      updateGaugeSemanticTokenColors(vscode);
+    }
+  });
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function createCommandHandler(command, vscode, executionController, options = {}) {
   return function handleGaugeCommand(...args) {
     if (EXECUTION_COMMANDS.has(command)) {
@@ -175,6 +223,7 @@ function startGaugeServices(context, vscode, options = {}) {
   registerGaugeLanguageConfiguration(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
   registerSemanticTokensProvider(context, vscode, options);
+  registerSemanticTokenColorUpdates(context, vscode);
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();

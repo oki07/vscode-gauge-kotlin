@@ -10,9 +10,32 @@ function createFakeVscode(overrides = {}) {
   const registeredCommands = [];
   const contexts = [];
   const debugProviders = [];
+  const editorUpdates = [];
   const languageConfigurations = [];
+  const configurationListeners = [];
   const semanticTokenProviders = [];
+  const semanticTokenColors = {
+    argument: "#ae81ff",
+    stepMarker: "#ffffff",
+    step: "#a6e22e",
+    table: "#ae81ff",
+    tableHeaderSeparator: "#8349f0",
+    tableBorder: "#8349f0",
+    tableKeyword: "#ffffff",
+    tableFileValue: "#dddddd",
+    tagKeyword: "#ff4689",
+    tagValue: "#fc88b2",
+    specification: "#66d9ef",
+    scenario: "#66d9ef",
+    comment: "#cccccc",
+    disabledStep: "#228549",
+    ...overrides.semanticTokenColors,
+  };
   const fakeVscode = {
+    ConfigurationTarget: {
+      Global: "global",
+      Workspace: "workspace",
+    },
     commands: {
       executeCommand(command, key, value) {
         contexts.push({ command, key, value });
@@ -53,12 +76,44 @@ function createFakeVscode(overrides = {}) {
       },
     },
     workspace: {
+      getConfiguration(section) {
+        if (section === "gauge.semanticTokenColors") {
+          return {
+            get(key) {
+              return semanticTokenColors[key];
+            },
+          };
+        }
+        if (section === "editor") {
+          return {
+            update(key, value, target) {
+              editorUpdates.push({ key, value, target });
+              return Promise.resolve(undefined);
+            },
+          };
+        }
+        return {
+          get() {
+            return undefined;
+          },
+          update() {
+            return Promise.resolve(undefined);
+          },
+        };
+      },
+      onDidChangeConfiguration(listener) {
+        const disposable = { dispose() {} };
+        configurationListeners.push({ listener, disposable });
+        return disposable;
+      },
       workspaceFolders: overrides.workspaceFolders,
     },
   };
   return {
+    configurationListeners,
     contexts,
     debugProviders,
+    editorUpdates,
     fakeVscode,
     languageConfigurations,
     registeredCommands,
@@ -157,7 +212,9 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   const context = { subscriptions: [] };
   const {
     contexts,
+    configurationListeners,
     debugProviders,
+    editorUpdates,
     fakeVscode,
     languageConfigurations,
     registeredCommands,
@@ -286,5 +343,34 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
   ]);
   assert.equal(created.semanticTokensProvider.options.vscode, fakeVscode);
+  assert.equal(context.subscriptions.includes(configurationListeners[0].disposable), true);
+  assert.deepEqual(editorUpdates[0], {
+    key: "semanticTokenColorCustomizations",
+    value: {
+      rules: {
+        argument: { foreground: "#ae81ff" },
+        stepMarker: { foreground: "#ffffff" },
+        step: { foreground: "#a6e22e" },
+        table: { foreground: "#ae81ff" },
+        tableHeaderSeparator: { foreground: "#8349f0" },
+        tableBorder: { foreground: "#8349f0" },
+        tableKeyword: { foreground: "#ffffff" },
+        tableFileValue: { foreground: "#dddddd" },
+        tagKeyword: { foreground: "#ff4689" },
+        tagValue: { foreground: "#fc88b2" },
+        specification: { foreground: "#66d9ef" },
+        scenario: { foreground: "#66d9ef" },
+        gaugeComment: { foreground: "#cccccc" },
+        disabledStep: { foreground: "#228549" },
+      },
+    },
+    target: "global",
+  });
+  configurationListeners[0].listener({
+    affectsConfiguration(section) {
+      return section === "gauge.semanticTokenColors";
+    },
+  });
+  assert.equal(editorUpdates.length, 2);
   assert.equal(registeredCommands.some((entry) => entry.command === "gauge.showReferences.atCursor"), false);
 });
