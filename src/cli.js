@@ -1,0 +1,201 @@
+"use strict";
+
+const childProcess = require("node:child_process");
+const { OutputChannel } = require("./execution/outputChannel");
+
+const GAUGE_COMMAND = "gauge";
+const GAUGE_VERSION_ARG = "--version";
+const MACHINE_READABLE_ARG = "--machine-readable";
+const GAUGE_INSTALL_ARG = "install";
+const MAVEN_COMMAND = "mvn";
+const MAVEN_VERSION_ARG = "--version";
+const GRADLE_WRAPPER_COMMAND = "gradlew";
+
+function parseVersion(version) {
+  return String(version || "")
+    .split(/[.-]/)
+    .map((part) => Number.parseInt(part, 10))
+    .map((part) => (Number.isNaN(part) ? 0 : part));
+}
+
+function compareVersions(left, right) {
+  const leftParts = parseVersion(left);
+  const rightParts = parseVersion(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] || 0;
+    const rightPart = rightParts[index] || 0;
+    if (leftPart > rightPart) {
+      return 1;
+    }
+    if (leftPart < rightPart) {
+      return -1;
+    }
+  }
+  return 0;
+}
+
+function getVscode(vscode) {
+  return vscode || require("vscode");
+}
+
+class CLI {
+  constructor(command, manifest = {}, mavenCommand, gradleCommand) {
+    this.command = command;
+    this.maven = mavenCommand;
+    this.gradle = gradleCommand;
+    this.gaugeVersion = manifest.version;
+    this.gaugeCommitHash = manifest.commitHash;
+    this.gaugePlugins = manifest.plugins || [];
+  }
+
+  static instance(options = {}) {
+    const vscode = options.vscode;
+    const gaugeCommand = this.getCommand(GAUGE_COMMAND);
+    const mavenCommand = this.getCommand(MAVEN_COMMAND, [MAVEN_VERSION_ARG]);
+    const gradleCommand = this.getGradleCommand();
+    if (!gaugeCommand) {
+      return new CLI(undefined, {}, mavenCommand, gradleCommand);
+    }
+
+    const versionResult = gaugeCommand.spawnSync([GAUGE_VERSION_ARG, MACHINE_READABLE_ARG]);
+    try {
+      return new CLI(
+        gaugeCommand,
+        JSON.parse(versionResult.stdout.toString()),
+        mavenCommand,
+        gradleCommand,
+      );
+    } catch (_error) {
+      getVscode(vscode).window.showErrorMessage(
+        `Error fetching Gauge and plugins version information. \n${versionResult.stdout.toString()}`,
+      );
+      return undefined;
+    }
+  }
+
+  isPluginInstalled(pluginName) {
+    return this.gaugePlugins.some((plugin) => plugin.name === pluginName);
+  }
+
+  gaugeCommand() {
+    return this.command;
+  }
+
+  isGaugeInstalled() {
+    return Boolean(this.command);
+  }
+
+  isGaugeVersionGreaterOrEqual(version) {
+    return compareVersions(this.gaugeVersion, version) >= 0;
+  }
+
+  getGaugePluginVersion(language) {
+    const plugin = this.gaugePlugins.find((entry) => entry.name === language);
+    return plugin && plugin.version;
+  }
+
+  installGaugeRunner(language, options = {}) {
+    const vscode = getVscode(options.vscode);
+    const channel = vscode.window.createOutputChannel("Gauge Install");
+    const output = new OutputChannel(channel, `Installing gauge ${language} plugin ...\n`, "");
+
+    return new Promise((resolve) => {
+      const child = this.command.spawn([GAUGE_INSTALL_ARG, language]);
+      child.stdout.on("data", (chunk) => output.appendOutBuf(chunk.toString()));
+      child.stderr.on("data", (chunk) => output.appendErrBuf(chunk.toString()));
+      child.on("exit", (code) => {
+        output.onFinish(
+          resolve,
+          code,
+          "",
+          "\nRefer to https://docs.gauge.org/plugin.html to install manually",
+          false,
+        );
+      });
+    });
+  }
+
+  mavenCommand() {
+    return this.maven;
+  }
+
+  gradleCommand() {
+    return this.gradle;
+  }
+
+  gaugeVersionString() {
+    const version = `Gauge version: ${this.gaugeVersion}`;
+    const commitHash = this.gaugeCommitHash ? `Commit Hash: ${this.gaugeCommitHash}` : "";
+    const plugins = this.gaugePlugins
+      .map((plugin) => `${plugin.name} (${plugin.version})`)
+      .join("\n");
+    return `${version}\n${commitHash}\n\nPlugins\n-------\n${plugins}`;
+  }
+
+  static getCommandCandidates(command) {
+    if (process.platform === "win32") {
+      return [
+        new Command(command, ".exe"),
+        new Command(command, ".bat", true),
+        new Command(command, ".cmd", true),
+      ];
+    }
+    return [new Command(command)];
+  }
+
+  static isSpawnable(command, testArgs = []) {
+    const result = command.spawnSync(testArgs);
+    return result.status === 0 && !result.error;
+  }
+
+  static getCommand(command, testArgs = []) {
+    return this.getCommandCandidates(command).find((candidate) => this.isSpawnable(candidate, testArgs));
+  }
+
+  static getGradleCommand() {
+    if (process.platform === "win32") {
+      return new Command(GRADLE_WRAPPER_COMMAND, ".bat", true);
+    }
+    return new Command(`./${GRADLE_WRAPPER_COMMAND}`);
+  }
+}
+
+class Command {
+  constructor(cmdPrefix, cmdSuffix = "", shellMode = false) {
+    this.cmdPrefix = cmdPrefix;
+    this.cmdSuffix = cmdSuffix;
+    this.shellMode = shellMode;
+    this.command = `${cmdPrefix}${cmdSuffix}`;
+    this.defaultSpawnOptions = shellMode ? { shell: true } : {};
+  }
+
+  spawn(args = [], options = {}) {
+    return childProcess.spawn(
+      this.command,
+      this.argsForSpawnType(args),
+      { ...options, ...this.defaultSpawnOptions },
+    );
+  }
+
+  spawnSync(args = [], options = {}) {
+    return childProcess.spawnSync(
+      this.command,
+      this.argsForSpawnType(args),
+      { ...options, ...this.defaultSpawnOptions },
+    );
+  }
+
+  argsForSpawnType(args) {
+    if (!this.shellMode) {
+      return args;
+    }
+    return args.map((arg) => (arg.includes(" ") ? `"${arg}"` : arg));
+  }
+}
+
+module.exports = {
+  CLI,
+  Command,
+};
