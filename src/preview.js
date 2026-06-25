@@ -7,15 +7,18 @@ const { CLI } = require("./cli");
 const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
+const INSTALL_SPECTACLE_ACTION = "Install Spectacle";
+const MISSING_SPECTACLE_MESSAGE = "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.";
 const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept to preview.";
+const SPECTACLE_PLUGIN_NAME = "spectacle";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
 
-function showError(vscode, message) {
+function showError(vscode, message, ...actions) {
   if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
-    return vscode.window.showErrorMessage(message);
+    return vscode.window.showErrorMessage(message, ...actions);
   }
   return undefined;
 }
@@ -109,6 +112,21 @@ function failureReason(result) {
     .trim();
 }
 
+function isSpectacleInstalled(cli) {
+  if (!cli || typeof cli.isPluginInstalled !== "function") {
+    return true;
+  }
+  return cli.isPluginInstalled(SPECTACLE_PLUGIN_NAME);
+}
+
+async function promptToInstallSpectacle(vscode, cli) {
+  const action = await showError(vscode, MISSING_SPECTACLE_MESSAGE, INSTALL_SPECTACLE_ACTION);
+  if (action === INSTALL_SPECTACLE_ACTION && typeof cli.installGaugeRunner === "function") {
+    return cli.installGaugeRunner(SPECTACLE_PLUGIN_NAME, { vscode });
+  }
+  return undefined;
+}
+
 function previewFailureMessage(pathModule, filePath, result) {
   const base = `Unable to create html file for ${pathModule.basename(filePath)}`;
   const reason = failureReason(result);
@@ -160,6 +178,9 @@ async function previewGaugeDocument(options = {}) {
     return showError(vscode, previewFailureMessage(pathModule, filePath, {
       error: new Error("Gauge is not installed."),
     }));
+  }
+  if (!isSpectacleInstalled(cli)) {
+    return promptToInstallSpectacle(vscode, cli);
   }
 
   const previewRoot = options.tempDirProvider

@@ -21,6 +21,7 @@ function createChildProcess(options = {}) {
 
 function createFakeVscode(overrides = {}) {
   const errors = [];
+  const errorPrompts = [];
   const opened = [];
   const document = overrides.document || {
     languageId: "gauge",
@@ -44,12 +45,14 @@ function createFakeVscode(overrides = {}) {
       },
       window: {
         activeTextEditor: document ? { document } : undefined,
-        showErrorMessage(message) {
+        showErrorMessage(message, ...actions) {
           errors.push(message);
-          return Promise.resolve(undefined);
+          errorPrompts.push({ message, actions });
+          return Promise.resolve(overrides.errorSelection);
         },
       },
     },
+    errorPrompts,
   };
 }
 
@@ -149,6 +152,63 @@ test("previewGaugeDocument reports Spectacle generation failures", async () => {
   assert.deepEqual(opened, []);
   assert.deepEqual(errors, [
     "Unable to create html file for example.spec. missing spectacle plugin",
+  ]);
+});
+
+test("previewGaugeDocument prompts to install Spectacle when the plugin is missing", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { errorPrompts, errors, opened, vscode } = createFakeVscode({
+    errorSelection: "Install Spectacle",
+  });
+  const installed = [];
+  const spawns = [];
+  const cli = {
+    isPluginInstalled(pluginName) {
+      assert.equal(pluginName, "spectacle");
+      return false;
+    },
+    installGaugeRunner(pluginName, options) {
+      installed.push({ pluginName, vscode: options.vscode });
+      return Promise.resolve(undefined);
+    },
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          return createChildProcess({ stdout: "created\n" });
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(spawns, []);
+  assert.deepEqual(errors, [
+    "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.",
+  ]);
+  assert.deepEqual(errorPrompts, [
+    {
+      message: "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.",
+      actions: ["Install Spectacle"],
+    },
+  ]);
+  assert.deepEqual(installed, [
+    { pluginName: "spectacle", vscode },
   ]);
 });
 
