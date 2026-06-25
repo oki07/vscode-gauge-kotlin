@@ -6,6 +6,7 @@ const test = require("node:test");
 function createFakeVscode(overrides = {}) {
   const commands = [];
   const errors = [];
+  const errorActions = [];
   const inputs = [];
   const progressReports = [];
   const quickPicks = [];
@@ -28,8 +29,9 @@ function createFakeVscode(overrides = {}) {
       },
     },
     window: {
-      showErrorMessage(message) {
+      showErrorMessage(message, ...actions) {
         errors.push(message);
+        errorActions.push(actions);
         return Promise.resolve(undefined);
       },
       showInputBox(options) {
@@ -69,6 +71,7 @@ function createFakeVscode(overrides = {}) {
   };
   return {
     commands,
+    errorActions,
     errors,
     inputs,
     openDialogs,
@@ -342,4 +345,56 @@ test("ProjectInitializer prefers the configured Kotlin project template", async 
 
   assert.equal(quickPicks[0][0].label, "kotlin_gradle");
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
+});
+
+test("ProjectInitializer reports template list parsing failures", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    errorActions,
+    errors,
+    inputs,
+    openDialogs,
+    quickPicks,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawnSync(args) {
+          assert.deepEqual(args, ["template", "--list", "--machine-readable"]);
+          return {
+            stdout: Buffer.from("not-json"),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+      removeSync() {},
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(errors, ["Failed to get list of templates."]);
+  assert.deepEqual(errorActions, [[
+    " Try running 'gauge template --list ----machine-readable' from command line",
+  ]]);
+  assert.deepEqual(quickPicks, [[]]);
+  assert.deepEqual(openDialogs, []);
+  assert.deepEqual(inputs, []);
 });

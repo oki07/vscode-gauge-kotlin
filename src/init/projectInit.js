@@ -230,7 +230,7 @@ class ProjectInitializer {
     } catch (_error) {
       await this.vscode.window.showErrorMessage(
         "Failed to get list of templates.",
-        "Try running 'gauge template --list --machine-readable' from command line",
+        " Try running 'gauge template --list ----machine-readable' from command line",
       );
       return [];
     }
