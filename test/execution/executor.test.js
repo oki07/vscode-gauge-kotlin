@@ -160,3 +160,127 @@ test("executor rejects a new run while another run is in progress", async () => 
   assert.equal(secondRun, undefined);
   assert.deepEqual(errors, ["A Specification or Scenario is still running!"]);
 });
+
+test("execute scenario at cursor runs the provider scenario and ignores launch filters", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const scenarioRequests = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      {
+        type: "gauge",
+        request: "test",
+        name: "Gauge",
+        tags: "ignored",
+        scenario: ["ignored"],
+        "retry-only": "ignored",
+      },
+    ],
+    activeTextEditor: {
+      selection: { active: { line: 8, character: 0 } },
+      document: {
+        fileName: "/workspace/specs/example.spec",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    async scenariosProvider(request) {
+      scenarioRequests.push(request);
+      return {
+        heading: "Checkout order",
+        executionIdentifier: "/workspace/specs/example.spec:8",
+      };
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.scenario");
+
+  assert.deepEqual(scenarioRequests, [
+    {
+      projectRoot: "/workspace",
+      spec: "/workspace/specs/example.spec",
+      position: { line: 8, character: 0 },
+      atCursor: true,
+    },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gradle",
+      args: [
+        "clean",
+        "gauge",
+        "-PadditionalFlags=--hide-suggestion --simple-console",
+        "-PspecsDir=specs/example.spec:8",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/specs/example.spec:8",
+    },
+  ]);
+});
+
+test("execute scenarios lets the user pick one provider scenario", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    quickPickSelection: { label: "Second scenario", detail: "Scenario" },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async scenariosProvider() {
+      return [
+        {
+          heading: "First scenario",
+          executionIdentifier: "/workspace/specs/example.spec:4",
+        },
+        {
+          heading: "Second scenario",
+          executionIdentifier: "/workspace/specs/example.spec:10",
+        },
+      ];
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.scenarios");
+
+  assert.deepEqual(quickPicks, [
+    {
+      items: [
+        { label: "First scenario", detail: "Scenario" },
+        { label: "Second scenario", detail: "Scenario" },
+      ],
+      options: undefined,
+    },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--hide-suggestion", "--simple-console", "/workspace/specs/example.spec:10"],
+      cwd: "/workspace",
+      status: "/workspace/specs/example.spec:10",
+    },
+  ]);
+});

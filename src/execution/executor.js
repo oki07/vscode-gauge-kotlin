@@ -112,6 +112,14 @@ function buildArgs(projectKind, projectRoot, spec, option, pathModule) {
   return buildRunArgs.forGauge(spec, option);
 }
 
+function getScenarioSpecPath(executionIdentifier) {
+  const separatorIndex = executionIdentifier.lastIndexOf(":");
+  if (separatorIndex < 0) {
+    return executionIdentifier;
+  }
+  return executionIdentifier.slice(0, separatorIndex);
+}
+
 function defaultRunner(vscode) {
   return async function runInTerminal(command) {
     if (!vscode.window || typeof vscode.window.createTerminal !== "function") {
@@ -132,6 +140,7 @@ function createGaugeExecutionController(options = {}) {
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
   const runner = options.runner || defaultRunner(vscode);
+  const scenariosProvider = options.scenariosProvider || (async () => []);
   let executing = false;
   let activeRun;
 
@@ -150,6 +159,11 @@ function createGaugeExecutionController(options = {}) {
       repeat: Boolean(flags.repeat),
       parallel: Boolean(flags.parallel),
     };
+    if (spec && /:\d+$/.test(spec)) {
+      option.tags = null;
+      option.scenario = null;
+      option["retry-only"] = null;
+    }
     const command = {
       command: commandForProjectKind(projectKind, options),
       args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
@@ -167,26 +181,41 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
-  async function executeActiveSpecification() {
+  function getActiveSpecificationContext(kind) {
     const editor = vscode.window && vscode.window.activeTextEditor;
     if (!editor || !editor.document) {
-      return vscode.window.showErrorMessage(
-        "A gauge specification file should be open to run this command.",
-      );
+      return {
+        error: "A gauge specification file should be open to run this command.",
+      };
     }
 
     const spec = editor.document.fileName || (editor.document.uri && editor.document.uri.fsPath);
     if (!SPEC_EXTENSIONS.has(pathModule.extname(spec))) {
-      return vscode.window.showErrorMessage(
-        "No specification found. Current file is not a gauge specification.",
-      );
+      return {
+        error: `No ${kind} found. Current file is not a gauge specification.`,
+      };
     }
 
     const projectRoot = getProjectRootForSpec(vscode, spec, pathModule);
     if (!projectRoot) {
-      return vscode.window.showErrorMessage("No workspace folder is open.");
+      return {
+        error: "No workspace folder is open.",
+      };
     }
-    return executeInProject(projectRoot, spec, { status: spec });
+
+    return {
+      editor,
+      projectRoot,
+      spec,
+    };
+  }
+
+  async function executeActiveSpecification() {
+    const context = getActiveSpecificationContext("specification");
+    if (context.error) {
+      return vscode.window.showErrorMessage(context.error);
+    }
+    return executeInProject(context.projectRoot, context.spec, { status: context.spec });
   }
 
   async function executeAllSpecifications() {
@@ -221,6 +250,61 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
+  function getScenarioQuickPickItems(scenarios) {
+    return scenarios.map((scenario) => ({
+      label: scenario.heading,
+      detail: "Scenario",
+    }));
+  }
+
+  async function executeScenarioIdentifier(executionIdentifier) {
+    const specPath = getScenarioSpecPath(executionIdentifier);
+    const projectRoot = getProjectRootForSpec(vscode, specPath, pathModule);
+    if (!projectRoot) {
+      return vscode.window.showErrorMessage("No workspace folder is open.");
+    }
+    return executeInProject(projectRoot, executionIdentifier, {
+      status: executionIdentifier,
+    });
+  }
+
+  async function chooseAndExecuteScenario(scenarios) {
+    if (!Array.isArray(scenarios) || scenarios.length === 0) {
+      return undefined;
+    }
+    const selected = await vscode.window.showQuickPick(getScenarioQuickPickItems(scenarios));
+    if (!selected) {
+      return undefined;
+    }
+    const scenario = scenarios.find((entry) => entry.heading === selected.label);
+    if (!scenario) {
+      return undefined;
+    }
+    return executeScenarioIdentifier(scenario.executionIdentifier);
+  }
+
+  async function executeScenario(atCursor) {
+    const context = getActiveSpecificationContext("scenario(s)");
+    if (context.error) {
+      return vscode.window.showErrorMessage(context.error);
+    }
+
+    const position = atCursor
+      ? (context.editor.selection && context.editor.selection.active)
+      : { line: 1, character: 1 };
+    const scenarios = await scenariosProvider({
+      projectRoot: context.projectRoot,
+      spec: context.spec,
+      position,
+      atCursor,
+    });
+
+    if (atCursor && !Array.isArray(scenarios)) {
+      return executeScenarioIdentifier(scenarios.executionIdentifier);
+    }
+    return chooseAndExecuteScenario(scenarios);
+  }
+
   async function stopExecution() {
     if (activeRun && typeof activeRun.cancel === "function") {
       return activeRun.cancel();
@@ -239,6 +323,10 @@ function createGaugeExecutionController(options = {}) {
         return executeFailed();
       case "gauge.execute.repeat":
         return repeatExecution();
+      case "gauge.execute.scenario":
+        return executeScenario(true);
+      case "gauge.execute.scenarios":
+        return executeScenario(false);
       case "gauge.stopExecution":
         return stopExecution();
       default:
@@ -250,6 +338,7 @@ function createGaugeExecutionController(options = {}) {
     executeActiveSpecification,
     executeAllSpecifications,
     executeFailed,
+    executeScenario,
     handleCommand,
     repeatExecution,
     stopExecution,
