@@ -135,6 +135,20 @@ test("GaugeArgumentCodeActionProvider converts concept double-hash heading argum
   assert.equal(replacement.newText, "\"item\"");
 });
 
+test("GaugeArgumentCodeActionProvider ignores indented concept hash heading arguments", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+  const line = "  # Shared checkout <item>";
+
+  assert.deepEqual(
+    provider.provideCodeActions(
+      createDocument(line, "/workspace/specs/concepts/shared.cpt"),
+      createRange(0, line.indexOf("item")),
+    ),
+    [],
+  );
+});
+
 test("GaugeArgumentCodeActionProvider converts escaped dynamic arguments to static parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();

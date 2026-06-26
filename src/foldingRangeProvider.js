@@ -25,6 +25,10 @@ function isDoubleHashHeading(line) {
   return /^\s*##.*$/.test(line);
 }
 
+function isHashHeading(line, conceptDocument) {
+  return conceptDocument ? line.startsWith("#") : isSingleHashHeading(line) || isDoubleHashHeading(line);
+}
+
 function isLegacySpecUnderline(line) {
   return /^\s*=+\s*$/.test(line);
 }
@@ -68,11 +72,7 @@ function foldingMarkers(lines, options = {}) {
       continue;
     }
 
-    if (
-      isSingleHashHeading(text)
-      || isDoubleHashHeading(text)
-      || (!conceptDocument && isTeardown(text))
-    ) {
+    if (isHashHeading(text, conceptDocument) || (!conceptDocument && isTeardown(text))) {
       markers.push({ startLine: line, boundaryLine: line });
     }
   }

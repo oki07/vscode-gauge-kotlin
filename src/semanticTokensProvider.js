@@ -116,6 +116,10 @@ function isConceptLegacyUnderlineHeadingText(line) {
   return line.trim().length > 0 && !/[#*|]/.test(line);
 }
 
+function isHashHeadingLine(line, conceptDocument) {
+  return conceptDocument ? line.startsWith("#") : line.trimStart().startsWith("#");
+}
+
 function isFirstTableLine(lines, lineNumber) {
   if (!isTableLine(lines[lineNumber] || "")) {
     return false;
@@ -180,7 +184,7 @@ class GaugeSemanticTokensProvider {
         }
       }
 
-      if (trimmedLine.startsWith("#")) {
+      if (isHashHeadingLine(line, conceptDocument)) {
         let lastIndex = line.search(/\S/);
         const isScenarioHeading = !conceptDocument && trimmedLine.startsWith("##");
         const headingToken = isScenarioHeading ? "scenario" : "specification";

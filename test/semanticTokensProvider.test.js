@@ -214,6 +214,32 @@ test("GaugeSemanticTokensProvider treats concept double-hash headings as concept
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats indented concept hash headings as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return [
+        "  # Shared checkout <item>",
+        "* Select <item>",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider ignores concept hyphen underline headings", () => {
   const {
     GaugeSemanticTokensProvider,

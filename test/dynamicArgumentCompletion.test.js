@@ -330,6 +330,24 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept double-hash headin
   assert.deepEqual(labels(headingItems), ["item", "i"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores indented concept hash heading arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const heading = "  # Shared checkout <item>";
+  const step = "* Select <i>";
+  const document = createDocument([
+    heading,
+    step,
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const stepItems = provider.provideCompletionItems(document, new vscode.Position(1, step.indexOf("i") + 1));
+  const headingItems = provider.provideCompletionItems(document, new vscode.Position(0, heading.indexOf("item")));
+
+  assert.deepEqual(labels(stepItems), ["i"]);
+  assert.deepEqual(headingItems, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores concept table dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
