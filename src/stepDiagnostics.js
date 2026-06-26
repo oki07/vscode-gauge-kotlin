@@ -2637,14 +2637,18 @@ function isPropertyAccessorAnnotationContext(text, annotationStart) {
   if (annotationStart === undefined || annotationStart < 0) {
     return false;
   }
-  const annotationLineStart = lineStartBefore(text, annotationStart);
-  const sameLinePrefix = text.slice(annotationLineStart, annotationStart);
+  return isPropertyAccessorDeclarationContext(text, annotationStart);
+}
+
+function isPropertyAccessorDeclarationContext(text, declarationStart) {
+  const declarationLineStart = lineStartBefore(text, declarationStart);
+  const sameLinePrefix = text.slice(declarationLineStart, declarationStart);
   if (isPropertyDeclarationLine(sameLinePrefix)) {
     return true;
   }
 
-  const annotationIndent = lineIndent(text.slice(annotationLineStart, annotationStart));
-  let bounds = previousLineBounds(text, annotationLineStart);
+  const declarationIndent = lineIndent(text.slice(declarationLineStart, declarationStart));
+  let bounds = previousLineBounds(text, declarationLineStart);
   while (bounds) {
     const line = text.slice(bounds.start, bounds.end).replace(/\r$/, "");
     const trimmed = line.trim();
@@ -2653,9 +2657,9 @@ function isPropertyAccessorAnnotationContext(text, annotationStart) {
       continue;
     }
     if (isPropertyDeclarationLine(line)) {
-      return lineIndent(line) < annotationIndent;
+      return lineIndent(line) < declarationIndent;
     }
-    if (lineIndent(line) < annotationIndent || isDeclarationBoundaryLine(line)) {
+    if (lineIndent(line) < declarationIndent || isDeclarationBoundaryLine(line)) {
       return false;
     }
     bounds = previousLineBounds(text, bounds.start);
@@ -3005,6 +3009,42 @@ function collectConstructorBodyRanges(text, ignoredRanges = []) {
       }
     }
     match = constructorPattern.exec(text);
+  }
+  return ranges;
+}
+
+function collectPropertyAccessorBodyRanges(text, ignoredRanges = []) {
+  const ranges = [];
+  const accessorPattern = /\b(?:get|set)\b/g;
+  let match = accessorPattern.exec(text);
+  while (match) {
+    if (
+      isInIgnoredRange(match.index, ignoredRanges)
+      || !isPropertyAccessorDeclarationContext(text, match.index)
+    ) {
+      match = accessorPattern.exec(text);
+      continue;
+    }
+    let bodyStart = skipWhitespaceAndComments(text, accessorPattern.lastIndex);
+    if (text[bodyStart] === "(") {
+      const closeParen = findMatchingParen(text, bodyStart);
+      if (closeParen === -1) {
+        match = accessorPattern.exec(text);
+        continue;
+      }
+      bodyStart = skipWhitespaceAndComments(text, closeParen + 1);
+    }
+    if (text[bodyStart] === "{") {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          start: bodyStart + 1,
+        });
+        accessorPattern.lastIndex = bodyEnd + 1;
+      }
+    }
+    match = accessorPattern.exec(text);
   }
   return ranges;
 }
@@ -3568,6 +3608,7 @@ function findStepFunctions(text) {
     ...collectFunctionBodyRanges(text, ignoredRanges),
     ...collectInitBlockBodyRanges(text, ignoredRanges),
     ...collectConstructorBodyRanges(text, ignoredRanges),
+    ...collectPropertyAccessorBodyRanges(text, ignoredRanges),
     ...collectPropertyInitializerRanges(text, ignoredRanges),
   ];
   addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges);
