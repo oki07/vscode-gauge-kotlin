@@ -397,6 +397,11 @@ function parseKotlinIntegerLiteralExpression(value) {
   return String(sign * parsed);
 }
 
+function parseKotlinBooleanLiteralExpression(value) {
+  const trimmed = value.trim();
+  return trimmed === "true" || trimmed === "false" ? trimmed : undefined;
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -545,6 +550,10 @@ function evaluateStringExpression(expression, constants) {
   const intLiteral = parseKotlinIntegerLiteralExpression(trimmed);
   if (intLiteral !== undefined) {
     return intLiteral;
+  }
+  const booleanLiteral = parseKotlinBooleanLiteralExpression(trimmed);
+  if (booleanLiteral !== undefined) {
+    return booleanLiteral;
   }
 
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
@@ -875,7 +884,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Int|Long))?\s*=/g;
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Int|Long|Boolean))?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
