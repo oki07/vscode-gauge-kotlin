@@ -56,10 +56,7 @@ function isConceptDocument(document) {
 }
 
 function isConceptHeadingLine(line, document) {
-  const trimmed = line.trimStart();
-  return isConceptDocument(document)
-    && trimmed.startsWith("#")
-    && !trimmed.startsWith("##");
+  return isConceptDocument(document) && line.trimStart().startsWith("#");
 }
 
 function uriPath(uri) {

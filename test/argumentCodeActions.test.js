@@ -116,6 +116,25 @@ test("GaugeArgumentCodeActionProvider converts dynamic arguments to static param
   assert.equal(replacement.newText, "\"item\"");
 });
 
+test("GaugeArgumentCodeActionProvider converts concept double-hash heading arguments", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeArgumentCodeActionProvider({ vscode });
+
+  const actions = provider.provideCodeActions(
+    createDocument("## Shared checkout <item>", "/workspace/specs/concepts/shared.cpt"),
+    createRange(0, 21),
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Convert to Static Parameter");
+  const replacement = actions[0].edit.replacements[0];
+  assert.deepEqual(replacement.uri, { fsPath: "/workspace/specs/concepts/shared.cpt" });
+  assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 19 });
+  assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 25 });
+  assert.equal(replacement.newText, "\"item\"");
+});
+
 test("GaugeArgumentCodeActionProvider converts escaped dynamic arguments to static parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();
