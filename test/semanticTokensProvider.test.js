@@ -175,6 +175,33 @@ test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () 
   )), true);
 });
 
+test("GaugeSemanticTokensProvider does not span dynamic table arguments across pipes", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const row = "| <user | admin> |";
+  const document = {
+    getText() {
+      return row;
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const argumentTokens = tokens.filter((entry) => entry.type === "argument");
+  const dynamicBoundary = row.indexOf("|", row.indexOf("<"));
+  const borderStarts = tokens
+    .filter((entry) => entry.type === "tableBorder")
+    .map((entry) => entry.start);
+
+  assert.deepEqual(argumentTokens, []);
+  assert.equal(borderStarts.includes(dynamicBoundary), true);
+});
+
 test("GaugeSemanticTokensProvider tokenizes escaped dynamic step arguments", () => {
   const {
     GaugeSemanticTokensProvider,
