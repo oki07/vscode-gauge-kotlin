@@ -79,7 +79,7 @@ class GaugeSemanticTokensProvider {
   provideDocumentSemanticTokens(document) {
     const builder = new this.SemanticTokensBuilder(this.legend);
     const lines = document.getText().split(/\r?\n/);
-    const argumentRegex = /(?:"[^"]*"|<[^>]*>)/g;
+    const argumentRegex = /(?:"[^"]*"|<(?:\\[<>]|[^>\r\n])*>)/g;
     const tableDynamicArgumentRegex = /<(?:\\[<>]|[^>\r\n])*>/g;
     const tableHeaderSeparatorRegex = /^\|\s*-+\s*(\|\s*-+\s*)+\|?$/;
 

@@ -143,3 +143,34 @@ test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () =>
     },
   ]);
 });
+
+test("GaugeSemanticTokensProvider tokenizes escaped dynamic step arguments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const step = "* Say <name \\> suffix>";
+  const document = {
+    getText() {
+      return step;
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const argumentTokens = tokens.filter((entry) => entry.type === "argument");
+
+  assert.deepEqual(argumentTokens, [
+    {
+      line: 0,
+      start: step.indexOf("<"),
+      length: step.length - step.indexOf("<"),
+      tokenType: tokenTypes.indexOf("argument"),
+      tokenModifiers: 0,
+      type: "argument",
+    },
+  ]);
+});
