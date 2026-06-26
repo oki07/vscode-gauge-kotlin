@@ -110,6 +110,29 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
+test("GaugeSemanticTokensProvider keeps quoted concept heading text as heading", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return '# Shared "cart" only';
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.map((entry) => entry.type), [
+    "specification",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () => {
   const {
     GaugeSemanticTokensProvider,
