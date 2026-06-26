@@ -479,6 +479,28 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin boolean constants in string 
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin byte and short constants in string templates", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val RETRY_COUNT: Byte = 2",
+    "private const val GROUP_COUNT: Short = 4",
+    "private const val LOGIN_STEP = \"Retry $RETRY_COUNT/$GROUP_COUNT times as <user>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Retry 2/4 times as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates parenthesized Kotlin const expressions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
