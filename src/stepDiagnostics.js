@@ -551,8 +551,47 @@ function extractStepAliases(annotationText, constants) {
 }
 
 function countStepParameters(stepText) {
-  const matches = stepText.match(/<[^>\r\n]+>/g);
-  return matches ? matches.length : 0;
+  let count = 0;
+  let index = 0;
+
+  while (index < stepText.length) {
+    const openIndex = stepText.indexOf("<", index);
+    if (openIndex === -1) {
+      break;
+    }
+
+    const closeIndex = findDynamicParameterEnd(stepText, openIndex);
+    if (closeIndex === -1) {
+      break;
+    }
+
+    count += 1;
+    index = closeIndex + 1;
+  }
+
+  return count;
+}
+
+function findDynamicParameterEnd(text, openIndex) {
+  let escaped = false;
+
+  for (let index = openIndex + 1; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (character === "\r" || character === "\n") {
+      return -1;
+    }
+
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function findBlankGaugeSteps(text) {

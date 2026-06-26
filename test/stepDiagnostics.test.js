@@ -59,6 +59,17 @@ test("GaugeStepDiagnosticsProvider reports Kotlin Step parameter count mismatche
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 20 });
 });
 
+test("GaugeStepDiagnosticsProvider counts escaped dynamic Step parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Use <first \\\\> middle <second>>\")",
+    "fun use(first: String) {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider checks each Step alias separately", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
