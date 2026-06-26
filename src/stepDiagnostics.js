@@ -2416,6 +2416,10 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   );
   let match = importPattern.exec(text);
   while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = importPattern.exec(text);
+      continue;
+    }
     const importedName = match[1];
     const alias = match[2];
     if (importedName.endsWith(".*")) {
