@@ -724,6 +724,27 @@ test("GaugeStepDiagnosticsProvider accepts context parameter Kotlin step functio
   );
 });
 
+test("GaugeStepDiagnosticsProvider skips backtick annotations before Kotlin step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "annotation class `Audit Marker`",
+    "",
+    "@Step(\"Decorated <value>\")",
+    "@`Audit Marker`",
+    "fun decorated() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Decorated <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin const step annotation values", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

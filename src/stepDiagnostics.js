@@ -2290,7 +2290,10 @@ function skipKotlinAnnotation(text, startIndex) {
     index += target[0].length;
   }
 
-  const name = /^(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*/.exec(text.slice(index));
+  const namePattern = new RegExp(
+    `^(?:${KOTLIN_IDENTIFIER_PATTERN}\\.)*${KOTLIN_IDENTIFIER_PATTERN}`,
+  );
+  const name = namePattern.exec(text.slice(index));
   if (!name) {
     return startIndex;
   }
