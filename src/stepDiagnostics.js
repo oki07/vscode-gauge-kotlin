@@ -1663,21 +1663,21 @@ function expressionInsideCall(expression, callName) {
   return trimmed.slice(openParen + 1, closeParen);
 }
 
-function evaluateStepAliasExpression(expression, constants) {
+function evaluateStepAliasExpression(expression, constants, constantTypes) {
   const trimmed = expression.trim();
   const arrayCall = expressionInsideCall(trimmed, "arrayOf");
   if (arrayCall !== undefined) {
     return splitTopLevelParameters(arrayCall)
-      .map((part) => evaluateStringExpression(part, constants))
+      .map((part) => evaluateStringExpression(part, constants, constantTypes))
       .filter((value) => value !== undefined);
   }
   if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
     return splitTopLevelParameters(trimmed.slice(1, -1))
-      .map((part) => evaluateStringExpression(part, constants))
+      .map((part) => evaluateStringExpression(part, constants, constantTypes))
       .filter((value) => value !== undefined);
   }
 
-  const value = evaluateStringExpression(trimmed, constants);
+  const value = evaluateStringExpression(trimmed, constants, constantTypes);
   return value === undefined ? [] : [value];
 }
 
@@ -2061,10 +2061,10 @@ function collectStringConstants(text) {
     }
   }
 
-  return constants;
+  return { constants, constantTypes };
 }
 
-function extractStepAliases(annotationText, constants) {
+function extractStepAliases(annotationText, constants, constantTypes) {
   const args = splitTopLevelParameters(annotationText);
   const positionalExpressions = [];
   let valueExpression;
@@ -2084,11 +2084,11 @@ function extractStepAliases(annotationText, constants) {
   }
 
   if (valueExpression !== undefined) {
-    return evaluateStepAliasExpression(valueExpression, constants);
+    return evaluateStepAliasExpression(valueExpression, constants, constantTypes);
   }
 
   return positionalExpressions.flatMap((expression) => (
-    evaluateStepAliasExpression(expression, constants)
+    evaluateStepAliasExpression(expression, constants, constantTypes)
   ));
 }
 
@@ -3209,6 +3209,7 @@ function addStepFunctionEntry(
   entries,
   text,
   constants,
+  constantTypes,
   ignoredRanges,
   stepImports,
   functionBodyRanges,
@@ -3229,14 +3230,14 @@ function addStepFunctionEntry(
   if (closeParen === -1) {
     return;
   }
-  const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
+  const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants, constantTypes);
   const method = findAttachedDeclaration(text, functionSearchStart(closeParen), ignoredRanges, annotationStart);
   if (aliases.length > 0 && method) {
     entries.push({ aliases, ...method });
   }
 }
 
-function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, functionBodyRanges) {
+function addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges) {
   const groupPattern = /@(?:(get|set):)?\[/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
@@ -3281,6 +3282,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
         entries,
         text,
         constants,
+        constantTypes,
         ignoredRanges,
         stepImports,
         functionBodyRanges,
@@ -3301,11 +3303,11 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
 function findStepFunctions(text) {
   const entries = [];
   const annotationPattern = new RegExp(`@(?:(get|set):)?(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
-  const constants = collectStringConstants(text);
+  const { constants, constantTypes } = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
   const functionBodyRanges = collectFunctionBodyRanges(text, ignoredRanges);
-  addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, functionBodyRanges);
+  addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -3332,6 +3334,7 @@ function findStepFunctions(text) {
       entries,
       text,
       constants,
+      constantTypes,
       ignoredRanges,
       stepImports,
       functionBodyRanges,
