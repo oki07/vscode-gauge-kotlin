@@ -412,6 +412,31 @@ test("GaugeStepDiagnosticsProvider ignores constructor-body-local Step functions
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores annotated constructor-body-local Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  @Inject constructor() {",
+    "    @Step(\"Local <value>\")",
+    "    fun localStep() {}",
+    "  }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks Kotlin Step getter use-site annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

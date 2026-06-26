@@ -2947,10 +2947,28 @@ function collectInitBlockBodyRanges(text, ignoredRanges = []) {
 
 function isSecondaryConstructorStart(text, startIndex) {
   const lineStart = lineStartBefore(text, startIndex);
-  const prefix = text.slice(lineStart, startIndex);
-  const modifierPattern = [...KOTLIN_FUNCTION_MODIFIERS].join("|");
-  const pattern = new RegExp(`^[ \\t]*(?:(?:${modifierPattern})\\s+)*$`);
-  return pattern.test(prefix);
+  let index = lineStart;
+  while (index < startIndex) {
+    if (text[index] === " " || text[index] === "\t") {
+      index += 1;
+      continue;
+    }
+    if (text[index] === "@") {
+      const next = skipKotlinAnnotation(text, index);
+      if (next === index || next > startIndex) {
+        return false;
+      }
+      index = next;
+      continue;
+    }
+    const token = /^[A-Za-z_]\w*/.exec(text.slice(index, startIndex));
+    if (token && KOTLIN_FUNCTION_MODIFIERS.has(token[0])) {
+      index += token[0].length;
+      continue;
+    }
+    return false;
+  }
+  return true;
 }
 
 function collectConstructorBodyRanges(text, ignoredRanges = []) {
