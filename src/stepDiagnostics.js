@@ -6,6 +6,7 @@ const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
+const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
 const KOTLIN_FUNCTION_MODIFIERS = new Set([
   "abstract",
   "actual",
@@ -2357,20 +2358,27 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
 }
 
 function stepAnnotationImports(text) {
-  const imports = new Map();
-  const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
+  const named = new Map();
+  const wildcards = new Set();
+  const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:\.\*)?)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
   let match = importPattern.exec(text);
   while (match) {
     const importedName = match[1];
     const alias = match[2];
+    if (importedName.endsWith(".*")) {
+      wildcards.add(importedName.slice(0, -2));
+      match = importPattern.exec(text);
+      continue;
+    }
+
     const importedParts = importedName.split(".");
     const exposedName = alias || importedParts[importedParts.length - 1];
     if (importedParts[importedParts.length - 1] === "Step") {
-      imports.set(exposedName, importedName);
+      named.set(exposedName, importedName);
     }
     match = importPattern.exec(text);
   }
-  return imports;
+  return { named, wildcards };
 }
 
 function localClassifierNames(text, ignoredRanges) {
@@ -2396,11 +2404,14 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
   if (annotationName.includes(".")) {
     return false;
   }
-  if (stepImports.has(annotationName)) {
-    return stepImports.get(annotationName) === GAUGE_STEP_ANNOTATION;
+  if (stepImports.named.has(annotationName)) {
+    return stepImports.named.get(annotationName) === GAUGE_STEP_ANNOTATION;
   }
   if (localClassifierNames.has(annotationName)) {
     return false;
+  }
+  if (annotationName === "Step" && stepImports.wildcards.size > 0) {
+    return stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
   }
   return annotationName === "Step";
 }
