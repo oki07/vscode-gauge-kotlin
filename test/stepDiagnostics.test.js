@@ -95,6 +95,24 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step vararg aliases", () => {
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts Kotlin comments inside Step annotation arguments", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(/* ignored ) */ \"Commented <value>\")",
+    "fun commented() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Commented <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

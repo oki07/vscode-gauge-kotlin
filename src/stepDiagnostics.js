@@ -81,19 +81,56 @@ function findBlockCommentEnd(text, startIndex) {
   return text.length;
 }
 
+function findCommentEnd(text, startIndex) {
+  if (text.startsWith("//", startIndex)) {
+    return findLineEnd(text, startIndex);
+  }
+  if (text.startsWith("/*", startIndex)) {
+    return findBlockCommentEnd(text, startIndex);
+  }
+  return undefined;
+}
+
+function removeKotlinComments(text) {
+  let result = "";
+  let index = 0;
+
+  while (index < text.length) {
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd;
+      continue;
+    }
+
+    if (text.startsWith("\"\"\"", index)) {
+      const closeIndex = text.indexOf("\"\"\"", index + 3);
+      const end = closeIndex === -1 ? text.length : closeIndex + 3;
+      result += text.slice(index, end);
+      index = end;
+      continue;
+    }
+    if (text[index] === "\"" || text[index] === "'") {
+      const end = findQuotedEnd(text, index, text[index]);
+      result += text.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    result += text[index];
+    index += 1;
+  }
+
+  return result;
+}
+
 function collectIgnoredKotlinRanges(text) {
   const ranges = [];
   let index = 0;
 
   while (index < text.length) {
-    if (text.startsWith("//", index)) {
-      const end = findLineEnd(text, index);
-      ranges.push({ end, start: index });
-      index = end;
-      continue;
-    }
-    if (text.startsWith("/*", index)) {
-      const end = findBlockCommentEnd(text, index);
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      const end = commentEnd;
       ranges.push({ end, start: index });
       index = end;
       continue;
@@ -135,6 +172,11 @@ function findMatchingParen(text, openIndex) {
       continue;
     }
 
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
     if (char === "\"" || char === "'") {
       quote = char;
       continue;
@@ -174,6 +216,11 @@ function splitTopLevel(text, separator) {
       continue;
     }
 
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
     if (text.startsWith("\"\"\"", index)) {
       quote = "\"\"\"";
       index += 2;
@@ -236,6 +283,11 @@ function findTopLevelChar(text, target) {
       continue;
     }
 
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
     if (text.startsWith("\"\"\"", index)) {
       quote = "\"\"\"";
       index += 2;
@@ -366,7 +418,7 @@ function parseStringLiteralTerm(text, constants) {
 }
 
 function evaluateStringExpression(expression, constants) {
-  const trimmed = expression.trim();
+  const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
     return undefined;
   }
