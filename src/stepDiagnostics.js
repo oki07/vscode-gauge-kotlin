@@ -695,7 +695,9 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
   );
-  for (const line of kotlinSourceLines(text, ignoredRanges)) {
+  const lines = kotlinSourceLines(text, ignoredRanges);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     let match = importPattern.exec(line);
     if (match) {
       const importedName = normalizeKotlinIdentifierPath(match[1]);
@@ -709,12 +711,14 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
       continue;
     }
 
-    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(line));
+    const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
+    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(statement.statement));
     if (match) {
       aliases.set(
         normalizeKotlinIdentifier(match[1]),
         normalizeKotlinIdentifierPath(match[2]),
       );
+      lineIndex = statement.endIndex;
     }
   }
   return aliases;
