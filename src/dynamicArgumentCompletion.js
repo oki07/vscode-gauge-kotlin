@@ -54,7 +54,7 @@ function dynamicArgumentRange(line, position) {
 function staticArgumentRange(line, position) {
   let openIndex = line.indexOf("\"");
   while (openIndex !== -1) {
-    const closeIndex = line.indexOf("\"", openIndex + 1);
+    const closeIndex = closingQuoteIndex(line, openIndex);
     if (position.character > openIndex && (closeIndex === -1 || position.character <= closeIndex)) {
       return {
         end: closeIndex === -1 ? position.character : closeIndex,
@@ -68,6 +68,23 @@ function staticArgumentRange(line, position) {
   }
 
   return undefined;
+}
+
+function closingQuoteIndex(line, openIndex) {
+  let index = openIndex + 1;
+  let escaped = false;
+  while (index < line.length) {
+    const character = line[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === "\"") {
+      return index;
+    }
+    index += 1;
+  }
+  return -1;
 }
 
 function isScenarioHeading(line) {
@@ -152,13 +169,17 @@ function staticArguments(text) {
     if (!line.trimStart().startsWith("*")) {
       continue;
     }
-    const pattern = /"([^"\r\n]*)"/g;
-    let match = pattern.exec(line);
-    while (match) {
-      if (match[1]) {
-        values.push(match[1]);
+    let openIndex = line.indexOf("\"");
+    while (openIndex !== -1) {
+      const closeIndex = closingQuoteIndex(line, openIndex);
+      if (closeIndex === -1) {
+        break;
       }
-      match = pattern.exec(line);
+      const value = line.slice(openIndex + 1, closeIndex);
+      if (value) {
+        values.push(value);
+      }
+      openIndex = line.indexOf("\"", closeIndex + 1);
     }
   }
   return unique(values);
