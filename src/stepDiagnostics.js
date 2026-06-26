@@ -711,34 +711,41 @@ function stripKotlinTypeAliasPreamble(line) {
   return line.slice(index).trim();
 }
 
-function normalizeKotlinTypeAliasStatementForMatch(statement) {
-  const stripped = stripKotlinTypeAliasPreamble(statement);
+function normalizeKotlinQualifiedPathDots(text) {
   let result = "";
   let index = 0;
-  while (index < stripped.length) {
-    if (stripped[index] === "`") {
-      const end = stripped.indexOf("`", index + 1);
+  while (index < text.length) {
+    if (text[index] === "`") {
+      const end = text.indexOf("`", index + 1);
       if (end === -1) {
-        result += stripped.slice(index);
+        result += text.slice(index);
         break;
       }
-      result += stripped.slice(index, end + 1);
+      result += text.slice(index, end + 1);
       index = end + 1;
       continue;
     }
-    if (stripped[index] === ".") {
+    if (text[index] === ".") {
       result = result.replace(/\s+$/, "");
       result += ".";
       index += 1;
-      while (index < stripped.length && /\s/.test(stripped[index])) {
+      while (index < text.length && /\s/.test(text[index])) {
         index += 1;
       }
       continue;
     }
-    result += stripped[index];
+    result += text[index];
     index += 1;
   }
   return result.trim();
+}
+
+function normalizeKotlinTypeAliasStatementForMatch(statement) {
+  return normalizeKotlinQualifiedPathDots(stripKotlinTypeAliasPreamble(statement));
+}
+
+function normalizeKotlinImportStatementForMatch(statement) {
+  return normalizeKotlinQualifiedPathDots(statement);
 }
 
 function collectKotlinTypeAliases(text, ignoredRanges = []) {
@@ -752,7 +759,7 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
-    let match = importPattern.exec(line);
+    let match = importPattern.exec(normalizeKotlinImportStatementForMatch(line));
     if (match) {
       const importedName = normalizeKotlinIdentifierPath(match[1]);
       if (resolveKotlinConstTypeName(importedName) !== undefined) {
@@ -4011,7 +4018,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
-    let match = importPattern.exec(line);
+    let match = importPattern.exec(normalizeKotlinImportStatementForMatch(line));
     if (match) {
       const importedName = normalizeKotlinIdentifierPath(match[1]);
       const alias = match[2] === undefined ? undefined : normalizeKotlinIdentifier(match[2]);

@@ -1478,6 +1478,31 @@ test("GaugeStepDiagnosticsProvider resolves Step aliases with Kotlin comments", 
   assert.deepEqual(provider.provideDiagnostics(nonGaugeImportAliasDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider resolves commented qualified Step import aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const gaugeAliasDocument = createDocument([
+    "import com.thoughtworks.gauge./* target */Step as GaugeStep",
+    "",
+    "@GaugeStep(\"Imported <value>\")",
+    "fun imported() {}",
+  ].join("\n"));
+  const nonGaugeAliasDocument = createDocument([
+    "import io.cucumber.java.en./* target */Step as CucumberStep",
+    "",
+    "@CucumberStep(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(gaugeAliasDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Imported <value>\". ",
+    ],
+  );
+  assert.deepEqual(provider.provideDiagnostics(nonGaugeAliasDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores local Step annotation declarations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -3093,6 +3118,28 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with impor
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Retry 2 times as <user>\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with commented qualified import aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import kotlin./* target */String as StepText",
+    "private const val USER_ARG: StepText = \"<user>\"",
+    "private const val LOGIN_STEP: StepText = \"Log in as $USER_ARG\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
     ],
   );
 });
