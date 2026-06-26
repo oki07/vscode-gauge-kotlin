@@ -214,7 +214,7 @@ function tableCells(line) {
 }
 
 function isEscapedPipe(line, index) {
-  return index > 0 && line[index - 1] === "\\";
+  return isEscaped(line, index);
 }
 
 function isTableSeparator(cells) {
