@@ -198,6 +198,8 @@ class GaugeSemanticTokensProvider {
               builder.push(index, charIndex, 1, tokenTypes.indexOf("table"), 0);
             }
           }
+        } else if (index + 1 < lines.length && tableHeaderSeparatorRegex.test(lines[index + 1].trim())) {
+          pushTableSegment(builder, index, line, 0, line.length);
         } else {
           let lastIndex = 0;
           tableDynamicArgumentRegex.lastIndex = 0;

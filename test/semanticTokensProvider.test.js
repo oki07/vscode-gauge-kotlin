@@ -167,6 +167,32 @@ test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () =>
   ]);
 });
 
+test("GaugeSemanticTokensProvider keeps dynamic-looking table headers as table tokens", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "| <user> | role |",
+        "| ------ | ---- |",
+        "| Bob    | admin |",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0 && entry.type === "argument"), []);
+  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "tableBorder"), true);
+  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "table"), true);
+});
+
 test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () => {
   const {
     GaugeSemanticTokensProvider,
