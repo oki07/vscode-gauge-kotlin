@@ -409,6 +409,102 @@ test("spec explorer run all executes the active project without prompting", asyn
   ]);
 });
 
+test("execute specification runs the provided spec explorer node", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/shop" } },
+      { uri: { fsPath: "/workspace/admin" } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification", {
+    file: "/workspace/admin/specs/checkout.spec",
+  });
+
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/admin/specs/checkout.spec",
+      ],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/specs/checkout.spec",
+    },
+  ]);
+});
+
+test("execute scenario runs the provided spec explorer node", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const scenarioRequests = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/shop" } },
+      { uri: { fsPath: "/workspace/admin" } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async scenariosProvider(request) {
+      scenarioRequests.push(request);
+      return {
+        heading: "Should not be used",
+        executionIdentifier: "/workspace/shop/specs/example.spec:3",
+      };
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.scenario", {
+    file: "/workspace/admin/specs/checkout.spec",
+    executionIdentifier: "/workspace/admin/specs/checkout.spec:12",
+  });
+
+  assert.deepEqual(scenarioRequests, []);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/admin/specs/checkout.spec:12",
+      ],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/specs/checkout.spec",
+    },
+  ]);
+});
+
 test("executor rejects a new run while another run is in progress", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   let finish;

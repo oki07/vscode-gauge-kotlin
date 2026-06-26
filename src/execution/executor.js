@@ -637,6 +637,9 @@ function createGaugeExecutionController(options = {}) {
       case "gauge.execute.inParallel":
         return executeCodeLensTarget(argument, { parallel: true });
       case "gauge.execute.specification":
+        if (argument) {
+          return executeNode(argument, false);
+        }
         return executeActiveSpecification();
       case "gauge.execute.specification.all":
         return executeAllSpecifications();
@@ -647,6 +650,9 @@ function createGaugeExecutionController(options = {}) {
       case "gauge.execute.repeat":
         return repeatExecution();
       case "gauge.execute.scenario":
+        if (argument) {
+          return executeNode(argument, false);
+        }
         return executeScenario(true);
       case "gauge.execute.scenarios":
         return executeScenario(false);
