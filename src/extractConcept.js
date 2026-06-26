@@ -344,15 +344,53 @@ function dynamicParametersInLines(lines) {
   const parameters = [];
   const seen = new Set();
   for (const line of lines || []) {
-    const matches = line.matchAll(/<[^>\r\n]+>/g);
-    for (const match of matches) {
-      if (!seen.has(match[0])) {
-        seen.add(match[0]);
-        parameters.push(match[0]);
+    let openIndex = nextUnescapedDynamicStart(line, 0);
+    while (openIndex !== -1) {
+      const closeIndex = dynamicParameterEnd(line, openIndex);
+      if (closeIndex === -1) {
+        break;
       }
+      const parameter = line.slice(openIndex, closeIndex + 1);
+      if (!seen.has(parameter)) {
+        seen.add(parameter);
+        parameters.push(parameter);
+      }
+      openIndex = nextUnescapedDynamicStart(line, closeIndex + 1);
     }
   }
   return parameters;
+}
+
+function nextUnescapedDynamicStart(line, startIndex) {
+  for (let index = startIndex; index < line.length; index += 1) {
+    if (line[index] === "<" && !isEscaped(line, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function dynamicParameterEnd(line, openIndex) {
+  let escaped = false;
+  for (let index = openIndex + 1; index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isEscaped(line, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function appendMissingParameters(name, parameters) {
