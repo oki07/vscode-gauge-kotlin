@@ -174,3 +174,36 @@ test("GaugeSemanticTokensProvider tokenizes escaped dynamic step arguments", () 
     },
   ]);
 });
+
+test("GaugeSemanticTokensProvider tokenizes escaped static step arguments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const step = "* Say \"Ada \\\"The First\\\"\" now";
+  const document = {
+    getText() {
+      return step;
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const argumentTokens = tokens.filter((entry) => entry.type === "argument");
+  const start = step.indexOf("\"");
+  const end = step.lastIndexOf("\"") + 1;
+
+  assert.deepEqual(argumentTokens, [
+    {
+      line: 0,
+      start,
+      length: end - start,
+      tokenType: tokenTypes.indexOf("argument"),
+      tokenModifiers: 0,
+      type: "argument",
+    },
+  ]);
+});
