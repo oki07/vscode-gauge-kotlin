@@ -730,6 +730,61 @@ function collectObjectRanges(text, ignoredRanges) {
   return ranges;
 }
 
+function collectClassRanges(text, ignoredRanges) {
+  const ranges = [];
+  const classPattern = /\bclass\s+([A-Za-z_]\w*)\b/g;
+  let match = classPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = classPattern.exec(text);
+      continue;
+    }
+
+    const bodyStart = findObjectBodyStart(text, classPattern.lastIndex);
+    if (bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          name: match[1],
+          start: bodyStart + 1,
+        });
+        classPattern.lastIndex = bodyStart + 1;
+      }
+    }
+    match = classPattern.exec(text);
+  }
+  return ranges;
+}
+
+function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
+  const ranges = [];
+  const companionPattern = /\bcompanion\s+object(?:\s+[A-Za-z_]\w*)?\b/g;
+  let match = companionPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = companionPattern.exec(text);
+      continue;
+    }
+
+    const enclosingClass = enclosingObjectPath(classRanges, match.index).at(-1);
+    const bodyStart = findObjectBodyStart(text, companionPattern.lastIndex);
+    if (enclosingClass !== undefined && bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          name: enclosingClass,
+          start: bodyStart + 1,
+        });
+        companionPattern.lastIndex = bodyStart + 1;
+      }
+    }
+    match = companionPattern.exec(text);
+  }
+  return ranges;
+}
+
 function enclosingObjectPath(objectRanges, offset) {
   return objectRanges
     .filter((range) => offset >= range.start && offset < range.end)
@@ -741,7 +796,11 @@ function collectStringConstants(text) {
   const constants = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
-  const objectRanges = collectObjectRanges(text, ignoredRanges);
+  const classRanges = collectClassRanges(text, ignoredRanges);
+  const objectRanges = [
+    ...collectObjectRanges(text, ignoredRanges),
+    ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
+  ];
   const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*String)?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
