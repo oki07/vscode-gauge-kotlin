@@ -67,6 +67,28 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests headers inside escaped dynamic arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const step = "* Login as <u \\> suffix>";
+  const document = createDocument([
+    "# Checkout",
+    "| user | role |",
+    "| ---- | ---- |",
+    "| Bob  | admin |",
+    "",
+    "## Successful checkout",
+    step,
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(6, step.indexOf("suffix")));
+
+  assert.deepEqual(labels(items), ["user", "role"]);
+  assert.deepEqual({ ...items[0].range.start }, { line: 6, character: step.indexOf("<") + 1 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 6, character: step.lastIndexOf(">") });
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

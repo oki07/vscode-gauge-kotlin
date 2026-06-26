@@ -30,25 +30,22 @@ function isConceptDocument(document) {
 }
 
 function dynamicArgumentRange(line, position) {
-  const openIndex = line.lastIndexOf("<", Math.max(position.character - 1, 0));
-  if (openIndex === -1 || position.character <= openIndex) {
-    return undefined;
+  let openIndex = line.indexOf("<");
+  while (openIndex !== -1) {
+    const closeIndex = closingAngleIndex(line, openIndex);
+    if (position.character > openIndex && (closeIndex === -1 || position.character <= closeIndex)) {
+      return {
+        end: closeIndex === -1 ? position.character : closeIndex,
+        start: openIndex + 1,
+      };
+    }
+    if (closeIndex === -1) {
+      return undefined;
+    }
+    openIndex = line.indexOf("<", closeIndex + 1);
   }
 
-  const previousCloseIndex = line.lastIndexOf(">", position.character - 1);
-  if (previousCloseIndex > openIndex) {
-    return undefined;
-  }
-
-  const closeIndex = line.indexOf(">", openIndex + 1);
-  if (closeIndex !== -1 && position.character > closeIndex) {
-    return undefined;
-  }
-
-  return {
-    end: closeIndex === -1 ? position.character : closeIndex,
-    start: openIndex + 1,
-  };
+  return undefined;
 }
 
 function staticArgumentRange(line, position) {
@@ -71,6 +68,14 @@ function staticArgumentRange(line, position) {
 }
 
 function closingQuoteIndex(line, openIndex) {
+  return closingEscapedArgumentIndex(line, openIndex, "\"");
+}
+
+function closingAngleIndex(line, openIndex) {
+  return closingEscapedArgumentIndex(line, openIndex, ">");
+}
+
+function closingEscapedArgumentIndex(line, openIndex, closeCharacter) {
   let index = openIndex + 1;
   let escaped = false;
   while (index < line.length) {
@@ -79,7 +84,7 @@ function closingQuoteIndex(line, openIndex) {
       escaped = false;
     } else if (character === "\\") {
       escaped = true;
-    } else if (character === "\"") {
+    } else if (character === closeCharacter) {
       return index;
     }
     index += 1;
