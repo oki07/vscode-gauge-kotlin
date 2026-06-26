@@ -398,6 +398,35 @@ test("GaugeStepDiagnosticsProvider checks function-body object member Step funct
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks function-body local class member Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  fun holder() {",
+    "    class LocalSteps {",
+    "      @Step(\"Local class <value>\")",
+    "      fun localClassStep() {}",
+    "    }",
+    "",
+    "    @Step(\"Local function <value>\")",
+    "    fun localFunctionStep() {}",
+    "  }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Local class <value>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores init-block-local Step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

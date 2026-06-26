@@ -3338,11 +3338,12 @@ function collectObjectExpressionBodyRanges(text, startIndex, endIndex) {
       index = findQuotedEnd(text, index, text[index]) - 1;
       continue;
     }
-    if (!isKeywordAt(text, index, "object")) {
+    const keywordLength = methodOwnerKeywordLengthAt(text, index);
+    if (keywordLength === 0) {
       continue;
     }
 
-    const bodyStart = findObjectExpressionBodyStart(text, index + "object".length, endIndex);
+    const bodyStart = findObjectExpressionBodyStart(text, index + keywordLength, endIndex);
     if (bodyStart === -1) {
       continue;
     }
@@ -3357,6 +3358,23 @@ function collectObjectExpressionBodyRanges(text, startIndex, endIndex) {
     index = bodyEnd;
   }
   return ranges;
+}
+
+function methodOwnerKeywordLengthAt(text, index) {
+  if (isKeywordAt(text, index, "object")) {
+    return "object".length;
+  }
+  if (
+    isKeywordAt(text, index, "class")
+    && text[index - 1] !== ":"
+    && text[index - 1] !== "."
+  ) {
+    return "class".length;
+  }
+  if (isKeywordAt(text, index, "interface")) {
+    return "interface".length;
+  }
+  return 0;
 }
 
 function splitRangeAroundObjectExpressionBodies(text, start, end) {
