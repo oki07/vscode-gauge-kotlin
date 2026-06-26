@@ -43,6 +43,37 @@ test("MavenProject returns Gauge custom classpath environment", () => {
   ]);
 });
 
+test("MavenProject reports classpath calculation errors", () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const errors = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync() {
+      throw { output: Buffer.from("Error message.") };
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const env = project.envs({
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nError message.",
+  ]);
+});
+
 test("GradleProject returns Gauge custom classpath environment", () => {
   const { GradleProject } = require("../src/project/gradleProject");
   const calls = [];
