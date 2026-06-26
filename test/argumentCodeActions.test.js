@@ -155,6 +155,20 @@ test("GaugeArgumentCodeActionProvider converts escaped dynamic arguments to stat
   assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 23 });
 });
 
+test("GaugeArgumentCodeActionProvider ignores escaped argument starts", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+
+  assert.deepEqual(
+    provider.provideCodeActions(createDocument("* Literal \\<user> now"), createRange(0, 13)),
+    [],
+  );
+  assert.deepEqual(
+    provider.provideCodeActions(createDocument('* Literal \\"admin" now'), createRange(0, 13)),
+    [],
+  );
+});
+
 test("GaugeArgumentCodeActionProvider ignores non-step text", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });

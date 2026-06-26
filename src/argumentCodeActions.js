@@ -105,10 +105,24 @@ function closingEscapedArgumentIndex(line, openIndex, closeCharacter) {
   return -1;
 }
 
+function isEscapedCharacter(line, index) {
+  let backslashCount = 0;
+  let cursor = index - 1;
+  while (cursor >= 0 && line[cursor] === "\\") {
+    backslashCount += 1;
+    cursor -= 1;
+  }
+  return backslashCount % 2 === 1;
+}
+
 function findArgumentAt(line, range) {
   let index = 0;
   while (index < line.length) {
     const character = line[index];
+    if ((character === "\"" || character === "<") && isEscapedCharacter(line, index)) {
+      index += 1;
+      continue;
+    }
     const closeIndex = character === "\""
       ? closingQuoteIndex(line, index)
       : (character === "<" ? closingAngleIndex(line, index) : -1);
