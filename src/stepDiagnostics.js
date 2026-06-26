@@ -2334,6 +2334,11 @@ function skipKotlinAnnotation(text, startIndex) {
     index += target[0].length;
   }
 
+  if (text[index] === "[") {
+    const closeBracket = findMatchingBracket(text, index);
+    return closeBracket === -1 ? text.length : closeBracket + 1;
+  }
+
   const namePattern = new RegExp(`^${KOTLIN_ANNOTATION_NAME_PATTERN}`);
   const name = namePattern.exec(text.slice(index));
   if (!name) {

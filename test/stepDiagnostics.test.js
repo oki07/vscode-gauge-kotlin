@@ -763,6 +763,28 @@ test("GaugeStepDiagnosticsProvider accepts grouped Kotlin Step annotations", () 
   );
 });
 
+test("GaugeStepDiagnosticsProvider skips grouped annotations before Kotlin step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "annotation class Audit",
+    "annotation class Trace(val value: String = \"\")",
+    "",
+    "@Step(\"Grouped decorated <value>\")",
+    "@[Audit Trace(\"step\")]",
+    "fun groupedDecorated() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Grouped decorated <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin const step annotation values", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
