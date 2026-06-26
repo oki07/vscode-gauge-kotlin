@@ -138,6 +138,35 @@ test("ReferenceProvider reports when no step references are available", async ()
   assert.deepEqual(calls.information, ["Action NA: Try this on an implementation."]);
 });
 
+test("ReferenceProvider does not show references outside step context", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const { calls, vscode } = createFakeVscode();
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, false);
+  assert.deepEqual(requestCalls.map((entry) => entry.method), [
+    "gauge/stepValueAt",
+    "gauge/stepReferences",
+  ]);
+  assert.equal(requestCalls[1].params, null);
+  assert.deepEqual(calls.commands, []);
+  assert.deepEqual(calls.information, ["Action NA: Try this on an implementation."]);
+});
+
 test("ReferenceProvider registers reference commands", () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
