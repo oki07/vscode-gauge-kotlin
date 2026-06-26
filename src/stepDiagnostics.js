@@ -378,6 +378,12 @@ function parseKotlinCharLiteralExpression(value) {
   return character;
 }
 
+function parseKotlinIntLiteralExpression(value) {
+  const trimmed = value.trim();
+  const match = /^[+-]?(?:0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)$/.exec(trimmed);
+  return match ? trimmed.replace(/_/g, "") : undefined;
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -522,6 +528,10 @@ function evaluateStringExpression(expression, constants) {
   const charLiteral = parseKotlinCharLiteralExpression(trimmed);
   if (charLiteral !== undefined) {
     return charLiteral;
+  }
+  const intLiteral = parseKotlinIntLiteralExpression(trimmed);
+  if (intLiteral !== undefined) {
+    return intLiteral;
   }
 
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
@@ -852,7 +862,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char))?\s*=/g;
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Int))?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
