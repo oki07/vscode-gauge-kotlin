@@ -802,6 +802,147 @@ function evaluateIntegerArithmeticExpression(expression, constants) {
   return undefined;
 }
 
+function parseKotlinNumericLiteralExpression(value) {
+  const floatingPointLiteral = parseKotlinFloatingPointLiteralExpression(value);
+  if (floatingPointLiteral !== undefined) {
+    return { floating: true, value: Number(floatingPointLiteral) };
+  }
+  const integerLiteral = parseKotlinIntegerLiteralExpression(value);
+  if (integerLiteral !== undefined) {
+    return { floating: false, value: BigInt(integerLiteral) };
+  }
+  return undefined;
+}
+
+function numericValueAsNumber(value) {
+  return value.floating ? value.value : Number(value.value);
+}
+
+function formatKotlinFloatingPointValue(value) {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  return Number.isInteger(value) ? `${value}.0` : String(value);
+}
+
+function applyNumericArithmeticOperator(left, operator, right) {
+  const floating = left.floating || right.floating;
+  if (floating) {
+    const leftValue = numericValueAsNumber(left);
+    const rightValue = numericValueAsNumber(right);
+    if ((operator === "/" || operator === "%") && rightValue === 0) {
+      return undefined;
+    }
+    if (operator === "+") {
+      return { floating: true, value: leftValue + rightValue };
+    }
+    if (operator === "-") {
+      return { floating: true, value: leftValue - rightValue };
+    }
+    if (operator === "*") {
+      return { floating: true, value: leftValue * rightValue };
+    }
+    if (operator === "/") {
+      return { floating: true, value: leftValue / rightValue };
+    }
+    return { floating: true, value: leftValue % rightValue };
+  }
+
+  if ((operator === "/" || operator === "%") && right.value === 0n) {
+    return undefined;
+  }
+  if (operator === "+") {
+    return { floating: false, value: left.value + right.value };
+  }
+  if (operator === "-") {
+    return { floating: false, value: left.value - right.value };
+  }
+  if (operator === "*") {
+    return { floating: false, value: left.value * right.value };
+  }
+  if (operator === "/") {
+    return { floating: false, value: left.value / right.value };
+  }
+  return { floating: false, value: left.value % right.value };
+}
+
+function evaluateNumericArithmetic(expression) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateNumericArithmetic(trimmed.slice(1, -1));
+  }
+
+  const literal = parseKotlinNumericLiteralExpression(trimmed);
+  if (literal !== undefined) {
+    return literal;
+  }
+  if ((trimmed.startsWith("+") || trimmed.startsWith("-")) && trimmed.length > 1) {
+    const unaryValue = evaluateNumericArithmetic(trimmed.slice(1));
+    if (unaryValue !== undefined) {
+      if (unaryValue.floating) {
+        return {
+          floating: true,
+          value: trimmed[0] === "-" ? -unaryValue.value : unaryValue.value,
+        };
+      }
+      return {
+        floating: false,
+        value: trimmed[0] === "-" ? -unaryValue.value : unaryValue.value,
+      };
+    }
+  }
+  const additiveParts = splitTopLevelOperators(trimmed, new Set(["+", "-"]));
+  if (additiveParts.length > 1) {
+    let result = evaluateNumericArithmetic(additiveParts[0].expression);
+    if (result === undefined) {
+      return undefined;
+    }
+    for (const part of additiveParts.slice(1)) {
+      const value = evaluateNumericArithmetic(part.expression);
+      if (value === undefined) {
+        return undefined;
+      }
+      result = applyNumericArithmeticOperator(result, part.operator, value);
+      if (result === undefined) {
+        return undefined;
+      }
+    }
+    return result;
+  }
+
+  const multiplicativeParts = splitTopLevelOperators(trimmed, new Set(["*", "/", "%"]));
+  if (multiplicativeParts.length > 1) {
+    let result = evaluateNumericArithmetic(multiplicativeParts[0].expression);
+    if (result === undefined) {
+      return undefined;
+    }
+    for (const part of multiplicativeParts.slice(1)) {
+      const value = evaluateNumericArithmetic(part.expression);
+      if (value === undefined) {
+        return undefined;
+      }
+      result = applyNumericArithmeticOperator(result, part.operator, value);
+      if (result === undefined) {
+        return undefined;
+      }
+    }
+    return result;
+  }
+
+  return undefined;
+}
+
+function evaluateFloatingPointArithmeticExpression(expression) {
+  const value = evaluateNumericArithmetic(expression);
+  if (value === undefined || !value.floating) {
+    return undefined;
+  }
+  return formatKotlinFloatingPointValue(value.value);
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -956,6 +1097,10 @@ function evaluateStringExpression(expression, constants) {
   const integerArithmetic = evaluateIntegerArithmeticExpression(trimmed, constants);
   if (integerArithmetic !== undefined) {
     return integerArithmetic;
+  }
+  const floatingPointArithmetic = evaluateFloatingPointArithmeticExpression(trimmed);
+  if (floatingPointArithmetic !== undefined) {
+    return floatingPointArithmetic;
   }
   const integerSubtraction = evaluateIntegerSubtractionExpression(trimmed);
   if (integerSubtraction !== undefined) {
