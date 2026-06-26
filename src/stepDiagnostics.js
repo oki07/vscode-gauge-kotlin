@@ -378,23 +378,23 @@ function parseKotlinCharLiteralExpression(value) {
   return character;
 }
 
-function parseKotlinIntLiteralExpression(value) {
+function parseKotlinIntegerLiteralExpression(value) {
   const trimmed = value.trim();
-  const match = /^[+-]?(?:0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)$/.exec(trimmed);
+  const match = /^([+-]?)(0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)(L)?$/.exec(trimmed);
   if (!match) {
     return undefined;
   }
-  const sign = trimmed.startsWith("-") ? -1 : 1;
-  const unsigned = trimmed.replace(/^[+-]/, "").replace(/_/g, "");
+  const sign = match[1] === "-" ? -1n : 1n;
+  const unsigned = match[2].replace(/_/g, "");
   let parsed;
   if (/^0[xX]/.test(unsigned)) {
-    parsed = Number.parseInt(unsigned.slice(2), 16);
+    parsed = BigInt(`0x${unsigned.slice(2)}`);
   } else if (/^0[bB]/.test(unsigned)) {
-    parsed = Number.parseInt(unsigned.slice(2), 2);
+    parsed = BigInt(`0b${unsigned.slice(2)}`);
   } else {
-    parsed = Number.parseInt(unsigned, 10);
+    parsed = BigInt(unsigned);
   }
-  return Number.isFinite(parsed) ? String(sign * parsed) : undefined;
+  return String(sign * parsed);
 }
 
 function appendStringTemplateValue(result, name, constants) {
@@ -542,7 +542,7 @@ function evaluateStringExpression(expression, constants) {
   if (charLiteral !== undefined) {
     return charLiteral;
   }
-  const intLiteral = parseKotlinIntLiteralExpression(trimmed);
+  const intLiteral = parseKotlinIntegerLiteralExpression(trimmed);
   if (intLiteral !== undefined) {
     return intLiteral;
   }
@@ -875,7 +875,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Int))?\s*=/g;
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Int|Long))?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
