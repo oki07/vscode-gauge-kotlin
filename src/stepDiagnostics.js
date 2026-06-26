@@ -755,6 +755,10 @@ function evaluateBooleanEqualityOperand(expression, constants, constantTypes) {
   ) {
     return parseKotlinBooleanLiteralExpression(constants.get(trimmed));
   }
+  const evaluatedExpression = evaluateBooleanExpression(trimmed, constants, constantTypes);
+  if (evaluatedExpression !== undefined) {
+    return evaluatedExpression;
+  }
   return undefined;
 }
 
