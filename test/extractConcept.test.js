@@ -1018,6 +1018,64 @@ test("ExtractConceptCommandProvider rejects duplicate concept names", async () =
   assert.deepEqual(appliedEdits, []);
 });
 
+test("ExtractConceptCommandProvider ignores indented concept hash lines when checking duplicates", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "  # Shared login\n* Setup\n",
+    },
+    document,
+    inputResponses: ["Shared login"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(errors, []);
+  assert.equal(appliedEdits.length, 1);
+
+  const conceptReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
+  );
+  assert.equal(
+    conceptReplacement.newText,
+    [
+      "  # Shared login",
+      "* Setup",
+      "",
+      "# Shared login",
+      "* Login",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("ExtractConceptCommandProvider rejects duplicate double-hash concept names", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];

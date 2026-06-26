@@ -183,7 +183,7 @@ function normalizeConceptHeading(input) {
 function extractConceptHeadings(text) {
   return (text || "")
     .split(/\r\n|\n/)
-    .map((line) => /^\s*#+\s*(.+?)\s*$/.exec(line))
+    .map((line) => /^#+\s*(.+?)\s*$/.exec(line))
     .filter(Boolean)
     .map((match) => normalizeConceptHeading(match[1]));
 }
