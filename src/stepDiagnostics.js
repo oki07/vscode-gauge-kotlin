@@ -122,6 +122,7 @@ function removeKotlinComments(text) {
   while (index < text.length) {
     const commentEnd = findCommentEnd(text, index);
     if (commentEnd !== undefined) {
+      result += " ";
       index = commentEnd;
       continue;
     }

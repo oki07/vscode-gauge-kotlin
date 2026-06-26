@@ -1100,6 +1100,18 @@ test("GaugeStepDiagnosticsProvider resolves Step aliases with Kotlin comments", 
     "@GaugeStep(\"Imported after as <value>\")",
     "fun importedAfterAs() {}",
   ].join("\n"));
+  const tightImportAliasDocument = createDocument([
+    "import com.thoughtworks.gauge.Step/* comment */as GaugeStep",
+    "",
+    "@GaugeStep(\"Tight imported <value>\")",
+    "fun tightImported() {}",
+  ].join("\n"));
+  const tightImportAliasAfterAsDocument = createDocument([
+    "import com.thoughtworks.gauge.Step as/* comment */GaugeStep",
+    "",
+    "@GaugeStep(\"Tight imported after as <value>\")",
+    "fun tightImportedAfterAs() {}",
+  ].join("\n"));
   const typeAliasDocument = createDocument([
     "typealias ProjectStep /* comment */ = com.thoughtworks.gauge.Step",
     "",
@@ -1129,6 +1141,20 @@ test("GaugeStepDiagnosticsProvider resolves Step aliases with Kotlin comments", 
     provider.provideDiagnostics(importAliasAfterAsDocument).map((diagnostic) => diagnostic.message),
     [
       "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Imported after as <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(tightImportAliasDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Tight imported <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider
+      .provideDiagnostics(tightImportAliasAfterAsDocument)
+      .map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Tight imported after as <value>\". ",
     ],
   );
   assert.deepEqual(
