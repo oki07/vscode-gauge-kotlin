@@ -60,7 +60,11 @@ function foldingMarkers(lines, options = {}) {
       continue;
     }
 
-    if (isSingleHashHeading(text) || isDoubleHashHeading(text) || isTeardown(text)) {
+    if (
+      isSingleHashHeading(text)
+      || isDoubleHashHeading(text)
+      || (!conceptDocument && isTeardown(text))
+    ) {
       markers.push({ startLine: line, boundaryLine: line });
     }
   }

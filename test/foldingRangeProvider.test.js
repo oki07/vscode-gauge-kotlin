@@ -102,3 +102,20 @@ test("GaugeFoldingRangeProvider ignores concept hyphen underline headings", () =
 
   assert.deepEqual(provider.provideFoldingRanges(document), []);
 });
+
+test("GaugeFoldingRangeProvider does not split concept folds on teardown markers", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider();
+  const document = createDocument([
+    "# Shared checkout",
+    "* Reuse cart",
+    "",
+    "___",
+    "* Still concept text",
+    "",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 4 },
+  ]);
+});
