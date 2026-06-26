@@ -286,6 +286,44 @@ test("GaugeSemanticTokensProvider tokenizes table headers as tableHeader tokens"
   ]);
 });
 
+test("GaugeSemanticTokensProvider tokenizes first table rows as headers without separators", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "| <user> | role |",
+        "| Ada    | admin |",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0 && entry.type === "argument"), []);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0 && entry.type === "table"), []);
+  assert.deepEqual(
+    tokens.filter((entry) => entry.line === 0 && entry.type === "tableBorder").map((entry) => entry.start),
+    [0, 9, 16],
+  );
+  assert.deepEqual(
+    tokens.filter((entry) => entry.line === 0 && entry.type === "tableHeader")
+      .map(({ start, length }) => ({ start, length })),
+    [
+      { start: 1, length: 8 },
+      { start: 10, length: 6 },
+    ],
+  );
+  assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tableHeader"), false);
+  assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "table"), true);
+});
+
 test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () => {
   const {
     GaugeSemanticTokensProvider,
@@ -297,7 +335,10 @@ test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () 
   const row = "| Ada \\| Bob | admin |";
   const document = {
     getText() {
-      return row;
+      return [
+        "| name | role |",
+        row,
+      ].join("\n");
     },
   };
 
@@ -306,12 +347,13 @@ test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () 
   const escapedPipeStart = row.indexOf("\\|");
   const middleBorderStart = row.indexOf("|", escapedPipeStart + 2);
   const borderStarts = tokens
-    .filter((entry) => entry.type === "tableBorder")
+    .filter((entry) => entry.line === 1 && entry.type === "tableBorder")
     .map((entry) => entry.start);
 
   assert.deepEqual(borderStarts, [0, middleBorderStart, row.length - 1]);
   assert.equal(tokens.some((entry) => (
-    entry.type === "table"
+    entry.line === 1
+    && entry.type === "table"
     && entry.start <= escapedPipeStart
     && entry.start + entry.length >= escapedPipeStart + 2
   )), true);

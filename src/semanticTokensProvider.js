@@ -108,6 +108,24 @@ function pushKeywordLine(builder, lineNumber, line, keyword, keywordTokenType, v
   return true;
 }
 
+function isTableLine(line) {
+  return line.trimStart().startsWith("|");
+}
+
+function isFirstTableLine(lines, lineNumber) {
+  if (!isTableLine(lines[lineNumber] || "")) {
+    return false;
+  }
+  for (let index = lineNumber - 1; index >= 0; index -= 1) {
+    const line = lines[index] || "";
+    if (line.trim() === "") {
+      continue;
+    }
+    return !isTableLine(line);
+  }
+  return true;
+}
+
 class GaugeSemanticTokensProvider {
   constructor(options = {}) {
     this.vscode = options.vscode;
@@ -212,7 +230,7 @@ class GaugeSemanticTokensProvider {
           }
         }
         index += 1;
-      } else if (trimmedLine.startsWith("|")) {
+      } else if (isTableLine(line)) {
         if (tableHeaderSeparatorRegex.test(trimmedLine)) {
           for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
             const char = line[charIndex];
@@ -229,7 +247,10 @@ class GaugeSemanticTokensProvider {
               builder.push(index, charIndex, 1, tokenTypes.indexOf("table"), 0);
             }
           }
-        } else if (index + 1 < lines.length && tableHeaderSeparatorRegex.test(lines[index + 1].trim())) {
+        } else if (
+          isFirstTableLine(lines, index)
+          || (index + 1 < lines.length && tableHeaderSeparatorRegex.test(lines[index + 1].trim()))
+        ) {
           pushTableSegment(builder, index, line, 0, line.length, "tableHeader");
         } else {
           let lastIndex = 0;
