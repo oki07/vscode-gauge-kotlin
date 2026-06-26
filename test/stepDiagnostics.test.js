@@ -469,6 +469,34 @@ test("GaugeStepDiagnosticsProvider ignores nested local Step classifier declarat
   );
 });
 
+test("GaugeStepDiagnosticsProvider lets local Step classifiers shadow Gauge imports", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const namedImportDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class Steps {",
+    "  annotation class Step(val value: String)",
+    "",
+    "  @Step(\"Local <value>\")",
+    "  fun localStep() {}",
+    "}",
+  ].join("\n"));
+  const aliasImportDocument = createDocument([
+    "import com.thoughtworks.gauge.Step as GaugeStep",
+    "",
+    "class Steps {",
+    "  annotation class GaugeStep(val value: String)",
+    "",
+    "  @GaugeStep(\"Local <value>\")",
+    "  fun localStep() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(namedImportDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(aliasImportDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores nested Step classifiers outside annotation scope", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

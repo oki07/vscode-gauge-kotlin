@@ -2599,11 +2599,11 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
   if (annotationName.includes(".")) {
     return false;
   }
-  if (stepImports.named.has(annotationName)) {
-    return resolveStepAnnotationTarget(annotationName, stepImports.named) === GAUGE_STEP_ANNOTATION;
-  }
   if (localClassifierNames.has(annotationName)) {
     return false;
+  }
+  if (stepImports.named.has(annotationName)) {
+    return resolveStepAnnotationTarget(annotationName, stepImports.named) === GAUGE_STEP_ANNOTATION;
   }
   if (annotationName === "Step" && stepImports.wildcards.size > 0) {
     return stepImports.wildcards.size === 1 && stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
