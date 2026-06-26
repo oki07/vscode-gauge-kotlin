@@ -2946,10 +2946,7 @@ function collectInitBlockBodyRanges(text, ignoredRanges = []) {
     if (text[bodyStart] === "{") {
       const bodyEnd = findMatchingBrace(text, bodyStart);
       if (bodyEnd !== -1) {
-        ranges.push({
-          end: bodyEnd,
-          start: bodyStart + 1,
-        });
+        ranges.push(...splitRangeAroundObjectExpressionBodies(text, bodyStart + 1, bodyEnd));
         initPattern.lastIndex = bodyEnd + 1;
       }
     }
