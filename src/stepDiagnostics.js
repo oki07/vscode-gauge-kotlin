@@ -349,6 +349,20 @@ function isKotlinIdentifierPath(value) {
   return /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(value);
 }
 
+const KOTLIN_NUMERIC_TYPES = new Set(["Byte", "Short", "Int", "Long", "Float", "Double"]);
+
+function canonicalKotlinTypeName(typeName) {
+  if (typeName === undefined) {
+    return undefined;
+  }
+  const parts = typeName.split(".");
+  return parts[parts.length - 1];
+}
+
+function isKotlinNumericType(typeName) {
+  return KOTLIN_NUMERIC_TYPES.has(canonicalKotlinTypeName(typeName));
+}
+
 function parseKotlinCharLiteralExpression(value) {
   const trimmed = value.trim();
   if (!trimmed.startsWith("'")) {
@@ -866,13 +880,13 @@ function applyNumericArithmeticOperator(left, operator, right) {
   return { floating: false, value: left.value % right.value };
 }
 
-function evaluateNumericArithmetic(expression) {
+function evaluateNumericArithmetic(expression, constants, constantTypes) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
     return undefined;
   }
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
-    return evaluateNumericArithmetic(trimmed.slice(1, -1));
+    return evaluateNumericArithmetic(trimmed.slice(1, -1), constants, constantTypes);
   }
 
   const literal = parseKotlinNumericLiteralExpression(trimmed);
@@ -880,7 +894,7 @@ function evaluateNumericArithmetic(expression) {
     return literal;
   }
   if ((trimmed.startsWith("+") || trimmed.startsWith("-")) && trimmed.length > 1) {
-    const unaryValue = evaluateNumericArithmetic(trimmed.slice(1));
+    const unaryValue = evaluateNumericArithmetic(trimmed.slice(1), constants, constantTypes);
     if (unaryValue !== undefined) {
       if (unaryValue.floating) {
         return {
@@ -894,14 +908,24 @@ function evaluateNumericArithmetic(expression) {
       };
     }
   }
+  if (
+    constants !== undefined
+    && constantTypes !== undefined
+    && isKotlinIdentifierPath(trimmed)
+    && constants.has(trimmed)
+    && isKotlinNumericType(constantTypes.get(trimmed))
+  ) {
+    return parseKotlinNumericLiteralExpression(constants.get(trimmed));
+  }
+
   const additiveParts = splitTopLevelOperators(trimmed, new Set(["+", "-"]));
   if (additiveParts.length > 1) {
-    let result = evaluateNumericArithmetic(additiveParts[0].expression);
+    let result = evaluateNumericArithmetic(additiveParts[0].expression, constants, constantTypes);
     if (result === undefined) {
       return undefined;
     }
     for (const part of additiveParts.slice(1)) {
-      const value = evaluateNumericArithmetic(part.expression);
+      const value = evaluateNumericArithmetic(part.expression, constants, constantTypes);
       if (value === undefined) {
         return undefined;
       }
@@ -915,12 +939,12 @@ function evaluateNumericArithmetic(expression) {
 
   const multiplicativeParts = splitTopLevelOperators(trimmed, new Set(["*", "/", "%"]));
   if (multiplicativeParts.length > 1) {
-    let result = evaluateNumericArithmetic(multiplicativeParts[0].expression);
+    let result = evaluateNumericArithmetic(multiplicativeParts[0].expression, constants, constantTypes);
     if (result === undefined) {
       return undefined;
     }
     for (const part of multiplicativeParts.slice(1)) {
-      const value = evaluateNumericArithmetic(part.expression);
+      const value = evaluateNumericArithmetic(part.expression, constants, constantTypes);
       if (value === undefined) {
         return undefined;
       }
@@ -935,8 +959,8 @@ function evaluateNumericArithmetic(expression) {
   return undefined;
 }
 
-function evaluateFloatingPointArithmeticExpression(expression) {
-  const value = evaluateNumericArithmetic(expression);
+function evaluateFloatingPointArithmeticExpression(expression, constants, constantTypes) {
+  const value = evaluateNumericArithmetic(expression, constants, constantTypes);
   if (value === undefined || !value.floating) {
     return undefined;
   }
@@ -950,7 +974,7 @@ function appendStringTemplateValue(result, name, constants) {
   return `${result}${constants.get(name)}`;
 }
 
-function interpolateStringTemplate(value, constants) {
+function interpolateStringTemplate(value, constants, constantTypes) {
   let result = "";
   for (let index = 0; index < value.length; index += 1) {
     const char = value[index];
@@ -965,7 +989,7 @@ function interpolateStringTemplate(value, constants) {
         return undefined;
       }
       const expression = value.slice(index + 2, closeIndex).trim();
-      const expressionValue = evaluateStringExpression(expression, constants);
+      const expressionValue = evaluateStringExpression(expression, constants, constantTypes);
       if (expressionValue === undefined) {
         return undefined;
       }
@@ -1021,12 +1045,12 @@ function parseEscapedStringCharacter(text, slashIndex) {
   };
 }
 
-function parseStringLiteralTerm(text, constants) {
+function parseStringLiteralTerm(text, constants, constantTypes) {
   const trimmed = text.trim();
   if (trimmed.startsWith("\"\"\"")) {
     const end = trimmed.indexOf("\"\"\"", 3);
     if (end !== -1 && trimmed.slice(end + 3).trim() === "") {
-      return interpolateStringTemplate(trimmed.slice(3, end), constants);
+      return interpolateStringTemplate(trimmed.slice(3, end), constants, constantTypes);
     }
     return undefined;
   }
@@ -1050,7 +1074,7 @@ function parseStringLiteralTerm(text, constants) {
       if (trimmed.slice(index + 1).trim() !== "") {
         return undefined;
       }
-      const templateValue = interpolateStringTemplate(value, constants);
+      const templateValue = interpolateStringTemplate(value, constants, constantTypes);
       return templateValue === undefined ? undefined : templateValue.replace(/\u0000/g, "$");
     }
     value += char;
@@ -1058,19 +1082,19 @@ function parseStringLiteralTerm(text, constants) {
   return undefined;
 }
 
-function evaluateStringExpression(expression, constants) {
+function evaluateStringExpression(expression, constants, constantTypes = new Map()) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
     return undefined;
   }
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
-    return evaluateStringExpression(trimmed.slice(1, -1), constants);
+    return evaluateStringExpression(trimmed.slice(1, -1), constants, constantTypes);
   }
   if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
     return constants.get(trimmed);
   }
 
-  const literal = parseStringLiteralTerm(trimmed, constants);
+  const literal = parseStringLiteralTerm(trimmed, constants, constantTypes);
   if (literal !== undefined) {
     return literal;
   }
@@ -1098,7 +1122,7 @@ function evaluateStringExpression(expression, constants) {
   if (integerArithmetic !== undefined) {
     return integerArithmetic;
   }
-  const floatingPointArithmetic = evaluateFloatingPointArithmeticExpression(trimmed);
+  const floatingPointArithmetic = evaluateFloatingPointArithmeticExpression(trimmed, constants, constantTypes);
   if (floatingPointArithmetic !== undefined) {
     return floatingPointArithmetic;
   }
@@ -1134,7 +1158,7 @@ function evaluateStringExpression(expression, constants) {
     if (integerAddition !== undefined) {
       return integerAddition;
     }
-    const values = parts.map((part) => evaluateStringExpression(part, constants));
+    const values = parts.map((part) => evaluateStringExpression(part, constants, constantTypes));
     if (values.every((value) => value !== undefined)) {
       return values.join("");
     }
@@ -1453,6 +1477,7 @@ function enclosingObjectPath(objectRanges, offset) {
 
 function collectStringConstants(text) {
   const constants = new Map();
+  const constantTypes = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const classRanges = collectClassRanges(text, ignoredRanges);
@@ -1460,7 +1485,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Byte|Short|Int|Long|Float|Double|Boolean))?\s*=/g;
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*((?:[A-Za-z_]\w*\.)*(?:String|Char|Byte|Short|Int|Long|Float|Double|Boolean)))?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
@@ -1478,6 +1503,7 @@ function collectStringConstants(text) {
     expressions.push({
       expression: text.slice(expressionStart, expressionEnd),
       names,
+      typeName: canonicalKotlinTypeName(match[2]),
     });
     pattern.lastIndex = expressionEnd;
     match = pattern.exec(text);
@@ -1486,15 +1512,18 @@ function collectStringConstants(text) {
   let changed = true;
   while (changed) {
     changed = false;
-    for (const { expression, names } of expressions) {
+    for (const { expression, names, typeName } of expressions) {
       if (names.every((name) => constants.has(name))) {
         continue;
       }
-      const value = evaluateStringExpression(expression, constants);
+      const value = evaluateStringExpression(expression, constants, constantTypes);
       if (value !== undefined) {
         for (const name of names) {
           if (!constants.has(name)) {
             constants.set(name, value);
+            if (typeName !== undefined) {
+              constantTypes.set(name, typeName);
+            }
           }
         }
         changed = true;

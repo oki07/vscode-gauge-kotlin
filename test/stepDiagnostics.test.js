@@ -623,6 +623,27 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin floating-point arithmetic ex
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin typed floating-point constants in arithmetic templates", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val TIMEOUT_SECONDS: Double = 1.5",
+    "private const val LOGIN_STEP = \"Wait ${TIMEOUT_SECONDS + 0.5} seconds as <user>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Wait 2.0 seconds as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider preserves numeric-looking Kotlin string constants in templates", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
