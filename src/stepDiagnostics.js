@@ -2433,6 +2433,29 @@ function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
   return findNextPropertyAccessor(text, startIndex, "", ignoredRanges);
 }
 
+function findNextGetterAccessor(text, startIndex, ignoredRanges = []) {
+  if (isInIgnoredRange(startIndex, ignoredRanges)) {
+    return undefined;
+  }
+  const accessor = /^get\b/.exec(text.slice(startIndex));
+  if (!accessor) {
+    return undefined;
+  }
+  const openParen = skipWhitespaceAndComments(text, startIndex + accessor[0].length);
+  if (text[openParen] !== "(") {
+    return undefined;
+  }
+  const closeParen = findMatchingParen(text, openParen);
+  if (closeParen === -1) {
+    return undefined;
+  }
+  return {
+    parameterEnd: closeParen,
+    parameterStart: openParen + 1,
+    parameterText: text.slice(openParen + 1, closeParen),
+  };
+}
+
 function findNextPropertySetter(text, startIndex, ignoredRanges = []) {
   const declaration = /^(?:val|var)\b/.exec(text.slice(startIndex));
   if (!declaration || declaration[0] !== "var") {
@@ -2639,6 +2662,9 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
     }
     if (token[0] === "fun") {
       return findNextFunction(text, index, ignoredRanges);
+    }
+    if (token[0] === "get") {
+      return findNextGetterAccessor(text, index, ignoredRanges);
     }
     if (KOTLIN_FUNCTION_MODIFIERS.has(token[0])) {
       index += token[0].length;
