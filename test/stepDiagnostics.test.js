@@ -1342,6 +1342,48 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin backtick const references", 
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin backtick named const scopes", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "object `Step Text` {",
+    "  const val LOGIN_STEP = \"Log in as <user>\"",
+    "}",
+    "",
+    "class `Step Container` {",
+    "  companion object {",
+    "    const val AUDIT_STEP = \"Audit <event>\"",
+    "  }",
+    "}",
+    "",
+    "interface `Step Interface` {",
+    "  companion object {",
+    "    const val DELETE_STEP = \"Delete <record>\"",
+    "  }",
+    "}",
+    "",
+    "@Step(`Step Text`.LOGIN_STEP)",
+    "fun login() {}",
+    "",
+    "@Step(`Step Container`.AUDIT_STEP)",
+    "fun audit() {}",
+    "",
+    "@Step(`Step Interface`.DELETE_STEP)",
+    "fun delete() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Audit <event>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Delete <record>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

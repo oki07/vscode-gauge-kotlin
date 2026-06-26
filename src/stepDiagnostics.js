@@ -1741,7 +1741,7 @@ function findObjectBodyStart(text, startIndex) {
 
 function collectObjectRanges(text, ignoredRanges) {
   const ranges = [];
-  const objectPattern = /\bobject\s+([A-Za-z_]\w*)\b/g;
+  const objectPattern = new RegExp(`\\bobject\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "g");
   let match = objectPattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges) || isCompanionObjectKeyword(text, match.index)) {
@@ -1772,7 +1772,7 @@ function isCompanionObjectKeyword(text, objectIndex) {
 
 function collectNamedTypeRanges(text, ignoredRanges) {
   const ranges = [];
-  const typePattern = /\b(?:class|interface)\s+([A-Za-z_]\w*)\b/g;
+  const typePattern = new RegExp(`\\b(?:class|interface)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "g");
   let match = typePattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
@@ -1799,7 +1799,10 @@ function collectNamedTypeRanges(text, ignoredRanges) {
 
 function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
   const ranges = [];
-  const companionPattern = /\bcompanion\s+object(?:\s+([A-Za-z_]\w*))?\b/g;
+  const companionPattern = new RegExp(
+    `\\bcompanion\\s+object(?:\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?`,
+    "g",
+  );
   let match = companionPattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
