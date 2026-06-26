@@ -1217,6 +1217,42 @@ test("GaugeStepDiagnosticsProvider resolves chained Step type aliases", () => {
   assert.deepEqual(provider.provideDiagnostics(cyclicAliasDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider resolves Step type aliases through wildcard imports", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const gaugeWildcardDocument = createDocument([
+    "import com.thoughtworks.gauge.*",
+    "typealias GaugeStep = Step",
+    "",
+    "@GaugeStep(\"Wildcard <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+  const nonGaugeWildcardDocument = createDocument([
+    "import io.cucumber.java.en.*",
+    "typealias GaugeStep = Step",
+    "",
+    "@GaugeStep(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+  const ambiguousWildcardDocument = createDocument([
+    "import com.thoughtworks.gauge.*",
+    "import io.cucumber.java.en.*",
+    "typealias GaugeStep = Step",
+    "",
+    "@GaugeStep(\"Ambiguous <value>\")",
+    "fun ambiguous() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(gaugeWildcardDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Wildcard <value>\". ",
+    ],
+  );
+  assert.deepEqual(provider.provideDiagnostics(nonGaugeWildcardDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(ambiguousWildcardDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider resolves backtick Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

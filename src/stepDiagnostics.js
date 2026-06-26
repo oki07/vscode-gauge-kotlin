@@ -4113,7 +4113,13 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
     return false;
   }
   if (stepImports.named.has(normalizedName)) {
-    return resolveStepAnnotationTarget(normalizedName, stepImports.named) === GAUGE_STEP_ANNOTATION;
+    const resolvedName = resolveStepAnnotationTarget(normalizedName, stepImports.named);
+    return resolvedName === GAUGE_STEP_ANNOTATION
+      || (
+        resolvedName === "Step"
+        && stepImports.wildcards.size === 1
+        && stepImports.wildcards.has(GAUGE_STEP_PACKAGE)
+      );
   }
   if (normalizedName === "Step" && stepImports.wildcards.size > 0) {
     return stepImports.wildcards.size === 1 && stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
