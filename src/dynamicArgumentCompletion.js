@@ -104,7 +104,7 @@ function isScenarioHeading(line) {
 }
 
 function isStepLine(line) {
-  return line.trimStart().startsWith("*");
+  return line.startsWith("*");
 }
 
 function isConceptHeading(line) {
@@ -243,7 +243,7 @@ function staticArguments(text, options = {}) {
     if (excludeTeardown && isTeardownLine(line)) {
       break;
     }
-    if (!line.trimStart().startsWith("*")) {
+    if (!isStepLine(line)) {
       continue;
     }
     let openIndex = nextUnescapedCharacterIndex(line, "\"");

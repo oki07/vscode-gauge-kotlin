@@ -261,6 +261,40 @@ test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables"
   assert.deepEqual(labels(items), []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider treats indented step markers as comments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "  * Commented setup \"draft\" <ignored>",
+    "| user | role |",
+    "| ---- | ---- |",
+    "| Bob  | admin |",
+    "",
+    "## Successful checkout",
+    "* Login as <u>",
+    "* Confirm \"a\"",
+  ].join("\n"));
+
+  const indentedItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, 31),
+  );
+  const dynamicItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(7, 13),
+  );
+  const staticItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(8, 12),
+  );
+
+  assert.deepEqual(indentedItems, []);
+  assert.deepEqual(labels(dynamicItems), ["user", "role"]);
+  assert.deepEqual(labels(staticItems), ["a"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores non-step spec arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
