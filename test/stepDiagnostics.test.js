@@ -177,6 +177,31 @@ test("GaugeStepDiagnosticsProvider does not attach Step annotations to later fun
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores function-local Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const localFunctionDocument = createDocument([
+    "fun helper() {",
+    "  @Step(\"Local <value>\")",
+    "  fun localStep() {}",
+    "}",
+  ].join("\n"));
+  const memberFunctionDocument = createDocument([
+    "class Steps {",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(localFunctionDocument), []);
+  assert.deepEqual(
+    provider.provideDiagnostics(memberFunctionDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

@@ -2306,6 +2306,113 @@ function findNextFunction(text, startIndex, ignoredRanges = []) {
   return undefined;
 }
 
+function startsDeclarationLine(text, index) {
+  if (index > 0 && text[index - 1] !== "\n" && text[index - 1] !== "\r") {
+    return false;
+  }
+  const modifierPattern = [...KOTLIN_FUNCTION_MODIFIERS].join("|");
+  const declarationPattern = new RegExp(
+    `^[ \\t]*(?:@|(?:(?:${modifierPattern})\\s+)*(?:fun|class|interface|object)\\b)`,
+  );
+  return declarationPattern.test(text.slice(index));
+}
+
+function findFunctionBlockBodyStart(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (angleDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+      if (char === "{") {
+        return index;
+      }
+      if (char === "=" || char === ";" || startsDeclarationLine(text, index)) {
+        return -1;
+      }
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+  }
+  return -1;
+}
+
+function collectFunctionBodyRanges(text, ignoredRanges = []) {
+  const ranges = [];
+  const funPattern = /\bfun\b/g;
+  let match = funPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = funPattern.exec(text);
+      continue;
+    }
+    let openParen = findFunctionParameterStart(text, funPattern.lastIndex);
+    while (openParen !== -1) {
+      const header = text.slice(funPattern.lastIndex, openParen);
+      const closeParen = findMatchingParen(text, openParen);
+      if (closeParen === -1) {
+        openParen = -1;
+        continue;
+      }
+      if (isKotlinFunctionHeader(header)) {
+        const bodyStart = findFunctionBlockBodyStart(text, closeParen + 1);
+        if (bodyStart !== -1) {
+          const bodyEnd = findMatchingBrace(text, bodyStart);
+          if (bodyEnd !== -1) {
+            ranges.push({
+              end: bodyEnd,
+              start: bodyStart + 1,
+            });
+          }
+        }
+        break;
+      }
+      openParen = findFunctionParameterStart(text, closeParen + 1);
+    }
+    match = funPattern.exec(text);
+  }
+  return ranges;
+}
+
 function skipWhitespaceAndComments(text, startIndex) {
   let index = startIndex;
   while (index < text.length) {
@@ -2617,10 +2724,14 @@ function addStepFunctionEntry(
   constants,
   ignoredRanges,
   stepImports,
+  functionBodyRanges,
   annotationName,
   openParen,
   functionSearchStart,
 ) {
+  if (functionBodyRanges.some((range) => isInsideRange(openParen, range))) {
+    return;
+  }
   const classifierNames = localClassifierNamesAtOffset(text, ignoredRanges, openParen);
   if (!isStepAnnotationAllowed(annotationName, stepImports, classifierNames)) {
     return;
@@ -2636,7 +2747,7 @@ function addStepFunctionEntry(
   }
 }
 
-function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports) {
+function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, functionBodyRanges) {
   const groupPattern = /@\[/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
@@ -2682,6 +2793,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
         constants,
         ignoredRanges,
         stepImports,
+        functionBodyRanges,
         annotationMatch[0],
         openParen,
         () => closeBracket + 1,
@@ -2700,7 +2812,8 @@ function findStepFunctions(text) {
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
-  addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports);
+  const functionBodyRanges = collectFunctionBodyRanges(text, ignoredRanges);
+  addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, functionBodyRanges);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -2728,6 +2841,7 @@ function findStepFunctions(text) {
       constants,
       ignoredRanges,
       stepImports,
+      functionBodyRanges,
       annotationName,
       openParen,
       () => closeParen + 1,
