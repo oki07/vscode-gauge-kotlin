@@ -38,7 +38,7 @@ function isLegacyScenarioUnderline(line) {
 }
 
 function isTeardown(line) {
-  return /^\s*___+\s*$/.test(line);
+  return /^___+\s*$/.test(line);
 }
 
 function hasLegacyHeadingText(line) {
