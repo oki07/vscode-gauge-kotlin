@@ -633,7 +633,12 @@ const KOTLIN_NUMERIC_TYPES = new Set([
 ]);
 const KOTLIN_INTEGER_LITERAL_BODY_PATTERN = "(?:0[xX][0-9A-Fa-f_]+|0[bB][01_]+|0|[1-9][0-9_]*)";
 const KOTLIN_INTEGER_LITERAL_SUFFIX_PATTERN = "(?:L|[uU](?:[lL])?)?";
-const KOTLIN_CONST_TYPE_PATTERN = "(?:[A-Za-z_]\\w*\\.)*(?:String|Char|Byte|Short|Int|Long|UByte|UShort|UInt|ULong|Float|Double|Boolean)";
+const KOTLIN_CONST_TYPES = new Set([
+  "String",
+  "Char",
+  "Boolean",
+  ...KOTLIN_NUMERIC_TYPES,
+]);
 
 function canonicalKotlinTypeName(typeName) {
   if (typeName === undefined) {
@@ -645,6 +650,47 @@ function canonicalKotlinTypeName(typeName) {
 
 function isKotlinNumericType(typeName) {
   return KOTLIN_NUMERIC_TYPES.has(canonicalKotlinTypeName(typeName));
+}
+
+function isKotlinConstType(typeName) {
+  return KOTLIN_CONST_TYPES.has(canonicalKotlinTypeName(typeName));
+}
+
+function collectKotlinTypeAliases(text, ignoredRanges = []) {
+  const aliases = new Map();
+  const typeAliasPattern = new RegExp(
+    `^(?:(?:public|private|internal|expect|actual)\\s+)*typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+  );
+  for (const line of kotlinSourceLines(text, ignoredRanges)) {
+    const match = typeAliasPattern.exec(line);
+    if (match) {
+      aliases.set(
+        normalizeKotlinIdentifier(match[1]),
+        normalizeKotlinIdentifierPath(match[2]),
+      );
+    }
+  }
+  return aliases;
+}
+
+function resolveKotlinConstTypeName(typeName, typeAliases, seen = new Set()) {
+  if (typeName === undefined) {
+    return undefined;
+  }
+  const normalizedName = normalizeKotlinIdentifierPath(typeName);
+  const canonicalName = canonicalKotlinTypeName(normalizedName);
+  if (isKotlinConstType(canonicalName)) {
+    return canonicalName;
+  }
+  if (!typeAliases || seen.has(normalizedName)) {
+    return undefined;
+  }
+  const aliasedName = typeAliases.get(normalizedName);
+  if (aliasedName === undefined) {
+    return undefined;
+  }
+  seen.add(normalizedName);
+  return resolveKotlinConstTypeName(aliasedName, typeAliases, seen);
 }
 
 function parseKotlinCharLiteralExpression(value) {
@@ -2161,7 +2207,7 @@ function pathHasPrefix(path, prefix) {
   return text === prefixText || text.startsWith(`${prefixText}.`);
 }
 
-function readKotlinConstDeclaration(text, constIndex) {
+function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
   let index = skipWhitespaceAndComments(text, constIndex + "const".length);
 
   while (index < text.length) {
@@ -2201,11 +2247,14 @@ function readKotlinConstDeclaration(text, constIndex) {
   let typeName;
   if (text[index] === ":") {
     index = skipWhitespaceAndComments(text, index + 1);
-    const typeMatch = new RegExp(`^${KOTLIN_CONST_TYPE_PATTERN}`).exec(text.slice(index));
+    const typeMatch = new RegExp(`^${KOTLIN_ANNOTATION_NAME_PATTERN}`).exec(text.slice(index));
     if (!typeMatch) {
       return undefined;
     }
-    typeName = canonicalKotlinTypeName(typeMatch[0]);
+    typeName = resolveKotlinConstTypeName(typeMatch[0], typeAliases);
+    if (typeName === undefined) {
+      return undefined;
+    }
     index = skipWhitespaceAndComments(text, index + typeMatch[0].length);
   }
 
@@ -2229,6 +2278,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
+  const typeAliases = collectKotlinTypeAliases(text, ignoredRanges);
   const pattern = /\bconst\b/g;
   let match = pattern.exec(text);
   while (match) {
@@ -2237,7 +2287,7 @@ function collectStringConstants(text) {
       continue;
     }
 
-    const declaration = readKotlinConstDeclaration(text, match.index);
+    const declaration = readKotlinConstDeclaration(text, match.index, typeAliases);
     if (declaration === undefined) {
       pattern.lastIndex = match.index + "const".length;
       match = pattern.exec(text);
