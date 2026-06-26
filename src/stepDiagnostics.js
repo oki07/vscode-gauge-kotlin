@@ -601,6 +601,24 @@ function normalizeKotlinIdentifierPath(value) {
   return segments.map((segment) => normalizeKotlinIdentifier(segment)).join(".");
 }
 
+function resolveKotlinConstantReference(name, constants, constantTypes) {
+  const trimmed = name.trim();
+  if (!isKotlinIdentifierPath(trimmed) || constants === undefined) {
+    return undefined;
+  }
+  let resolvedName = trimmed;
+  if (!constants.has(resolvedName)) {
+    resolvedName = normalizeKotlinIdentifierPath(trimmed);
+  }
+  if (!constants.has(resolvedName)) {
+    return undefined;
+  }
+  return {
+    value: constants.get(resolvedName),
+    typeName: constantTypes && constantTypes.get(resolvedName),
+  };
+}
+
 const KOTLIN_NUMERIC_TYPES = new Set([
   "Byte",
   "Short",
@@ -974,12 +992,9 @@ function evaluateStringEqualityOperand(expression, constants, constantTypes) {
   if (literal !== undefined) {
     return literal;
   }
-  if (
-    isKotlinIdentifierPath(trimmed)
-    && constants.has(trimmed)
-    && canonicalKotlinTypeName(constantTypes.get(trimmed)) === "String"
-  ) {
-    return constants.get(trimmed);
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined && canonicalKotlinTypeName(constant.typeName) === "String") {
+    return constant.value;
   }
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
   if (parts.length > 1) {
@@ -1032,12 +1047,9 @@ function evaluateBooleanEqualityOperand(expression, constants, constantTypes) {
   if (literal !== undefined) {
     return literal;
   }
-  if (
-    isKotlinIdentifierPath(trimmed)
-    && constants.has(trimmed)
-    && canonicalKotlinTypeName(constantTypes.get(trimmed)) === "Boolean"
-  ) {
-    return parseKotlinBooleanLiteralExpression(constants.get(trimmed));
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined && canonicalKotlinTypeName(constant.typeName) === "Boolean") {
+    return parseKotlinBooleanLiteralExpression(constant.value);
   }
   const evaluatedExpression = evaluateBooleanExpression(trimmed, constants, constantTypes);
   if (evaluatedExpression !== undefined) {
@@ -1086,12 +1098,9 @@ function evaluateCharEqualityOperand(expression, constants, constantTypes) {
   if (literal !== undefined) {
     return literal;
   }
-  if (
-    isKotlinIdentifierPath(trimmed)
-    && constants.has(trimmed)
-    && canonicalKotlinTypeName(constantTypes.get(trimmed)) === "Char"
-  ) {
-    return constants.get(trimmed);
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined && canonicalKotlinTypeName(constant.typeName) === "Char") {
+    return constant.value;
   }
   return undefined;
 }
@@ -1178,8 +1187,9 @@ function evaluateBooleanExpression(expression, constants, constantTypes = new Ma
   if (literal !== undefined) {
     return literal;
   }
-  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
-    return parseKotlinBooleanLiteralExpression(constants.get(trimmed));
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined) {
+    return parseKotlinBooleanLiteralExpression(constant.value);
   }
   if (trimmed.startsWith("!")) {
     const value = evaluateBooleanExpression(trimmed.slice(1), constants, constantTypes);
@@ -1266,6 +1276,7 @@ function splitTopLevelOperators(text, operators) {
   let bracketDepth = 0;
   let braceDepth = 0;
   let parenDepth = 0;
+  let inBacktickIdentifier = false;
   let quote;
 
   for (let index = 0; index < text.length; index += 1) {
@@ -1285,6 +1296,13 @@ function splitTopLevelOperators(text, operators) {
     const commentEnd = findCommentEnd(text, index);
     if (commentEnd !== undefined) {
       index = commentEnd - 1;
+      continue;
+    }
+    if (char === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
       continue;
     }
     if (text.startsWith("\"\"\"", index)) {
@@ -1349,12 +1367,13 @@ function evaluateIntegerArithmeticExpression(expression, constants, constantType
       return trimmed[0] === "-" ? String(-BigInt(unaryValue)) : unaryValue;
     }
   }
-  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
-    const typeName = canonicalKotlinTypeName(constantTypes && constantTypes.get(trimmed));
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined) {
+    const typeName = canonicalKotlinTypeName(constant.typeName);
     if (typeName !== undefined && !isKotlinNumericType(typeName)) {
       return undefined;
     }
-    return parseKotlinIntegerLiteralExpression(constants.get(trimmed));
+    return parseKotlinIntegerLiteralExpression(constant.value);
   }
 
   const additiveParts = splitTopLevelOperators(trimmed, new Set(["+", "-"]));
@@ -1490,14 +1509,9 @@ function evaluateNumericArithmetic(expression, constants, constantTypes) {
       };
     }
   }
-  if (
-    constants !== undefined
-    && constantTypes !== undefined
-    && isKotlinIdentifierPath(trimmed)
-    && constants.has(trimmed)
-    && isKotlinNumericType(constantTypes.get(trimmed))
-  ) {
-    return parseKotlinNumericLiteralExpression(constants.get(trimmed));
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined && isKotlinNumericType(constant.typeName)) {
+    return parseKotlinNumericLiteralExpression(constant.value);
   }
 
   const additiveParts = splitTopLevelOperators(trimmed, new Set(["+", "-"]));
@@ -1550,10 +1564,11 @@ function evaluateFloatingPointArithmeticExpression(expression, constants, consta
 }
 
 function appendStringTemplateValue(result, name, constants) {
-  if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
+  const constant = resolveKotlinConstantReference(name, constants);
+  if (constant === undefined) {
     return undefined;
   }
-  return `${result}${constants.get(name)}`;
+  return `${result}${constant.value}`;
 }
 
 function interpolateStringTemplate(value, constants, constantTypes) {
@@ -1681,8 +1696,9 @@ function evaluateStringExpression(expression, constants, constantTypes = new Map
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
     return evaluateStringExpression(trimmed.slice(1, -1), constants, constantTypes);
   }
-  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
-    return constants.get(trimmed);
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined) {
+    return constant.value;
   }
 
   const literal = parseStringLiteralTerm(trimmed, constants, constantTypes);
@@ -1766,8 +1782,9 @@ function inferKotlinConstantType(expression, constants, constantTypes) {
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
     return inferKotlinConstantType(trimmed.slice(1, -1), constants, constantTypes);
   }
-  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
-    return canonicalKotlinTypeName(constantTypes.get(trimmed));
+  const constant = resolveKotlinConstantReference(trimmed, constants, constantTypes);
+  if (constant !== undefined) {
+    return canonicalKotlinTypeName(constant.typeName);
   }
   if (parseStringLiteralTerm(trimmed, constants, constantTypes) !== undefined) {
     return "String";
