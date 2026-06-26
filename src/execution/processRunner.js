@@ -70,8 +70,8 @@ function terminateWindowsProcessTree(child, processTree, killProcess) {
         killPid(processInfo.PID || processInfo.pid, killProcess);
       }
     }
-    killPid(child.pid, killProcess);
   });
+  killPid(child.pid, killProcess);
 }
 
 function terminateNonWindowsProcessTree(child, killProcess) {

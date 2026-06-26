@@ -210,3 +210,44 @@ test("process runner cancel terminates Windows child process trees", async () =>
   assert.deepEqual(child.killCalls, []);
   assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
 });
+
+test("process runner cancel kills the Windows parent before async tree lookup completes", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const killed = [];
+  let treeCallback;
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    platform: "win32",
+    processTree(_pid, callback) {
+      treeCallback = callback;
+    },
+    killProcess(pid) {
+      killed.push(pid);
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run"],
+    cwd: "/workspace",
+  });
+
+  run.cancel();
+  assert.deepEqual(killed, [2468]);
+
+  treeCallback(null, [
+    { PID: "3001" },
+    { PID: 3002 },
+  ]);
+  child.emit("exit", null);
+
+  assert.equal(await run, false);
+  assert.deepEqual(killed, [2468, 3001, 3002]);
+  assert.deepEqual(child.killCalls, []);
+  assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
+});
