@@ -440,6 +440,9 @@ function evaluateStringExpression(expression, constants) {
   if (!trimmed) {
     return undefined;
   }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateStringExpression(trimmed.slice(1, -1), constants);
+  }
   if (/^[A-Za-z_]\w*$/.test(trimmed) && constants.has(trimmed)) {
     return constants.get(trimmed);
   }
