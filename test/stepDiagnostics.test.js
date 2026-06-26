@@ -415,6 +415,28 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin integer constants in string 
   );
 });
 
+test("GaugeStepDiagnosticsProvider stringifies Kotlin hex and binary integer constants", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val HEX_COUNT: Int = 0x10",
+    "private const val BINARY_COUNT: Int = 0b10",
+    "private const val LOGIN_STEP = \"Retry $HEX_COUNT/$BINARY_COUNT times as <user>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Retry 16/2 times as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates parenthesized Kotlin const expressions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

@@ -381,7 +381,20 @@ function parseKotlinCharLiteralExpression(value) {
 function parseKotlinIntLiteralExpression(value) {
   const trimmed = value.trim();
   const match = /^[+-]?(?:0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)$/.exec(trimmed);
-  return match ? trimmed.replace(/_/g, "") : undefined;
+  if (!match) {
+    return undefined;
+  }
+  const sign = trimmed.startsWith("-") ? -1 : 1;
+  const unsigned = trimmed.replace(/^[+-]/, "").replace(/_/g, "");
+  let parsed;
+  if (/^0[xX]/.test(unsigned)) {
+    parsed = Number.parseInt(unsigned.slice(2), 16);
+  } else if (/^0[bB]/.test(unsigned)) {
+    parsed = Number.parseInt(unsigned.slice(2), 2);
+  } else {
+    parsed = Number.parseInt(unsigned, 10);
+  }
+  return Number.isFinite(parsed) ? String(sign * parsed) : undefined;
 }
 
 function appendStringTemplateValue(result, name, constants) {
