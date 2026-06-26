@@ -1761,17 +1761,17 @@ function collectObjectRanges(text, ignoredRanges) {
   return ranges;
 }
 
-function collectClassRanges(text, ignoredRanges) {
+function collectNamedTypeRanges(text, ignoredRanges) {
   const ranges = [];
-  const classPattern = /\bclass\s+([A-Za-z_]\w*)\b/g;
-  let match = classPattern.exec(text);
+  const typePattern = /\b(?:class|interface)\s+([A-Za-z_]\w*)\b/g;
+  let match = typePattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
-      match = classPattern.exec(text);
+      match = typePattern.exec(text);
       continue;
     }
 
-    const bodyStart = findObjectBodyStart(text, classPattern.lastIndex);
+    const bodyStart = findObjectBodyStart(text, typePattern.lastIndex);
     if (bodyStart !== -1) {
       const bodyEnd = findMatchingBrace(text, bodyStart);
       if (bodyEnd !== -1) {
@@ -1780,10 +1780,10 @@ function collectClassRanges(text, ignoredRanges) {
           name: match[1],
           start: bodyStart + 1,
         });
-        classPattern.lastIndex = bodyStart + 1;
+        typePattern.lastIndex = bodyStart + 1;
       }
     }
-    match = classPattern.exec(text);
+    match = typePattern.exec(text);
   }
   return ranges;
 }
@@ -1828,7 +1828,7 @@ function collectStringConstants(text) {
   const constantTypes = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
-  const classRanges = collectClassRanges(text, ignoredRanges);
+  const classRanges = collectNamedTypeRanges(text, ignoredRanges);
   const objectRanges = [
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
