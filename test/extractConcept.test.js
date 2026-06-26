@@ -837,6 +837,51 @@ test("ExtractConceptCommandProvider rejects duplicate concept names", async () =
   assert.deepEqual(appliedEdits, []);
 });
 
+test("ExtractConceptCommandProvider rejects duplicate double-hash concept names", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "## Shared login\n* Login\n",
+    },
+    document,
+    inputResponses: ["Shared login"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(errors, [
+    "Concept `Shared login` already present",
+  ]);
+  assert.deepEqual(appliedEdits, []);
+});
+
 test("ExtractConceptCommandProvider rejects duplicate parameterized static concept names", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
