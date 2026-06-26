@@ -419,6 +419,14 @@ function parseKotlinBooleanLiteralExpression(value) {
   return trimmed === "true" || trimmed === "false" ? trimmed : undefined;
 }
 
+function evaluateIntegerAdditionExpression(parts) {
+  const values = parts.map((part) => parseKotlinIntegerLiteralExpression(part));
+  if (values.some((value) => value === undefined)) {
+    return undefined;
+  }
+  return String(values.reduce((sum, value) => sum + BigInt(value), 0n));
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -569,6 +577,10 @@ function evaluateStringExpression(expression, constants) {
 
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
   if (parts.length > 1) {
+    const integerAddition = evaluateIntegerAdditionExpression(parts);
+    if (integerAddition !== undefined) {
+      return integerAddition;
+    }
     const values = parts.map((part) => evaluateStringExpression(part, constants));
     if (values.every((value) => value !== undefined)) {
       return values.join("");
