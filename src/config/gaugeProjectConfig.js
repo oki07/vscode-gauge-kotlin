@@ -15,8 +15,8 @@ function escapeXml(value) {
 }
 
 function normalizeJavaVersion(output) {
-  const match = /version "([^"]+)"/.exec(String(output || ""))
-    || /(\d+(?:\.\d+)*)/.exec(String(output || ""));
+  const match = /version ".*?(\d+\.?\d*\.?\d*)/.exec(String(output || ""))
+    || /(\d+\.?\d*\.?\d*)/.exec(String(output || ""));
   if (!match) {
     return DEFAULT_JAVA_VERSION;
   }

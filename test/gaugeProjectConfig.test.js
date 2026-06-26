@@ -73,3 +73,48 @@ test("GaugeJavaProjectConfig writes Eclipse Java project files", () => {
     /other\.jar/,
   );
 });
+
+test("GaugeJavaProjectConfig normalizes early-access Java versions", () => {
+  const { GaugeJavaProjectConfig } = require("../src/config/gaugeProjectConfig");
+  const writes = new Map();
+  const fileSystem = {
+    existsSync(filename) {
+      return writes.has(filename);
+    },
+    readdirSync(dirname) {
+      assert.equal(dirname, "/gauge/plugins/java/1.0.0/libs");
+      return ["gauge-java.jar"];
+    },
+    writeFileSync(filename, content, encoding) {
+      writes.set(filename, { content, encoding });
+    },
+  };
+  const config = new GaugeJavaProjectConfig(
+    "/workspace/gauge",
+    "1.0.0",
+    {
+      pluginsPath() {
+        return "/gauge/plugins";
+      },
+    },
+    {
+      exec(command, callback) {
+        assert.equal(command, "java -version");
+        callback(null, "", "openjdk version \"21-ea\" 2023-09-19");
+      },
+      fileSystem,
+      pathModule: path.posix,
+    },
+  );
+
+  config.generate();
+
+  assert.match(
+    writes.get("/workspace/gauge/.classpath").content,
+    /JavaSE-21/,
+  );
+  assert.doesNotMatch(
+    writes.get("/workspace/gauge/.classpath").content,
+    /JavaSE-21-ea/,
+  );
+});
