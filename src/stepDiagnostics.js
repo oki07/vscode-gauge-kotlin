@@ -3082,6 +3082,136 @@ function isKeywordAt(text, index, keyword) {
     && !isIdentifierCharacter(text[index + keyword.length]);
 }
 
+function findObjectExpressionBodyStart(text, startIndex, endIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let inBacktickIdentifier = false;
+  let quote;
+
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
+      continue;
+    }
+
+    if (angleDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+      if (char === "{") {
+        return index;
+      }
+      if (char === ";" || startsDeclarationLine(text, index)) {
+        return -1;
+      }
+    }
+
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+  }
+  return -1;
+}
+
+function collectObjectExpressionBodyRanges(text, startIndex, endIndex) {
+  const ranges = [];
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      const closeIndex = text.indexOf("\"\"\"", index + 3);
+      index = closeIndex === -1 ? endIndex - 1 : closeIndex + 2;
+      continue;
+    }
+    if (text[index] === "\"" || text[index] === "'") {
+      index = findQuotedEnd(text, index, text[index]) - 1;
+      continue;
+    }
+    if (!isKeywordAt(text, index, "object")) {
+      continue;
+    }
+
+    const bodyStart = findObjectExpressionBodyStart(text, index + "object".length, endIndex);
+    if (bodyStart === -1) {
+      continue;
+    }
+    const bodyEnd = findMatchingBrace(text, bodyStart);
+    if (bodyEnd === -1 || bodyEnd > endIndex) {
+      continue;
+    }
+    ranges.push({
+      end: bodyEnd,
+      start: bodyStart + 1,
+    });
+    index = bodyEnd;
+  }
+  return ranges;
+}
+
+function splitRangeAroundObjectExpressionBodies(text, start, end) {
+  const objectBodies = collectObjectExpressionBodyRanges(text, start, end);
+  if (objectBodies.length === 0) {
+    return [{ end, start }];
+  }
+
+  const ranges = [];
+  let cursor = start;
+  for (const body of objectBodies) {
+    if (body.start > cursor) {
+      ranges.push({
+        end: body.start,
+        start: cursor,
+      });
+    }
+    cursor = Math.max(cursor, body.end);
+  }
+  if (cursor < end) {
+    ranges.push({ end, start: cursor });
+  }
+  return ranges;
+}
+
 function findPropertyDelegateExpressionStart(text, startIndex) {
   let angleDepth = 0;
   let bracketDepth = 0;
@@ -3172,10 +3302,7 @@ function collectPropertyInitializerRanges(text, ignoredRanges = []) {
       const initializerStart = skipWhitespaceAndComments(text, headerEnd + 1);
       const initializerEnd = findFunctionExpressionBodyEnd(text, initializerStart);
       if (initializerEnd > initializerStart) {
-        ranges.push({
-          end: initializerEnd,
-          start: initializerStart,
-        });
+        ranges.push(...splitRangeAroundObjectExpressionBodies(text, initializerStart, initializerEnd));
         propertyPattern.lastIndex = initializerEnd;
       }
     } else {
@@ -3183,10 +3310,7 @@ function collectPropertyInitializerRanges(text, ignoredRanges = []) {
       if (delegateStart !== -1) {
         const delegateEnd = findFunctionExpressionBodyEnd(text, delegateStart);
         if (delegateEnd > delegateStart) {
-          ranges.push({
-            end: delegateEnd,
-            start: delegateStart,
-          });
+          ranges.push(...splitRangeAroundObjectExpressionBodies(text, delegateStart, delegateEnd));
           propertyPattern.lastIndex = delegateEnd;
         }
       }

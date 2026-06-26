@@ -387,6 +387,32 @@ test("GaugeStepDiagnosticsProvider ignores property-initializer-local Step funct
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks property-initializer object member Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  val objectStep = object {",
+    "    @Step(\"Object member <value>\")",
+    "    fun objectMemberStep() {}",
+    "  }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Object member <value>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores property-delegate-local Step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
