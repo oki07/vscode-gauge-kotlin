@@ -767,14 +767,14 @@ function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
       continue;
     }
 
-    const enclosingClass = enclosingObjectPath(classRanges, match.index).at(-1);
+    const enclosingClassPath = enclosingObjectPath(classRanges, match.index);
     const bodyStart = findObjectBodyStart(text, companionPattern.lastIndex);
-    if (enclosingClass !== undefined && bodyStart !== -1) {
+    if (enclosingClassPath.length > 0 && bodyStart !== -1) {
       const bodyEnd = findMatchingBrace(text, bodyStart);
       if (bodyEnd !== -1) {
         ranges.push({
           end: bodyEnd,
-          name: enclosingClass,
+          name: enclosingClassPath.join("."),
           start: bodyStart + 1,
         });
         companionPattern.lastIndex = bodyStart + 1;
