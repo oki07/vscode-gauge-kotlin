@@ -445,10 +445,9 @@ function normalizeConceptFilePath(file, projectRoot, pathModule) {
     return undefined;
   }
   const withExtension = pathModule.extname(trimmed) ? trimmed : `${trimmed}.cpt`;
-  if (pathModule.isAbsolute(withExtension)) {
-    return withExtension;
-  }
-  return pathModule.join(projectRoot, withExtension);
+  const parsed = pathModule.parse(withExtension);
+  const projectRelative = parsed.root ? withExtension.slice(parsed.root.length) : withExtension;
+  return pathModule.join(projectRoot, projectRelative);
 }
 
 class ExtractConceptCommandProvider {

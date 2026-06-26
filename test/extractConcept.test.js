@@ -589,6 +589,50 @@ test("ExtractConceptCommandProvider creates a new concept file from the selected
   assert.equal(conceptReplacement.newText, "# Shared login\n* Login\n");
 });
 
+test("ExtractConceptCommandProvider keeps rooted new concept paths inside the project", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {},
+    document,
+    inputResponses: ["Shared login", "/specs/shared"],
+    quickPickSelection: {
+      label: "New File",
+      description: "Create a new concept file",
+      value: "New File",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests, []), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(appliedEdits[0].createdFiles, [
+    {
+      uri: { fsPath: "/workspace/gauge/specs/shared.cpt" },
+      options: { ignoreIfExists: true },
+    },
+  ]);
+});
+
 test("ExtractConceptCommandProvider rejects selections that include non-step text", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const document = createDocument([
