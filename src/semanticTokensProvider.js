@@ -84,7 +84,7 @@ function isEscapedCharacter(line, index) {
 }
 
 function keywordLinePrefix(line, keyword) {
-  const keywordRegex = new RegExp(`^(\\s*)${keyword}[ \\t\\f]?:`);
+  const keywordRegex = new RegExp(`^(\\s*)${keyword}[ \\t\\f]?:`, "i");
   const match = keywordRegex.exec(line);
   if (!match) {
     return undefined;
