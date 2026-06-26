@@ -2006,9 +2006,32 @@ function pathHasPrefix(path, prefix) {
 
 function readKotlinConstDeclaration(text, constIndex) {
   let index = skipWhitespaceAndComments(text, constIndex + "const".length);
+
+  while (index < text.length) {
+    if (text[index] === "@") {
+      const next = skipKotlinAnnotation(text, index);
+      if (next === index) {
+        return undefined;
+      }
+      index = skipWhitespaceAndComments(text, next);
+      continue;
+    }
+
+    if (isKeywordAt(text, index, "val")) {
+      break;
+    }
+
+    const modifier = /^[A-Za-z_]\w*/.exec(text.slice(index));
+    if (!modifier || !KOTLIN_PROPERTY_MODIFIERS.has(modifier[0])) {
+      return undefined;
+    }
+    index = skipWhitespaceAndComments(text, index + modifier[0].length);
+  }
+
   if (!isKeywordAt(text, index, "val")) {
     return undefined;
   }
+
   index = skipWhitespaceAndComments(text, index + "val".length);
 
   const nameMatch = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(text.slice(index));

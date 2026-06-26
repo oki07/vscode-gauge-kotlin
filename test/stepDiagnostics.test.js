@@ -1647,6 +1647,29 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const declarations with head
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const declarations with reordered modifiers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "const private val OPEN = \"<\"",
+    "const /* c */ internal /* p */ val NAME: String = \"user\"",
+    "const public val CLOSE = \">\"",
+    "const private val LOGIN_STEP: String = \"Log in as $OPEN$NAME$CLOSE\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin string template constants", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
