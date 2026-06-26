@@ -2686,6 +2686,17 @@ function startsDeclarationLine(text, index) {
   return declarationPattern.test(text.slice(index));
 }
 
+function startsPropertyDeclarationLine(text, index) {
+  if (index > 0 && text[index - 1] !== "\n" && text[index - 1] !== "\r") {
+    return false;
+  }
+  const modifierPattern = [...KOTLIN_PROPERTY_MODIFIERS].join("|");
+  const declarationPattern = new RegExp(
+    `^[ \\t]*(?:(?:${modifierPattern})\\s+)*(?:val|var)\\b`,
+  );
+  return declarationPattern.test(text.slice(index));
+}
+
 function findFunctionBlockBodyStart(text, startIndex) {
   let angleDepth = 0;
   let bracketDepth = 0;
@@ -3049,6 +3060,91 @@ function collectPropertyAccessorBodyRanges(text, ignoredRanges = []) {
   return ranges;
 }
 
+function isIdentifierCharacter(char) {
+  return /[A-Za-z_0-9]/.test(char || "");
+}
+
+function isKeywordAt(text, index, keyword) {
+  return text.startsWith(keyword, index)
+    && !isIdentifierCharacter(text[index - 1])
+    && !isIdentifierCharacter(text[index + keyword.length]);
+}
+
+function findPropertyDelegateExpressionStart(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let inBacktickIdentifier = false;
+  let quote;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
+      continue;
+    }
+
+    if (angleDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+      if (isKeywordAt(text, index, "by")) {
+        return skipWhitespaceAndComments(text, index + 2);
+      }
+      if (
+        char === "="
+        || char === ";"
+        || isPropertyAccessorStart(text, index, startIndex)
+        || startsDeclarationLine(text, index)
+        || startsPropertyDeclarationLine(text, index)
+      ) {
+        return -1;
+      }
+    }
+
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+  }
+  return -1;
+}
+
 function collectPropertyInitializerRanges(text, ignoredRanges = []) {
   const ranges = [];
   const propertyPattern = /\b(?:val|var)\b/g;
@@ -3069,6 +3165,18 @@ function collectPropertyInitializerRanges(text, ignoredRanges = []) {
           start: initializerStart,
         });
         propertyPattern.lastIndex = initializerEnd;
+      }
+    } else {
+      const delegateStart = findPropertyDelegateExpressionStart(text, propertyPattern.lastIndex);
+      if (delegateStart !== -1) {
+        const delegateEnd = findFunctionExpressionBodyEnd(text, delegateStart);
+        if (delegateEnd > delegateStart) {
+          ranges.push({
+            end: delegateEnd,
+            start: delegateStart,
+          });
+          propertyPattern.lastIndex = delegateEnd;
+        }
       }
     }
     match = propertyPattern.exec(text);
