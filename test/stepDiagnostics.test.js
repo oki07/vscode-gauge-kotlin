@@ -499,6 +499,26 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin unary boolean expressions in
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin boolean operator expressions in templates", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val LOGIN_STEP = \"Feature ${false || true && !false} for <user>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Feature true for <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin byte and short constants in string templates", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

@@ -419,6 +419,76 @@ function parseKotlinBooleanLiteralExpression(value) {
   return trimmed === "true" || trimmed === "false" ? trimmed : undefined;
 }
 
+function splitTopLevelToken(text, token) {
+  const parts = [];
+  let start = 0;
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      text.startsWith(token, index)
+      && angleDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+    ) {
+      parts.push(text.slice(start, index).trim());
+      index += token.length - 1;
+      start = index + 1;
+    }
+  }
+
+  parts.push(text.slice(start).trim());
+  return parts;
+}
+
 function evaluateBooleanExpression(expression, constants) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
@@ -426,6 +496,23 @@ function evaluateBooleanExpression(expression, constants) {
   }
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
     return evaluateBooleanExpression(trimmed.slice(1, -1), constants);
+  }
+
+  const disjunctionParts = splitTopLevelToken(trimmed, "||");
+  if (disjunctionParts.length > 1) {
+    const values = disjunctionParts.map((part) => evaluateBooleanExpression(part, constants));
+    if (values.some((value) => value === undefined)) {
+      return undefined;
+    }
+    return values.includes("true") ? "true" : "false";
+  }
+  const conjunctionParts = splitTopLevelToken(trimmed, "&&");
+  if (conjunctionParts.length > 1) {
+    const values = conjunctionParts.map((part) => evaluateBooleanExpression(part, constants));
+    if (values.some((value) => value === undefined)) {
+      return undefined;
+    }
+    return values.every((value) => value === "true") ? "true" : "false";
   }
 
   const literal = parseKotlinBooleanLiteralExpression(trimmed);
