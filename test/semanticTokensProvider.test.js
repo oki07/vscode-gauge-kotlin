@@ -242,6 +242,42 @@ test("GaugeSemanticTokensProvider ignores concept hyphen underline headings", ()
   ]);
 });
 
+test("GaugeSemanticTokensProvider ignores concept equals underline after identifiers", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return [
+        "* Reuse",
+        "=======",
+        "| name |",
+        "=======",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+  assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "tableBorder"), true);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 3).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () => {
   const {
     GaugeSemanticTokensProvider,

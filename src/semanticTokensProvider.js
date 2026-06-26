@@ -112,6 +112,10 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isConceptLegacyUnderlineHeadingText(line) {
+  return line.trim().length > 0 && !/[#*|]/.test(line);
+}
+
 function isFirstTableLine(lines, lineNumber) {
   if (!isTableLine(lines[lineNumber] || "")) {
     return false;
@@ -156,7 +160,11 @@ class GaugeSemanticTokensProvider {
       if (index + 1 < lines.length) {
         const nextLine = lines[index + 1];
         const trimmedNextLine = nextLine.trim();
-        if (trimmedNextLine.length > 0 && /^[=]+$/.test(trimmedNextLine)) {
+        if (
+          trimmedNextLine.length > 0
+          && /^[=]+$/.test(trimmedNextLine)
+          && (!conceptDocument || isConceptLegacyUnderlineHeadingText(line))
+        ) {
           const leadingSpaces = line.length - line.trimStart().length;
           builder.push(index, leadingSpaces, line.length - leadingSpaces, tokenTypes.indexOf("specification"), 0);
           builder.push(index + 1, 0, nextLine.length, tokenTypes.indexOf("specification"), 0);

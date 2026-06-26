@@ -41,6 +41,10 @@ function hasLegacyHeadingText(line) {
   return Boolean(line && line.trim());
 }
 
+function isConceptLegacyUnderlineHeadingText(line) {
+  return hasLegacyHeadingText(line) && !/[#*|]/.test(line);
+}
+
 function foldingMarkers(lines, options = {}) {
   const markers = [];
   const conceptDocument = Boolean(options.conceptDocument);
@@ -48,7 +52,11 @@ function foldingMarkers(lines, options = {}) {
     const text = lines[line];
     const nextText = lines[line + 1];
 
-    if (hasLegacyHeadingText(text) && isLegacySpecUnderline(nextText)) {
+    if (
+      hasLegacyHeadingText(text)
+      && isLegacySpecUnderline(nextText)
+      && (!conceptDocument || isConceptLegacyUnderlineHeadingText(text))
+    ) {
       markers.push({ startLine: line + 1, boundaryLine: line });
       line += 1;
       continue;
