@@ -148,6 +148,39 @@ function removeKotlinComments(text) {
   return result;
 }
 
+function replaceKotlinCommentsWithSpaces(text) {
+  let result = "";
+  let index = 0;
+
+  while (index < text.length) {
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      result += " ".repeat(commentEnd - index);
+      index = commentEnd;
+      continue;
+    }
+
+    if (text.startsWith("\"\"\"", index)) {
+      const closeIndex = text.indexOf("\"\"\"", index + 3);
+      const end = closeIndex === -1 ? text.length : closeIndex + 3;
+      result += text.slice(index, end);
+      index = end;
+      continue;
+    }
+    if (text[index] === "\"" || text[index] === "'") {
+      const end = findQuotedEnd(text, index, text[index]);
+      result += text.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    result += text[index];
+    index += 1;
+  }
+
+  return result;
+}
+
 function collectIgnoredKotlinRanges(text) {
   const ranges = [];
   let index = 0;
@@ -3725,30 +3758,32 @@ function isTopLevelOffset(text, offset) {
 
 function localClassifierNames(text, ignoredRanges) {
   const names = new Set();
+  const searchableText = replaceKotlinCommentsWithSpaces(text);
   const pattern = new RegExp(
     `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
     "g",
   );
-  let match = pattern.exec(text);
+  let match = pattern.exec(searchableText);
   while (match) {
     if (!isInIgnoredRange(match.index, ignoredRanges) && isTopLevelOffset(text, match.index)) {
       names.add(match[1]);
     }
-    match = pattern.exec(text);
+    match = pattern.exec(searchableText);
   }
   return names;
 }
 
 function collectClassifierScopeRanges(text, ignoredRanges) {
   const ranges = [];
+  const searchableText = replaceKotlinCommentsWithSpaces(text);
   const pattern = new RegExp(
     `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
     "g",
   );
-  let match = pattern.exec(text);
+  let match = pattern.exec(searchableText);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
-      match = pattern.exec(text);
+      match = pattern.exec(searchableText);
       continue;
     }
 
@@ -3763,7 +3798,7 @@ function collectClassifierScopeRanges(text, ignoredRanges) {
         pattern.lastIndex = bodyStart + 1;
       }
     }
-    match = pattern.exec(text);
+    match = pattern.exec(searchableText);
   }
   return ranges;
 }
@@ -3782,12 +3817,13 @@ function isInsideChildScope(offset, scope, scopes) {
 
 function directClassifierNamesInScope(text, ignoredRanges, scope, scopes) {
   const names = new Set();
+  const searchableText = replaceKotlinCommentsWithSpaces(text);
   const pattern = new RegExp(
     `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
     "g",
   );
   pattern.lastIndex = scope.start;
-  let match = pattern.exec(text);
+  let match = pattern.exec(searchableText);
   while (match && match.index < scope.end) {
     if (
       !isInIgnoredRange(match.index, ignoredRanges)
@@ -3795,7 +3831,7 @@ function directClassifierNamesInScope(text, ignoredRanges, scope, scopes) {
     ) {
       names.add(match[1]);
     }
-    match = pattern.exec(text);
+    match = pattern.exec(searchableText);
   }
   return names;
 }

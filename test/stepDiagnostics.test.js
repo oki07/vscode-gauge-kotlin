@@ -1200,9 +1200,16 @@ test("GaugeStepDiagnosticsProvider ignores local Step classifier declarations", 
     "@Step(\"Object <value>\")",
     "fun localObjectStep() {}",
   ].join("\n"));
+  const commentedLocalClassDocument = createDocument([
+    "class/* comment */Step",
+    "",
+    "@Step(\"Commented local <value>\")",
+    "fun commentedLocalClassStep() {}",
+  ].join("\n"));
 
   assert.deepEqual(provider.provideDiagnostics(localClassDocument), []);
   assert.deepEqual(provider.provideDiagnostics(localObjectDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(commentedLocalClassDocument), []);
 });
 
 test("GaugeStepDiagnosticsProvider ignores nested local Step classifier declarations in scope", () => {
