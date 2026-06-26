@@ -427,6 +427,20 @@ function evaluateIntegerAdditionExpression(parts) {
   return String(values.reduce((sum, value) => sum + BigInt(value), 0n));
 }
 
+function evaluateIntegerSubtractionExpression(expression) {
+  const integerLiteral = "[+-]?(?:0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)(?:L)?";
+  const match = new RegExp(`^(${integerLiteral})\\s+-\\s+(${integerLiteral})$`).exec(expression);
+  if (!match) {
+    return undefined;
+  }
+  const left = parseKotlinIntegerLiteralExpression(match[1]);
+  const right = parseKotlinIntegerLiteralExpression(match[2]);
+  if (left === undefined || right === undefined) {
+    return undefined;
+  }
+  return String(BigInt(left) - BigInt(right));
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -573,6 +587,10 @@ function evaluateStringExpression(expression, constants) {
   const booleanLiteral = parseKotlinBooleanLiteralExpression(trimmed);
   if (booleanLiteral !== undefined) {
     return booleanLiteral;
+  }
+  const integerSubtraction = evaluateIntegerSubtractionExpression(trimmed);
+  if (integerSubtraction !== undefined) {
+    return integerSubtraction;
   }
 
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
