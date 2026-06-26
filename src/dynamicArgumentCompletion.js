@@ -116,7 +116,7 @@ function isTableLine(line) {
 }
 
 function isTeardownLine(line) {
-  return /^\s*___+\s*$/.test(line);
+  return /^___+\s*$/.test(line);
 }
 
 function isFirstTableLine(lines, lineNumber) {
