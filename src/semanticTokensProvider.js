@@ -72,7 +72,15 @@ function pushTableSegment(builder, lineNumber, line, start, end, textTokenType =
 }
 
 function isEscapedPipe(line, index) {
-  return index > 0 && line[index - 1] === "\\";
+  return isEscapedCharacter(line, index);
+}
+
+function isEscapedCharacter(line, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function keywordLinePrefix(line, keyword) {
@@ -160,6 +168,10 @@ class GaugeSemanticTokensProvider {
         let match = dynamicArgumentRegex.exec(line);
         while (match !== null) {
           const matchStart = match.index;
+          if (isEscapedCharacter(line, matchStart)) {
+            match = dynamicArgumentRegex.exec(line);
+            continue;
+          }
           if (matchStart > lastIndex) {
             builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf(headingToken), 0);
           }
@@ -184,6 +196,10 @@ class GaugeSemanticTokensProvider {
           let match = argumentRegex.exec(line);
           while (match !== null) {
             const matchStart = match.index;
+            if (isEscapedCharacter(line, matchStart)) {
+              match = argumentRegex.exec(line);
+              continue;
+            }
             if (matchStart > lastIndex) {
               builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf("step"), 0);
             }
@@ -220,6 +236,10 @@ class GaugeSemanticTokensProvider {
           tableDynamicArgumentRegex.lastIndex = 0;
           let match = tableDynamicArgumentRegex.exec(line);
           while (match !== null) {
+            if (isEscapedCharacter(line, match.index)) {
+              match = tableDynamicArgumentRegex.exec(line);
+              continue;
+            }
             pushTableSegment(builder, index, line, lastIndex, match.index);
             pushToken(builder, index, match.index, match[0].length, "argument");
             lastIndex = tableDynamicArgumentRegex.lastIndex;
