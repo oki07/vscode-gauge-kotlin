@@ -2033,7 +2033,7 @@ function extractStepAliases(annotationText, constants) {
       continue;
     }
 
-    const name = arg.slice(0, equalsIndex).trim();
+    const name = removeKotlinComments(arg.slice(0, equalsIndex)).trim();
     if (name === "value") {
       valueExpression = arg.slice(equalsIndex + 1);
       break;
