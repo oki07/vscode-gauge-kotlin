@@ -54,7 +54,7 @@ function dynamicArgumentRange(line, position) {
 }
 
 function staticArgumentRange(line, position) {
-  let openIndex = line.indexOf("\"");
+  let openIndex = nextUnescapedCharacterIndex(line, "\"");
   while (openIndex !== -1) {
     const closeIndex = closingQuoteIndex(line, openIndex);
     if (position.character > openIndex && (closeIndex === -1 || position.character <= closeIndex)) {
@@ -66,7 +66,7 @@ function staticArgumentRange(line, position) {
     if (closeIndex === -1) {
       return undefined;
     }
-    openIndex = line.indexOf("\"", closeIndex + 1);
+    openIndex = nextUnescapedCharacterIndex(line, "\"", closeIndex + 1);
   }
 
   return undefined;
@@ -166,6 +166,14 @@ function isEscapedCharacter(line, index) {
   return slashCount % 2 === 1;
 }
 
+function nextUnescapedCharacterIndex(line, character, startIndex = 0) {
+  let index = line.indexOf(character, startIndex);
+  while (index !== -1 && isEscapedCharacter(line, index)) {
+    index = line.indexOf(character, index + 1);
+  }
+  return index;
+}
+
 function unique(values) {
   const seen = new Set();
   const result = [];
@@ -230,7 +238,7 @@ function staticArguments(text) {
     if (!line.trimStart().startsWith("*")) {
       continue;
     }
-    let openIndex = line.indexOf("\"");
+    let openIndex = nextUnescapedCharacterIndex(line, "\"");
     while (openIndex !== -1) {
       const closeIndex = closingQuoteIndex(line, openIndex);
       if (closeIndex === -1) {
@@ -240,7 +248,7 @@ function staticArguments(text) {
       if (value) {
         values.push(value);
       }
-      openIndex = line.indexOf("\"", closeIndex + 1);
+      openIndex = nextUnescapedCharacterIndex(line, "\"", closeIndex + 1);
     }
   }
   return unique(values);

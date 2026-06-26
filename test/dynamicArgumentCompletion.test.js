@@ -387,6 +387,25 @@ test("GaugeDynamicArgumentCompletionProvider suggests escaped spec static argume
   assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 12 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores escaped static argument starts", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const step = "* Escape \\\"literal\\\" text";
+  const document = createDocument([
+    "# Checkout",
+    step,
+    "* Confirm \"a\"",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, step.indexOf("literal")),
+  );
+
+  assert.deepEqual(items, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests concept static arguments inside quotes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
