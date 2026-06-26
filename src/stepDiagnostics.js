@@ -3877,23 +3877,32 @@ function addStepFunctionEntry(
 }
 
 function addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges) {
-  const groupPattern = /@(?:(get|set):)?\[/g;
+  const groupPattern = /@/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
     if (isInIgnoredRange(groupMatch.index, ignoredRanges)) {
       groupMatch = groupPattern.exec(text);
       continue;
     }
-    const openBracket = groupMatch.index + groupMatch[0].length - 1;
-    const closeBracket = findMatchingBracket(text, openBracket);
-    if (closeBracket === -1) {
-      groupPattern.lastIndex = openBracket + 1;
+    const group = readKotlinAnnotationApplication(text, groupMatch.index);
+    if (
+      group === undefined
+      || group.kind !== "group"
+      || group.openBracket === -1
+      || group.closeBracket === -1
+    ) {
+      if (group && group.end > groupPattern.lastIndex) {
+        groupPattern.lastIndex = group.end;
+      }
       groupMatch = groupPattern.exec(text);
       continue;
     }
 
+    const openBracket = group.openBracket;
+    const closeBracket = group.closeBracket;
+
     const groupStart = openBracket + 1;
-    const findAttachedDeclaration = findAttachedPropertyAccessor(groupMatch[1]);
+    const findAttachedDeclaration = findAttachedPropertyAccessor(group.useSiteTarget);
     const annotationPattern = new RegExp(KOTLIN_ANNOTATION_NAME_PATTERN, "g");
     annotationPattern.lastIndex = groupStart;
     let annotationMatch = annotationPattern.exec(text);
@@ -3902,10 +3911,7 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
         annotationMatch = annotationPattern.exec(text);
         continue;
       }
-      let openParen = annotationPattern.lastIndex;
-      while (/\s/.test(text[openParen])) {
-        openParen += 1;
-      }
+      const openParen = skipWhitespaceAndComments(text, annotationPattern.lastIndex);
       if (text[openParen] !== "(") {
         annotationMatch = annotationPattern.exec(text);
         continue;
@@ -3934,7 +3940,7 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
       annotationPattern.lastIndex = closeParen + 1;
       annotationMatch = annotationPattern.exec(text);
     }
-    groupPattern.lastIndex = closeBracket + 1;
+    groupPattern.lastIndex = group.end;
     groupMatch = groupPattern.exec(text);
   }
 }

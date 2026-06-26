@@ -1606,6 +1606,35 @@ test("GaugeStepDiagnosticsProvider accepts grouped Kotlin Step annotations", () 
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts whitespace after grouped annotation markers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const functionDocument = createDocument([
+    "@ /* marker */ [Step(\"Grouped <value>\")]",
+    "fun grouped() {}",
+  ].join("\n"));
+  const getterDocument = createDocument([
+    "class Steps {",
+    "  @get: /* marker */ [Step(\"Grouped getter <value>\")]",
+    "  val getterStep: String",
+    "    get() = \"value\"",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(functionDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Grouped <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(getterDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Grouped getter <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider skips grouped annotations before Kotlin step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
