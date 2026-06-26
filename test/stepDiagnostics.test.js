@@ -28,10 +28,10 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(text, languageId = "kotlin") {
+function createDocument(text, languageId = "kotlin", fsPath = "/workspace/gauge/src/test/kotlin/Steps.kt") {
   return {
     languageId,
-    uri: { fsPath: "/workspace/gauge/src/test/kotlin/Steps.kt" },
+    uri: { fsPath },
     getText() {
       return text;
     },
@@ -3472,6 +3472,46 @@ test("GaugeStepDiagnosticsProvider evaluates imported Kotlin const step aliases"
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates imported workspace Kotlin const step aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const constantsDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "const val LOGIN_STEP = \"Log in as <user>\"",
+    "",
+    "object StepText {",
+    "  const val AUDIT_STEP = \"Audit <event>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/StepText.kt");
+  const stepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import fixtures.steps.LOGIN_STEP",
+    "import fixtures.steps.StepText.AUDIT_STEP as AUDIT_STEP_ALIAS",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+    "",
+    "@Step(AUDIT_STEP_ALIAS)",
+    "fun audit() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [constantsDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Audit <event>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores unqualified object Kotlin const references outside scope", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -3919,8 +3959,11 @@ test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection"
   const provider = new GaugeStepDiagnosticsProvider({ vscode });
 
   const disposable = provider.register();
-  changed[0]({ document: createDocument("@Step(\"A <value>\")\nfun a(value: String) {}") });
-  closed[0](document);
+  const changedDocument = createDocument("@Step(\"A <value>\")\nfun a(value: String) {}");
+  vscode.workspace.textDocuments = [changedDocument];
+  changed[0]({ document: changedDocument });
+  vscode.workspace.textDocuments = [];
+  closed[0](changedDocument);
   disposable.dispose();
 
   assert.equal(sets[0].diagnostics.length, 1);

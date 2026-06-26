@@ -2679,9 +2679,9 @@ function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
   };
 }
 
-function collectStringConstants(text) {
-  const constants = new Map();
-  const constantTypes = new Map();
+function collectStringConstants(text, externalConstants = {}) {
+  const constants = new Map(externalConstants.constants || []);
+  const constantTypes = new Map(externalConstants.constantTypes || []);
   const constantVisibility = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
@@ -4673,10 +4673,10 @@ function addGroupedStepFunctions(
   }
 }
 
-function findStepFunctions(text) {
+function findStepFunctions(text, externalConstants) {
   const entries = [];
   const annotationPattern = /@/g;
-  const { constants, constantTypes, constantVisibility } = collectStringConstants(text);
+  const { constants, constantTypes, constantVisibility } = collectStringConstants(text, externalConstants);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
   const functionBodyRanges = [
@@ -4772,6 +4772,47 @@ class GaugeStepDiagnosticsProvider {
     );
   }
 
+  collectWorkspaceConstants(document) {
+    const workspace = this.vscode.workspace || {};
+    const constants = new Map();
+    const constantTypes = new Map();
+    const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
+    const documentPath = document.uri && document.uri.fsPath;
+    for (const candidate of textDocuments) {
+      const candidatePath = candidate && candidate.uri && candidate.uri.fsPath;
+      if (
+        !candidate
+        || candidate === document
+        || candidatePath === documentPath
+        || candidate.languageId !== KOTLIN_LANGUAGE
+        || typeof candidate.getText !== "function"
+        || !this.isGaugeProjectDocument(candidate)
+      ) {
+        continue;
+      }
+
+      const text = candidate.getText();
+      const ignoredRanges = collectIgnoredKotlinRanges(text);
+      const packageName = collectKotlinPackageName(text, ignoredRanges);
+      if (packageName === undefined) {
+        continue;
+      }
+
+      const collected = collectStringConstants(text);
+      const packagePrefix = `${packageName}.`;
+      for (const [name, value] of collected.constants) {
+        if (!name.startsWith(packagePrefix) || constants.has(name)) {
+          continue;
+        }
+        constants.set(name, value);
+        if (collected.constantTypes.has(name)) {
+          constantTypes.set(name, collected.constantTypes.get(name));
+        }
+      }
+    }
+    return { constants, constantTypes };
+  }
+
   provideDiagnostics(document) {
     if (!this.shouldDiagnose(document)) {
       return [];
@@ -4790,7 +4831,8 @@ class GaugeStepDiagnosticsProvider {
       return diagnostics;
     }
 
-    for (const entry of findStepFunctions(text)) {
+    const externalConstants = this.collectWorkspaceConstants(document);
+    for (const entry of findStepFunctions(text, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart);
       const end = positionAt(text, entry.parameterEnd);
@@ -4822,6 +4864,13 @@ class GaugeStepDiagnosticsProvider {
     collection.set(document.uri, this.provideDiagnostics(document));
   }
 
+  refreshDocuments(collection) {
+    const workspace = this.vscode.workspace || {};
+    for (const document of workspace.textDocuments || []) {
+      this.updateDocument(collection, document);
+    }
+  }
+
   register() {
     if (!this.vscode.languages || typeof this.vscode.languages.createDiagnosticCollection !== "function") {
       return { dispose() {} };
@@ -4839,15 +4888,14 @@ class GaugeStepDiagnosticsProvider {
       }
     };
 
-    for (const document of workspace.textDocuments || []) {
-      this.updateDocument(collection, document);
-    }
-    registerListener("onDidOpenTextDocument", (document) => this.updateDocument(collection, document));
-    registerListener("onDidChangeTextDocument", (event) => this.updateDocument(collection, event.document));
+    this.refreshDocuments(collection);
+    registerListener("onDidOpenTextDocument", () => this.refreshDocuments(collection));
+    registerListener("onDidChangeTextDocument", () => this.refreshDocuments(collection));
     registerListener("onDidCloseTextDocument", (document) => {
       if (document && document.uri && typeof collection.delete === "function") {
         collection.delete(document.uri);
       }
+      this.refreshDocuments(collection);
     });
 
     return {
