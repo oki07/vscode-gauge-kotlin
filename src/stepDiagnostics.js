@@ -282,6 +282,38 @@ function findMatchingAngle(text, openIndex) {
   return -1;
 }
 
+function previousNonWhitespaceIndex(text, startIndex) {
+  for (let index = startIndex - 1; index >= 0; index -= 1) {
+    if (!/\s/.test(text[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function nextNonWhitespaceIndex(text, startIndex) {
+  for (let index = startIndex + 1; index < text.length; index += 1) {
+    if (!/\s/.test(text[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isLikelyTypeArgumentStart(text, index) {
+  if (/\s/.test(text[index - 1] || "")) {
+    return false;
+  }
+  const previousIndex = previousNonWhitespaceIndex(text, index);
+  const nextIndex = nextNonWhitespaceIndex(text, index);
+  if (previousIndex === -1 || nextIndex === -1 || text[nextIndex] === "=") {
+    return false;
+  }
+  const previous = text[previousIndex];
+  const next = text[nextIndex];
+  return /[\w`\)\]]/.test(previous) && /[A-Za-z_`*]/.test(next);
+}
+
 function splitTopLevel(text, separator) {
   const parts = [];
   let start = 0;
@@ -319,7 +351,7 @@ function splitTopLevel(text, separator) {
       quote = char;
       continue;
     }
-    if (char === "<") {
+    if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0) {
       angleDepth -= 1;
