@@ -201,9 +201,9 @@ class GaugeSemanticTokensProvider {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
         }
         index += 1;
-      } else if (pushKeywordLine(builder, index, line, "table", "tableKeyword", "tableFileValue")) {
+      } else if (!conceptDocument && pushKeywordLine(builder, index, line, "table", "tableKeyword", "tableFileValue")) {
         index += 1;
-      } else if (pushKeywordLine(builder, index, line, "tags", "tagKeyword", "tagValue")) {
+      } else if (!conceptDocument && pushKeywordLine(builder, index, line, "tags", "tagKeyword", "tagValue")) {
         index += 1;
       } else if (trimmedLine.startsWith("*")) {
         const markerStart = line.indexOf("*");
