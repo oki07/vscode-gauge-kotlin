@@ -3440,6 +3440,66 @@ test("GaugeStepDiagnosticsProvider evaluates qualified Kotlin const references",
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores unqualified object Kotlin const references outside scope", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const topLevelDocument = createDocument([
+    "object StepText {",
+    "  const val LOGIN_STEP = \"Log in as <user>\"",
+    "}",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+  const nestedObjectDocument = createDocument([
+    "class Steps {",
+    "  object Text {",
+    "    const val LOGIN_STEP = \"Log in as <user>\"",
+    "  }",
+    "",
+    "  @Step(LOGIN_STEP)",
+    "  fun login() {}",
+    "}",
+  ].join("\n"));
+  const topLevelAliasDocument = createDocument([
+    "object StepText {",
+    "  const val USER_ARG = \"<user>\"",
+    "}",
+    "private const val LOGIN_STEP = \"Log in as \" + USER_ARG",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(topLevelDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(nestedObjectDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(topLevelAliasDocument), []);
+});
+
+test("GaugeStepDiagnosticsProvider evaluates unqualified companion Kotlin const references in the enclosing class", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  companion object {",
+    "    const val LOGIN_STEP = \"Log in as <user>\"",
+    "  }",
+    "",
+    "  @Step(LOGIN_STEP)",
+    "  fun login() {}",
+    "}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates compact object Kotlin const references", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

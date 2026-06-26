@@ -2328,6 +2328,7 @@ function collectObjectRanges(text, ignoredRanges) {
       if (bodyEnd !== -1) {
         ranges.push({
           end: bodyEnd,
+          kind: "object",
           name: match[1],
           start: bodyStart + 1,
         });
@@ -2359,6 +2360,7 @@ function collectNamedTypeRanges(text, ignoredRanges) {
       if (bodyEnd !== -1) {
         ranges.push({
           end: bodyEnd,
+          kind: "type",
           name: match[1],
           start: bodyStart + 1,
         });
@@ -2392,6 +2394,8 @@ function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
         const companionName = match[1] || "Companion";
         ranges.push({
           end: bodyEnd,
+          enclosingClassPath,
+          kind: "companion",
           names: [
             enclosingName,
             `${enclosingName}.${companionName}`,
@@ -2429,6 +2433,85 @@ function pathHasPrefix(path, prefix) {
   const text = pathText(path);
   const prefixText = pathText(prefix);
   return text === prefixText || text.startsWith(`${prefixText}.`);
+}
+
+function enclosingRanges(ranges, offset) {
+  return ranges
+    .filter((range) => offset >= range.start && offset < range.end)
+    .sort((left, right) => left.start - right.start);
+}
+
+function classScopeMap(classRanges) {
+  const scopes = new Map();
+  for (const range of classRanges) {
+    for (const path of enclosingObjectPaths(classRanges, range.start)) {
+      if (path.length > 0) {
+        scopes.set(pathText(path), {
+          end: range.end,
+          start: range.start,
+        });
+      }
+    }
+  }
+  return scopes;
+}
+
+function addConstantVisibility(visibility, name, scope) {
+  if (name.includes(".")) {
+    return;
+  }
+  const scopes = visibility.get(name) || [];
+  scopes.push(scope || { global: true });
+  visibility.set(name, scopes);
+}
+
+function constantSimpleVisibilityScopes(declarationOffset, objectRanges, classesByPath) {
+  const objectScopes = enclosingRanges(objectRanges, declarationOffset);
+  if (objectScopes.length === 0) {
+    return [{ global: true }];
+  }
+
+  const innermostObject = objectScopes[objectScopes.length - 1];
+  if (innermostObject.kind === "companion") {
+    const classScope = classesByPath.get(pathText(innermostObject.enclosingClassPath || []));
+    return [classScope || { end: innermostObject.end, start: innermostObject.start }];
+  }
+
+  return [{ end: innermostObject.end, start: innermostObject.start }];
+}
+
+function isConstantVisibleAtOffset(name, visibility, offset) {
+  if (name.includes(".") || visibility === undefined) {
+    return true;
+  }
+  const scopes = visibility.get(name);
+  if (scopes === undefined) {
+    return true;
+  }
+  return scopes.some((scope) => (
+    scope.global || (offset >= scope.start && offset < scope.end)
+  ));
+}
+
+function constantsVisibleAtOffset(constants, constantTypes, visibility, offset) {
+  if (visibility === undefined || offset === undefined) {
+    return { constants, constantTypes };
+  }
+
+  const visibleConstants = new Map();
+  const visibleTypes = new Map();
+  for (const [name, value] of constants) {
+    if (isConstantVisibleAtOffset(name, visibility, offset)) {
+      visibleConstants.set(name, value);
+      if (constantTypes && constantTypes.has(name)) {
+        visibleTypes.set(name, constantTypes.get(name));
+      }
+    }
+  }
+  return {
+    constants: visibleConstants,
+    constantTypes: visibleTypes,
+  };
 }
 
 function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
@@ -2495,6 +2578,7 @@ function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
 function collectStringConstants(text) {
   const constants = new Map();
   const constantTypes = new Map();
+  const constantVisibility = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const classRanges = collectNamedTypeRanges(text, ignoredRanges);
@@ -2502,6 +2586,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
+  const classesByPath = classScopeMap(classRanges);
   const typeAliases = collectKotlinTypeAliases(text, ignoredRanges);
   const pattern = /\bconst\b/g;
   let match = pattern.exec(text);
@@ -2540,9 +2625,18 @@ function collectStringConstants(text) {
     }
     expressions.push({
       expression: text.slice(expressionStart, expressionEnd),
+      offset: expressionStart,
       names: [...names],
       typeName: declaration.typeName,
     });
+    const simpleScopes = constantSimpleVisibilityScopes(
+      match.index,
+      objectRanges,
+      classesByPath,
+    );
+    for (const scope of simpleScopes) {
+      addConstantVisibility(constantVisibility, declaration.name, scope);
+    }
     pattern.lastIndex = expressionEnd;
     match = pattern.exec(text);
   }
@@ -2550,13 +2644,15 @@ function collectStringConstants(text) {
   let changed = true;
   while (changed) {
     changed = false;
-    for (const { expression, names, typeName } of expressions) {
+    for (const { expression, names, offset, typeName } of expressions) {
       if (names.every((name) => constants.has(name))) {
         continue;
       }
-      const value = evaluateStringExpression(expression, constants, constantTypes);
+      const visible = constantsVisibleAtOffset(constants, constantTypes, constantVisibility, offset);
+      const value = evaluateStringExpression(expression, visible.constants, visible.constantTypes);
       if (value !== undefined) {
-        const resolvedType = typeName || inferKotlinConstantType(expression, constants, constantTypes);
+        const resolvedType = typeName
+          || inferKotlinConstantType(expression, visible.constants, visible.constantTypes);
         for (const name of names) {
           if (!constants.has(name)) {
             constants.set(name, value);
@@ -2570,7 +2666,7 @@ function collectStringConstants(text) {
     }
   }
 
-  return { constants, constantTypes };
+  return { constants, constantTypes, constantVisibility };
 }
 
 function extractStepAliases(annotationText, constants, constantTypes) {
@@ -4342,6 +4438,7 @@ function addStepFunctionEntry(
   text,
   constants,
   constantTypes,
+  constantVisibility,
   ignoredRanges,
   stepImports,
   functionBodyRanges,
@@ -4362,14 +4459,28 @@ function addStepFunctionEntry(
   if (closeParen === -1) {
     return;
   }
-  const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants, constantTypes);
+  const visible = constantsVisibleAtOffset(constants, constantTypes, constantVisibility, openParen);
+  const aliases = extractStepAliases(
+    text.slice(openParen + 1, closeParen),
+    visible.constants,
+    visible.constantTypes,
+  );
   const method = findAttachedDeclaration(text, functionSearchStart(closeParen), ignoredRanges, annotationStart);
   if (aliases.length > 0 && method) {
     entries.push({ aliases, ...method });
   }
 }
 
-function addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges) {
+function addGroupedStepFunctions(
+  entries,
+  text,
+  constants,
+  constantTypes,
+  constantVisibility,
+  ignoredRanges,
+  stepImports,
+  functionBodyRanges,
+) {
   const groupPattern = /@/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
@@ -4427,6 +4538,7 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
         text,
         constants,
         constantTypes,
+        constantVisibility,
         ignoredRanges,
         stepImports,
         functionBodyRanges,
@@ -4446,7 +4558,7 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
 function findStepFunctions(text) {
   const entries = [];
   const annotationPattern = /@/g;
-  const { constants, constantTypes } = collectStringConstants(text);
+  const { constants, constantTypes, constantVisibility } = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
   const functionBodyRanges = [
@@ -4456,7 +4568,16 @@ function findStepFunctions(text) {
     ...collectPropertyAccessorBodyRanges(text, ignoredRanges),
     ...collectPropertyInitializerRanges(text, ignoredRanges),
   ];
-  addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges);
+  addGroupedStepFunctions(
+    entries,
+    text,
+    constants,
+    constantTypes,
+    constantVisibility,
+    ignoredRanges,
+    stepImports,
+    functionBodyRanges,
+  );
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -4482,6 +4603,7 @@ function findStepFunctions(text) {
       text,
       constants,
       constantTypes,
+      constantVisibility,
       ignoredRanges,
       stepImports,
       functionBodyRanges,
