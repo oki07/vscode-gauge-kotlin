@@ -461,6 +461,14 @@ function isKotlinIdentifierPath(value) {
   return KOTLIN_IDENTIFIER_PATH_PATTERN.test(value);
 }
 
+function normalizeKotlinIdentifier(value) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("`") && trimmed.endsWith("`")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
 const KOTLIN_NUMERIC_TYPES = new Set(["Byte", "Short", "Int", "Long", "Float", "Double"]);
 
 function canonicalKotlinTypeName(typeName) {
@@ -2068,7 +2076,7 @@ function extractStepAliases(annotationText, constants) {
       continue;
     }
 
-    const name = removeKotlinComments(arg.slice(0, equalsIndex)).trim();
+    const name = normalizeKotlinIdentifier(removeKotlinComments(arg.slice(0, equalsIndex)));
     if (name === "value") {
       valueExpression = arg.slice(equalsIndex + 1);
       break;

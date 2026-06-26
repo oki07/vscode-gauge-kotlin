@@ -212,6 +212,23 @@ test("GaugeStepDiagnosticsProvider accepts Kotlin comments in Step value argumen
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts backtick Step value argument names", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "@Step(`value` = [\"Use <name>\", \"Use <name> as <role>\"])",
+    "fun use(name: String) {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Use <name> as <role>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores comments inside Kotlin Step function parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
