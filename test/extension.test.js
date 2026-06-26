@@ -55,6 +55,9 @@ function createFakeVscode(overrides = {}) {
     },
     commands: {
       executeCommand(command, key, value) {
+        if (typeof overrides.onExecuteCommand === "function") {
+          overrides.onExecuteCommand(command, key, value);
+        }
         contexts.push({ command, key, value });
         return undefined;
       },
@@ -326,14 +329,22 @@ test("preview command delegates to the Gauge preview creator", () => {
   assert.equal(receivedOptions.projectFactory, projectFactory);
 });
 
-test("format command delegates to VS Code document formatting for Gauge files", () => {
+test("format command saves before delegating to VS Code document formatting for Gauge files", async () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
+  const calls = [];
   const { contexts, fakeVscode, registeredCommands } = createFakeVscode({
+    onExecuteCommand(command) {
+      calls.push(command);
+    },
     activeTextEditor: {
       document: {
         languageId: "gauge",
+        save() {
+          calls.push("document.save");
+          return Promise.resolve(true);
+        },
       },
     },
   });
@@ -349,7 +360,8 @@ test("format command delegates to VS Code document formatting for Gauge files", 
   );
 
   assert.ok(command);
-  command.handler();
+  await command.handler();
+  assert.deepEqual(calls, ["document.save", "editor.action.formatDocument"]);
   assert.deepEqual(contexts, [
     { command: "editor.action.formatDocument", key: undefined, value: undefined },
   ]);

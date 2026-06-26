@@ -111,9 +111,13 @@ function notify(vscode, message) {
   return undefined;
 }
 
-function formatActiveGaugeDocument(vscode) {
+async function formatActiveGaugeDocument(vscode) {
   if (!hasActiveGaugeDocument(vscode)) {
     return notify(vscode, "No Gauge file is active.");
+  }
+  const document = vscode.window.activeTextEditor.document;
+  if (typeof document.save === "function") {
+    await document.save();
   }
   if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
     return vscode.commands.executeCommand(FORMAT_DOCUMENT_COMMAND);
