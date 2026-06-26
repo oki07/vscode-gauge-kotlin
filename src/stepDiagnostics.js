@@ -708,6 +708,7 @@ function splitTopLevelToken(text, token) {
   let bracketDepth = 0;
   let braceDepth = 0;
   let parenDepth = 0;
+  let inBacktickIdentifier = false;
   let quote;
 
   for (let index = 0; index < text.length; index += 1) {
@@ -727,6 +728,13 @@ function splitTopLevelToken(text, token) {
     const commentEnd = findCommentEnd(text, index);
     if (commentEnd !== undefined) {
       index = commentEnd - 1;
+      continue;
+    }
+    if (char === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
       continue;
     }
     if (text.startsWith("\"\"\"", index)) {
