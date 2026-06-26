@@ -570,6 +570,7 @@ function findConstExpressionEnd(text, startIndex) {
         && bracketDepth === 0
         && braceDepth === 0
         && parenDepth === 0
+        && !text.slice(startIndex, index).trimEnd().endsWith("+")
       ) {
         return index;
       }
