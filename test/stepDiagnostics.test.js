@@ -294,6 +294,26 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step setter accessor annotation
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores bare accessor-like Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+
+  assert.deepEqual(provider.provideDiagnostics(createDocument([
+    "@Step(\"Bare getter <value>\")",
+    "get() = \"value\"",
+  ].join("\n"))), []);
+  assert.deepEqual(provider.provideDiagnostics(createDocument([
+    "@Step(\"Bare setter <value> and <other>\")",
+    "set(value) {}",
+  ].join("\n"))), []);
+  assert.deepEqual(provider.provideDiagnostics(createDocument([
+    "class Steps {",
+    "  @Step(\"Class getter <value>\")",
+    "  get() = \"value\"",
+    "}",
+  ].join("\n"))), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

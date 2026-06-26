@@ -2464,6 +2464,78 @@ function findNextSetterAccessor(text, startIndex, ignoredRanges = []) {
   return findNextDirectPropertyAccessor(text, startIndex, "set", ignoredRanges);
 }
 
+function lineStartBefore(text, offset) {
+  return text.lastIndexOf("\n", Math.max(0, offset - 1)) + 1;
+}
+
+function previousLineBounds(text, lineStart) {
+  if (lineStart <= 0) {
+    return undefined;
+  }
+  const end = lineStart - 1;
+  const start = text.lastIndexOf("\n", Math.max(0, end - 1)) + 1;
+  return { end, start };
+}
+
+function lineIndent(line) {
+  const match = /^[ \t]*/.exec(line);
+  return match ? match[0].length : 0;
+}
+
+function isPropertyDeclarationLine(line) {
+  const modifierPattern = [...KOTLIN_PROPERTY_MODIFIERS].join("|");
+  const pattern = new RegExp(
+    `^[ \\t]*(?:(?:${modifierPattern})\\s+)*(?:val|var)\\b`,
+  );
+  return pattern.test(line);
+}
+
+function isDeclarationBoundaryLine(line) {
+  const modifierPattern = [...KOTLIN_FUNCTION_MODIFIERS].join("|");
+  const pattern = new RegExp(
+    `^[ \\t]*(?:(?:${modifierPattern})\\s+)*(?:fun|class|interface|object|constructor|init)\\b`,
+  );
+  return pattern.test(line);
+}
+
+function isAccessorDeclarationLine(line) {
+  return /^[ \t]*(?:get|set)\b/.test(line);
+}
+
+function isAnnotationLine(line) {
+  return /^[ \t]*@/.test(line);
+}
+
+function isPropertyAccessorAnnotationContext(text, annotationStart) {
+  if (annotationStart === undefined || annotationStart < 0) {
+    return false;
+  }
+  const annotationLineStart = lineStartBefore(text, annotationStart);
+  const sameLinePrefix = text.slice(annotationLineStart, annotationStart);
+  if (isPropertyDeclarationLine(sameLinePrefix)) {
+    return true;
+  }
+
+  const annotationIndent = lineIndent(text.slice(annotationLineStart, annotationStart));
+  let bounds = previousLineBounds(text, annotationLineStart);
+  while (bounds) {
+    const line = text.slice(bounds.start, bounds.end).replace(/\r$/, "");
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("//") || isAnnotationLine(line) || isAccessorDeclarationLine(line)) {
+      bounds = previousLineBounds(text, bounds.start);
+      continue;
+    }
+    if (isPropertyDeclarationLine(line)) {
+      return lineIndent(line) < annotationIndent;
+    }
+    if (lineIndent(line) < annotationIndent || isDeclarationBoundaryLine(line)) {
+      return false;
+    }
+    bounds = previousLineBounds(text, bounds.start);
+  }
+  return false;
+}
+
 function findNextPropertySetter(text, startIndex, ignoredRanges = []) {
   const declaration = /^(?:val|var)\b/.exec(text.slice(startIndex));
   if (!declaration || declaration[0] !== "var") {
@@ -2645,7 +2717,7 @@ function skipKotlinContextParameters(text, startIndex) {
   return closeParen === -1 ? text.length : closeParen + 1;
 }
 
-function findAttachedFunction(text, startIndex, ignoredRanges = []) {
+function findAttachedFunction(text, startIndex, ignoredRanges = [], annotationStart) {
   let index = startIndex;
   while (index < text.length) {
     index = skipWhitespaceAndComments(text, index);
@@ -2671,10 +2743,10 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
     if (token[0] === "fun") {
       return findNextFunction(text, index, ignoredRanges);
     }
-    if (token[0] === "get") {
+    if (token[0] === "get" && isPropertyAccessorAnnotationContext(text, annotationStart)) {
       return findNextGetterAccessor(text, index, ignoredRanges);
     }
-    if (token[0] === "set") {
+    if (token[0] === "set" && isPropertyAccessorAnnotationContext(text, annotationStart)) {
       return findNextSetterAccessor(text, index, ignoredRanges);
     }
     if (KOTLIN_FUNCTION_MODIFIERS.has(token[0])) {
@@ -2981,6 +3053,7 @@ function addStepFunctionEntry(
   openParen,
   functionSearchStart,
   findAttachedDeclaration = findAttachedFunction,
+  annotationStart = -1,
 ) {
   if (functionBodyRanges.some((range) => isInsideRange(openParen, range))) {
     return;
@@ -2994,7 +3067,7 @@ function addStepFunctionEntry(
     return;
   }
   const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
-  const method = findAttachedDeclaration(text, functionSearchStart(closeParen), ignoredRanges);
+  const method = findAttachedDeclaration(text, functionSearchStart(closeParen), ignoredRanges, annotationStart);
   if (aliases.length > 0 && method) {
     entries.push({ aliases, ...method });
   }
@@ -3052,6 +3125,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
         openParen,
         () => closeBracket + 1,
         findAttachedDeclaration,
+        groupMatch.index,
       );
       annotationPattern.lastIndex = closeParen + 1;
       annotationMatch = annotationPattern.exec(text);
@@ -3102,6 +3176,7 @@ function findStepFunctions(text) {
       openParen,
       () => closeParen + 1,
       findAttachedDeclaration,
+      annotationMatch.index,
     );
     annotationPattern.lastIndex = closeParen + 1;
     annotationMatch = annotationPattern.exec(text);
