@@ -503,12 +503,12 @@ function splitTopLevelToken(text, token) {
   return parts;
 }
 
-function evaluateIntegerEqualityExpression(expression, constants) {
+function evaluateIntegerEqualityExpression(expression, constants, constantTypes) {
   const trimmed = removeKotlinComments(expression).trim();
   const equalParts = splitTopLevelToken(trimmed, "==");
   if (equalParts.length === 2) {
-    const left = evaluateIntegerArithmeticExpression(equalParts[0], constants);
-    const right = evaluateIntegerArithmeticExpression(equalParts[1], constants);
+    const left = evaluateIntegerArithmeticExpression(equalParts[0], constants, constantTypes);
+    const right = evaluateIntegerArithmeticExpression(equalParts[1], constants, constantTypes);
     if (left === undefined || right === undefined) {
       return undefined;
     }
@@ -520,8 +520,8 @@ function evaluateIntegerEqualityExpression(expression, constants) {
 
   const notEqualParts = splitTopLevelToken(trimmed, "!=");
   if (notEqualParts.length === 2) {
-    const left = evaluateIntegerArithmeticExpression(notEqualParts[0], constants);
-    const right = evaluateIntegerArithmeticExpression(notEqualParts[1], constants);
+    const left = evaluateIntegerArithmeticExpression(notEqualParts[0], constants, constantTypes);
+    const right = evaluateIntegerArithmeticExpression(notEqualParts[1], constants, constantTypes);
     if (left === undefined || right === undefined) {
       return undefined;
     }
@@ -530,14 +530,14 @@ function evaluateIntegerEqualityExpression(expression, constants) {
   return undefined;
 }
 
-function evaluateIntegerComparisonExpression(expression, constants) {
+function evaluateIntegerComparisonExpression(expression, constants, constantTypes) {
   const trimmed = removeKotlinComments(expression).trim();
   const operators = [">=", "<=", ">", "<"];
   for (const operator of operators) {
     const parts = splitTopLevelToken(trimmed, operator);
     if (parts.length === 2) {
-      const left = evaluateIntegerArithmeticExpression(parts[0], constants);
-      const right = evaluateIntegerArithmeticExpression(parts[1], constants);
+      const left = evaluateIntegerArithmeticExpression(parts[0], constants, constantTypes);
+      const right = evaluateIntegerArithmeticExpression(parts[1], constants, constantTypes);
       if (left === undefined || right === undefined) {
         return undefined;
       }
@@ -873,11 +873,11 @@ function evaluateBooleanExpression(expression, constants, constantTypes = new Ma
     return values.every((value) => value === "true") ? "true" : "false";
   }
 
-  const integerEquality = evaluateIntegerEqualityExpression(trimmed, constants);
+  const integerEquality = evaluateIntegerEqualityExpression(trimmed, constants, constantTypes);
   if (integerEquality !== undefined) {
     return integerEquality;
   }
-  const integerComparison = evaluateIntegerComparisonExpression(trimmed, constants);
+  const integerComparison = evaluateIntegerComparisonExpression(trimmed, constants, constantTypes);
   if (integerComparison !== undefined) {
     return integerComparison;
   }
@@ -1054,13 +1054,13 @@ function splitTopLevelOperators(text, operators) {
   return parts;
 }
 
-function evaluateIntegerArithmeticExpression(expression, constants) {
+function evaluateIntegerArithmeticExpression(expression, constants, constantTypes) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
     return undefined;
   }
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
-    return evaluateIntegerArithmeticExpression(trimmed.slice(1, -1), constants);
+    return evaluateIntegerArithmeticExpression(trimmed.slice(1, -1), constants, constantTypes);
   }
 
   const literal = parseKotlinIntegerLiteralExpression(trimmed);
@@ -1068,23 +1068,27 @@ function evaluateIntegerArithmeticExpression(expression, constants) {
     return literal;
   }
   if ((trimmed.startsWith("+") || trimmed.startsWith("-")) && trimmed.length > 1) {
-    const unaryValue = evaluateIntegerArithmeticExpression(trimmed.slice(1), constants);
+    const unaryValue = evaluateIntegerArithmeticExpression(trimmed.slice(1), constants, constantTypes);
     if (unaryValue !== undefined) {
       return trimmed[0] === "-" ? String(-BigInt(unaryValue)) : unaryValue;
     }
   }
   if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
+    const typeName = canonicalKotlinTypeName(constantTypes && constantTypes.get(trimmed));
+    if (typeName !== undefined && !isKotlinNumericType(typeName)) {
+      return undefined;
+    }
     return parseKotlinIntegerLiteralExpression(constants.get(trimmed));
   }
 
   const additiveParts = splitTopLevelOperators(trimmed, new Set(["+", "-"]));
   if (additiveParts.length > 1) {
-    let result = evaluateIntegerArithmeticExpression(additiveParts[0].expression, constants);
+    let result = evaluateIntegerArithmeticExpression(additiveParts[0].expression, constants, constantTypes);
     if (result === undefined) {
       return undefined;
     }
     for (const part of additiveParts.slice(1)) {
-      const value = evaluateIntegerArithmeticExpression(part.expression, constants);
+      const value = evaluateIntegerArithmeticExpression(part.expression, constants, constantTypes);
       if (value === undefined) {
         return undefined;
       }
@@ -1095,12 +1099,12 @@ function evaluateIntegerArithmeticExpression(expression, constants) {
 
   const multiplicativeParts = splitTopLevelOperators(trimmed, new Set(["*", "/", "%"]));
   if (multiplicativeParts.length > 1) {
-    let result = evaluateIntegerArithmeticExpression(multiplicativeParts[0].expression, constants);
+    let result = evaluateIntegerArithmeticExpression(multiplicativeParts[0].expression, constants, constantTypes);
     if (result === undefined) {
       return undefined;
     }
     for (const part of multiplicativeParts.slice(1)) {
-      const value = evaluateIntegerArithmeticExpression(part.expression, constants);
+      const value = evaluateIntegerArithmeticExpression(part.expression, constants, constantTypes);
       if (value === undefined || ((part.operator === "/" || part.operator === "%") && BigInt(value) === 0n)) {
         return undefined;
       }
@@ -1429,7 +1433,7 @@ function evaluateStringExpression(expression, constants, constantTypes = new Map
   if (booleanExpression !== undefined) {
     return booleanExpression;
   }
-  const integerArithmetic = evaluateIntegerArithmeticExpression(trimmed, constants);
+  const integerArithmetic = evaluateIntegerArithmeticExpression(trimmed, constants, constantTypes);
   if (integerArithmetic !== undefined) {
     return integerArithmetic;
   }
