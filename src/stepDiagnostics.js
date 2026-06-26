@@ -2119,6 +2119,7 @@ function isFunctionHeaderContinuationStart(char) {
     && (
       char === "("
       || char === "<"
+      || char === ">"
       || char === "."
       || char === "`"
       || char === "@"
