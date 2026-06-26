@@ -1,9 +1,10 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-function createDocument(text) {
+function createDocument(text, fsPath = "/workspace/specs/example.spec") {
   const lines = text.split("\n");
   return {
+    uri: { fsPath },
     lineAt(line) {
       return { text: lines[line] };
     },
@@ -87,4 +88,17 @@ test("GaugeFoldingRangeProvider folds hash headings accepted by the Gauge lexer"
     { start: 3, end: 4 },
     { start: 6, end: 7 },
   ]);
+});
+
+test("GaugeFoldingRangeProvider ignores concept hyphen underline headings", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider();
+  const document = createDocument([
+    "Not a concept heading",
+    "---------------------",
+    "* Reuse",
+    "",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), []);
 });

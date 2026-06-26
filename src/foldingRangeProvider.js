@@ -8,6 +8,15 @@ function documentLines(document) {
   return lines;
 }
 
+function documentPath(document) {
+  const uri = document && document.uri;
+  return (uri && (uri.fsPath || uri.path)) || document.fileName || "";
+}
+
+function isConceptDocument(document) {
+  return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
 function isSingleHashHeading(line) {
   return /^\s*#(?!#).*$/.test(line);
 }
@@ -32,14 +41,20 @@ function hasLegacyHeadingText(line) {
   return Boolean(line && line.trim());
 }
 
-function foldingMarkers(lines) {
+function foldingMarkers(lines, options = {}) {
   const markers = [];
+  const conceptDocument = Boolean(options.conceptDocument);
   for (let line = 0; line < lines.length; line += 1) {
     const text = lines[line];
     const nextText = lines[line + 1];
 
-    if (hasLegacyHeadingText(text)
-      && (isLegacySpecUnderline(nextText) || isLegacyScenarioUnderline(nextText))) {
+    if (hasLegacyHeadingText(text) && isLegacySpecUnderline(nextText)) {
+      markers.push({ startLine: line + 1, boundaryLine: line });
+      line += 1;
+      continue;
+    }
+
+    if (!conceptDocument && hasLegacyHeadingText(text) && isLegacyScenarioUnderline(nextText)) {
       markers.push({ startLine: line + 1, boundaryLine: line });
       line += 1;
       continue;
@@ -63,7 +78,7 @@ function trimEndLine(lines, startLine, endLine) {
 class GaugeFoldingRangeProvider {
   provideFoldingRanges(document) {
     const lines = documentLines(document);
-    const markers = foldingMarkers(lines);
+    const markers = foldingMarkers(lines, { conceptDocument: isConceptDocument(document) });
     const ranges = [];
 
     for (let index = 0; index < markers.length; index += 1) {
