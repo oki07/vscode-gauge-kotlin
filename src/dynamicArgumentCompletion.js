@@ -155,14 +155,20 @@ function specDataTableHeaders(text) {
 
 function conceptDynamicArguments(text) {
   const values = [];
-  const pattern = /<([^>\r\n]+)>/g;
-  let match = pattern.exec(text);
-  while (match) {
-    const value = match[1].trim();
-    if (value) {
-      values.push(value);
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    let openIndex = line.indexOf("<");
+    while (openIndex !== -1) {
+      const closeIndex = closingAngleIndex(line, openIndex);
+      if (closeIndex === -1) {
+        break;
+      }
+      const value = line.slice(openIndex + 1, closeIndex).trim();
+      if (value) {
+        values.push(value);
+      }
+      openIndex = line.indexOf("<", closeIndex + 1);
     }
-    match = pattern.exec(text);
   }
   return unique(values);
 }

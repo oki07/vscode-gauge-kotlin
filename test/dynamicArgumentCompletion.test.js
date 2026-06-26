@@ -146,6 +146,20 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept dynamic arguments"
   assert.deepEqual(labels(items), ["item", "user", "u"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests escaped concept dynamic arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Shared checkout <user \\> name>",
+    "* Select <item>",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(1, 11));
+
+  assert.deepEqual(labels(items), ["user \\> name", "item"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments inside quotes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
