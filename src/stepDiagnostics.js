@@ -212,6 +212,49 @@ function findMatchingParen(text, openIndex) {
   return -1;
 }
 
+function findMatchingBracket(text, openIndex) {
+  let depth = 0;
+  let quote;
+  for (let index = openIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "[") {
+      depth += 1;
+    } else if (char === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
 function splitTopLevel(text, separator) {
   const parts = [];
   let start = 0;
@@ -347,6 +390,7 @@ function findTopLevelChar(text, target) {
 }
 
 const KOTLIN_IDENTIFIER_PATTERN = "(?:[A-Za-z_]\\w*|`[^`\\r\\n]+`)";
+const KOTLIN_ANNOTATION_NAME_PATTERN = `${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*`;
 const KOTLIN_IDENTIFIER_PATH_PATTERN = new RegExp(
   `^${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*$`,
 );
@@ -2290,9 +2334,7 @@ function skipKotlinAnnotation(text, startIndex) {
     index += target[0].length;
   }
 
-  const namePattern = new RegExp(
-    `^(?:${KOTLIN_IDENTIFIER_PATTERN}\\.)*${KOTLIN_IDENTIFIER_PATTERN}`,
-  );
+  const namePattern = new RegExp(`^${KOTLIN_ANNOTATION_NAME_PATTERN}`);
   const name = namePattern.exec(text.slice(index));
   if (!name) {
     return startIndex;
@@ -2444,16 +2486,98 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
   return annotationName === "Step";
 }
 
+function addStepFunctionEntry(
+  entries,
+  text,
+  constants,
+  ignoredRanges,
+  stepImports,
+  classifierNames,
+  annotationName,
+  openParen,
+  functionSearchStart,
+) {
+  if (!isStepAnnotationAllowed(annotationName, stepImports, classifierNames)) {
+    return;
+  }
+  const closeParen = findMatchingParen(text, openParen);
+  if (closeParen === -1) {
+    return;
+  }
+  const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
+  const method = findAttachedFunction(text, functionSearchStart(closeParen), ignoredRanges);
+  if (aliases.length > 0 && method) {
+    entries.push({ aliases, ...method });
+  }
+}
+
+function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, classifierNames) {
+  const groupPattern = /@\[/g;
+  let groupMatch = groupPattern.exec(text);
+  while (groupMatch) {
+    if (isInIgnoredRange(groupMatch.index, ignoredRanges)) {
+      groupMatch = groupPattern.exec(text);
+      continue;
+    }
+    const openBracket = groupMatch.index + 1;
+    const closeBracket = findMatchingBracket(text, openBracket);
+    if (closeBracket === -1) {
+      groupPattern.lastIndex = openBracket + 1;
+      groupMatch = groupPattern.exec(text);
+      continue;
+    }
+
+    const groupStart = openBracket + 1;
+    const annotationPattern = new RegExp(KOTLIN_ANNOTATION_NAME_PATTERN, "g");
+    annotationPattern.lastIndex = groupStart;
+    let annotationMatch = annotationPattern.exec(text);
+    while (annotationMatch && annotationMatch.index < closeBracket) {
+      if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
+        annotationMatch = annotationPattern.exec(text);
+        continue;
+      }
+      let openParen = annotationPattern.lastIndex;
+      while (/\s/.test(text[openParen])) {
+        openParen += 1;
+      }
+      if (text[openParen] !== "(") {
+        annotationMatch = annotationPattern.exec(text);
+        continue;
+      }
+      const closeParen = findMatchingParen(text, openParen);
+      if (closeParen === -1 || closeParen > closeBracket) {
+        annotationPattern.lastIndex = openParen + 1;
+        annotationMatch = annotationPattern.exec(text);
+        continue;
+      }
+
+      addStepFunctionEntry(
+        entries,
+        text,
+        constants,
+        ignoredRanges,
+        stepImports,
+        classifierNames,
+        annotationMatch[0],
+        openParen,
+        () => closeBracket + 1,
+      );
+      annotationPattern.lastIndex = closeParen + 1;
+      annotationMatch = annotationPattern.exec(text);
+    }
+    groupPattern.lastIndex = closeBracket + 1;
+    groupMatch = groupPattern.exec(text);
+  }
+}
+
 function findStepFunctions(text) {
   const entries = [];
-  const annotationPattern = new RegExp(
-    `@(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)`,
-    "g",
-  );
+  const annotationPattern = new RegExp(`@(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
   const classifierNames = localClassifierNames(text, ignoredRanges);
+  addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, classifierNames);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -2461,10 +2585,6 @@ function findStepFunctions(text) {
       continue;
     }
     const annotationName = annotationMatch[1];
-    if (!isStepAnnotationAllowed(annotationName, stepImports, classifierNames)) {
-      annotationMatch = annotationPattern.exec(text);
-      continue;
-    }
     let openParen = annotationPattern.lastIndex;
     while (/\s/.test(text[openParen])) {
       openParen += 1;
@@ -2479,11 +2599,17 @@ function findStepFunctions(text) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
-    const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
-    const method = findAttachedFunction(text, closeParen + 1, ignoredRanges);
-    if (aliases.length > 0 && method) {
-      entries.push({ aliases, ...method });
-    }
+    addStepFunctionEntry(
+      entries,
+      text,
+      constants,
+      ignoredRanges,
+      stepImports,
+      classifierNames,
+      annotationName,
+      openParen,
+      () => closeParen + 1,
+    );
     annotationPattern.lastIndex = closeParen + 1;
     annotationMatch = annotationPattern.exec(text);
   }
