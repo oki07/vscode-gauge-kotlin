@@ -184,6 +184,10 @@ function isConceptLegacyUnderlineHeadingText(line) {
   return line.trim().length > 0 && !/[#*|]/.test(line);
 }
 
+function isConceptLegacyUnderline(lines, lineNumber) {
+  return lineNumber + 1 < lines.length && /^[=]+$/.test(lines[lineNumber]);
+}
+
 function extractConceptHeadings(text) {
   const headings = [];
   const lines = (text || "").split(/\r\n|\n/);
@@ -196,7 +200,7 @@ function extractConceptHeadings(text) {
     if (
       index + 1 < lines.length
       && isConceptLegacyUnderlineHeadingText(lines[index])
-      && /^[=]+\s*$/.test(lines[index + 1])
+      && isConceptLegacyUnderline(lines, index + 1)
     ) {
       headings.push(normalizeConceptHeading(lines[index]));
       index += 1;

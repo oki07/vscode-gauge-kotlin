@@ -116,6 +116,10 @@ function isConceptLegacyUnderlineHeadingText(line) {
   return line.trim().length > 0 && !/[#*|]/.test(line);
 }
 
+function hasFollowingLine(lines, lineNumber) {
+  return lineNumber + 1 < lines.length;
+}
+
 function isHashHeadingLine(line, conceptDocument) {
   return conceptDocument ? line.startsWith("#") : line.trimStart().startsWith("#");
 }
@@ -165,7 +169,10 @@ class GaugeSemanticTokensProvider {
         const nextLine = lines[index + 1];
         if (
           /^[=]+$/.test(nextLine)
-          && (!conceptDocument || isConceptLegacyUnderlineHeadingText(line))
+          && (
+            !conceptDocument
+            || (isConceptLegacyUnderlineHeadingText(line) && hasFollowingLine(lines, index + 1))
+          )
         ) {
           const leadingSpaces = line.length - line.trimStart().length;
           builder.push(index, leadingSpaces, line.length - leadingSpaces, tokenTypes.indexOf("specification"), 0);

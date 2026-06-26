@@ -356,6 +356,48 @@ test("GaugeSemanticTokensProvider ignores indented legacy underline headings", (
   ]);
 });
 
+test("GaugeSemanticTokensProvider requires concept legacy underline terminators", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const specDocument = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "Checkout",
+        "========",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return [
+        "Shared checkout",
+        "========",
+      ].join("\n");
+    },
+  };
+
+  const specTokens = provider.provideDocumentSemanticTokens(specDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const conceptTokens = provider.provideDocumentSemanticTokens(conceptDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(specTokens.map((entry) => entry.type), [
+    "specification",
+    "specification",
+  ]);
+  assert.deepEqual(conceptTokens.map((entry) => entry.type), [
+    "gaugeComment",
+    "gaugeComment",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () => {
   const {
     GaugeSemanticTokensProvider,
