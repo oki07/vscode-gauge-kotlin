@@ -270,14 +270,42 @@ function tableParameterMap(steps) {
   return tables;
 }
 
+function unescapedDynamicParameterRanges(text, parameter) {
+  const ranges = [];
+  let openIndex = nextUnescapedDynamicStart(text, 0);
+  while (openIndex !== -1) {
+    const closeIndex = dynamicParameterEnd(text, openIndex);
+    if (closeIndex === -1) {
+      break;
+    }
+    const value = text.slice(openIndex, closeIndex + 1);
+    if (value === parameter) {
+      ranges.push({ end: closeIndex + 1, start: openIndex });
+    }
+    openIndex = nextUnescapedDynamicStart(text, closeIndex + 1);
+  }
+  return ranges;
+}
+
+function hasUnescapedDynamicParameter(text, parameter) {
+  return unescapedDynamicParameterRanges(text, parameter).length > 0;
+}
+
 function conceptHasTableParameter(conceptName, tableName) {
-  return new RegExp(`<${escapeRegExp(tableName)}>`).test(conceptName);
+  return hasUnescapedDynamicParameter(conceptName, `<${tableName}>`);
 }
 
 function removeTableParameters(conceptName, tableNames) {
   let usageName = conceptName;
   for (const tableName of tableNames) {
-    usageName = usageName.replace(new RegExp(`\\s*<${escapeRegExp(tableName)}>`, "g"), "");
+    const ranges = unescapedDynamicParameterRanges(usageName, `<${tableName}>`);
+    for (const range of ranges.reverse()) {
+      let start = range.start;
+      while (start > 0 && /\s/.test(usageName[start - 1])) {
+        start -= 1;
+      }
+      usageName = `${usageName.slice(0, start)}${usageName.slice(range.end)}`;
+    }
   }
   return usageName.trim().replace(/\s+/g, " ");
 }
@@ -396,7 +424,7 @@ function isEscaped(line, index) {
 function appendMissingParameters(name, parameters) {
   let result = name.trim();
   for (const parameter of parameters) {
-    if (new RegExp(escapeRegExp(parameter)).test(result)) {
+    if (hasUnescapedDynamicParameter(result, parameter)) {
       continue;
     }
     result = `${result} ${parameter}`.trim();
