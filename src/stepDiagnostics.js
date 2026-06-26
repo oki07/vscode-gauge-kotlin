@@ -1167,6 +1167,36 @@ function evaluateStringExpression(expression, constants, constantTypes = new Map
   return undefined;
 }
 
+function inferKotlinConstantType(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return inferKotlinConstantType(trimmed.slice(1, -1), constants, constantTypes);
+  }
+  if (parseStringLiteralTerm(trimmed, constants, constantTypes) !== undefined) {
+    return "String";
+  }
+  if (parseKotlinCharLiteralExpression(trimmed) !== undefined) {
+    return "Char";
+  }
+  if (parseKotlinBooleanLiteralExpression(trimmed) !== undefined) {
+    return "Boolean";
+  }
+
+  const numericLiteral = parseKotlinNumericLiteralExpression(trimmed);
+  if (numericLiteral !== undefined) {
+    return numericLiteral.floating ? "Double" : "Int";
+  }
+  const numericArithmetic = evaluateNumericArithmetic(trimmed, constants, constantTypes);
+  if (numericArithmetic !== undefined) {
+    return numericArithmetic.floating ? "Double" : "Int";
+  }
+
+  return undefined;
+}
+
 function expressionInsideCall(expression, callName) {
   const trimmed = expression.trim();
   if (!trimmed.startsWith(`${callName}(`)) {
@@ -1518,11 +1548,12 @@ function collectStringConstants(text) {
       }
       const value = evaluateStringExpression(expression, constants, constantTypes);
       if (value !== undefined) {
+        const resolvedType = typeName || inferKotlinConstantType(expression, constants, constantTypes);
         for (const name of names) {
           if (!constants.has(name)) {
             constants.set(name, value);
-            if (typeName !== undefined) {
-              constantTypes.set(name, typeName);
+            if (resolvedType !== undefined) {
+              constantTypes.set(name, resolvedType);
             }
           }
         }
