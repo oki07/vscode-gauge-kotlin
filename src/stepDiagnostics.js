@@ -2408,6 +2408,17 @@ function localClassifierNames(text, ignoredRanges) {
   return names;
 }
 
+function resolveStepAnnotationTarget(annotationName, namedImports, seen = new Set()) {
+  if (annotationName === GAUGE_STEP_ANNOTATION) {
+    return annotationName;
+  }
+  if (!namedImports.has(annotationName) || seen.has(annotationName)) {
+    return annotationName;
+  }
+  seen.add(annotationName);
+  return resolveStepAnnotationTarget(namedImports.get(annotationName), namedImports, seen);
+}
+
 function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNames = new Set()) {
   if (annotationName === GAUGE_STEP_ANNOTATION) {
     return true;
@@ -2416,7 +2427,7 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
     return false;
   }
   if (stepImports.named.has(annotationName)) {
-    return stepImports.named.get(annotationName) === GAUGE_STEP_ANNOTATION;
+    return resolveStepAnnotationTarget(annotationName, stepImports.named) === GAUGE_STEP_ANNOTATION;
   }
   if (localClassifierNames.has(annotationName)) {
     return false;

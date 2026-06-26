@@ -320,6 +320,41 @@ test("GaugeStepDiagnosticsProvider resolves Step type aliases", () => {
   assert.deepEqual(provider.provideDiagnostics(localAliasDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider resolves chained Step type aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const gaugeChainDocument = createDocument([
+    "typealias GaugeStep = com.thoughtworks.gauge.Step",
+    "typealias ProjectStep = GaugeStep",
+    "",
+    "@ProjectStep(\"Gauge <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+  const nonGaugeChainDocument = createDocument([
+    "typealias CucumberStep = io.cucumber.java.en.Step",
+    "typealias Step = CucumberStep",
+    "",
+    "@Step(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+  const cyclicAliasDocument = createDocument([
+    "typealias Step = ProjectStep",
+    "typealias ProjectStep = Step",
+    "",
+    "@Step(\"Cycle <value>\")",
+    "fun cycle() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(gaugeChainDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Gauge <value>\". ",
+    ],
+  );
+  assert.deepEqual(provider.provideDiagnostics(nonGaugeChainDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(cyclicAliasDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores local Step annotation declarations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
