@@ -496,15 +496,29 @@ function evaluateStepAliasExpression(expression, constants) {
 
 function collectStringConstants(text) {
   const constants = new Map();
+  const expressions = [];
   const pattern = /^\s*(?:[A-Za-z_]\w*\s+)*const\s+val\s+([A-Za-z_]\w*)\s*(?::\s*String)?\s*=\s*(.+?)\s*$/gm;
   let match = pattern.exec(text);
   while (match) {
-    const value = evaluateStringExpression(match[2], constants);
-    if (value !== undefined) {
-      constants.set(match[1], value);
-    }
+    expressions.push({ expression: match[2], name: match[1] });
     match = pattern.exec(text);
   }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const { expression, name } of expressions) {
+      if (constants.has(name)) {
+        continue;
+      }
+      const value = evaluateStringExpression(expression, constants);
+      if (value !== undefined) {
+        constants.set(name, value);
+        changed = true;
+      }
+    }
+  }
+
   return constants;
 }
 
