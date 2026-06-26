@@ -324,6 +324,41 @@ test("GaugeSemanticTokensProvider tokenizes first table rows as headers without 
   assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "table"), true);
 });
 
+test("GaugeSemanticTokensProvider tokenizes blank-separated table rows as new headers", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "# Inventory",
+        "| user |",
+        "| Bob  |",
+        "",
+        "| <item> | quantity |",
+        "| book   | 2        |",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const secondHeaderTokens = tokens
+    .filter((entry) => entry.line === 4 && entry.type === "tableHeader")
+    .map(({ start, length }) => ({ start, length }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 4 && entry.type === "argument"), []);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 4 && entry.type === "table"), []);
+  assert.deepEqual(secondHeaderTokens, [
+    { start: 1, length: 8 },
+    { start: 10, length: 10 },
+  ]);
+});
+
 test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () => {
   const {
     GaugeSemanticTokensProvider,

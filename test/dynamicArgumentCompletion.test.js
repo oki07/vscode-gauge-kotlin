@@ -200,6 +200,28 @@ test("GaugeDynamicArgumentCompletionProvider ignores dynamic-looking table heade
   assert.deepEqual(items, []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores blank-separated table headers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const header = "| <item> | quantity |";
+  const document = createDocument([
+    "# Inventory",
+    "| user |",
+    "| Bob  |",
+    "",
+    header,
+    "| book   | 2        |",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(4, header.indexOf("item")),
+  );
+
+  assert.deepEqual(items, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

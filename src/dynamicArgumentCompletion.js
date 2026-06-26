@@ -122,7 +122,7 @@ function isFirstTableLine(lines, lineNumber) {
   for (let index = lineNumber - 1; index >= 0; index -= 1) {
     const line = lines[index] || "";
     if (line.trim() === "") {
-      continue;
+      return true;
     }
     return !isTableLine(line);
   }
