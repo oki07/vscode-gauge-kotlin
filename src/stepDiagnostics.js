@@ -6,6 +6,24 @@ const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
+const KOTLIN_FUNCTION_MODIFIERS = new Set([
+  "abstract",
+  "actual",
+  "expect",
+  "external",
+  "final",
+  "infix",
+  "inline",
+  "internal",
+  "open",
+  "operator",
+  "override",
+  "private",
+  "protected",
+  "public",
+  "suspend",
+  "tailrec",
+]);
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -681,6 +699,79 @@ function findNextFunction(text, startIndex, ignoredRanges = []) {
   return undefined;
 }
 
+function skipWhitespaceAndComments(text, startIndex) {
+  let index = startIndex;
+  while (index < text.length) {
+    if (/\s/.test(text[index])) {
+      index += 1;
+      continue;
+    }
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd;
+      continue;
+    }
+    return index;
+  }
+  return index;
+}
+
+function skipKotlinAnnotation(text, startIndex) {
+  if (text[startIndex] !== "@") {
+    return startIndex;
+  }
+
+  let index = startIndex + 1;
+  const target = /^[A-Za-z_]\w*:/.exec(text.slice(index));
+  if (target) {
+    index += target[0].length;
+  }
+
+  const name = /^(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*/.exec(text.slice(index));
+  if (!name) {
+    return startIndex;
+  }
+  index += name[0].length;
+  index = skipWhitespaceAndComments(text, index);
+  if (text[index] === "(") {
+    const closeParen = findMatchingParen(text, index);
+    if (closeParen === -1) {
+      return text.length;
+    }
+    return closeParen + 1;
+  }
+  return index;
+}
+
+function findAttachedFunction(text, startIndex, ignoredRanges = []) {
+  let index = startIndex;
+  while (index < text.length) {
+    index = skipWhitespaceAndComments(text, index);
+    if (text[index] === "@") {
+      const next = skipKotlinAnnotation(text, index);
+      if (next === index) {
+        return undefined;
+      }
+      index = next;
+      continue;
+    }
+
+    const token = /^[A-Za-z_]\w*/.exec(text.slice(index));
+    if (!token) {
+      return undefined;
+    }
+    if (token[0] === "fun") {
+      return findNextFunction(text, index, ignoredRanges);
+    }
+    if (KOTLIN_FUNCTION_MODIFIERS.has(token[0])) {
+      index += token[0].length;
+      continue;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
 function stepAnnotationImports(text) {
   const imports = new Map();
   const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
@@ -743,7 +834,7 @@ function findStepFunctions(text) {
       continue;
     }
     const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
-    const method = findNextFunction(text, closeParen + 1, ignoredRanges);
+    const method = findAttachedFunction(text, closeParen + 1, ignoredRanges);
     if (aliases.length > 0 && method) {
       entries.push({ aliases, ...method });
     }

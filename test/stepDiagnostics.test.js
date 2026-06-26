@@ -124,6 +124,19 @@ test("GaugeStepDiagnosticsProvider ignores comments inside Kotlin Step function 
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider does not attach Step annotations to later functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Holder <value>\")",
+    "class StepHolder {",
+    "  fun helper() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
