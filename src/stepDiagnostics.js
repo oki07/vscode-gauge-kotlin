@@ -705,6 +705,14 @@ function evaluateStringEqualityOperand(expression, constants, constantTypes) {
   ) {
     return constants.get(trimmed);
   }
+  const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
+  if (parts.length > 1) {
+    const values = parts.map((part) => evaluateStringExpression(part, constants, constantTypes));
+    const hasStringOperand = parts.some((part) => evaluateStringEqualityOperand(part, constants, constantTypes) !== undefined);
+    if (hasStringOperand && values.every((value) => value !== undefined)) {
+      return values.join("");
+    }
+  }
   return undefined;
 }
 
