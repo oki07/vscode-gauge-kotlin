@@ -4089,16 +4089,19 @@ function localClassifierNamesAtOffset(text, ignoredRanges, offset) {
   return names;
 }
 
-function resolveStepAnnotationTarget(annotationName, namedImports, seen = new Set()) {
+function resolveStepAnnotationTarget(annotationName, namedImports, localClassifierNames = new Set(), seen = new Set()) {
   const normalizedName = normalizeKotlinIdentifierPath(annotationName);
   if (normalizedName === GAUGE_STEP_ANNOTATION) {
+    return normalizedName;
+  }
+  if (!normalizedName.includes(".") && localClassifierNames.has(normalizedName)) {
     return normalizedName;
   }
   if (!namedImports.has(normalizedName) || seen.has(normalizedName)) {
     return normalizedName;
   }
   seen.add(normalizedName);
-  return resolveStepAnnotationTarget(namedImports.get(normalizedName), namedImports, seen);
+  return resolveStepAnnotationTarget(namedImports.get(normalizedName), namedImports, localClassifierNames, seen);
 }
 
 function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNames = new Set()) {
@@ -4113,7 +4116,10 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
     return false;
   }
   if (stepImports.named.has(normalizedName)) {
-    const resolvedName = resolveStepAnnotationTarget(normalizedName, stepImports.named);
+    const resolvedName = resolveStepAnnotationTarget(normalizedName, stepImports.named, localClassifierNames);
+    if (!resolvedName.includes(".") && localClassifierNames.has(resolvedName)) {
+      return false;
+    }
     return resolvedName === GAUGE_STEP_ANNOTATION
       || (
         resolvedName === "Step"

@@ -1253,6 +1253,30 @@ test("GaugeStepDiagnosticsProvider resolves Step type aliases through wildcard i
   assert.deepEqual(provider.provideDiagnostics(ambiguousWildcardDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider lets local classifiers shadow Step typealias targets", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const wildcardDocument = createDocument([
+    "import com.thoughtworks.gauge.*",
+    "annotation class Step(val value: String)",
+    "typealias GaugeStep = Step",
+    "",
+    "@GaugeStep(\"Local alias <value>\")",
+    "fun local() {}",
+  ].join("\n"));
+  const explicitImportDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "annotation class Step(val value: String)",
+    "typealias GaugeStep = Step",
+    "",
+    "@GaugeStep(\"Local explicit alias <value>\")",
+    "fun local() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(wildcardDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(explicitImportDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider resolves backtick Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
