@@ -114,13 +114,27 @@ function isTableHeaderSeparator(line) {
 }
 
 function tableCells(line) {
-  return line
+  const body = line
     .trim()
     .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim())
-    .filter(Boolean);
+    .replace(/\|$/, "");
+  const cells = [];
+  let cell = "";
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (character === "|" && !isEscapedPipe(body, index)) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells.filter(Boolean);
+}
+
+function isEscapedPipe(line, index) {
+  return index > 0 && line[index - 1] === "\\";
 }
 
 function unique(values) {

@@ -89,6 +89,25 @@ test("GaugeDynamicArgumentCompletionProvider suggests headers inside escaped dyn
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: step.lastIndexOf(">") });
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests escaped table header pipes", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "| user \\| name | role |",
+    "| ------------ | ---- |",
+    "| Bob          | admin |",
+    "",
+    "## Successful checkout",
+    "* Login as <u>",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(6, 13));
+
+  assert.deepEqual(labels(items), ["user \\| name", "role"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
