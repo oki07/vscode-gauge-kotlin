@@ -735,6 +735,56 @@ function evaluateStringEqualityExpression(expression, constants, constantTypes) 
   return undefined;
 }
 
+function evaluateBooleanEqualityOperand(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateBooleanEqualityOperand(trimmed.slice(1, -1), constants, constantTypes);
+  }
+
+  const literal = parseKotlinBooleanLiteralExpression(trimmed);
+  if (literal !== undefined) {
+    return literal;
+  }
+  if (
+    isKotlinIdentifierPath(trimmed)
+    && constants.has(trimmed)
+    && canonicalKotlinTypeName(constantTypes.get(trimmed)) === "Boolean"
+  ) {
+    return parseKotlinBooleanLiteralExpression(constants.get(trimmed));
+  }
+  return undefined;
+}
+
+function evaluateBooleanEqualityExpression(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  const equalParts = splitTopLevelToken(trimmed, "==");
+  if (equalParts.length === 2) {
+    const left = evaluateBooleanEqualityOperand(equalParts[0], constants, constantTypes);
+    const right = evaluateBooleanEqualityOperand(equalParts[1], constants, constantTypes);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return left === right ? "true" : "false";
+  }
+  if (equalParts.length > 2) {
+    return undefined;
+  }
+
+  const notEqualParts = splitTopLevelToken(trimmed, "!=");
+  if (notEqualParts.length === 2) {
+    const left = evaluateBooleanEqualityOperand(notEqualParts[0], constants, constantTypes);
+    const right = evaluateBooleanEqualityOperand(notEqualParts[1], constants, constantTypes);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return left !== right ? "true" : "false";
+  }
+  return undefined;
+}
+
 function evaluateBooleanExpression(expression, constants, constantTypes = new Map()) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
@@ -776,6 +826,10 @@ function evaluateBooleanExpression(expression, constants, constantTypes = new Ma
   const stringEquality = evaluateStringEqualityExpression(trimmed, constants, constantTypes);
   if (stringEquality !== undefined) {
     return stringEquality;
+  }
+  const booleanEquality = evaluateBooleanEqualityExpression(trimmed, constants, constantTypes);
+  if (booleanEquality !== undefined) {
+    return booleanEquality;
   }
 
   const literal = parseKotlinBooleanLiteralExpression(trimmed);
