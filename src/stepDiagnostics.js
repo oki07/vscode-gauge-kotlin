@@ -345,8 +345,13 @@ function findTopLevelChar(text, target) {
   return -1;
 }
 
+const KOTLIN_IDENTIFIER_PATTERN = "(?:[A-Za-z_]\\w*|`[^`\\r\\n]+`)";
+const KOTLIN_IDENTIFIER_PATH_PATTERN = new RegExp(
+  `^${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*$`,
+);
+
 function isKotlinIdentifierPath(value) {
-  return /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(value);
+  return KOTLIN_IDENTIFIER_PATH_PATTERN.test(value);
 }
 
 const KOTLIN_NUMERIC_TYPES = new Set(["Byte", "Short", "Int", "Long", "Float", "Double"]);
@@ -1850,7 +1855,10 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*((?:[A-Za-z_]\w*\.)*(?:String|Char|Byte|Short|Int|Long|Float|Double|Boolean)))?\s*=/g;
+  const pattern = new RegExp(
+    `\\bconst\\s+val\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*(?::\\s*((?:[A-Za-z_]\\w*\\.)*(?:String|Char|Byte|Short|Int|Long|Float|Double|Boolean)))?\\s*=`,
+    "g",
+  );
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
