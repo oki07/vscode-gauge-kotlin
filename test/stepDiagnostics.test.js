@@ -287,6 +287,39 @@ test("GaugeStepDiagnosticsProvider ignores ambiguous Step wildcard imports", () 
   );
 });
 
+test("GaugeStepDiagnosticsProvider resolves Step type aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const nonGaugeAliasDocument = createDocument([
+    "typealias Step = io.cucumber.java.en.Step",
+    "",
+    "@Step(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+  const gaugeAliasDocument = createDocument([
+    "typealias GaugeStep = com.thoughtworks.gauge.Step",
+    "",
+    "@GaugeStep(\"Gauge <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+  const localAliasDocument = createDocument([
+    "annotation class LocalStep(val value: String)",
+    "typealias Step = LocalStep",
+    "",
+    "@Step(\"Local <value>\")",
+    "fun local() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(nonGaugeAliasDocument), []);
+  assert.deepEqual(
+    provider.provideDiagnostics(gaugeAliasDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Gauge <value>\". ",
+    ],
+  );
+  assert.deepEqual(provider.provideDiagnostics(localAliasDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores local Step annotation declarations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

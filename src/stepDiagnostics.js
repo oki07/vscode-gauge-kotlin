@@ -2357,7 +2357,7 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
   return undefined;
 }
 
-function stepAnnotationImports(text) {
+function stepAnnotationImports(text, ignoredRanges = []) {
   const named = new Map();
   const wildcards = new Set();
   const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:\.\*)?)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
@@ -2377,6 +2377,17 @@ function stepAnnotationImports(text) {
       named.set(exposedName, importedName);
     }
     match = importPattern.exec(text);
+  }
+  const typeAliasPattern = new RegExp(
+    `\\btypealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)`,
+    "g",
+  );
+  match = typeAliasPattern.exec(text);
+  while (match) {
+    if (!isInIgnoredRange(match.index, ignoredRanges)) {
+      named.set(match[1], match[2]);
+    }
+    match = typeAliasPattern.exec(text);
   }
   return { named, wildcards };
 }
@@ -2421,7 +2432,7 @@ function findStepFunctions(text) {
   const annotationPattern = /@((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\b/g;
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
-  const stepImports = stepAnnotationImports(text);
+  const stepImports = stepAnnotationImports(text, ignoredRanges);
   const classifierNames = localClassifierNames(text, ignoredRanges);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
