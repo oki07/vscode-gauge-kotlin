@@ -103,7 +103,7 @@ function isTableLine(text) {
 }
 
 function isTableStartLine(text) {
-  return /^\|.*\|\s*$/.test(text);
+  return isTableLine(text);
 }
 
 function escapeRegExp(text) {
