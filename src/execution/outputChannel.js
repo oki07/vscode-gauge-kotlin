@@ -1,42 +1,33 @@
 "use strict";
 
 const nodePath = require("node:path");
-
-class LineBuffer {
-  constructor(onLine) {
-    this.pending = "";
-    this.onLine = onLine;
-  }
-
-  append(chunk) {
-    const parts = `${this.pending}${chunk}`.split(/\r?\n/);
-    this.pending = parts.pop();
-    for (const line of parts) {
-      this.onLine(line);
-    }
-  }
-
-  done() {
-    if (this.pending) {
-      this.onLine(this.pending);
-      this.pending = "";
-    }
-  }
-}
+const { LineBuffer } = require("./lineBuffer");
 
 class OutputChannel {
   constructor(outputChannel, initial, projectRoot, options = {}) {
     this.channel = outputChannel;
     this.projectRoot = projectRoot;
     this.pathModule = options.pathModule || nodePath;
-    this.outBuffer = new LineBuffer((line) => this.channel.appendLine(line));
-    this.errBuffer = new LineBuffer((line) => this.channel.appendLine(line));
+    this.outBuffer = new LineBuffer();
+    this.errBuffer = new LineBuffer();
 
     this.channel.clear();
     this.channel.appendLine(initial);
     if (typeof this.channel.show === "function") {
       this.channel.show(true);
     }
+    this.outBuffer.onLine((line) => this.channel.appendLine(line));
+    this.outBuffer.onDone((last) => {
+      if (last) {
+        this.channel.appendLine(last);
+      }
+    });
+    this.errBuffer.onLine((line) => this.channel.appendLine(line));
+    this.errBuffer.onDone((last) => {
+      if (last) {
+        this.channel.appendLine(last);
+      }
+    });
   }
 
   absolutizeOutputPaths(line) {
