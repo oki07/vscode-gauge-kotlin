@@ -2433,11 +2433,11 @@ function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
   return findNextPropertyAccessor(text, startIndex, "", ignoredRanges);
 }
 
-function findNextGetterAccessor(text, startIndex, ignoredRanges = []) {
+function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredRanges = []) {
   if (isInIgnoredRange(startIndex, ignoredRanges)) {
     return undefined;
   }
-  const accessor = /^get\b/.exec(text.slice(startIndex));
+  const accessor = new RegExp(`^${accessorName}\\b`).exec(text.slice(startIndex));
   if (!accessor) {
     return undefined;
   }
@@ -2454,6 +2454,14 @@ function findNextGetterAccessor(text, startIndex, ignoredRanges = []) {
     parameterStart: openParen + 1,
     parameterText: text.slice(openParen + 1, closeParen),
   };
+}
+
+function findNextGetterAccessor(text, startIndex, ignoredRanges = []) {
+  return findNextDirectPropertyAccessor(text, startIndex, "get", ignoredRanges);
+}
+
+function findNextSetterAccessor(text, startIndex, ignoredRanges = []) {
+  return findNextDirectPropertyAccessor(text, startIndex, "set", ignoredRanges);
 }
 
 function findNextPropertySetter(text, startIndex, ignoredRanges = []) {
@@ -2665,6 +2673,9 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
     }
     if (token[0] === "get") {
       return findNextGetterAccessor(text, index, ignoredRanges);
+    }
+    if (token[0] === "set") {
+      return findNextSetterAccessor(text, index, ignoredRanges);
     }
     if (KOTLIN_FUNCTION_MODIFIERS.has(token[0])) {
       index += token[0].length;
