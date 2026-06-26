@@ -15,6 +15,14 @@ function readReferencePackageJson() {
   return JSON.parse(fs.readFileSync(packagePath, "utf8"));
 }
 
+function readVscodeIgnore() {
+  const ignorePath = path.join(root, ".vscodeignore");
+  return fs.readFileSync(ignorePath, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function comparableConfigurationSchema(configuration) {
   return {
     type: configuration.type,
@@ -50,6 +58,14 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");
   assert.deepEqual(manifest.categories, ["Programming Languages", "Testing"]);
+  assert.deepEqual(manifest.files, [
+    "language-configuration.json",
+    "resources/**",
+    "snippets/**",
+    "src/**",
+    "syntaxes/**",
+    ".vscodeignore",
+  ]);
 
   assert.deepEqual(manifest.activationEvents, [
     "onCommand:gauge.createProject",
@@ -322,6 +338,38 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
     "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
   ]);
+});
+
+test("extension package ignores development-only files while keeping runtime sources", () => {
+  const ignored = readVscodeIgnore();
+
+  for (const pattern of [
+    ".vscode/**",
+    ".git/**",
+    ".gitignore",
+    "**/*.vsix",
+    "**/*.zip",
+    "**/*.tgz",
+    "test/**",
+    ".vscode-test/**",
+    "docs/**",
+    "scripts/**",
+    "package-lock.json",
+  ]) {
+    assert.ok(ignored.includes(pattern), `missing ${pattern}`);
+  }
+
+  for (const runtimePattern of [
+    "src/**",
+    "resources/**",
+    "snippets/**",
+    "syntaxes/**",
+    "language-configuration.json",
+    "package.json",
+    "node_modules",
+  ]) {
+    assert.ok(!ignored.includes(runtimePattern), `runtime pattern must stay packaged: ${runtimePattern}`);
+  }
 });
 
 test("extension manifest preserves the official Gauge configuration schema", () => {

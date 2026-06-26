@@ -20,6 +20,14 @@
     "testing",
     "specification"
   ],
+  "files": [
+    "language-configuration.json",
+    "resources/**",
+    "snippets/**",
+    "src/**",
+    "syntaxes/**",
+    ".vscodeignore"
+  ],
   "engines": {
     "vscode": "^1.82.0"
   },

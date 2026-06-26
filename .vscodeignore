@@ -1,0 +1,14 @@
+.vscode/**
+.git/**
+.gitignore
+**/*.vsix
+**/*.zip
+**/*.tgz
+test/**
+.vscode-test/**
+docs/**
+scripts/**
+package-lock.json
+coverage/**
+.nyc_output/**
+*.log
