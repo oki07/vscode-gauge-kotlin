@@ -579,6 +579,46 @@ test("GaugeStepDiagnosticsProvider ignores expression-bodied accessor-local Step
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks accessor-body object member Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  val getterValue: Int",
+    "    get() {",
+    "      val objectStep = object {",
+    "        @Step(\"Getter object <value>\")",
+    "        fun objectMemberStep() {}",
+    "      }",
+    "      return 1",
+    "    }",
+    "",
+    "  var setterValue: Int = 0",
+    "    set(value) = run {",
+    "      val objectStep = object {",
+    "        @Step(\"Setter object <value> and <other>\")",
+    "        fun objectMemberStep(value: String) {}",
+    "      }",
+    "      field = value",
+    "    }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Getter object <value>\". ",
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Setter object <value> and <other>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores constructor-body-local Step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
