@@ -397,6 +397,23 @@ function parseKotlinIntegerLiteralExpression(value) {
   return String(sign * parsed);
 }
 
+function parseKotlinFloatingPointLiteralExpression(value) {
+  const trimmed = value.trim();
+  const hasFloatSuffix = /[fF]$/.test(trimmed);
+  const body = hasFloatSuffix ? trimmed.slice(0, -1) : trimmed;
+  const integerPattern = /^[+-]?(?:0|[1-9][0-9_]*)$/;
+  const floatingPattern = /^[+-]?(?:(?:[0-9][0-9_]*\.[0-9_]*|[0-9_]*\.[0-9][0-9_]*)(?:[eE][+-]?[0-9][0-9_]*)?|[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*)$/;
+  if (!floatingPattern.test(body) && !(hasFloatSuffix && integerPattern.test(body))) {
+    return undefined;
+  }
+
+  const parsed = Number(body.replace(/_/g, ""));
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return Number.isInteger(parsed) ? `${parsed}.0` : String(parsed);
+}
+
 function parseKotlinBooleanLiteralExpression(value) {
   const trimmed = value.trim();
   return trimmed === "true" || trimmed === "false" ? trimmed : undefined;
@@ -550,6 +567,10 @@ function evaluateStringExpression(expression, constants) {
   const intLiteral = parseKotlinIntegerLiteralExpression(trimmed);
   if (intLiteral !== undefined) {
     return intLiteral;
+  }
+  const floatingPointLiteral = parseKotlinFloatingPointLiteralExpression(trimmed);
+  if (floatingPointLiteral !== undefined) {
+    return floatingPointLiteral;
   }
   const booleanLiteral = parseKotlinBooleanLiteralExpression(trimmed);
   if (booleanLiteral !== undefined) {
@@ -884,7 +905,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Byte|Short|Int|Long|Boolean))?\s*=/g;
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char|Byte|Short|Int|Long|Float|Double|Boolean))?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
