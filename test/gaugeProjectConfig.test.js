@@ -13,6 +13,45 @@ test("GaugeConfig resolves plugin path from GAUGE_HOME", () => {
   assert.equal(config.pluginsPath(), "/custom/gauge/plugins");
 });
 
+test("GaugeConfig resolves Windows plugin path from APPDATA", () => {
+  const { GaugeConfig } = require("../src/config/gaugeConfig");
+
+  const config = new GaugeConfig("win32", {
+    env: { APPDATA: "/Users/userName/AppData/Roaming" },
+    pathModule: path.posix,
+  });
+
+  assert.equal(config.pluginsPath(), "/Users/userName/AppData/Roaming/Gauge/plugins");
+});
+
+test("GaugeConfig resolves Windows plugin path from GAUGE_HOME", () => {
+  const { GaugeConfig } = require("../src/config/gaugeConfig");
+
+  const config = new GaugeConfig("win32", {
+    env: {
+      APPDATA: "/Users/userName/AppData/Roaming",
+      GAUGE_HOME: "/custom/gauge",
+    },
+    pathModule: path.posix,
+  });
+
+  assert.equal(config.pluginsPath(), "/custom/gauge/plugins");
+});
+
+test("GaugeConfig resolves non-Windows plugin path from the user home", () => {
+  const { GaugeConfig } = require("../src/config/gaugeConfig");
+
+  const config = new GaugeConfig("darwin", {
+    env: {},
+    homeDir() {
+      return "/Users/userName";
+    },
+    pathModule: path.posix,
+  });
+
+  assert.equal(config.pluginsPath(), "/Users/userName/.gauge/plugins");
+});
+
 test("GaugeJavaProjectConfig writes Eclipse Java project files", () => {
   const { GaugeJavaProjectConfig } = require("../src/config/gaugeProjectConfig");
   const execCalls = [];
