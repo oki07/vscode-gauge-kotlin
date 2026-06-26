@@ -33,6 +33,10 @@ function dynamicArgumentRange(line, position) {
   let openIndex = line.indexOf("<");
   const stopAtUnescapedPipe = isTableLine(line);
   while (openIndex !== -1) {
+    if (isEscapedCharacter(line, openIndex)) {
+      openIndex = line.indexOf("<", openIndex + 1);
+      continue;
+    }
     const closeIndex = closingAngleIndex(line, openIndex, stopAtUnescapedPipe);
     if (position.character > openIndex && (closeIndex === -1 || position.character <= closeIndex)) {
       return {
@@ -141,7 +145,15 @@ function tableCells(line) {
 }
 
 function isEscapedPipe(line, index) {
-  return index > 0 && line[index - 1] === "\\";
+  return isEscapedCharacter(line, index);
+}
+
+function isEscapedCharacter(line, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function unique(values) {
@@ -183,6 +195,10 @@ function conceptDynamicArguments(text) {
     }
     let openIndex = line.indexOf("<");
     while (openIndex !== -1) {
+      if (isEscapedCharacter(line, openIndex)) {
+        openIndex = line.indexOf("<", openIndex + 1);
+        continue;
+      }
       const closeIndex = closingAngleIndex(line, openIndex);
       if (closeIndex === -1) {
         break;

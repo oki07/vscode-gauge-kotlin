@@ -89,6 +89,29 @@ test("GaugeDynamicArgumentCompletionProvider suggests headers inside escaped dyn
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: step.lastIndexOf(">") });
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores escaped dynamic argument starts", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const step = "* Login as \\<u>";
+  const document = createDocument([
+    "# Checkout",
+    "| user | role |",
+    "| ---- | ---- |",
+    "| Bob  | admin |",
+    "",
+    "## Successful checkout",
+    step,
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(6, step.indexOf("u") + 1),
+  );
+
+  assert.deepEqual(items, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests escaped table header pipes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
