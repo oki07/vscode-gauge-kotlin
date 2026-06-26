@@ -3212,6 +3212,58 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with comme
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates commented qualified Kotlin const references", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const documents = {
+    directAnnotation: createDocument([
+      "object Steps {",
+      "  const val LOGIN_STEP = \"Log in as <user>\"",
+      "}",
+      "",
+      "@Step(Steps./* ref */LOGIN_STEP)",
+      "fun login() {}",
+    ].join("\n")),
+    templateExpression: createDocument([
+      "object Steps {",
+      "  const val USER_ARG = \"<user>\"",
+      "}",
+      "const val LOGIN_STEP = \"Log in as ${Steps./* ref */USER_ARG}\"",
+      "",
+      "@Step(LOGIN_STEP)",
+      "fun login() {}",
+    ].join("\n")),
+    aliasExpression: createDocument([
+      "object Steps {",
+      "  const val BASE_STEP = \"Log in as <user>\"",
+      "}",
+      "const val LOGIN_STEP = Steps./* ref */BASE_STEP",
+      "",
+      "@Step(LOGIN_STEP)",
+      "fun login() {}",
+    ].join("\n")),
+  };
+
+  const diagnostics = Object.fromEntries(
+    Object.entries(documents).map(([name, document]) => [
+      name,
+      provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    ]),
+  );
+
+  assert.deepEqual(diagnostics, {
+    aliasExpression: [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+    directAnnotation: [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+    templateExpression: [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  });
+});
+
 test("GaugeStepDiagnosticsProvider evaluates qualified Kotlin const references", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

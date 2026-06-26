@@ -633,7 +633,7 @@ function readKotlinIdentifierPath(text, startIndex) {
 }
 
 function resolveKotlinConstantReference(name, constants, constantTypes) {
-  const trimmed = name.trim();
+  const trimmed = normalizeKotlinQualifiedPathDots(name.trim());
   if (!isKotlinIdentifierPath(trimmed) || constants === undefined) {
     return undefined;
   }
