@@ -1935,6 +1935,16 @@ function enclosingObjectPaths(objectRanges, offset) {
   return paths;
 }
 
+function pathText(path) {
+  return path.join(".");
+}
+
+function pathHasPrefix(path, prefix) {
+  const text = pathText(path);
+  const prefixText = pathText(prefix);
+  return text === prefixText || text.startsWith(`${prefixText}.`);
+}
+
 function collectStringConstants(text) {
   const constants = new Map();
   const constantTypes = new Map();
@@ -1959,10 +1969,21 @@ function collectStringConstants(text) {
     const expressionStart = pattern.lastIndex;
     const expressionEnd = findConstExpressionEnd(text, expressionStart);
     const objectPaths = enclosingObjectPaths(objectRanges, match.index);
+    const classPaths = enclosingObjectPaths(classRanges, match.index);
     const names = new Set([match[1]]);
     for (const objectPath of objectPaths) {
       if (objectPath.length > 0) {
-        names.add(`${objectPath.join(".")}.${match[1]}`);
+        names.add(`${pathText(objectPath)}.${match[1]}`);
+      }
+    }
+    for (const classPath of classPaths) {
+      if (classPath.length === 0) {
+        continue;
+      }
+      for (const objectPath of objectPaths) {
+        if (objectPath.length > 0 && !pathHasPrefix(objectPath, classPath)) {
+          names.add(`${pathText(classPath.concat(objectPath))}.${match[1]}`);
+        }
       }
     }
     expressions.push({

@@ -1869,6 +1869,30 @@ test("GaugeStepDiagnosticsProvider evaluates compact object Kotlin const referen
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates class nested object Kotlin const references", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class StepText {",
+    "  object Aliases {",
+    "    const val LOGIN_STEP = \"Log in as <user>\"",
+    "  }",
+    "}",
+    "",
+    "@Step(StepText.Aliases.LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates companion object Kotlin const references", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
