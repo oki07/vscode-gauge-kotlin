@@ -260,6 +260,28 @@ function findMatchingBracket(text, openIndex) {
   return -1;
 }
 
+function findMatchingAngle(text, openIndex) {
+  let depth = 0;
+  for (let index = openIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "`") {
+      const closeIndex = text.indexOf("`", index + 1);
+      if (closeIndex === -1) {
+        return -1;
+      }
+      index = closeIndex;
+    } else if (char === "<") {
+      depth += 1;
+    } else if (char === ">") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
 function splitTopLevel(text, separator) {
   const parts = [];
   let start = 0;
@@ -1572,10 +1594,20 @@ function inferKotlinConstantType(expression, constants, constantTypes) {
 
 function expressionInsideCall(expression, callName) {
   const trimmed = expression.trim();
-  if (!trimmed.startsWith(`${callName}(`)) {
+  if (!trimmed.startsWith(callName)) {
     return undefined;
   }
-  const openParen = trimmed.indexOf("(");
+  let openParen = skipWhitespaceAndComments(trimmed, callName.length);
+  if (trimmed[openParen] === "<") {
+    const closeAngle = findMatchingAngle(trimmed, openParen);
+    if (closeAngle === -1) {
+      return undefined;
+    }
+    openParen = skipWhitespaceAndComments(trimmed, closeAngle + 1);
+  }
+  if (trimmed[openParen] !== "(") {
+    return undefined;
+  }
   const closeParen = findMatchingParen(trimmed, openParen);
   if (closeParen !== trimmed.length - 1) {
     return undefined;
