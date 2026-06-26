@@ -1140,6 +1140,44 @@ test("GaugeStepDiagnosticsProvider evaluates companion object Kotlin const refer
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates explicit companion object Kotlin const reference paths", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class DefaultStepText {",
+    "  companion object {",
+    "    const val LOGIN_STEP = \"Log in as <user>\"",
+    "  }",
+    "}",
+    "",
+    "class NamedStepText {",
+    "  companion object Names {",
+    "    const val LOGIN_STEP = \"Log in as <user>\"",
+    "  }",
+    "}",
+    "",
+    "@Step(DefaultStepText.Companion.LOGIN_STEP)",
+    "fun defaultLogin() {}",
+    "",
+    "@Step(NamedStepText.LOGIN_STEP)",
+    "fun namedLogin() {}",
+    "",
+    "@Step(NamedStepText.Names.LOGIN_STEP)",
+    "fun explicitNamedLogin() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates interface companion object Kotlin const references", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

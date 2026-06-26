@@ -1739,7 +1739,7 @@ function collectObjectRanges(text, ignoredRanges) {
   const objectPattern = /\bobject\s+([A-Za-z_]\w*)\b/g;
   let match = objectPattern.exec(text);
   while (match) {
-    if (isInIgnoredRange(match.index, ignoredRanges)) {
+    if (isInIgnoredRange(match.index, ignoredRanges) || isCompanionObjectKeyword(text, match.index)) {
       match = objectPattern.exec(text);
       continue;
     }
@@ -1759,6 +1759,10 @@ function collectObjectRanges(text, ignoredRanges) {
     match = objectPattern.exec(text);
   }
   return ranges;
+}
+
+function isCompanionObjectKeyword(text, objectIndex) {
+  return /\bcompanion$/.test(text.slice(0, objectIndex).trimEnd());
 }
 
 function collectNamedTypeRanges(text, ignoredRanges) {
@@ -1790,7 +1794,7 @@ function collectNamedTypeRanges(text, ignoredRanges) {
 
 function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
   const ranges = [];
-  const companionPattern = /\bcompanion\s+object(?:\s+[A-Za-z_]\w*)?\b/g;
+  const companionPattern = /\bcompanion\s+object(?:\s+([A-Za-z_]\w*))?\b/g;
   let match = companionPattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
@@ -1798,14 +1802,19 @@ function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
       continue;
     }
 
-    const enclosingClassPath = enclosingObjectPath(classRanges, match.index);
+    const enclosingClassPath = enclosingObjectPaths(classRanges, match.index)[0] || [];
     const bodyStart = findObjectBodyStart(text, companionPattern.lastIndex);
     if (enclosingClassPath.length > 0 && bodyStart !== -1) {
       const bodyEnd = findMatchingBrace(text, bodyStart);
       if (bodyEnd !== -1) {
+        const enclosingName = enclosingClassPath.join(".");
+        const companionName = match[1] || "Companion";
         ranges.push({
           end: bodyEnd,
-          name: enclosingClassPath.join("."),
+          names: [
+            enclosingName,
+            `${enclosingName}.${companionName}`,
+          ],
           start: bodyStart + 1,
         });
         companionPattern.lastIndex = bodyStart + 1;
@@ -1816,11 +1825,19 @@ function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
   return ranges;
 }
 
-function enclosingObjectPath(objectRanges, offset) {
-  return objectRanges
+function rangeNames(range) {
+  return Array.isArray(range.names) ? range.names : [range.name];
+}
+
+function enclosingObjectPaths(objectRanges, offset) {
+  const enclosingRanges = objectRanges
     .filter((range) => offset >= range.start && offset < range.end)
-    .sort((left, right) => left.start - right.start)
-    .map((range) => range.name);
+    .sort((left, right) => left.start - right.start);
+  let paths = [[]];
+  for (const range of enclosingRanges) {
+    paths = paths.flatMap((path) => rangeNames(range).map((name) => path.concat(name)));
+  }
+  return paths;
 }
 
 function collectStringConstants(text) {
@@ -1843,14 +1860,16 @@ function collectStringConstants(text) {
 
     const expressionStart = pattern.lastIndex;
     const expressionEnd = findConstExpressionEnd(text, expressionStart);
-    const objectPath = enclosingObjectPath(objectRanges, match.index);
-    const names = [match[1]];
-    if (objectPath.length > 0) {
-      names.push(`${objectPath.join(".")}.${match[1]}`);
+    const objectPaths = enclosingObjectPaths(objectRanges, match.index);
+    const names = new Set([match[1]]);
+    for (const objectPath of objectPaths) {
+      if (objectPath.length > 0) {
+        names.add(`${objectPath.join(".")}.${match[1]}`);
+      }
     }
     expressions.push({
       expression: text.slice(expressionStart, expressionEnd),
-      names,
+      names: [...names],
       typeName: canonicalKotlinTypeName(match[2]),
     });
     pattern.lastIndex = expressionEnd;
