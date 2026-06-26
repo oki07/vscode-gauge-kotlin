@@ -724,6 +724,35 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step getter use-site annotation
   assert.deepEqual(provider.provideDiagnostics(localGetterDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider accepts whitespace after Kotlin Step annotation markers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const functionDocument = createDocument([
+    "@ /* marker */ Step(\"Decorated <value>\")",
+    "fun decorated() {}",
+  ].join("\n"));
+  const getterDocument = createDocument([
+    "class Steps {",
+    "  @get: /* marker */ Step(\"Getter <value>\")",
+    "  val getterStep: String",
+    "    get() = \"value\"",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(functionDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Decorated <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(getterDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Getter <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks Kotlin Step getter accessor annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

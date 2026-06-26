@@ -3405,37 +3405,66 @@ function skipWhitespaceAndComments(text, startIndex) {
   return index;
 }
 
-function skipKotlinAnnotation(text, startIndex) {
+function readKotlinAnnotationApplication(text, startIndex) {
   if (text[startIndex] !== "@") {
-    return startIndex;
+    return undefined;
   }
 
-  let index = startIndex + 1;
-  const target = /^[A-Za-z_]\w*:/.exec(text.slice(index));
+  let index = skipWhitespaceAndComments(text, startIndex + 1);
+  let useSiteTarget;
+  const target = /^(?:get|set)\b/.exec(text.slice(index));
   if (target) {
-    index += target[0].length;
+    const colonIndex = skipWhitespaceAndComments(text, index + target[0].length);
+    if (text[colonIndex] === ":") {
+      useSiteTarget = target[0];
+      index = skipWhitespaceAndComments(text, colonIndex + 1);
+    }
   }
 
   if (text[index] === "[") {
     const closeBracket = findMatchingBracket(text, index);
-    return closeBracket === -1 ? text.length : closeBracket + 1;
+    return {
+      closeBracket,
+      end: closeBracket === -1 ? text.length : closeBracket + 1,
+      kind: "group",
+      openBracket: index,
+      useSiteTarget,
+    };
   }
 
   const namePattern = new RegExp(`^${KOTLIN_ANNOTATION_NAME_PATTERN}`);
   const name = namePattern.exec(text.slice(index));
   if (!name) {
-    return startIndex;
+    return undefined;
   }
+
+  const annotationName = name[0];
   index += name[0].length;
   index = skipWhitespaceAndComments(text, index);
   if (text[index] === "(") {
     const closeParen = findMatchingParen(text, index);
-    if (closeParen === -1) {
-      return text.length;
-    }
-    return closeParen + 1;
+    return {
+      annotationName,
+      closeParen,
+      end: closeParen === -1 ? text.length : closeParen + 1,
+      kind: "annotation",
+      openParen: index,
+      useSiteTarget,
+    };
   }
-  return index;
+  return {
+    annotationName,
+    closeParen: -1,
+    end: index,
+    kind: "annotation",
+    openParen: -1,
+    useSiteTarget,
+  };
+}
+
+function skipKotlinAnnotation(text, startIndex) {
+  const annotation = readKotlinAnnotationApplication(text, startIndex);
+  return annotation === undefined ? startIndex : annotation.end;
 }
 
 function skipKotlinContextParameters(text, startIndex) {
@@ -3912,7 +3941,7 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
 
 function findStepFunctions(text) {
   const entries = [];
-  const annotationPattern = new RegExp(`@(?:(get|set):)?(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
+  const annotationPattern = /@/g;
   const { constants, constantTypes } = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
@@ -3930,22 +3959,20 @@ function findStepFunctions(text) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
-    const annotationName = annotationMatch[2];
-    const findAttachedDeclaration = findAttachedPropertyAccessor(annotationMatch[1]);
-    let openParen = annotationPattern.lastIndex;
-    while (/\s/.test(text[openParen])) {
-      openParen += 1;
-    }
-    if (text[openParen] !== "(") {
+    const annotation = readKotlinAnnotationApplication(text, annotationMatch.index);
+    if (
+      annotation === undefined
+      || annotation.kind !== "annotation"
+      || annotation.openParen === -1
+      || annotation.closeParen === -1
+    ) {
+      if (annotation && annotation.end > annotationPattern.lastIndex) {
+        annotationPattern.lastIndex = annotation.end;
+      }
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
-    const closeParen = findMatchingParen(text, openParen);
-    if (closeParen === -1) {
-      annotationPattern.lastIndex = openParen + 1;
-      annotationMatch = annotationPattern.exec(text);
-      continue;
-    }
+    const findAttachedDeclaration = findAttachedPropertyAccessor(annotation.useSiteTarget);
     addStepFunctionEntry(
       entries,
       text,
@@ -3954,13 +3981,13 @@ function findStepFunctions(text) {
       ignoredRanges,
       stepImports,
       functionBodyRanges,
-      annotationName,
-      openParen,
-      () => closeParen + 1,
+      annotation.annotationName,
+      annotation.openParen,
+      () => annotation.closeParen + 1,
       findAttachedDeclaration,
       annotationMatch.index,
     );
-    annotationPattern.lastIndex = closeParen + 1;
+    annotationPattern.lastIndex = annotation.end;
     annotationMatch = annotationPattern.exec(text);
   }
   return entries;
