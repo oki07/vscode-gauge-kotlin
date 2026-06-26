@@ -64,6 +64,36 @@ test("OutputChannel does not rewrite absolute implementation paths", () => {
   );
 });
 
+test("OutputChannel converts lambda implementation paths from relative to absolute", () => {
+  const { OutputChannel } = require("../../src/execution/outputChannel");
+  const channel = new MockOutputChannel();
+  const outputChannel = new OutputChannel(channel, "", "project", { pathModule: path.posix });
+
+  outputChannel.appendOutBuf(
+    `      at Object.<anonymous> (${path.posix.join("tests", "step_implementation.js:24:10")})\n`,
+  );
+
+  assert.equal(
+    channel.text,
+    `      at Object.<anonymous> (${path.posix.join("project", "tests", "step_implementation.js:24:10)")}`,
+  );
+});
+
+test("OutputChannel converts hook lambda implementation paths from relative to absolute", () => {
+  const { OutputChannel } = require("../../src/execution/outputChannel");
+  const channel = new MockOutputChannel();
+  const outputChannel = new OutputChannel(channel, "", "project", { pathModule: path.posix });
+
+  outputChannel.appendOutBuf(
+    `      at Object.<anonymous> (${path.posix.join("tests", "step_implementation.js:24:10")})\n`,
+  );
+
+  assert.equal(
+    channel.text,
+    `      at Object.<anonymous> (${path.posix.join("project", "tests", "step_implementation.js:24:10)")}`,
+  );
+});
+
 test("OutputChannel reports finish status", () => {
   const { OutputChannel } = require("../../src/execution/outputChannel");
   const channel = new MockOutputChannel();
