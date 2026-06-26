@@ -505,6 +505,47 @@ test("execute scenario runs the provided spec explorer node", async () => {
   ]);
 });
 
+test("execute node resolves Windows drive-letter spec paths to the matching workspace", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const otherRoot = "C:\\other";
+  const projectRoot = "C:\\workspace";
+  const spec = path.win32.join(projectRoot, "specs", "checkout.spec");
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: otherRoot } },
+      { uri: { fsPath: projectRoot } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.win32,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.specexplorer.runNode", {
+    file: spec,
+  });
+
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--hide-suggestion", "--simple-console", spec],
+      cwd: projectRoot,
+      status: spec,
+    },
+  ]);
+});
+
 test("executor rejects a new run while another run is in progress", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   let finish;

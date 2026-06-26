@@ -282,6 +282,9 @@ function buildArgs(projectKind, projectRoot, spec, option, pathModule) {
 }
 
 function getScenarioSpecPath(executionIdentifier) {
+  if (!/:\d+$/.test(executionIdentifier)) {
+    return executionIdentifier;
+  }
   const separatorIndex = executionIdentifier.lastIndexOf(":");
   if (separatorIndex < 0) {
     return executionIdentifier;
