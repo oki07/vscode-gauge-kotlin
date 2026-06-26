@@ -2445,6 +2445,46 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   return { named, wildcards };
 }
 
+function isTopLevelOffset(text, offset) {
+  let braceDepth = 0;
+  let quote;
+  for (let index = 0; index < offset; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    }
+  }
+  return braceDepth === 0;
+}
+
 function localClassifierNames(text, ignoredRanges) {
   const names = new Set();
   const pattern = new RegExp(
@@ -2453,7 +2493,7 @@ function localClassifierNames(text, ignoredRanges) {
   );
   let match = pattern.exec(text);
   while (match) {
-    if (!isInIgnoredRange(match.index, ignoredRanges)) {
+    if (!isInIgnoredRange(match.index, ignoredRanges) && isTopLevelOffset(text, match.index)) {
       names.add(match[1]);
     }
     match = pattern.exec(text);
