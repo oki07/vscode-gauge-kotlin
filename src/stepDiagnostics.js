@@ -314,6 +314,10 @@ function findMatchingBracket(text, openIndex) {
   return -1;
 }
 
+function isFunctionTypeArrowClose(text, index) {
+  return text[index] === ">" && text[index - 1] === "-";
+}
+
 function findMatchingAngle(text, openIndex) {
   let depth = 0;
   for (let index = openIndex; index < text.length; index += 1) {
@@ -326,7 +330,7 @@ function findMatchingAngle(text, openIndex) {
       index = closeIndex;
     } else if (char === "<") {
       depth += 1;
-    } else if (char === ">") {
+    } else if (char === ">" && !isFunctionTypeArrowClose(text, index)) {
       depth -= 1;
       if (depth === 0) {
         return index;
@@ -410,7 +414,7 @@ function splitTopLevel(text, separator) {
     }
     if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -477,7 +481,7 @@ function findTopLevelChar(text, target) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -701,7 +705,7 @@ function splitTopLevelToken(text, token) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -1251,7 +1255,7 @@ function splitTopLevelOperators(text, operators) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -1851,7 +1855,7 @@ function findConstExpressionEnd(text, startIndex) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -1955,7 +1959,7 @@ function findObjectBodyStart(text, startIndex) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -2446,7 +2450,7 @@ function findTopLevelDot(text) {
       quote = char;
     } else if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -2475,20 +2479,8 @@ function stripLeadingTypeParameters(header) {
     return trimmed;
   }
 
-  let depth = 0;
-  for (let index = 0; index < trimmed.length; index += 1) {
-    const char = trimmed[index];
-    if (char === "<") {
-      depth += 1;
-    } else if (char === ">") {
-      depth -= 1;
-      if (depth === 0) {
-        return trimmed.slice(index + 1).trim();
-      }
-    }
-  }
-
-  return trimmed;
+  const closeAngle = findMatchingAngle(trimmed, 0);
+  return closeAngle === -1 ? trimmed : trimmed.slice(closeAngle + 1).trim();
 }
 
 function isKotlinFunctionName(name) {
@@ -2654,7 +2646,7 @@ function findPropertyHeaderEnd(text, startIndex) {
 
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -2921,7 +2913,7 @@ function findFunctionBlockBodyStart(text, startIndex) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -2980,7 +2972,7 @@ function findFunctionExpressionBodyStart(text, startIndex) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -3045,7 +3037,7 @@ function findFunctionExpressionBodyEnd(text, startIndex) {
     }
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -3306,7 +3298,7 @@ function findObjectExpressionBodyStart(text, startIndex, endIndex) {
 
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
@@ -3460,7 +3452,7 @@ function findPropertyDelegateExpressionStart(text, startIndex) {
 
     if (char === "<") {
       angleDepth += 1;
-    } else if (char === ">" && angleDepth > 0) {
+    } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
     } else if (char === "[") {
       bracketDepth += 1;
