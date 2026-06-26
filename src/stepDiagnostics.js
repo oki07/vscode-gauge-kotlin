@@ -1474,6 +1474,9 @@ function inferKotlinConstantType(expression, constants, constantTypes) {
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
     return inferKotlinConstantType(trimmed.slice(1, -1), constants, constantTypes);
   }
+  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
+    return canonicalKotlinTypeName(constantTypes.get(trimmed));
+  }
   if (parseStringLiteralTerm(trimmed, constants, constantTypes) !== undefined) {
     return "String";
   }

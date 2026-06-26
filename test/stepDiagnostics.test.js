@@ -749,6 +749,42 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin char equality expressions in
   );
 });
 
+test("GaugeStepDiagnosticsProvider propagates Kotlin const alias types into equality templates", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val BASE_NAME = \"login\"",
+    "private const val FEATURE_NAME = BASE_NAME",
+    "private const val BASE_ENABLED = true",
+    "private const val FEATURE_ENABLED = BASE_ENABLED",
+    "private const val BASE_OPEN = '<'",
+    "private const val OPEN = BASE_OPEN",
+    "private const val STRING_STEP = \"String ${FEATURE_NAME == \"login\"} for <user>\"",
+    "private const val BOOLEAN_STEP = \"Boolean ${FEATURE_ENABLED == true} for <user>\"",
+    "private const val CHAR_STEP = \"Char ${OPEN == '<'} for <user>\"",
+    "",
+    "@Step(STRING_STEP)",
+    "fun stringStep() {}",
+    "",
+    "@Step(BOOLEAN_STEP)",
+    "fun booleanStep() {}",
+    "",
+    "@Step(CHAR_STEP)",
+    "fun charStep() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"String true for <user>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Boolean true for <user>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Char true for <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider preserves numeric-looking Kotlin string constants in templates", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
