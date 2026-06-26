@@ -226,6 +226,24 @@ test("GaugeDynamicArgumentCompletionProvider suggests escaped concept dynamic ar
   assert.deepEqual(labels(items), ["user \\> name", "item"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests concept double-hash heading arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const heading = "## Shared checkout <item>";
+  const step = "* Select <i>";
+  const document = createDocument([
+    heading,
+    step,
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const stepItems = provider.provideCompletionItems(document, new vscode.Position(1, step.indexOf("i") + 1));
+  const headingItems = provider.provideCompletionItems(document, new vscode.Position(0, heading.indexOf("item")));
+
+  assert.deepEqual(labels(stepItems), ["item", "i"]);
+  assert.deepEqual(labels(headingItems), ["item", "i"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores concept table dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
