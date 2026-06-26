@@ -2732,7 +2732,10 @@ function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredR
   }
   const openParen = skipWhitespaceAndComments(text, startIndex + accessor[0].length);
   if (text[openParen] !== "(") {
-    if (options.implicitParameterText && isBareAccessorBoundary(text, startIndex + accessor[0].length)) {
+    if (
+      options.implicitParameterText !== undefined
+      && isBareAccessorBoundary(text, startIndex + accessor[0].length)
+    ) {
       return {
         parameterEnd: startIndex + accessor[0].length,
         parameterStart: startIndex,
@@ -2753,7 +2756,9 @@ function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredR
 }
 
 function findNextGetterAccessor(text, startIndex, ignoredRanges = []) {
-  return findNextDirectPropertyAccessor(text, startIndex, "get", ignoredRanges);
+  return findNextDirectPropertyAccessor(text, startIndex, "get", ignoredRanges, {
+    implicitParameterText: "",
+  });
 }
 
 function findNextSetterAccessor(text, startIndex, ignoredRanges = []) {

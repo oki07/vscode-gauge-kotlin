@@ -790,6 +790,25 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step getter accessor annotation
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks Kotlin Step getter accessors without parameter lists", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  var getterStep: String = \"value\"",
+    "    @Step(\"Getter accessor <value>\")",
+    "    get",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Getter accessor <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks Kotlin Step setter use-site annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
