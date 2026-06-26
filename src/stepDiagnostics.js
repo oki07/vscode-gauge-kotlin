@@ -503,6 +503,45 @@ function normalizeKotlinIdentifier(value) {
   return trimmed;
 }
 
+function splitKotlinIdentifierPath(value) {
+  const segments = [];
+  let index = 0;
+  while (index < value.length) {
+    if (value[index] === "`") {
+      const end = value.indexOf("`", index + 1);
+      if (end === -1) {
+        return undefined;
+      }
+      segments.push(value.slice(index, end + 1));
+      index = end + 1;
+    } else {
+      const match = /^[A-Za-z_]\w*/.exec(value.slice(index));
+      if (!match) {
+        return undefined;
+      }
+      segments.push(match[0]);
+      index += match[0].length;
+    }
+
+    if (index === value.length) {
+      return segments;
+    }
+    if (value[index] !== ".") {
+      return undefined;
+    }
+    index += 1;
+  }
+  return segments;
+}
+
+function normalizeKotlinIdentifierPath(value) {
+  const segments = splitKotlinIdentifierPath(value.trim());
+  if (segments === undefined) {
+    return normalizeKotlinIdentifier(value);
+  }
+  return segments.map((segment) => normalizeKotlinIdentifier(segment)).join(".");
+}
+
 const KOTLIN_NUMERIC_TYPES = new Set([
   "Byte",
   "Short",
@@ -3685,7 +3724,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   const named = new Map();
   const wildcards = new Set();
   const importPattern = new RegExp(
-    `^import\\s+([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+    `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
   );
   const typeAliasPattern = new RegExp(
     `^(?:(?:public|private|internal|expect|actual)\\s+)*typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
@@ -3693,9 +3732,9 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   for (const line of kotlinSourceLines(text, ignoredRanges)) {
     let match = importPattern.exec(line);
     if (match) {
-      const importedName = match[1];
-      const alias = match[2];
-      if (importedName.endsWith(".*")) {
+      const importedName = normalizeKotlinIdentifierPath(match[1]);
+      const alias = match[2] === undefined ? undefined : normalizeKotlinIdentifier(match[2]);
+      if (match[1].endsWith(".*")) {
         wildcards.add(importedName.slice(0, -2));
         continue;
       }
@@ -3710,7 +3749,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
 
     match = typeAliasPattern.exec(line);
     if (match) {
-      named.set(match[1], match[2]);
+      named.set(normalizeKotlinIdentifier(match[1]), normalizeKotlinIdentifierPath(match[2]));
     }
   }
   return { named, wildcards };
@@ -3766,7 +3805,7 @@ function localClassifierNames(text, ignoredRanges) {
   let match = pattern.exec(searchableText);
   while (match) {
     if (!isInIgnoredRange(match.index, ignoredRanges) && isTopLevelOffset(text, match.index)) {
-      names.add(match[1]);
+      names.add(normalizeKotlinIdentifier(match[1]));
     }
     match = pattern.exec(searchableText);
   }
@@ -3829,7 +3868,7 @@ function directClassifierNamesInScope(text, ignoredRanges, scope, scopes) {
       !isInIgnoredRange(match.index, ignoredRanges)
       && !isInsideChildScope(match.index, scope, scopes)
     ) {
-      names.add(match[1]);
+      names.add(normalizeKotlinIdentifier(match[1]));
     }
     match = pattern.exec(searchableText);
   }
@@ -3852,33 +3891,35 @@ function localClassifierNamesAtOffset(text, ignoredRanges, offset) {
 }
 
 function resolveStepAnnotationTarget(annotationName, namedImports, seen = new Set()) {
-  if (annotationName === GAUGE_STEP_ANNOTATION) {
-    return annotationName;
+  const normalizedName = normalizeKotlinIdentifierPath(annotationName);
+  if (normalizedName === GAUGE_STEP_ANNOTATION) {
+    return normalizedName;
   }
-  if (!namedImports.has(annotationName) || seen.has(annotationName)) {
-    return annotationName;
+  if (!namedImports.has(normalizedName) || seen.has(normalizedName)) {
+    return normalizedName;
   }
-  seen.add(annotationName);
-  return resolveStepAnnotationTarget(namedImports.get(annotationName), namedImports, seen);
+  seen.add(normalizedName);
+  return resolveStepAnnotationTarget(namedImports.get(normalizedName), namedImports, seen);
 }
 
 function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNames = new Set()) {
-  if (annotationName === GAUGE_STEP_ANNOTATION) {
+  const normalizedName = normalizeKotlinIdentifierPath(annotationName);
+  if (normalizedName === GAUGE_STEP_ANNOTATION) {
     return true;
   }
-  if (annotationName.includes(".")) {
+  if (normalizedName.includes(".")) {
     return false;
   }
-  if (localClassifierNames.has(annotationName)) {
+  if (localClassifierNames.has(normalizedName)) {
     return false;
   }
-  if (stepImports.named.has(annotationName)) {
-    return resolveStepAnnotationTarget(annotationName, stepImports.named) === GAUGE_STEP_ANNOTATION;
+  if (stepImports.named.has(normalizedName)) {
+    return resolveStepAnnotationTarget(normalizedName, stepImports.named) === GAUGE_STEP_ANNOTATION;
   }
-  if (annotationName === "Step" && stepImports.wildcards.size > 0) {
+  if (normalizedName === "Step" && stepImports.wildcards.size > 0) {
     return stepImports.wildcards.size === 1 && stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
   }
-  return annotationName === "Step";
+  return normalizedName === "Step";
 }
 
 function addStepFunctionEntry(

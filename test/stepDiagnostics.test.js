@@ -1360,6 +1360,30 @@ test("GaugeStepDiagnosticsProvider accepts Gauge Step import aliases", () => {
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts escaped Gauge Step annotation identifiers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@`Step`(\"Escaped imported <value>\")",
+    "fun imported() {}",
+    "",
+    "@com.thoughtworks.gauge.`Step`(\"Escaped qualified <value>\")",
+    "fun qualified() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Escaped imported <value>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Escaped qualified <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider accepts backtick Kotlin step function names", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
