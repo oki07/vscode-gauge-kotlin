@@ -449,6 +449,18 @@ function evaluateIntegerMultiplicationExpression(parts) {
   return String(values.reduce((product, value) => product * BigInt(value), 1n));
 }
 
+function evaluateIntegerDivisionExpression(parts) {
+  const values = parts.map((part) => parseKotlinIntegerLiteralExpression(part));
+  if (values.some((value) => value === undefined)) {
+    return undefined;
+  }
+  const [first, ...rest] = values.map((value) => BigInt(value));
+  if (rest.some((value) => value === 0n)) {
+    return undefined;
+  }
+  return String(rest.reduce((quotient, value) => quotient / value, first));
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -605,6 +617,13 @@ function evaluateStringExpression(expression, constants) {
     const integerMultiplication = evaluateIntegerMultiplicationExpression(productParts);
     if (integerMultiplication !== undefined) {
       return integerMultiplication;
+    }
+  }
+  const quotientParts = splitTopLevel(trimmed, "/").map((part) => part.trim());
+  if (quotientParts.length > 1) {
+    const integerDivision = evaluateIntegerDivisionExpression(quotientParts);
+    if (integerDivision !== undefined) {
+      return integerDivision;
     }
   }
 
