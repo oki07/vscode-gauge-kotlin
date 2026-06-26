@@ -639,6 +639,13 @@ const KOTLIN_CONST_TYPES = new Set([
   "Boolean",
   ...KOTLIN_NUMERIC_TYPES,
 ]);
+const KOTLIN_TYPEALIAS_MODIFIERS = new Set([
+  "public",
+  "private",
+  "internal",
+  "expect",
+  "actual",
+]);
 
 function canonicalKotlinTypeName(typeName) {
   if (typeName === undefined) {
@@ -656,13 +663,37 @@ function isKotlinConstType(typeName) {
   return KOTLIN_CONST_TYPES.has(canonicalKotlinTypeName(typeName));
 }
 
+function stripKotlinTypeAliasPreamble(line) {
+  let index = 0;
+  while (index < line.length) {
+    index = skipWhitespaceAndComments(line, index);
+    if (line[index] === "@") {
+      const next = skipKotlinAnnotation(line, index);
+      if (next === index) {
+        break;
+      }
+      index = next;
+      continue;
+    }
+
+    const modifier = /^[A-Za-z_]\w*/.exec(line.slice(index));
+    if (modifier && KOTLIN_TYPEALIAS_MODIFIERS.has(modifier[0])) {
+      index += modifier[0].length;
+      continue;
+    }
+
+    break;
+  }
+  return line.slice(index).trim();
+}
+
 function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const aliases = new Map();
   const importPattern = new RegExp(
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
   );
   const typeAliasPattern = new RegExp(
-    `^(?:(?:public|private|internal|expect|actual)\\s+)*typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
   );
   for (const line of kotlinSourceLines(text, ignoredRanges)) {
     let match = importPattern.exec(line);
@@ -678,7 +709,7 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
       continue;
     }
 
-    match = typeAliasPattern.exec(line);
+    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(line));
     if (match) {
       aliases.set(
         normalizeKotlinIdentifier(match[1]),
