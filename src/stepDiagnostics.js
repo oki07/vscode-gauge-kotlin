@@ -483,6 +483,7 @@ const KOTLIN_NUMERIC_TYPES = new Set([
 ]);
 const KOTLIN_INTEGER_LITERAL_BODY_PATTERN = "(?:0[xX][0-9A-Fa-f_]+|0[bB][01_]+|0|[1-9][0-9_]*)";
 const KOTLIN_INTEGER_LITERAL_SUFFIX_PATTERN = "(?:L|[uU](?:[lL])?)?";
+const KOTLIN_CONST_TYPE_PATTERN = "(?:[A-Za-z_]\\w*\\.)*(?:String|Char|Byte|Short|Int|Long|UByte|UShort|UInt|ULong|Float|Double|Boolean)";
 
 function canonicalKotlinTypeName(typeName) {
   if (typeName === undefined) {
@@ -2003,6 +2004,41 @@ function pathHasPrefix(path, prefix) {
   return text === prefixText || text.startsWith(`${prefixText}.`);
 }
 
+function readKotlinConstDeclaration(text, constIndex) {
+  let index = skipWhitespaceAndComments(text, constIndex + "const".length);
+  if (!isKeywordAt(text, index, "val")) {
+    return undefined;
+  }
+  index = skipWhitespaceAndComments(text, index + "val".length);
+
+  const nameMatch = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(text.slice(index));
+  if (!nameMatch) {
+    return undefined;
+  }
+  const name = nameMatch[0];
+  index = skipWhitespaceAndComments(text, index + name.length);
+
+  let typeName;
+  if (text[index] === ":") {
+    index = skipWhitespaceAndComments(text, index + 1);
+    const typeMatch = new RegExp(`^${KOTLIN_CONST_TYPE_PATTERN}`).exec(text.slice(index));
+    if (!typeMatch) {
+      return undefined;
+    }
+    typeName = canonicalKotlinTypeName(typeMatch[0]);
+    index = skipWhitespaceAndComments(text, index + typeMatch[0].length);
+  }
+
+  if (text[index] !== "=") {
+    return undefined;
+  }
+  return {
+    expressionStart: index + 1,
+    name,
+    typeName,
+  };
+}
+
 function collectStringConstants(text) {
   const constants = new Map();
   const constantTypes = new Map();
@@ -2013,10 +2049,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = new RegExp(
-    `\\bconst\\s+val\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*(?::\\s*((?:[A-Za-z_]\\w*\\.)*(?:String|Char|Byte|Short|Int|Long|UByte|UShort|UInt|ULong|Float|Double|Boolean)))?\\s*=`,
-    "g",
-  );
+  const pattern = /\bconst\b/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
@@ -2024,14 +2057,21 @@ function collectStringConstants(text) {
       continue;
     }
 
-    const expressionStart = pattern.lastIndex;
+    const declaration = readKotlinConstDeclaration(text, match.index);
+    if (declaration === undefined) {
+      pattern.lastIndex = match.index + "const".length;
+      match = pattern.exec(text);
+      continue;
+    }
+
+    const expressionStart = declaration.expressionStart;
     const expressionEnd = findConstExpressionEnd(text, expressionStart);
     const objectPaths = enclosingObjectPaths(objectRanges, match.index);
     const classPaths = enclosingObjectPaths(classRanges, match.index);
-    const names = new Set([match[1]]);
+    const names = new Set([declaration.name]);
     for (const objectPath of objectPaths) {
       if (objectPath.length > 0) {
-        names.add(`${pathText(objectPath)}.${match[1]}`);
+        names.add(`${pathText(objectPath)}.${declaration.name}`);
       }
     }
     for (const classPath of classPaths) {
@@ -2040,14 +2080,14 @@ function collectStringConstants(text) {
       }
       for (const objectPath of objectPaths) {
         if (objectPath.length > 0 && !pathHasPrefix(objectPath, classPath)) {
-          names.add(`${pathText(classPath.concat(objectPath))}.${match[1]}`);
+          names.add(`${pathText(classPath.concat(objectPath))}.${declaration.name}`);
         }
       }
     }
     expressions.push({
       expression: text.slice(expressionStart, expressionEnd),
       names: [...names],
-      typeName: canonicalKotlinTypeName(match[2]),
+      typeName: declaration.typeName,
     });
     pattern.lastIndex = expressionEnd;
     match = pattern.exec(text);
