@@ -601,6 +601,30 @@ function normalizeKotlinIdentifierPath(value) {
   return segments.map((segment) => normalizeKotlinIdentifier(segment)).join(".");
 }
 
+function readKotlinIdentifierPath(text, startIndex) {
+  const segments = [];
+  let index = skipWhitespaceAndComments(text, startIndex);
+  while (index < text.length) {
+    const match = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(text.slice(index));
+    if (!match) {
+      break;
+    }
+    segments.push(match[0]);
+    index = skipWhitespaceAndComments(text, index + match[0].length);
+    if (text[index] !== ".") {
+      break;
+    }
+    index = skipWhitespaceAndComments(text, index + 1);
+  }
+  if (segments.length === 0) {
+    return undefined;
+  }
+  return {
+    end: index,
+    path: segments.join("."),
+  };
+}
+
 function resolveKotlinConstantReference(name, constants, constantTypes) {
   const trimmed = name.trim();
   if (!isKotlinIdentifierPath(trimmed) || constants === undefined) {
@@ -2328,15 +2352,15 @@ function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
   let typeName;
   if (text[index] === ":") {
     index = skipWhitespaceAndComments(text, index + 1);
-    const typeMatch = new RegExp(`^${KOTLIN_ANNOTATION_NAME_PATTERN}`).exec(text.slice(index));
-    if (!typeMatch) {
+    const typeReference = readKotlinIdentifierPath(text, index);
+    if (typeReference === undefined) {
       return undefined;
     }
-    typeName = resolveKotlinConstTypeName(typeMatch[0], typeAliases);
+    typeName = resolveKotlinConstTypeName(typeReference.path, typeAliases);
     if (typeName === undefined) {
       return undefined;
     }
-    index = skipWhitespaceAndComments(text, index + typeMatch[0].length);
+    index = skipWhitespaceAndComments(text, typeReference.end);
   }
 
   if (text[index] !== "=") {
