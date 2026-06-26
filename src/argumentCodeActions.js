@@ -55,6 +55,13 @@ function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
 }
 
+function isConceptHeadingLine(line, document) {
+  const trimmed = line.trimStart();
+  return isConceptDocument(document)
+    && trimmed.startsWith("#")
+    && !trimmed.startsWith("##");
+}
+
 function uriPath(uri) {
   return (uri && (uri.fsPath || uri.path)) || "";
 }
@@ -64,9 +71,7 @@ function isGaugeStepOrConceptHeading(line, document) {
   if (trimmed.startsWith("*")) {
     return true;
   }
-  return isConceptDocument(document)
-    && trimmed.startsWith("#")
-    && !trimmed.startsWith("##");
+  return isConceptHeadingLine(line, document);
 }
 
 function rangeIntersectsArgument(range, start, end) {
@@ -137,6 +142,9 @@ class GaugeArgumentCodeActionProvider {
 
     const argument = findArgumentAt(line, range);
     if (!argument) {
+      return [];
+    }
+    if (isConceptHeadingLine(line, document) && argument.text.startsWith("\"")) {
       return [];
     }
 

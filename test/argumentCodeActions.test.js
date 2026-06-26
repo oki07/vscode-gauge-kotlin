@@ -160,6 +160,19 @@ test("GaugeArgumentCodeActionProvider ignores specification and scenario heading
   );
 });
 
+test("GaugeArgumentCodeActionProvider ignores quoted concept heading text", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+
+  assert.deepEqual(
+    provider.provideCodeActions(
+      createDocument('# Shared "cart"', "/workspace/specs/concepts/shared.cpt"),
+      createRange(0, 10),
+    ),
+    [],
+  );
+});
+
 test("selectArgumentRange selects the converted Gauge argument body", () => {
   const { selectArgumentRange } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();
