@@ -99,6 +99,24 @@ test("GaugeStepDiagnosticsProvider counts static Step parameters", () => {
   );
 });
 
+test("GaugeStepDiagnosticsProvider handles raw Step strings with embedded quotes and parens", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"\"\"Use \"quoted)\" <name>\"\"\")",
+    "fun use() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [2]) with step annotation : \"Use \"quoted)\" <name>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks each Step alias separately", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

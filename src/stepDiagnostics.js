@@ -236,6 +236,9 @@ function findMatchingParen(text, openIndex) {
     if (quote) {
       if (char === "\\") {
         index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
       } else if (char === quote) {
         quote = undefined;
       }
@@ -245,6 +248,11 @@ function findMatchingParen(text, openIndex) {
     const commentEnd = findCommentEnd(text, index);
     if (commentEnd !== undefined) {
       index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
       continue;
     }
     if (char === "\"" || char === "'") {
