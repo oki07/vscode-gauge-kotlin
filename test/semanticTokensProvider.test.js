@@ -198,6 +198,34 @@ test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () 
   )), true);
 });
 
+test("GaugeSemanticTokensProvider tokenizes single-column table separators", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "| user |",
+        "| ---- |",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const separatorTokens = tokens.filter((entry) => entry.line === 1);
+
+  assert.equal(separatorTokens.some((entry) => entry.type === "tableHeaderSeparator"), true);
+  assert.deepEqual(
+    separatorTokens.filter((entry) => entry.type === "tableBorder").map((entry) => entry.start),
+    [0, 7],
+  );
+});
+
 test("GaugeSemanticTokensProvider does not span dynamic table arguments across pipes", () => {
   const {
     GaugeSemanticTokensProvider,
