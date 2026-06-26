@@ -2152,20 +2152,21 @@ function findNextFunction(text, startIndex, ignoredRanges = []) {
       match = funPattern.exec(text);
       continue;
     }
-    const openParen = findFunctionParameterStart(text, funPattern.lastIndex);
-    if (openParen === -1) {
-      return undefined;
-    }
-    const header = text.slice(funPattern.lastIndex, openParen);
-    if (isKotlinFunctionHeader(header)) {
+    let openParen = findFunctionParameterStart(text, funPattern.lastIndex);
+    while (openParen !== -1) {
+      const header = text.slice(funPattern.lastIndex, openParen);
       const closeParen = findMatchingParen(text, openParen);
-      if (closeParen !== -1) {
+      if (closeParen === -1) {
+        return undefined;
+      }
+      if (isKotlinFunctionHeader(header)) {
         return {
           parameterEnd: closeParen,
           parameterStart: openParen + 1,
           parameterText: text.slice(openParen + 1, closeParen),
         };
       }
+      openParen = findFunctionParameterStart(text, closeParen + 1);
     }
     match = funPattern.exec(text);
   }
