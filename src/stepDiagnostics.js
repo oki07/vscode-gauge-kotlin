@@ -2114,7 +2114,7 @@ function isKotlinFunctionName(name) {
 }
 
 function isKotlinFunctionHeader(header) {
-  const trimmed = stripLeadingTypeParameters(header);
+  const trimmed = stripLeadingTypeParameters(removeKotlinComments(header));
   const dotIndex = findTopLevelDot(trimmed);
   const receiver = dotIndex === -1 ? undefined : trimmed.slice(0, dotIndex).trim();
   const name = dotIndex === -1 ? trimmed : trimmed.slice(dotIndex + 1).trim();
