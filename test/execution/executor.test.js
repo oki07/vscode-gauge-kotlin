@@ -466,7 +466,7 @@ test("executor shows a stop status bar item while a run is active", async () => 
   assert.equal(stopItem.priority, 2);
   assert.equal(stopItem.command, "gauge.stopExecution");
   assert.equal(stopItem.tooltip, "Click to Stop Run");
-  assert.equal(stopItem.text, "$(primitive-square) Running /workspace/All specs");
+  assert.equal(stopItem.text, "$(primitive-square) Running All specs");
   assert.equal(stopItem.showCalls, 1);
 
   finish(true);

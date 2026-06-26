@@ -200,6 +200,13 @@ function formatExecutionTooltip(status) {
     + `${status.sceFailed} Failed, ${status.sceSkipped} Skipped`;
 }
 
+function formatRunningStatus(projectRoot, status, pathModule) {
+  if (!status || !pathModule.isAbsolute(status) || !isInside(projectRoot, status, pathModule)) {
+    return status;
+  }
+  return pathModule.relative(projectRoot, status);
+}
+
 function executionStatusColor(status) {
   if (status.sceFailed > 0) {
     return "#E73E48";
@@ -227,12 +234,12 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
   executionStatus.command = SHOW_REPORT_COMMAND;
 
   return {
-    beforeExecute(command) {
+    beforeExecute(command, runningStatus) {
       executionStatus.hide();
       if (command.env && command.env.DEBUGGING) {
         return;
       }
-      stopExecution.text = `$(primitive-square) Running ${command.status}`;
+      stopExecution.text = `$(primitive-square) Running ${runningStatus || command.status}`;
       stopExecution.show();
     },
     async afterExecute(projectRoot, aborted) {
@@ -389,7 +396,10 @@ function createGaugeExecutionController(options = {}) {
     }
 
     executing = true;
-    executionStatusBar.beforeExecute(command);
+    executionStatusBar.beforeExecute(
+      command,
+      formatRunningStatus(projectRoot, command.status, pathModule),
+    );
     let result;
     try {
       activeRun = runner(command);
