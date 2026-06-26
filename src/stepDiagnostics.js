@@ -2039,10 +2039,18 @@ function findTopLevelDot(text) {
   let bracketDepth = 0;
   let parenDepth = 0;
   let dotIndex = -1;
+  let inBacktickIdentifier = false;
   let quote;
 
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
+    if (char === "`" && !quote) {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
+      continue;
+    }
     if (quote) {
       if (char === "\\") {
         index += 1;
