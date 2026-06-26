@@ -2845,6 +2845,30 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with typea
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with imported primitive type aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import kotlin.String as StepText",
+    "import kotlin.Int as StepCount",
+    "private const val USER_ARG: StepText = \"<user>\"",
+    "private const val RETRY_COUNT: StepCount = 2",
+    "private const val LOGIN_STEP: StepText = \"Retry $RETRY_COUNT times as $USER_ARG\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Retry 2 times as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates qualified Kotlin const references", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

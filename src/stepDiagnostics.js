@@ -658,11 +658,27 @@ function isKotlinConstType(typeName) {
 
 function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const aliases = new Map();
+  const importPattern = new RegExp(
+    `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+  );
   const typeAliasPattern = new RegExp(
     `^(?:(?:public|private|internal|expect|actual)\\s+)*typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
   );
   for (const line of kotlinSourceLines(text, ignoredRanges)) {
-    const match = typeAliasPattern.exec(line);
+    let match = importPattern.exec(line);
+    if (match) {
+      const importedName = normalizeKotlinIdentifierPath(match[1]);
+      if (resolveKotlinConstTypeName(importedName) !== undefined) {
+        const importedParts = importedName.split(".");
+        const exposedName = match[2] === undefined
+          ? importedParts[importedParts.length - 1]
+          : normalizeKotlinIdentifier(match[2]);
+        aliases.set(exposedName, importedName);
+      }
+      continue;
+    }
+
+    match = typeAliasPattern.exec(line);
     if (match) {
       aliases.set(
         normalizeKotlinIdentifier(match[1]),
