@@ -514,7 +514,7 @@ function findTopLevelChar(text, target) {
       quote = char;
       continue;
     }
-    if (char === "<") {
+    if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
@@ -952,7 +952,7 @@ function splitTopLevelToken(text, token) {
       quote = char;
       continue;
     }
-    if (char === "<") {
+    if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
@@ -1502,7 +1502,7 @@ function splitTopLevelOperators(text, operators) {
       quote = char;
       continue;
     }
-    if (char === "<") {
+    if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
@@ -2101,7 +2101,7 @@ function findConstExpressionEnd(text, startIndex) {
     ) {
       return index;
     }
-    if (char === "<") {
+    if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
@@ -3287,7 +3287,7 @@ function findFunctionExpressionBodyEnd(text, startIndex) {
     ) {
       return index;
     }
-    if (char === "<") {
+    if (char === "<" && isLikelyTypeArgumentStart(text, index)) {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0 && !isFunctionTypeArrowClose(text, index)) {
       angleDepth -= 1;
