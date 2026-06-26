@@ -135,6 +135,26 @@ test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at un
   assert.deepEqual(afterPipeItems, []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores dynamic-looking table headers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const header = "| <user> | role |";
+  const document = createDocument([
+    "# Checkout",
+    header,
+    "| ------ | ---- |",
+    "| Bob    | admin |",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, header.indexOf("user")),
+  );
+
+  assert.deepEqual(items, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

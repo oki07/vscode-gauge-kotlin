@@ -116,6 +116,11 @@ function isTableHeaderSeparator(line) {
   return /^(?:\|\s*-+\s*)+\|?$/.test(line.trim());
 }
 
+function isTableHeaderLine(document, lineNumber) {
+  const lines = document.getText().split(/\r?\n/);
+  return isTableLine(lines[lineNumber] || "") && isTableHeaderSeparator(lines[lineNumber + 1] || "");
+}
+
 function tableCells(line) {
   const body = line
     .trim()
@@ -246,6 +251,9 @@ class GaugeDynamicArgumentCompletionProvider {
     const argumentRange = dynamicArgumentRange(line, position);
     const quotedArgumentRange = staticArgumentRange(line, position);
     if (!argumentRange && !quotedArgumentRange) {
+      return [];
+    }
+    if (argumentRange && isTableHeaderLine(document, position.line)) {
       return [];
     }
     if (argumentRange && !allowsDynamicArgumentCompletion(line, document)) {
