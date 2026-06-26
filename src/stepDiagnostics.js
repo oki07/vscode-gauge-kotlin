@@ -469,7 +469,20 @@ function normalizeKotlinIdentifier(value) {
   return trimmed;
 }
 
-const KOTLIN_NUMERIC_TYPES = new Set(["Byte", "Short", "Int", "Long", "Float", "Double"]);
+const KOTLIN_NUMERIC_TYPES = new Set([
+  "Byte",
+  "Short",
+  "Int",
+  "Long",
+  "UByte",
+  "UShort",
+  "UInt",
+  "ULong",
+  "Float",
+  "Double",
+]);
+const KOTLIN_INTEGER_LITERAL_BODY_PATTERN = "(?:0[xX][0-9A-Fa-f_]+|0[bB][01_]+|0|[1-9][0-9_]*)";
+const KOTLIN_INTEGER_LITERAL_SUFFIX_PATTERN = "(?:L|[uU](?:[lL])?)?";
 
 function canonicalKotlinTypeName(typeName) {
   if (typeName === undefined) {
@@ -514,7 +527,9 @@ function parseKotlinCharLiteralExpression(value) {
 
 function parseKotlinIntegerLiteralExpression(value) {
   const trimmed = value.trim();
-  const match = /^([+-]?)(0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)(L)?$/.exec(trimmed);
+  const match = new RegExp(
+    `^([+-]?)(${KOTLIN_INTEGER_LITERAL_BODY_PATTERN})${KOTLIN_INTEGER_LITERAL_SUFFIX_PATTERN}$`,
+  ).exec(trimmed);
   if (!match) {
     return undefined;
   }
@@ -1043,7 +1058,7 @@ function evaluateIntegerAdditionExpression(parts) {
 }
 
 function evaluateIntegerSubtractionExpression(expression) {
-  const integerLiteral = "[+-]?(?:0|[1-9][0-9_]*|0[xX][0-9A-Fa-f_]+|0[bB][01_]+)(?:L)?";
+  const integerLiteral = `[+-]?${KOTLIN_INTEGER_LITERAL_BODY_PATTERN}${KOTLIN_INTEGER_LITERAL_SUFFIX_PATTERN}`;
   const match = new RegExp(`^(${integerLiteral})\\s+-\\s+(${integerLiteral})$`).exec(expression);
   if (!match) {
     return undefined;
@@ -1999,7 +2014,7 @@ function collectStringConstants(text) {
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
   const pattern = new RegExp(
-    `\\bconst\\s+val\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*(?::\\s*((?:[A-Za-z_]\\w*\\.)*(?:String|Char|Byte|Short|Int|Long|Float|Double|Boolean)))?\\s*=`,
+    `\\bconst\\s+val\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*(?::\\s*((?:[A-Za-z_]\\w*\\.)*(?:String|Char|Byte|Short|Int|Long|UByte|UShort|UInt|ULong|Float|Double|Boolean)))?\\s*=`,
     "g",
   );
   let match = pattern.exec(text);

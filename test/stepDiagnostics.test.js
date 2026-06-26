@@ -1772,6 +1772,30 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin long constants in string tem
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin unsigned integer constants in string templates", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val UINT_COUNT: UInt = 3u",
+    "private const val UINT_TOTAL: UInt = 5U",
+    "private const val ULONG_COUNT: ULong = 4UL",
+    "private const val ULONG_TOTAL: ULong = 6uL",
+    "private const val LOGIN_STEP = \"Retry $UINT_COUNT/$UINT_TOTAL and $ULONG_COUNT/$ULONG_TOTAL times as <user>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Retry 3/5 and 4/6 times as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin boolean constants in string templates", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
