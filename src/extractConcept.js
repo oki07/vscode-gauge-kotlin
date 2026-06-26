@@ -180,12 +180,29 @@ function normalizeConceptHeading(input) {
   return normalizeConceptName(input).replace(/\s+/g, " ");
 }
 
+function isConceptLegacyUnderlineHeadingText(line) {
+  return line.trim().length > 0 && !/[#*|]/.test(line);
+}
+
 function extractConceptHeadings(text) {
-  return (text || "")
-    .split(/\r\n|\n/)
-    .map((line) => /^#+\s*(.+?)\s*$/.exec(line))
-    .filter(Boolean)
-    .map((match) => normalizeConceptHeading(match[1]));
+  const headings = [];
+  const lines = (text || "").split(/\r\n|\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const hashHeading = /^#+\s*(.+?)\s*$/.exec(lines[index]);
+    if (hashHeading) {
+      headings.push(normalizeConceptHeading(hashHeading[1]));
+      continue;
+    }
+    if (
+      index + 1 < lines.length
+      && isConceptLegacyUnderlineHeadingText(lines[index])
+      && /^[=]+\s*$/.test(lines[index + 1])
+    ) {
+      headings.push(normalizeConceptHeading(lines[index]));
+      index += 1;
+    }
+  }
+  return headings;
 }
 
 function buildConceptDefinition(conceptName, lines, eol) {
