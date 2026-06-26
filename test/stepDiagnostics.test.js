@@ -1317,6 +1317,26 @@ test("GaugeStepDiagnosticsProvider resolves commented qualified Step typealias t
   );
 });
 
+test("GaugeStepDiagnosticsProvider resolves type-use annotated typealias targets for Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Target(AnnotationTarget.TYPE)",
+    "annotation class StepType",
+    "typealias GaugeStep = @StepType com.thoughtworks.gauge.Step",
+    "",
+    "@GaugeStep(\"Annotated target <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Annotated target <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider lets local classifiers shadow Step typealias targets", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -3105,6 +3125,30 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with comme
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const document = createDocument([
     "typealias StepText = kotlin./* target */String",
+    "private const val USER_ARG: StepText = \"<user>\"",
+    "private const val LOGIN_STEP: StepText = \"Log in as $USER_ARG\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with type-use annotated typealias targets", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Target(AnnotationTarget.TYPE)",
+    "annotation class StepType",
+    "typealias StepText = @StepType String",
     "private const val USER_ARG: StepText = \"<user>\"",
     "private const val LOGIN_STEP: StepText = \"Log in as $USER_ARG\"",
     "",

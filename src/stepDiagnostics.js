@@ -747,8 +747,31 @@ function normalizeKotlinQualifiedPathDots(text) {
   return result.trim();
 }
 
+function stripKotlinTypeAliasTargetAnnotations(statement) {
+  const equalsIndex = findTopLevelChar(statement, "=");
+  if (equalsIndex === -1) {
+    return statement;
+  }
+
+  const targetStart = skipWhitespaceAndComments(statement, equalsIndex + 1);
+  let index = targetStart;
+  while (statement[index] === "@") {
+    const next = skipKotlinAnnotation(statement, index);
+    if (next === index) {
+      break;
+    }
+    index = skipWhitespaceAndComments(statement, next);
+  }
+  if (index === targetStart) {
+    return statement;
+  }
+  return `${statement.slice(0, targetStart)}${statement.slice(index)}`;
+}
+
 function normalizeKotlinTypeAliasStatementForMatch(statement) {
-  return normalizeKotlinQualifiedPathDots(stripKotlinTypeAliasPreamble(statement));
+  return stripKotlinTypeAliasTargetAnnotations(
+    normalizeKotlinQualifiedPathDots(stripKotlinTypeAliasPreamble(statement)),
+  );
 }
 
 function normalizeKotlinImportStatementForMatch(statement) {
