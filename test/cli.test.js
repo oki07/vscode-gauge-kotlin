@@ -55,6 +55,27 @@ test("CLI formats Gauge version information", () => {
   ].join("\n"));
 });
 
+test("CLI omits the commit hash line when Gauge does not report one", () => {
+  const { CLI, Command } = require("../src/cli");
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [
+      { name: "kotlin", version: "0.9.0" },
+      { name: "java", version: "1.0.0" },
+    ],
+  }, new Command("mvn"), new Command("gradle"));
+
+  assert.equal(cli.gaugeVersionString(), [
+    "Gauge version: 1.2.3",
+    "",
+    "",
+    "Plugins",
+    "-------",
+    "kotlin (0.9.0)",
+    "java (1.0.0)",
+  ].join("\n"));
+});
+
 test("CLI compares Gauge versions", () => {
   const cli = createCli();
 
