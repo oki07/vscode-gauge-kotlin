@@ -202,6 +202,33 @@ test("GaugeStepDiagnosticsProvider ignores function-local Step functions", () =>
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks Kotlin Step getter use-site annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const getterDocument = createDocument([
+    "class Steps {",
+    "  @get:Step(\"Getter <value>\")",
+    "  val getterStep: String",
+    "    get() = \"value\"",
+    "}",
+  ].join("\n"));
+  const localGetterDocument = createDocument([
+    "fun helper() {",
+    "  @get:Step(\"Local <value>\")",
+    "  val localStep: String",
+    "    get() = \"value\"",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(getterDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Getter <value>\". ",
+    ],
+  );
+  assert.deepEqual(provider.provideDiagnostics(localGetterDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

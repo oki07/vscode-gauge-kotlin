@@ -25,6 +25,11 @@ const KOTLIN_FUNCTION_MODIFIERS = new Set([
   "suspend",
   "tailrec",
 ]);
+const KOTLIN_PROPERTY_MODIFIERS = new Set([
+  ...KOTLIN_FUNCTION_MODIFIERS,
+  "const",
+  "lateinit",
+]);
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -2306,6 +2311,124 @@ function findNextFunction(text, startIndex, ignoredRanges = []) {
   return undefined;
 }
 
+function isPropertyAccessorStart(text, index, headerStart) {
+  if (index <= headerStart || !/\s/.test(text[index - 1] || "")) {
+    return false;
+  }
+  const token = /^(?:get|set)\b/.exec(text.slice(index));
+  if (!token) {
+    return false;
+  }
+  const next = skipWhitespaceAndComments(text, index + token[0].length);
+  return text[next] === "(" || text[next] === "{";
+}
+
+function findPropertyHeaderEnd(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let inBacktickIdentifier = false;
+  let quote;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
+      continue;
+    }
+
+    if (angleDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+      if (
+        char === ":"
+        || char === "="
+        || char === ";"
+        || char === "{"
+        || char === "\n"
+        || char === "\r"
+        || isPropertyAccessorStart(text, index, startIndex)
+      ) {
+        return index;
+      }
+    }
+
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+  }
+
+  return text.length;
+}
+
+function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
+  if (isInIgnoredRange(startIndex, ignoredRanges)) {
+    return undefined;
+  }
+  const declaration = /^(?:val|var)\b/.exec(text.slice(startIndex));
+  if (!declaration) {
+    return undefined;
+  }
+
+  const headerStart = skipWhitespaceAndComments(text, startIndex + declaration[0].length);
+  const headerEnd = findPropertyHeaderEnd(text, headerStart);
+  const rawHeader = text.slice(headerStart, headerEnd);
+  const header = removeKotlinComments(rawHeader).trim();
+  const dotIndex = findTopLevelDot(header);
+  const propertyName = dotIndex === -1 ? header : header.slice(dotIndex + 1).trim();
+  if (!isKotlinFunctionName(propertyName)) {
+    return undefined;
+  }
+
+  const nameOffset = rawHeader.lastIndexOf(propertyName);
+  if (nameOffset === -1) {
+    return undefined;
+  }
+  const nameStart = headerStart + nameOffset;
+  return {
+    parameterEnd: nameStart + propertyName.length,
+    parameterStart: nameStart,
+    parameterText: "",
+  };
+}
+
 function startsDeclarationLine(text, index) {
   if (index > 0 && text[index - 1] !== "\n" && text[index - 1] !== "\r") {
     return false;
@@ -2506,6 +2629,41 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
       return findNextFunction(text, index, ignoredRanges);
     }
     if (KOTLIN_FUNCTION_MODIFIERS.has(token[0])) {
+      index += token[0].length;
+      continue;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function findAttachedPropertyGetter(text, startIndex, ignoredRanges = []) {
+  let index = startIndex;
+  while (index < text.length) {
+    index = skipWhitespaceAndComments(text, index);
+    if (text[index] === "@") {
+      const next = skipKotlinAnnotation(text, index);
+      if (next === index) {
+        return undefined;
+      }
+      index = next;
+      continue;
+    }
+
+    const contextEnd = skipKotlinContextParameters(text, index);
+    if (contextEnd !== index) {
+      index = contextEnd;
+      continue;
+    }
+
+    const token = /^[A-Za-z_]\w*/.exec(text.slice(index));
+    if (!token) {
+      return undefined;
+    }
+    if (token[0] === "val" || token[0] === "var") {
+      return findNextPropertyGetter(text, index, ignoredRanges);
+    }
+    if (KOTLIN_PROPERTY_MODIFIERS.has(token[0])) {
       index += token[0].length;
       continue;
     }
@@ -2728,6 +2886,7 @@ function addStepFunctionEntry(
   annotationName,
   openParen,
   functionSearchStart,
+  findAttachedDeclaration = findAttachedFunction,
 ) {
   if (functionBodyRanges.some((range) => isInsideRange(openParen, range))) {
     return;
@@ -2741,21 +2900,21 @@ function addStepFunctionEntry(
     return;
   }
   const aliases = extractStepAliases(text.slice(openParen + 1, closeParen), constants);
-  const method = findAttachedFunction(text, functionSearchStart(closeParen), ignoredRanges);
+  const method = findAttachedDeclaration(text, functionSearchStart(closeParen), ignoredRanges);
   if (aliases.length > 0 && method) {
     entries.push({ aliases, ...method });
   }
 }
 
 function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, functionBodyRanges) {
-  const groupPattern = /@\[/g;
+  const groupPattern = /@(?:(get):)?\[/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
     if (isInIgnoredRange(groupMatch.index, ignoredRanges)) {
       groupMatch = groupPattern.exec(text);
       continue;
     }
-    const openBracket = groupMatch.index + 1;
+    const openBracket = groupMatch.index + groupMatch[0].length - 1;
     const closeBracket = findMatchingBracket(text, openBracket);
     if (closeBracket === -1) {
       groupPattern.lastIndex = openBracket + 1;
@@ -2764,6 +2923,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
     }
 
     const groupStart = openBracket + 1;
+    const findAttachedDeclaration = groupMatch[1] === "get" ? findAttachedPropertyGetter : findAttachedFunction;
     const annotationPattern = new RegExp(KOTLIN_ANNOTATION_NAME_PATTERN, "g");
     annotationPattern.lastIndex = groupStart;
     let annotationMatch = annotationPattern.exec(text);
@@ -2797,6 +2957,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
         annotationMatch[0],
         openParen,
         () => closeBracket + 1,
+        findAttachedDeclaration,
       );
       annotationPattern.lastIndex = closeParen + 1;
       annotationMatch = annotationPattern.exec(text);
@@ -2808,7 +2969,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
 
 function findStepFunctions(text) {
   const entries = [];
-  const annotationPattern = new RegExp(`@(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
+  const annotationPattern = new RegExp(`@(?:(get):)?(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
@@ -2820,7 +2981,8 @@ function findStepFunctions(text) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
-    const annotationName = annotationMatch[1];
+    const annotationName = annotationMatch[2];
+    const findAttachedDeclaration = annotationMatch[1] === "get" ? findAttachedPropertyGetter : findAttachedFunction;
     let openParen = annotationPattern.lastIndex;
     while (/\s/.test(text[openParen])) {
       openParen += 1;
@@ -2845,6 +3007,7 @@ function findStepFunctions(text) {
       annotationName,
       openParen,
       () => closeParen + 1,
+      findAttachedDeclaration,
     );
     annotationPattern.lastIndex = closeParen + 1;
     annotationMatch = annotationPattern.exec(text);
