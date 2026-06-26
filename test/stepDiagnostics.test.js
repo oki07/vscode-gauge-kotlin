@@ -880,6 +880,25 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step setter accessors without p
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks same-indent Kotlin Step setter accessors", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  var setterStep: String = \"\"",
+    "  @Step(\"Setter accessor <value> and <other>\")",
+    "  private set",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Setter accessor <value> and <other>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores bare accessor-like Step annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

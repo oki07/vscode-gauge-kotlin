@@ -2832,7 +2832,7 @@ function isPropertyAccessorDeclarationContext(text, declarationStart) {
       continue;
     }
     if (isPropertyDeclarationLine(line)) {
-      return lineIndent(line) < declarationIndent;
+      return lineIndent(line) <= declarationIndent;
     }
     if (lineIndent(line) < declarationIndent || isDeclarationBoundaryLine(line)) {
       return false;
