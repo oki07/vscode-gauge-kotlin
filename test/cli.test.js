@@ -35,6 +35,7 @@ test("CLI reports installed plugins and plugin versions", () => {
   const cli = createCli();
 
   assert.equal(cli.isPluginInstalled("kotlin"), true);
+  assert.equal(cli.isPluginInstalled("KOTLIN"), true);
   assert.equal(cli.isPluginInstalled("ruby"), false);
   assert.equal(cli.getGaugePluginVersion("java"), "1.0.0");
 });

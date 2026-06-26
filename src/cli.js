@@ -36,6 +36,10 @@ function compareVersions(left, right) {
   return 0;
 }
 
+function pluginNameEquals(left, right) {
+  return String(left || "").toLowerCase() === String(right || "").toLowerCase();
+}
+
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
@@ -76,7 +80,7 @@ class CLI {
   }
 
   isPluginInstalled(pluginName) {
-    return this.gaugePlugins.some((plugin) => plugin.name === pluginName);
+    return this.gaugePlugins.some((plugin) => pluginNameEquals(plugin.name, pluginName));
   }
 
   gaugeCommand() {
