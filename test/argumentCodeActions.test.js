@@ -116,6 +116,26 @@ test("GaugeArgumentCodeActionProvider converts dynamic arguments to static param
   assert.equal(replacement.newText, "\"item\"");
 });
 
+test("GaugeArgumentCodeActionProvider converts escaped dynamic arguments to static parameters", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeArgumentCodeActionProvider({ vscode });
+
+  const actions = provider.provideCodeActions(
+    createDocument("* Open <item \\> special> now"),
+    createRange(0, 14),
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Convert to Static Parameter");
+  const replacement = actions[0].edit.replacements[0];
+  assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 7 });
+  assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 24 });
+  assert.equal(replacement.newText, "\"item \\> special\"");
+  assert.deepEqual({ ...actions[0].command.arguments[1].start }, { line: 0, character: 8 });
+  assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 23 });
+});
+
 test("GaugeArgumentCodeActionProvider ignores non-step text", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });

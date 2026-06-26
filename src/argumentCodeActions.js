@@ -79,6 +79,14 @@ function rangeIntersectsArgument(range, start, end) {
 }
 
 function closingQuoteIndex(line, openIndex) {
+  return closingEscapedArgumentIndex(line, openIndex, "\"");
+}
+
+function closingAngleIndex(line, openIndex) {
+  return closingEscapedArgumentIndex(line, openIndex, ">");
+}
+
+function closingEscapedArgumentIndex(line, openIndex, closeCharacter) {
   let index = openIndex + 1;
   let escaped = false;
   while (index < line.length) {
@@ -87,7 +95,7 @@ function closingQuoteIndex(line, openIndex) {
       escaped = false;
     } else if (character === "\\") {
       escaped = true;
-    } else if (character === "\"") {
+    } else if (character === closeCharacter) {
       return index;
     }
     index += 1;
@@ -101,7 +109,7 @@ function findArgumentAt(line, range) {
     const character = line[index];
     const closeIndex = character === "\""
       ? closingQuoteIndex(line, index)
-      : (character === "<" ? line.indexOf(">", index + 1) : -1);
+      : (character === "<" ? closingAngleIndex(line, index) : -1);
     if (closeIndex === -1) {
       index += 1;
       continue;
