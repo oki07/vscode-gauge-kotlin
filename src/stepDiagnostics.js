@@ -572,6 +572,12 @@ function evaluateIntegerArithmeticExpression(expression, constants) {
   if (literal !== undefined) {
     return literal;
   }
+  if ((trimmed.startsWith("+") || trimmed.startsWith("-")) && trimmed.length > 1) {
+    const unaryValue = evaluateIntegerArithmeticExpression(trimmed.slice(1), constants);
+    if (unaryValue !== undefined) {
+      return trimmed[0] === "-" ? String(-BigInt(unaryValue)) : unaryValue;
+    }
+  }
   if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
     return parseKotlinIntegerLiteralExpression(constants.get(trimmed));
   }
