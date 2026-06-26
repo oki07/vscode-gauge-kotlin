@@ -345,8 +345,12 @@ function findTopLevelChar(text, target) {
   return -1;
 }
 
+function isKotlinIdentifierPath(value) {
+  return /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(value);
+}
+
 function appendStringTemplateValue(result, name, constants) {
-  if (!/^[A-Za-z_]\w*$/.test(name) || !constants.has(name)) {
+  if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
   }
   return `${result}${constants.get(name)}`;
@@ -471,7 +475,7 @@ function evaluateStringExpression(expression, constants) {
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
     return evaluateStringExpression(trimmed.slice(1, -1), constants);
   }
-  if (/^[A-Za-z_]\w*$/.test(trimmed) && constants.has(trimmed)) {
+  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
     return constants.get(trimmed);
   }
 
@@ -595,10 +599,149 @@ function findConstExpressionEnd(text, startIndex) {
   return text.length;
 }
 
+function findMatchingBrace(text, openIndex) {
+  let depth = 0;
+  let quote;
+
+  for (let index = openIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function findObjectBodyStart(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      char === "{"
+      && angleDepth === 0
+      && bracketDepth === 0
+      && parenDepth === 0
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function collectObjectRanges(text, ignoredRanges) {
+  const ranges = [];
+  const objectPattern = /\bobject\s+([A-Za-z_]\w*)\b/g;
+  let match = objectPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = objectPattern.exec(text);
+      continue;
+    }
+
+    const bodyStart = findObjectBodyStart(text, objectPattern.lastIndex);
+    if (bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          name: match[1],
+          start: bodyStart + 1,
+        });
+        objectPattern.lastIndex = bodyStart + 1;
+      }
+    }
+    match = objectPattern.exec(text);
+  }
+  return ranges;
+}
+
+function enclosingObjectPath(objectRanges, offset) {
+  return objectRanges
+    .filter((range) => offset >= range.start && offset < range.end)
+    .sort((left, right) => left.start - right.start)
+    .map((range) => range.name);
+}
+
 function collectStringConstants(text) {
   const constants = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const objectRanges = collectObjectRanges(text, ignoredRanges);
   const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*String)?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
@@ -609,9 +752,14 @@ function collectStringConstants(text) {
 
     const expressionStart = pattern.lastIndex;
     const expressionEnd = findConstExpressionEnd(text, expressionStart);
+    const objectPath = enclosingObjectPath(objectRanges, match.index);
+    const names = [match[1]];
+    if (objectPath.length > 0) {
+      names.push(`${objectPath.join(".")}.${match[1]}`);
+    }
     expressions.push({
       expression: text.slice(expressionStart, expressionEnd),
-      name: match[1],
+      names,
     });
     pattern.lastIndex = expressionEnd;
     match = pattern.exec(text);
@@ -620,13 +768,17 @@ function collectStringConstants(text) {
   let changed = true;
   while (changed) {
     changed = false;
-    for (const { expression, name } of expressions) {
-      if (constants.has(name)) {
+    for (const { expression, names } of expressions) {
+      if (names.every((name) => constants.has(name))) {
         continue;
       }
       const value = evaluateStringExpression(expression, constants);
       if (value !== undefined) {
-        constants.set(name, value);
+        for (const name of names) {
+          if (!constants.has(name)) {
+            constants.set(name, value);
+          }
+        }
         changed = true;
       }
     }
