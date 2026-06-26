@@ -394,6 +394,34 @@ test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () 
   )), true);
 });
 
+test("GaugeSemanticTokensProvider treats even-backslash table pipes as borders", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const row = "| C:\\\\| Ada | admin |";
+  const document = {
+    getText() {
+      return [
+        "| path | user | role |",
+        row,
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const evenBackslashPipeStart = row.indexOf("\\\\|") + 2;
+  const borderStarts = tokens
+    .filter((entry) => entry.line === 1 && entry.type === "tableBorder")
+    .map((entry) => entry.start);
+
+  assert.deepEqual(borderStarts, [0, evenBackslashPipeStart, row.indexOf("|", evenBackslashPipeStart + 1), row.length - 1]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes single-column table separators", () => {
   const {
     GaugeSemanticTokensProvider,

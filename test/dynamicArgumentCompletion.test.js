@@ -153,6 +153,25 @@ test("GaugeDynamicArgumentCompletionProvider suggests escaped table header pipes
   assert.deepEqual(labels(items), ["user \\| name", "role"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider splits even-backslash table pipes", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "| path\\\\| alias | role |",
+    "| ----- | ----- | ---- |",
+    "| C:\\\\  | Ada   | admin |",
+    "",
+    "## Successful checkout",
+    "* Login as <p>",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(6, 13));
+
+  assert.deepEqual(labels(items), ["path\\\\", "alias", "role"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at unescaped pipes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
