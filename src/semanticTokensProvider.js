@@ -7,6 +7,7 @@ const tokenTypes = [
   "step",
   "argument",
   "table",
+  "tableHeader",
   "tableHeaderSeparator",
   "tableBorder",
   "tableKeyword",
@@ -47,12 +48,14 @@ function pushToken(builder, line, start, length, tokenType) {
   builder.push(line, start, length, tokenTypes.indexOf(tokenType), 0);
 }
 
-function pushTableSegment(builder, lineNumber, line, start, end) {
+function pushTableSegment(builder, lineNumber, line, start, end, textTokenType = "table") {
   let tokenStart = start;
   let currentType;
 
   for (let charIndex = start; charIndex < end; charIndex += 1) {
-    const tokenType = line[charIndex] === "|" && !isEscapedPipe(line, charIndex) ? "tableBorder" : "table";
+    const tokenType = line[charIndex] === "|" && !isEscapedPipe(line, charIndex)
+      ? "tableBorder"
+      : textTokenType;
     if (!currentType) {
       currentType = tokenType;
       tokenStart = charIndex;
@@ -199,7 +202,7 @@ class GaugeSemanticTokensProvider {
             }
           }
         } else if (index + 1 < lines.length && tableHeaderSeparatorRegex.test(lines[index + 1].trim())) {
-          pushTableSegment(builder, index, line, 0, line.length);
+          pushTableSegment(builder, index, line, 0, line.length, "tableHeader");
         } else {
           let lastIndex = 0;
           tableDynamicArgumentRegex.lastIndex = 0;

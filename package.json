@@ -394,6 +394,11 @@
           "default": "#ae81ff",
           "description": "Color for table rows (cell data)."
         },
+        "gauge.semanticTokenColors.tableHeader": {
+          "type": "string",
+          "default": "#ae81ff",
+          "description": "Color for table headers."
+        },
         "gauge.semanticTokenColors.tableHeaderSeparator": {
           "type": "string",
           "default": "#8349f0",

@@ -167,7 +167,7 @@ test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () =>
   ]);
 });
 
-test("GaugeSemanticTokensProvider keeps dynamic-looking table headers as table tokens", () => {
+test("GaugeSemanticTokensProvider tokenizes table headers as tableHeader tokens", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -188,9 +188,20 @@ test("GaugeSemanticTokensProvider keeps dynamic-looking table headers as table t
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
+  const headerTokens = tokens
+    .filter((entry) => entry.line === 0 && entry.type === "tableHeader")
+    .map(({ start, length }) => ({ start, length }));
+
   assert.deepEqual(tokens.filter((entry) => entry.line === 0 && entry.type === "argument"), []);
-  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "tableBorder"), true);
-  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "table"), true);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0 && entry.type === "table"), []);
+  assert.deepEqual(
+    tokens.filter((entry) => entry.line === 0 && entry.type === "tableBorder").map((entry) => entry.start),
+    [0, 9, 16],
+  );
+  assert.deepEqual(headerTokens, [
+    { start: 1, length: 8 },
+    { start: 10, length: 6 },
+  ]);
 });
 
 test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () => {

@@ -60,6 +60,7 @@ const SEMANTIC_TOKEN_COLOR_KEYS = [
   "stepMarker",
   "step",
   "table",
+  "tableHeader",
   "tableHeaderSeparator",
   "tableBorder",
   "tableKeyword",
