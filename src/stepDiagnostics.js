@@ -2239,6 +2239,22 @@ function skipKotlinAnnotation(text, startIndex) {
   return index;
 }
 
+function skipKotlinContextParameters(text, startIndex) {
+  if (!text.startsWith("context", startIndex)) {
+    return startIndex;
+  }
+  const afterKeyword = startIndex + "context".length;
+  if (/\w/.test(text[afterKeyword] || "")) {
+    return startIndex;
+  }
+  const openParen = skipWhitespaceAndComments(text, afterKeyword);
+  if (text[openParen] !== "(") {
+    return startIndex;
+  }
+  const closeParen = findMatchingParen(text, openParen);
+  return closeParen === -1 ? text.length : closeParen + 1;
+}
+
 function findAttachedFunction(text, startIndex, ignoredRanges = []) {
   let index = startIndex;
   while (index < text.length) {
@@ -2249,6 +2265,12 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
         return undefined;
       }
       index = next;
+      continue;
+    }
+
+    const contextEnd = skipKotlinContextParameters(text, index);
+    if (contextEnd !== index) {
+      index = contextEnd;
       continue;
     }
 
