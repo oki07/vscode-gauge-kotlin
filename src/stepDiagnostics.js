@@ -1594,10 +1594,15 @@ function inferKotlinConstantType(expression, constants, constantTypes) {
 
 function expressionInsideCall(expression, callName) {
   const trimmed = expression.trim();
+  let callNameEnd = callName.length;
   if (!trimmed.startsWith(callName)) {
-    return undefined;
+    const kotlinCallName = `kotlin.${callName}`;
+    if (!trimmed.startsWith(kotlinCallName)) {
+      return undefined;
+    }
+    callNameEnd = kotlinCallName.length;
   }
-  let openParen = skipWhitespaceAndComments(trimmed, callName.length);
+  let openParen = skipWhitespaceAndComments(trimmed, callNameEnd);
   if (trimmed[openParen] === "<") {
     const closeAngle = findMatchingAngle(trimmed, openParen);
     if (closeAngle === -1) {
