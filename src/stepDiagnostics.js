@@ -522,13 +522,98 @@ function evaluateStepAliasExpression(expression, constants) {
   return value === undefined ? [] : [value];
 }
 
+function findConstExpressionEnd(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+  let hasExpression = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      hasExpression = true;
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      hasExpression = true;
+      continue;
+    }
+    if ((char === "\r" || char === "\n") && hasExpression) {
+      if (
+        angleDepth === 0
+        && bracketDepth === 0
+        && braceDepth === 0
+        && parenDepth === 0
+      ) {
+        return index;
+      }
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+    if (!/\s/.test(char)) {
+      hasExpression = true;
+    }
+  }
+
+  return text.length;
+}
+
 function collectStringConstants(text) {
   const constants = new Map();
   const expressions = [];
-  const pattern = /^\s*(?:[A-Za-z_]\w*\s+)*const\s+val\s+([A-Za-z_]\w*)\s*(?::\s*String)?\s*=\s*(.+?)\s*$/gm;
+  const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*String)?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
-    expressions.push({ expression: match[2], name: match[1] });
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = pattern.exec(text);
+      continue;
+    }
+
+    const expressionStart = pattern.lastIndex;
+    const expressionEnd = findConstExpressionEnd(text, expressionStart);
+    expressions.push({
+      expression: text.slice(expressionStart, expressionEnd),
+      name: match[1],
+    });
+    pattern.lastIndex = expressionEnd;
     match = pattern.exec(text);
   }
 
