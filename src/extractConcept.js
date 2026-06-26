@@ -95,7 +95,7 @@ function normalizedSelection(selection) {
 }
 
 function isStepLine(text) {
-  return /^\s*\*\s*\S.*$/.test(text);
+  return /^\*\s*\S.*$/.test(text);
 }
 
 function isTableLine(text) {

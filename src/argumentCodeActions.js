@@ -64,8 +64,7 @@ function uriPath(uri) {
 }
 
 function isGaugeStepOrConceptHeading(line, document) {
-  const trimmed = line.trimStart();
-  if (trimmed.startsWith("*")) {
+  if (line.startsWith("*")) {
     return true;
   }
   return isConceptHeadingLine(line, document);

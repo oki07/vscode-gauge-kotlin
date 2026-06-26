@@ -112,6 +112,10 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isStepLine(line) {
+  return line.startsWith("*");
+}
+
 function isConceptLegacyUnderlineHeadingText(line) {
   return line.trim().length > 0 && !/[#*|]/.test(line);
 }
@@ -222,7 +226,7 @@ class GaugeSemanticTokensProvider {
         index += 1;
       } else if (!conceptDocument && pushKeywordLine(builder, index, line, "tags", "tagKeyword", "tagValue")) {
         index += 1;
-      } else if (trimmedLine.startsWith("*")) {
+      } else if (isStepLine(line)) {
         const markerStart = line.indexOf("*");
         if (markerStart !== -1) {
           builder.push(index, markerStart, 1, tokenTypes.indexOf("stepMarker"), 0);

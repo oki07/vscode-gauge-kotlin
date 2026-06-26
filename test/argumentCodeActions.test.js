@@ -149,6 +149,27 @@ test("GaugeArgumentCodeActionProvider ignores indented concept hash heading argu
   );
 });
 
+test("GaugeArgumentCodeActionProvider ignores indented step marker arguments", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+  const line = "  * Commented setup \"draft\" <ignored>";
+
+  assert.deepEqual(
+    provider.provideCodeActions(
+      createDocument(line),
+      createRange(0, line.indexOf("draft")),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    provider.provideCodeActions(
+      createDocument(line),
+      createRange(0, line.indexOf("ignored")),
+    ),
+    [],
+  );
+});
+
 test("GaugeArgumentCodeActionProvider converts escaped dynamic arguments to static parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();

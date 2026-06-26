@@ -240,6 +240,56 @@ test("GaugeSemanticTokensProvider treats indented concept hash headings as comme
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats indented step markers as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const specDocument = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "  * Commented setup \"draft\" <ignored>",
+        "* Real <item>",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return [
+        "  * Commented setup \"draft\" <ignored>",
+        "* Real <item>",
+      ].join("\n");
+    },
+  };
+
+  const specTokens = provider.provideDocumentSemanticTokens(specDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const conceptTokens = provider.provideDocumentSemanticTokens(conceptDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(specTokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+  assert.deepEqual(conceptTokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+  assert.deepEqual(specTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+    "argument",
+  ]);
+  assert.deepEqual(conceptTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+    "argument",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider ignores concept hyphen underline headings", () => {
   const {
     GaugeSemanticTokensProvider,

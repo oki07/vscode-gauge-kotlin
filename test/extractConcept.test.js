@@ -148,6 +148,22 @@ function createClients(requests, conceptFiles = ["/workspace/gauge/specs/concept
   };
 }
 
+test("buildExtractSelection rejects indented step marker comments", () => {
+  const { buildExtractSelection } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "  * Commented setup \"draft\" <ignored>",
+    "* Real <item>",
+  ].join("\n"));
+
+  const extraction = buildExtractSelection(document, {
+    start: { line: 1, character: 0 },
+    end: { line: 1, character: 38 },
+  });
+
+  assert.equal(extraction, undefined);
+});
+
 test("ExtractConceptCommandProvider extracts selected Gauge steps into an existing concept file", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
