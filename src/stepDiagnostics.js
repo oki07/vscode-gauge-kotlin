@@ -304,6 +304,9 @@ function isLikelyTypeArgumentStart(text, index) {
   if (/\s/.test(text[index - 1] || "")) {
     return false;
   }
+  if (findMatchingAngle(text, index) === -1) {
+    return false;
+  }
   const previousIndex = previousNonWhitespaceIndex(text, index);
   const nextIndex = nextNonWhitespaceIndex(text, index);
   if (previousIndex === -1 || nextIndex === -1 || text[nextIndex] === "=") {

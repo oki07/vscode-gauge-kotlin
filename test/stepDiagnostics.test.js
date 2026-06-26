@@ -239,6 +239,25 @@ test("GaugeStepDiagnosticsProvider counts Kotlin default comparison parameters",
   );
 });
 
+test("GaugeStepDiagnosticsProvider counts Kotlin compact default comparison parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "val left = 1",
+    "val right = 2",
+    "",
+    "@Step(\"Compare <value> <other> <third>\")",
+    "fun compare(flag: Boolean = left<right, other: String = \"x\") {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [2] expected [3]) with step annotation : \"Compare <value> <other> <third>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider does not attach Step annotations to later functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
