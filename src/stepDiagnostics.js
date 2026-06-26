@@ -2440,7 +2440,10 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
 
 function findStepFunctions(text) {
   const entries = [];
-  const annotationPattern = /@((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\b/g;
+  const annotationPattern = new RegExp(
+    `@(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)`,
+    "g",
+  );
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
