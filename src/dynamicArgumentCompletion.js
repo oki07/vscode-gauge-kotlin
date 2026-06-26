@@ -115,22 +115,32 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isTableBlockStartLine(line) {
+  return line.startsWith("|");
+}
+
 function isTeardownLine(line) {
   return /^___+\s*$/.test(line);
 }
 
-function isFirstTableLine(lines, lineNumber) {
+function tableBlockStartLine(lines, lineNumber) {
   if (!isTableLine(lines[lineNumber] || "")) {
-    return false;
+    return -1;
   }
-  for (let index = lineNumber - 1; index >= 0; index -= 1) {
-    const line = lines[index] || "";
-    if (line.trim() === "") {
-      return true;
-    }
-    return !isTableLine(line);
+
+  let startLine = lineNumber;
+  while (startLine > 0 && isTableLine(lines[startLine - 1] || "")) {
+    startLine -= 1;
   }
-  return true;
+  return isTableBlockStartLine(lines[startLine] || "") ? startLine : -1;
+}
+
+function isFirstTableLine(lines, lineNumber) {
+  return tableBlockStartLine(lines, lineNumber) === lineNumber;
+}
+
+function isTableBlockLine(lines, lineNumber) {
+  return tableBlockStartLine(lines, lineNumber) !== -1;
 }
 
 function isTableHeaderLine(document, lineNumber) {
@@ -262,11 +272,12 @@ function staticArguments(text, options = {}) {
   return unique(values);
 }
 
-function allowsDynamicArgumentCompletion(line, document) {
+function allowsDynamicArgumentCompletion(line, document, lineNumber) {
   if (isConceptDocument(document) && isConceptHeading(line)) {
     return true;
   }
-  return isStepLine(line) || isTableLine(line);
+  const lines = document.getText().split(/\r?\n/);
+  return isStepLine(line) || isTableBlockLine(lines, lineNumber);
 }
 
 function allowsStaticArgumentCompletion(line) {
@@ -297,7 +308,7 @@ class GaugeDynamicArgumentCompletionProvider {
     if (argumentRange && isTableHeaderLine(document, position.line)) {
       return [];
     }
-    if (argumentRange && !allowsDynamicArgumentCompletion(line, document)) {
+    if (argumentRange && !allowsDynamicArgumentCompletion(line, document, position.line)) {
       return [];
     }
     if (quotedArgumentRange && !allowsStaticArgumentCompletion(line)) {

@@ -592,6 +592,38 @@ test("GaugeSemanticTokensProvider tokenizes blank-separated table rows as new he
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats indented top-level table markers as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "  | <user> | role |",
+        "  | ------ | ---- |",
+        "* Real <item>",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
+    "gaugeComment",
+    "gaugeComment",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+    "argument",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () => {
   const {
     GaugeSemanticTokensProvider,

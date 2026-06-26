@@ -295,6 +295,26 @@ test("GaugeDynamicArgumentCompletionProvider treats indented step markers as com
   assert.deepEqual(labels(staticItems), ["a"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores indented top-level table markers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "  | user | role |",
+    "  | ---- | ---- |",
+    "",
+    "* Login as <u>",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(4, 13),
+  );
+
+  assert.deepEqual(labels(items), []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores non-step spec arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

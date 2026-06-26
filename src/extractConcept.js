@@ -102,6 +102,10 @@ function isTableLine(text) {
   return /^\s*\|.*\|\s*$/.test(text);
 }
 
+function isTableStartLine(text) {
+  return /^\|.*\|\s*$/.test(text);
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -144,11 +148,13 @@ function buildExtractSelection(document, selection) {
     const tableLines = [];
     const block = [stepText];
     let nextLine = line + 1;
-    while (nextLine < document.lineCount && isTableLine(lineText(document, nextLine))) {
-      const tableLine = lineText(document, nextLine).trim();
-      tableLines.push(tableLine);
-      block.push(tableLine);
-      nextLine += 1;
+    if (nextLine < document.lineCount && isTableStartLine(lineText(document, nextLine))) {
+      while (nextLine < document.lineCount && isTableLine(lineText(document, nextLine))) {
+        const tableLine = lineText(document, nextLine).trim();
+        tableLines.push(tableLine);
+        block.push(tableLine);
+        nextLine += 1;
+      }
     }
 
     blocks.push(block);

@@ -112,6 +112,10 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isTableBlockStartLine(line) {
+  return line.startsWith("|");
+}
+
 function isStepLine(line) {
   return line.startsWith("*");
 }
@@ -128,18 +132,24 @@ function isHashHeadingLine(line, conceptDocument) {
   return conceptDocument ? line.startsWith("#") : line.trimStart().startsWith("#");
 }
 
-function isFirstTableLine(lines, lineNumber) {
+function tableBlockStartLine(lines, lineNumber) {
   if (!isTableLine(lines[lineNumber] || "")) {
-    return false;
+    return -1;
   }
-  for (let index = lineNumber - 1; index >= 0; index -= 1) {
-    const line = lines[index] || "";
-    if (line.trim() === "") {
-      return true;
-    }
-    return !isTableLine(line);
+
+  let startLine = lineNumber;
+  while (startLine > 0 && isTableLine(lines[startLine - 1] || "")) {
+    startLine -= 1;
   }
-  return true;
+  return isTableBlockStartLine(lines[startLine] || "") ? startLine : -1;
+}
+
+function isFirstTableLine(lines, lineNumber) {
+  return tableBlockStartLine(lines, lineNumber) === lineNumber;
+}
+
+function isTableBlockLine(lines, lineNumber) {
+  return tableBlockStartLine(lines, lineNumber) !== -1;
 }
 
 class GaugeSemanticTokensProvider {
@@ -251,7 +261,7 @@ class GaugeSemanticTokensProvider {
           }
         }
         index += 1;
-      } else if (isTableLine(line)) {
+      } else if (isTableBlockLine(lines, index)) {
         if (tableHeaderSeparatorRegex.test(trimmedLine)) {
           for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
             const char = line[charIndex];

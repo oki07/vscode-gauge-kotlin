@@ -164,6 +164,23 @@ test("buildExtractSelection rejects indented step marker comments", () => {
   assert.equal(extraction, undefined);
 });
 
+test("buildExtractSelection rejects indented inline table starts", () => {
+  const { buildExtractSelection } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "* Login as <user>",
+    "  | item | count |",
+    "  | book | 1     |",
+  ].join("\n"));
+
+  const extraction = buildExtractSelection(document, {
+    start: { line: 1, character: 0 },
+    end: { line: 3, character: 18 },
+  });
+
+  assert.equal(extraction, undefined);
+});
+
 test("ExtractConceptCommandProvider extracts selected Gauge steps into an existing concept file", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
