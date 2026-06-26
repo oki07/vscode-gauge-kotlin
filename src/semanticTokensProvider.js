@@ -111,6 +111,7 @@ class GaugeSemanticTokensProvider {
   provideDocumentSemanticTokens(document) {
     const builder = new this.SemanticTokensBuilder(this.legend);
     const lines = document.getText().split(/\r?\n/);
+    const conceptDocument = isConceptDocument(document);
     const argumentRegex = /(?:"(?:\\"|[^"\r\n])*"|<(?:\\[<>]|[^>\r\n])*>)/g;
     const dynamicArgumentRegex = /<(?:\\[<>]|[^>\r\n])*>/g;
     const tableDynamicArgumentRegex = /<(?:\\[<>|]|[^>|\r\n])*>/g;
@@ -136,7 +137,7 @@ class GaugeSemanticTokensProvider {
           index += 2;
           continue;
         }
-        if (trimmedNextLine.length > 0 && /^[-]+$/.test(trimmedNextLine)) {
+        if (!conceptDocument && trimmedNextLine.length > 0 && /^[-]+$/.test(trimmedNextLine)) {
           const leadingSpaces = line.length - line.trimStart().length;
           builder.push(index, leadingSpaces, line.length - leadingSpaces, tokenTypes.indexOf("scenario"), 0);
           builder.push(index + 1, 0, nextLine.length, tokenTypes.indexOf("scenario"), 0);
@@ -149,7 +150,7 @@ class GaugeSemanticTokensProvider {
         let lastIndex = line.search(/\S/);
         const isScenarioHeading = trimmedLine.startsWith("##");
         const headingToken = isScenarioHeading ? "scenario" : "specification";
-        if (isScenarioHeading || !isConceptDocument(document)) {
+        if (isScenarioHeading || !conceptDocument) {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
           index += 1;
           continue;

@@ -163,6 +163,34 @@ test("GaugeSemanticTokensProvider keeps quoted concept heading text as heading",
   ]);
 });
 
+test("GaugeSemanticTokensProvider ignores concept hyphen underline headings", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return [
+        "Not a concept heading",
+        "---------------------",
+        "* Reuse",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
+    "gaugeComment",
+    "gaugeComment",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () => {
   const {
     GaugeSemanticTokensProvider,
