@@ -575,6 +575,16 @@ function findConstExpressionEnd(text, startIndex) {
         return index;
       }
     }
+    if (
+      (char === ";" || char === "}")
+      && hasExpression
+      && angleDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+    ) {
+      return index;
+    }
     if (char === "<") {
       angleDepth += 1;
     } else if (char === ">" && angleDepth > 0) {
