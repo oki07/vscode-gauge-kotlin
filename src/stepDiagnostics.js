@@ -4348,23 +4348,29 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
 
     const groupStart = openBracket + 1;
     const findAttachedDeclaration = findAttachedPropertyAccessor(group.useSiteTarget);
-    const annotationPattern = new RegExp(KOTLIN_ANNOTATION_NAME_PATTERN, "g");
-    annotationPattern.lastIndex = groupStart;
-    let annotationMatch = annotationPattern.exec(text);
-    while (annotationMatch && annotationMatch.index < closeBracket) {
-      if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
-        annotationMatch = annotationPattern.exec(text);
+    let annotationIndex = groupStart;
+    while (annotationIndex < closeBracket) {
+      annotationIndex = skipWhitespaceAndComments(text, annotationIndex);
+      if (annotationIndex >= closeBracket) {
+        break;
+      }
+      if (isInIgnoredRange(annotationIndex, ignoredRanges)) {
+        annotationIndex += 1;
         continue;
       }
-      const openParen = skipWhitespaceAndComments(text, annotationPattern.lastIndex);
+      const annotationName = readKotlinIdentifierPath(text, annotationIndex);
+      if (!annotationName || annotationName.end > closeBracket) {
+        annotationIndex += 1;
+        continue;
+      }
+      const openParen = skipWhitespaceAndComments(text, annotationName.end);
       if (text[openParen] !== "(") {
-        annotationMatch = annotationPattern.exec(text);
+        annotationIndex = Math.max(annotationName.end, annotationIndex + 1);
         continue;
       }
       const closeParen = findMatchingParen(text, openParen);
       if (closeParen === -1 || closeParen > closeBracket) {
-        annotationPattern.lastIndex = openParen + 1;
-        annotationMatch = annotationPattern.exec(text);
+        annotationIndex = openParen + 1;
         continue;
       }
 
@@ -4376,14 +4382,13 @@ function addGroupedStepFunctions(entries, text, constants, constantTypes, ignore
         ignoredRanges,
         stepImports,
         functionBodyRanges,
-        annotationMatch[0],
+        annotationName.path,
         openParen,
         () => closeBracket + 1,
         findAttachedDeclaration,
         groupMatch.index,
       );
-      annotationPattern.lastIndex = closeParen + 1;
-      annotationMatch = annotationPattern.exec(text);
+      annotationIndex = closeParen + 1;
     }
     groupPattern.lastIndex = group.end;
     groupMatch = groupPattern.exec(text);

@@ -2102,6 +2102,18 @@ test("GaugeStepDiagnosticsProvider skips grouped annotations before Kotlin step 
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores newline-separated non-Gauge grouped Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@[com.example.",
+    "  Step(\"Grouped <value>\")]",
+    "fun grouped() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin const step annotation values", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
