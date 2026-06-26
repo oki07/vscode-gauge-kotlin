@@ -519,6 +519,10 @@ function evaluateStringExpression(expression, constants) {
   if (literal !== undefined) {
     return literal;
   }
+  const charLiteral = parseKotlinCharLiteralExpression(trimmed);
+  if (charLiteral !== undefined) {
+    return charLiteral;
+  }
 
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
   if (parts.length > 1) {
@@ -848,7 +852,7 @@ function collectStringConstants(text) {
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
   ];
-  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*String)?\s*=/g;
+  const pattern = /\bconst\s+val\s+([A-Za-z_]\w*)\s*(?::\s*(?:[A-Za-z_]\w*\.)*(?:String|Char))?\s*=/g;
   let match = pattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
