@@ -40,6 +40,13 @@ function pluginNameEquals(left, right) {
   return String(left || "").toLowerCase() === String(right || "").toLowerCase();
 }
 
+function removeDeprecatedOutputLines(output) {
+  return String(output || "")
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("[DEPRECATED]"))
+    .join("\n");
+}
+
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
@@ -64,16 +71,17 @@ class CLI {
     }
 
     const versionResult = gaugeCommand.spawnSync([GAUGE_VERSION_ARG, MACHINE_READABLE_ARG]);
+    const versionOutput = versionResult.stdout.toString();
     try {
       return new CLI(
         gaugeCommand,
-        JSON.parse(versionResult.stdout.toString()),
+        JSON.parse(removeDeprecatedOutputLines(versionOutput)),
         mavenCommand,
         gradleCommand,
       );
     } catch (_error) {
       getVscode(vscode).window.showErrorMessage(
-        `Error fetching Gauge and plugins version information. \n${versionResult.stdout.toString()}`,
+        `Error fetching Gauge and plugins version information. \n${versionOutput}`,
       );
       return undefined;
     }

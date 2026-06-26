@@ -71,6 +71,58 @@ test("CLI reports whether Gauge is installed", () => {
   assert.equal(new CLI(null, {}, undefined, undefined).isGaugeInstalled(), false);
 });
 
+test("CLI parses Gauge machine-readable version output with deprecated warnings", () => {
+  const { CLI, Command } = require("../src/cli");
+  const errors = [];
+  const fakeGaugeCommand = {
+    spawnSync(args) {
+      assert.deepEqual(args, ["--version", "--machine-readable"]);
+      return {
+        stdout: Buffer.from([
+          "[DEPRECATED] This warning should not break JSON parsing.",
+          JSON.stringify({
+            version: "1.2.3",
+            commitHash: "3db28e6",
+            plugins: [{ name: "kotlin", version: "0.9.0" }],
+          }),
+        ].join("\n")),
+      };
+    },
+  };
+
+  class TestCLI extends CLI {
+    static getCommand(command) {
+      if (command === "gauge") {
+        return fakeGaugeCommand;
+      }
+      if (command === "mvn") {
+        return new Command("mvn");
+      }
+      return undefined;
+    }
+  }
+
+  const cli = TestCLI.instance({
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  assert.equal(cli.gaugeVersionString(), [
+    "Gauge version: 1.2.3",
+    "Commit Hash: 3db28e6",
+    "",
+    "Plugins",
+    "-------",
+    "kotlin (0.9.0)",
+  ].join("\n"));
+  assert.deepEqual(errors, []);
+});
+
 test("CLI creates platform command candidates", () => {
   const { CLI } = require("../src/cli");
   const candidates = CLI.getCommandCandidates("gauge");
