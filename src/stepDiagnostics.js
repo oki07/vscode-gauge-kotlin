@@ -2398,7 +2398,7 @@ function findPropertyHeaderEnd(text, startIndex) {
   return text.length;
 }
 
-function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
+function findNextPropertyAccessor(text, startIndex, parameterText, ignoredRanges = []) {
   if (isInIgnoredRange(startIndex, ignoredRanges)) {
     return undefined;
   }
@@ -2425,8 +2425,20 @@ function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
   return {
     parameterEnd: nameStart + propertyName.length,
     parameterStart: nameStart,
-    parameterText: "",
+    parameterText,
   };
+}
+
+function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
+  return findNextPropertyAccessor(text, startIndex, "", ignoredRanges);
+}
+
+function findNextPropertySetter(text, startIndex, ignoredRanges = []) {
+  const declaration = /^(?:val|var)\b/.exec(text.slice(startIndex));
+  if (!declaration || declaration[0] !== "var") {
+    return undefined;
+  }
+  return findNextPropertyAccessor(text, startIndex, "value", ignoredRanges);
 }
 
 function startsDeclarationLine(text, index) {
@@ -2672,6 +2684,51 @@ function findAttachedPropertyGetter(text, startIndex, ignoredRanges = []) {
   return undefined;
 }
 
+function findAttachedPropertySetter(text, startIndex, ignoredRanges = []) {
+  let index = startIndex;
+  while (index < text.length) {
+    index = skipWhitespaceAndComments(text, index);
+    if (text[index] === "@") {
+      const next = skipKotlinAnnotation(text, index);
+      if (next === index) {
+        return undefined;
+      }
+      index = next;
+      continue;
+    }
+
+    const contextEnd = skipKotlinContextParameters(text, index);
+    if (contextEnd !== index) {
+      index = contextEnd;
+      continue;
+    }
+
+    const token = /^[A-Za-z_]\w*/.exec(text.slice(index));
+    if (!token) {
+      return undefined;
+    }
+    if (token[0] === "val" || token[0] === "var") {
+      return findNextPropertySetter(text, index, ignoredRanges);
+    }
+    if (KOTLIN_PROPERTY_MODIFIERS.has(token[0])) {
+      index += token[0].length;
+      continue;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function findAttachedPropertyAccessor(useSiteTarget) {
+  if (useSiteTarget === "get") {
+    return findAttachedPropertyGetter;
+  }
+  if (useSiteTarget === "set") {
+    return findAttachedPropertySetter;
+  }
+  return findAttachedFunction;
+}
+
 function stepAnnotationImports(text, ignoredRanges = []) {
   const named = new Map();
   const wildcards = new Set();
@@ -2907,7 +2964,7 @@ function addStepFunctionEntry(
 }
 
 function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, functionBodyRanges) {
-  const groupPattern = /@(?:(get):)?\[/g;
+  const groupPattern = /@(?:(get|set):)?\[/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
     if (isInIgnoredRange(groupMatch.index, ignoredRanges)) {
@@ -2923,7 +2980,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
     }
 
     const groupStart = openBracket + 1;
-    const findAttachedDeclaration = groupMatch[1] === "get" ? findAttachedPropertyGetter : findAttachedFunction;
+    const findAttachedDeclaration = findAttachedPropertyAccessor(groupMatch[1]);
     const annotationPattern = new RegExp(KOTLIN_ANNOTATION_NAME_PATTERN, "g");
     annotationPattern.lastIndex = groupStart;
     let annotationMatch = annotationPattern.exec(text);
@@ -2969,7 +3026,7 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
 
 function findStepFunctions(text) {
   const entries = [];
-  const annotationPattern = new RegExp(`@(?:(get):)?(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
+  const annotationPattern = new RegExp(`@(?:(get|set):)?(${KOTLIN_ANNOTATION_NAME_PATTERN})`, "g");
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
@@ -2982,7 +3039,7 @@ function findStepFunctions(text) {
       continue;
     }
     const annotationName = annotationMatch[2];
-    const findAttachedDeclaration = annotationMatch[1] === "get" ? findAttachedPropertyGetter : findAttachedFunction;
+    const findAttachedDeclaration = findAttachedPropertyAccessor(annotationMatch[1]);
     let openParen = annotationPattern.lastIndex;
     while (/\s/.test(text[openParen])) {
       openParen += 1;
