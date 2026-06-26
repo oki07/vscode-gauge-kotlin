@@ -473,6 +473,150 @@ function evaluateIntegerRemainderExpression(parts) {
   return String(rest.reduce((remainder, value) => remainder % value, first));
 }
 
+function previousNonWhitespace(text, index) {
+  for (let current = index - 1; current >= 0; current -= 1) {
+    if (!/\s/.test(text[current])) {
+      return text[current];
+    }
+  }
+  return undefined;
+}
+
+function isUnaryAdditiveOperator(text, index) {
+  const previous = previousNonWhitespace(text, index);
+  return previous === undefined || "+-*/%(".includes(previous);
+}
+
+function splitTopLevelOperators(text, operators) {
+  const parts = [];
+  let start = 0;
+  let operator;
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      operators.has(char)
+      && angleDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+      && !((char === "+" || char === "-") && isUnaryAdditiveOperator(text, index))
+    ) {
+      parts.push({ operator, expression: text.slice(start, index).trim() });
+      operator = char;
+      start = index + 1;
+    }
+  }
+
+  parts.push({ operator, expression: text.slice(start).trim() });
+  return parts;
+}
+
+function evaluateIntegerArithmeticExpression(expression, constants) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateIntegerArithmeticExpression(trimmed.slice(1, -1), constants);
+  }
+
+  const literal = parseKotlinIntegerLiteralExpression(trimmed);
+  if (literal !== undefined) {
+    return literal;
+  }
+  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
+    return parseKotlinIntegerLiteralExpression(constants.get(trimmed));
+  }
+
+  const additiveParts = splitTopLevelOperators(trimmed, new Set(["+", "-"]));
+  if (additiveParts.length > 1) {
+    let result = evaluateIntegerArithmeticExpression(additiveParts[0].expression, constants);
+    if (result === undefined) {
+      return undefined;
+    }
+    for (const part of additiveParts.slice(1)) {
+      const value = evaluateIntegerArithmeticExpression(part.expression, constants);
+      if (value === undefined) {
+        return undefined;
+      }
+      result = String(part.operator === "+" ? BigInt(result) + BigInt(value) : BigInt(result) - BigInt(value));
+    }
+    return result;
+  }
+
+  const multiplicativeParts = splitTopLevelOperators(trimmed, new Set(["*", "/", "%"]));
+  if (multiplicativeParts.length > 1) {
+    let result = evaluateIntegerArithmeticExpression(multiplicativeParts[0].expression, constants);
+    if (result === undefined) {
+      return undefined;
+    }
+    for (const part of multiplicativeParts.slice(1)) {
+      const value = evaluateIntegerArithmeticExpression(part.expression, constants);
+      if (value === undefined || ((part.operator === "/" || part.operator === "%") && BigInt(value) === 0n)) {
+        return undefined;
+      }
+      if (part.operator === "*") {
+        result = String(BigInt(result) * BigInt(value));
+      } else if (part.operator === "/") {
+        result = String(BigInt(result) / BigInt(value));
+      } else {
+        result = String(BigInt(result) % BigInt(value));
+      }
+    }
+    return result;
+  }
+
+  return undefined;
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -619,6 +763,10 @@ function evaluateStringExpression(expression, constants) {
   const booleanLiteral = parseKotlinBooleanLiteralExpression(trimmed);
   if (booleanLiteral !== undefined) {
     return booleanLiteral;
+  }
+  const integerArithmetic = evaluateIntegerArithmeticExpression(trimmed, constants);
+  if (integerArithmetic !== undefined) {
+    return integerArithmetic;
   }
   const integerSubtraction = evaluateIntegerSubtractionExpression(trimmed);
   if (integerSubtraction !== undefined) {
