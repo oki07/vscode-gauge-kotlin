@@ -271,14 +271,36 @@ function toDynamicParameterName(value) {
 
 function staticArgumentParameters(conceptName) {
   const parameters = [];
-  const quotedArgument = /"([^"]+)"/g;
-  let match = quotedArgument.exec(conceptName);
-  while (match) {
+  let index = 0;
+  while (index < conceptName.length) {
+    if (conceptName[index] !== "\"") {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    index += 1;
+    let escaped = false;
+    while (index < conceptName.length) {
+      const character = conceptName[index];
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === "\"") {
+        break;
+      }
+      index += 1;
+    }
+    if (index >= conceptName.length) {
+      break;
+    }
+    const original = conceptName.slice(start, index + 1);
+    const value = conceptName.slice(start + 1, index);
     parameters.push({
-      dynamic: `<${toDynamicParameterName(match[1])}>`,
-      original: match[0],
+      dynamic: `<${toDynamicParameterName(value)}>`,
+      original,
     });
-    match = quotedArgument.exec(conceptName);
+    index += 1;
   }
   return parameters;
 }
