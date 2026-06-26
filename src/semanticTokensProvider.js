@@ -52,7 +52,7 @@ function pushTableSegment(builder, lineNumber, line, start, end) {
   let currentType;
 
   for (let charIndex = start; charIndex < end; charIndex += 1) {
-    const tokenType = line[charIndex] === "|" ? "tableBorder" : "table";
+    const tokenType = line[charIndex] === "|" && !isEscapedPipe(line, charIndex) ? "tableBorder" : "table";
     if (!currentType) {
       currentType = tokenType;
       tokenStart = charIndex;
@@ -66,6 +66,10 @@ function pushTableSegment(builder, lineNumber, line, start, end) {
   if (currentType) {
     pushToken(builder, lineNumber, tokenStart, end - tokenStart, currentType);
   }
+}
+
+function isEscapedPipe(line, index) {
+  return index > 0 && line[index - 1] === "\\";
 }
 
 class GaugeSemanticTokensProvider {
