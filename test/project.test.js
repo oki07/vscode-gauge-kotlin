@@ -104,6 +104,38 @@ test("build project envs report classpath calculation errors", () => {
   ]);
 });
 
+test("build project envs report missing build tool commands", () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const errors = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync() {
+      throw new Error("execSync should not run without a command");
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  assert.doesNotThrow(() => {
+    const env = project.envs({
+      mavenCommand() {
+        return undefined;
+      },
+    });
+    assert.equal(env, undefined);
+  });
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nBuild tool command is not available.",
+  ]);
+});
+
 test("GaugeProject compares by class and root", () => {
   const { GaugeProject } = require("../src/project/gaugeProject");
   const { GradleProject } = require("../src/project/gradleProject");

@@ -8,7 +8,7 @@ class MavenProject extends BuildToolProject {
   }
 
   envs(cli) {
-    return this.classpathEnv(`${this.getExecutionCommand(cli).command} -q gauge:classpath`);
+    return this.classpathEnv(this.getExecutionCommand(cli), "-q gauge:classpath");
   }
 }
 

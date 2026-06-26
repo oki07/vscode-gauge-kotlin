@@ -46,8 +46,13 @@ class BuildToolProject extends GaugeProject {
     }
   }
 
-  classpathEnv(commandLine) {
+  classpathEnv(command, args) {
+    if (!command || !command.command) {
+      this.showClasspathError(new Error("Build tool command is not available."));
+      return undefined;
+    }
     try {
+      const commandLine = `${command.command} ${args}`;
       const classpath = this.execSync(commandLine, { cwd: this.root() });
       return {
         [GAUGE_CUSTOM_CLASSPATH]: classpath.toString().trim(),

@@ -8,7 +8,7 @@ class GradleProject extends BuildToolProject {
   }
 
   envs(cli) {
-    return this.classpathEnv(`${this.getExecutionCommand(cli).command} -q clean classpath`);
+    return this.classpathEnv(this.getExecutionCommand(cli), "-q clean classpath");
   }
 }
 
