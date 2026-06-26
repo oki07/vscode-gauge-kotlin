@@ -113,6 +113,17 @@ test("GaugeStepDiagnosticsProvider accepts Kotlin comments inside Step annotatio
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores comments inside Kotlin Step function parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"No params\")",
+    "fun commented(/* no parameters */) {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores matching Kotlin Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

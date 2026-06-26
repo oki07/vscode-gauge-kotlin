@@ -559,7 +559,7 @@ function splitTopLevelParameters(text) {
 }
 
 function countKotlinParameters(parameterText) {
-  const trimmed = parameterText.trim();
+  const trimmed = removeKotlinComments(parameterText).trim();
   if (!trimmed) {
     return 0;
   }
