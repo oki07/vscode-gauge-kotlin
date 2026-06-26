@@ -171,6 +171,22 @@ test("GaugeStepDiagnosticsProvider checks generic Kotlin arrayOf Step aliases", 
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores comments inside generic arrayOf Step aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(value = arrayOf</* > */ String>(\"Use <name>\"))",
+    "fun use() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Use <name>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks qualified Kotlin arrayOf Step aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

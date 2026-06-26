@@ -320,8 +320,35 @@ function isFunctionTypeArrowClose(text, index) {
 
 function findMatchingAngle(text, openIndex) {
   let depth = 0;
+  let quote;
   for (let index = openIndex; index < text.length; index += 1) {
     const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
     if (char === "`") {
       const closeIndex = text.indexOf("`", index + 1);
       if (closeIndex === -1) {
