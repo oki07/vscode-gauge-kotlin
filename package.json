@@ -5,6 +5,11 @@
   "version": "0.0.1",
   "private": true,
   "license": "MIT",
+  "icon": "images/gauge-icon.png",
+  "galleryBanner": {
+    "color": "#F5C20F",
+    "theme": "light"
+  },
   "dependencies": {
     "get-port": "^7.1.0",
     "ps-tree": "^1.2.0",
@@ -21,6 +26,7 @@
     "specification"
   ],
   "files": [
+    "images/**",
     "language-configuration.json",
     "resources/**",
     "snippets/**",

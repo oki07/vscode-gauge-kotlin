@@ -46,6 +46,11 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.equal(manifest.name, "vscode-gauge-kotlin");
   assert.equal(manifest.displayName, "Gauge Kotlin");
   assert.equal(manifest.main, "./src/extension.js");
+  assert.equal(manifest.icon, "images/gauge-icon.png");
+  assert.deepEqual(manifest.galleryBanner, {
+    color: "#F5C20F",
+    theme: "light",
+  });
   assert.deepEqual(manifest.scripts, {
     typecheck: "node scripts/check-js-syntax.js",
     lint: "node scripts/check-js-syntax.js",
@@ -59,6 +64,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");
   assert.deepEqual(manifest.categories, ["Programming Languages", "Testing"]);
   assert.deepEqual(manifest.files, [
+    "images/**",
     "language-configuration.json",
     "resources/**",
     "snippets/**",
@@ -66,6 +72,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "syntaxes/**",
     ".vscodeignore",
   ]);
+  assert.equal(fs.existsSync(path.join(root, manifest.icon)), true);
 
   assert.deepEqual(manifest.activationEvents, [
     "onCommand:gauge.createProject",
