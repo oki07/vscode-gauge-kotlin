@@ -1542,6 +1542,27 @@ test("GaugeStepDiagnosticsProvider resolves commented qualified Step import alia
   assert.deepEqual(provider.provideDiagnostics(nonGaugeAliasDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider resolves newline-qualified Step import aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import com.thoughtworks.gauge.",
+    "  Step as GaugeStep",
+    "",
+    "@GaugeStep(\"Imported <value> and <other>\")",
+    "fun imported(value: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Imported <value> and <other>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores local Step annotation declarations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -3270,6 +3291,28 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with comme
     "import kotlin./* target */String as StepText",
     "private const val USER_ARG: StepText = \"<user>\"",
     "private const val LOGIN_STEP: StepText = \"Log in as $USER_ARG\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with newline-qualified import aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "import kotlin.",
+    "  String as StepText",
+    "private const val LOGIN_STEP: StepText = \"Log in as <user>\"",
     "",
     "@Step(LOGIN_STEP)",
     "fun login() {}",

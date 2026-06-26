@@ -778,6 +778,46 @@ function normalizeKotlinImportStatementForMatch(statement) {
   return normalizeKotlinQualifiedPathDots(statement);
 }
 
+function startsKotlinImportDeclaration(line) {
+  return /^import(?:\s|$)/.test(line);
+}
+
+function shouldContinueKotlinImportStatement(statement, nextLine) {
+  const normalizedStatement = normalizeKotlinImportStatementForMatch(statement);
+  const trimmedNextLine = nextLine.trim();
+  return normalizedStatement.endsWith(".")
+    || trimmedNextLine.startsWith(".")
+    || /^as(?:\s|$)/.test(trimmedNextLine);
+}
+
+function readKotlinImportStatement(lines, startIndex, importPattern) {
+  let statement = lines[startIndex];
+  if (!startsKotlinImportDeclaration(statement)) {
+    return { endIndex: startIndex, statement };
+  }
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const normalizedStatement = normalizeKotlinImportStatementForMatch(statement);
+    const nextLine = lines[index + 1];
+    if (
+      importPattern.test(normalizedStatement)
+      && (nextLine === undefined || !/^as(?:\s|$)/.test(nextLine.trim()))
+    ) {
+      return { endIndex: index, statement };
+    }
+    if (
+      nextLine === undefined
+      || startsKotlinImportDeclaration(nextLine)
+      || startsKotlinTypeAliasDeclaration(nextLine)
+      || !shouldContinueKotlinImportStatement(statement, nextLine)
+    ) {
+      return { endIndex: index, statement };
+    }
+    statement = `${statement} ${nextLine}`;
+  }
+  return { endIndex: lines.length - 1, statement };
+}
+
 function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const aliases = new Map();
   const importPattern = new RegExp(
@@ -789,7 +829,8 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
-    let match = importPattern.exec(normalizeKotlinImportStatementForMatch(line));
+    const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
+    let match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
     if (match) {
       const importedName = normalizeKotlinIdentifierPath(match[1]);
       if (resolveKotlinConstTypeName(importedName) !== undefined) {
@@ -799,6 +840,7 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
           : normalizeKotlinIdentifier(match[2]);
         aliases.set(exposedName, importedName);
       }
+      lineIndex = importStatement.endIndex;
       continue;
     }
 
@@ -4083,12 +4125,14 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
-    let match = importPattern.exec(normalizeKotlinImportStatementForMatch(line));
+    const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
+    let match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
     if (match) {
       const importedName = normalizeKotlinIdentifierPath(match[1]);
       const alias = match[2] === undefined ? undefined : normalizeKotlinIdentifier(match[2]);
       if (match[1].endsWith(".*")) {
         wildcards.add(importedName.slice(0, -2));
+        lineIndex = importStatement.endIndex;
         continue;
       }
 
@@ -4097,6 +4141,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
       if (importedParts[importedParts.length - 1] === "Step") {
         named.set(exposedName, importedName);
       }
+      lineIndex = importStatement.endIndex;
       continue;
     }
 
