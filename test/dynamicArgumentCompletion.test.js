@@ -67,6 +67,28 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers without separators", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "| user | role |",
+    "| Bob  | admin |",
+    "| Ada  | owner |",
+    "",
+    "* Login as <u>",
+    "",
+    "## Successful checkout",
+    "* Confirm <role>",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(6, 13));
+
+  assert.deepEqual(labels(items), ["user", "role"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests headers inside escaped dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

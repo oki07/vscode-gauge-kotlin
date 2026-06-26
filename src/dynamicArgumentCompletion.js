@@ -115,13 +115,23 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
-function isTableHeaderSeparator(line) {
-  return /^(?:\|\s*-+\s*)+\|?$/.test(line.trim());
+function isFirstTableLine(lines, lineNumber) {
+  if (!isTableLine(lines[lineNumber] || "")) {
+    return false;
+  }
+  for (let index = lineNumber - 1; index >= 0; index -= 1) {
+    const line = lines[index] || "";
+    if (line.trim() === "") {
+      continue;
+    }
+    return !isTableLine(line);
+  }
+  return true;
 }
 
 function isTableHeaderLine(document, lineNumber) {
   const lines = document.getText().split(/\r?\n/);
-  return isTableLine(lines[lineNumber] || "") && isTableHeaderSeparator(lines[lineNumber + 1] || "");
+  return isFirstTableLine(lines, lineNumber);
 }
 
 function tableCells(line) {
@@ -179,7 +189,7 @@ function specDataTableHeaders(text) {
     if (isStepLine(line)) {
       return [];
     }
-    if (isTableLine(line) && isTableHeaderSeparator(lines[index + 1])) {
+    if (isFirstTableLine(lines, index)) {
       return unique(tableCells(line));
     }
   }
