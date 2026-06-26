@@ -336,6 +336,50 @@ test("GaugeStepDiagnosticsProvider ignores expression-bodied function-local Step
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks function-body object member Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const blockBodyDocument = createDocument([
+    "class Steps {",
+    "  fun holder() {",
+    "    val objectStep = object {",
+    "      @Step(\"Block object <value>\")",
+    "      fun objectMemberStep() {}",
+    "    }",
+    "  }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+  const expressionBodyDocument = createDocument([
+    "class Steps {",
+    "  fun holder() = object {",
+    "    @Step(\"Expression object <value>\")",
+    "    fun objectMemberStep() {}",
+    "  }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(blockBodyDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Block object <value>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(expressionBodyDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Expression object <value>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores init-block-local Step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
