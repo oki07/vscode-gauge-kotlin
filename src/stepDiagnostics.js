@@ -2117,6 +2117,24 @@ function isKotlinFunctionHeader(header) {
   );
 }
 
+function findFunctionParameterStart(text, startIndex) {
+  let inBacktickIdentifier = false;
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (char === "(" && !inBacktickIdentifier) {
+      return index;
+    }
+    if ((char === "\r" || char === "\n" || char === "{") && !inBacktickIdentifier) {
+      return -1;
+    }
+  }
+  return -1;
+}
+
 function findNextFunction(text, startIndex, ignoredRanges = []) {
   const funPattern = /\bfun\b/g;
   funPattern.lastIndex = startIndex;
@@ -2126,7 +2144,7 @@ function findNextFunction(text, startIndex, ignoredRanges = []) {
       match = funPattern.exec(text);
       continue;
     }
-    const openParen = text.indexOf("(", funPattern.lastIndex);
+    const openParen = findFunctionParameterStart(text, funPattern.lastIndex);
     if (openParen === -1) {
       return undefined;
     }

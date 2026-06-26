@@ -270,6 +270,24 @@ test("GaugeStepDiagnosticsProvider accepts backtick Kotlin step function names",
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts backtick Kotlin step function names containing parentheses", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Backtick <value>\")",
+    "fun `backtick (legacy) step`() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Backtick <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider accepts generic Kotlin step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
