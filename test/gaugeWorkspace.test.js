@@ -243,6 +243,40 @@ test("GaugeWorkspace shares one output channel across workspace project clients"
   assert.deepEqual(outputChannels.map((channel) => channel.name), ["gauge"]);
 });
 
+test("GaugeWorkspace keeps clients started when runner language lookup fails", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode();
+
+  class RejectingLanguageClient extends FakeLanguageClient {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getRunnerLanguage");
+      return Promise.reject(new Error("language unavailable"));
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: RejectingLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+
+  await assert.doesNotReject(() => workspace.ready());
+
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+  assert.equal(entry.client.started, true);
+  assert.equal(workspace.getClientLanguageMap().has("/workspace/gauge"), false);
+});
+
 test("GaugeWorkspace generates Java config for mixed-case Java plugins", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

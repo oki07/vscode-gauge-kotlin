@@ -405,8 +405,13 @@ class GaugeWorkspace {
   }
 
   async setLanguageId(languageClient, projectRoot) {
-    const language = await languageClient.sendRequest("gauge/getRunnerLanguage", createToken(this.vscode));
-    this.clientLanguageMap.set(projectRoot, language);
+    try {
+      const language = await languageClient.sendRequest("gauge/getRunnerLanguage", createToken(this.vscode));
+      this.clientLanguageMap.set(projectRoot, language);
+    } catch (_error) {
+      return undefined;
+    }
+    return undefined;
   }
 }
 
