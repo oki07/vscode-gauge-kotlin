@@ -1152,6 +1152,12 @@ test("GaugeStepDiagnosticsProvider resolves Step type aliases", () => {
     "@GaugeStep(\"Gauge <value>\")",
     "fun gauge() {}",
   ].join("\n"));
+  const annotatedGaugeAliasDocument = createDocument([
+    "@Deprecated(\"use GaugeStep\") typealias GaugeStep = com.thoughtworks.gauge.Step",
+    "",
+    "@GaugeStep(\"Annotated <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
   const localAliasDocument = createDocument([
     "annotation class LocalStep(val value: String)",
     "typealias Step = LocalStep",
@@ -1165,6 +1171,12 @@ test("GaugeStepDiagnosticsProvider resolves Step type aliases", () => {
     provider.provideDiagnostics(gaugeAliasDocument).map((diagnostic) => diagnostic.message),
     [
       "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Gauge <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(annotatedGaugeAliasDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Annotated <value>\". ",
     ],
   );
   assert.deepEqual(provider.provideDiagnostics(localAliasDocument), []);

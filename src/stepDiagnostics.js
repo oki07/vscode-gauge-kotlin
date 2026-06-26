@@ -3926,7 +3926,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
   );
   const typeAliasPattern = new RegExp(
-    `^(?:(?:public|private|internal|expect|actual)\\s+)*typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
   );
   for (const line of kotlinSourceLines(text, ignoredRanges)) {
     let match = importPattern.exec(line);
@@ -3946,7 +3946,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
       continue;
     }
 
-    match = typeAliasPattern.exec(line);
+    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(line));
     if (match) {
       named.set(normalizeKotlinIdentifier(match[1]), normalizeKotlinIdentifierPath(match[2]));
     }
