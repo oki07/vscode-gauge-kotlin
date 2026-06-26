@@ -1320,6 +1320,39 @@ function evaluateCharEqualityExpression(expression, constants, constantTypes) {
   return undefined;
 }
 
+function compareCharValues(left, operator, right) {
+  if (operator === ">=") {
+    return left >= right;
+  }
+  if (operator === "<=") {
+    return left <= right;
+  }
+  if (operator === ">") {
+    return left > right;
+  }
+  return left < right;
+}
+
+function evaluateCharComparisonExpression(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  const operators = [">=", "<=", ">", "<"];
+  for (const operator of operators) {
+    const parts = splitTopLevelToken(trimmed, operator);
+    if (parts.length === 2) {
+      const left = evaluateCharEqualityOperand(parts[0], constants, constantTypes);
+      const right = evaluateCharEqualityOperand(parts[1], constants, constantTypes);
+      if (left === undefined || right === undefined) {
+        return undefined;
+      }
+      return compareCharValues(left, operator, right) ? "true" : "false";
+    }
+    if (parts.length > 2) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function evaluateBooleanExpression(expression, constants, constantTypes = new Map()) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
@@ -1369,6 +1402,10 @@ function evaluateBooleanExpression(expression, constants, constantTypes = new Ma
   const charEquality = evaluateCharEqualityExpression(trimmed, constants, constantTypes);
   if (charEquality !== undefined) {
     return charEquality;
+  }
+  const charComparison = evaluateCharComparisonExpression(trimmed, constants, constantTypes);
+  if (charComparison !== undefined) {
+    return charComparison;
   }
 
   const literal = parseKotlinBooleanLiteralExpression(trimmed);
