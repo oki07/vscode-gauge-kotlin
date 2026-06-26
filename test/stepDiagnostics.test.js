@@ -1299,6 +1299,24 @@ test("GaugeStepDiagnosticsProvider resolves multiline Step type aliases", () => 
   );
 });
 
+test("GaugeStepDiagnosticsProvider resolves commented qualified Step typealias targets", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "typealias GaugeStep = com.thoughtworks.gauge./* target */Step",
+    "",
+    "@GaugeStep(\"Commented target <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Commented target <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider lets local classifiers shadow Step typealias targets", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -3009,6 +3027,28 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with multi
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Retry 2 times as <user>\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with commented qualified typealias targets", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "typealias StepText = kotlin./* target */String",
+    "private const val USER_ARG: StepText = \"<user>\"",
+    "private const val LOGIN_STEP: StepText = \"Log in as $USER_ARG\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
     ],
   );
 });

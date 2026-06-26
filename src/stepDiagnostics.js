@@ -687,6 +687,36 @@ function stripKotlinTypeAliasPreamble(line) {
   return line.slice(index).trim();
 }
 
+function normalizeKotlinTypeAliasStatementForMatch(statement) {
+  const stripped = stripKotlinTypeAliasPreamble(statement);
+  let result = "";
+  let index = 0;
+  while (index < stripped.length) {
+    if (stripped[index] === "`") {
+      const end = stripped.indexOf("`", index + 1);
+      if (end === -1) {
+        result += stripped.slice(index);
+        break;
+      }
+      result += stripped.slice(index, end + 1);
+      index = end + 1;
+      continue;
+    }
+    if (stripped[index] === ".") {
+      result = result.replace(/\s+$/, "");
+      result += ".";
+      index += 1;
+      while (index < stripped.length && /\s/.test(stripped[index])) {
+        index += 1;
+      }
+      continue;
+    }
+    result += stripped[index];
+    index += 1;
+  }
+  return result.trim();
+}
+
 function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const aliases = new Map();
   const importPattern = new RegExp(
@@ -712,7 +742,7 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
     }
 
     const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
-    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(statement.statement));
+    match = typeAliasPattern.exec(normalizeKotlinTypeAliasStatementForMatch(statement.statement));
     if (match) {
       aliases.set(
         normalizeKotlinIdentifier(match[1]),
@@ -3934,7 +3964,7 @@ function readKotlinTypeAliasStatement(lines, startIndex, typeAliasPattern) {
   }
 
   for (let index = startIndex; index < lines.length; index += 1) {
-    if (typeAliasPattern.test(stripKotlinTypeAliasPreamble(statement))) {
+    if (typeAliasPattern.test(normalizeKotlinTypeAliasStatementForMatch(statement))) {
       return { endIndex: index, statement };
     }
     if (index + 1 >= lines.length || startsKotlinTypeAliasDeclaration(lines[index + 1])) {
@@ -3975,7 +4005,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
     }
 
     const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
-    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(statement.statement));
+    match = typeAliasPattern.exec(normalizeKotlinTypeAliasStatementForMatch(statement.statement));
     if (match) {
       named.set(normalizeKotlinIdentifier(match[1]), normalizeKotlinIdentifierPath(match[2]));
       lineIndex = statement.endIndex;
