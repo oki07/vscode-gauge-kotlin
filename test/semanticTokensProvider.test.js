@@ -592,6 +592,33 @@ test("GaugeSemanticTokensProvider tokenizes blank-separated table rows as new he
   ]);
 });
 
+test("GaugeSemanticTokensProvider keeps contiguous table rows as body rows before later separators", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "| user |",
+        "| ---- |",
+        "| <item> |",
+        "| ---- |",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "tableHeader"), false);
+  assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "argument"), true);
+  assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "tableHeaderSeparator"), false);
+});
+
 test("GaugeSemanticTokensProvider treats indented top-level table markers as comments", () => {
   const {
     GaugeSemanticTokensProvider,

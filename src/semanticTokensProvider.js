@@ -262,7 +262,8 @@ class GaugeSemanticTokensProvider {
         }
         index += 1;
       } else if (isTableBlockLine(lines, index)) {
-        if (tableHeaderSeparatorRegex.test(trimmedLine)) {
+        const tableStartLine = tableBlockStartLine(lines, index);
+        if (index === tableStartLine + 1 && tableHeaderSeparatorRegex.test(trimmedLine)) {
           for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
             const char = line[charIndex];
             if (char === "|") {
@@ -278,10 +279,7 @@ class GaugeSemanticTokensProvider {
               builder.push(index, charIndex, 1, tokenTypes.indexOf("table"), 0);
             }
           }
-        } else if (
-          isFirstTableLine(lines, index)
-          || (index + 1 < lines.length && tableHeaderSeparatorRegex.test(lines[index + 1].trim()))
-        ) {
+        } else if (index === tableStartLine) {
           pushTableSegment(builder, index, line, 0, line.length, "tableHeader");
         } else {
           let lastIndex = 0;
