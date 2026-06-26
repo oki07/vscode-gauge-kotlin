@@ -419,6 +419,31 @@ function parseKotlinBooleanLiteralExpression(value) {
   return trimmed === "true" || trimmed === "false" ? trimmed : undefined;
 }
 
+function evaluateBooleanExpression(expression, constants) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateBooleanExpression(trimmed.slice(1, -1), constants);
+  }
+
+  const literal = parseKotlinBooleanLiteralExpression(trimmed);
+  if (literal !== undefined) {
+    return literal;
+  }
+  if (isKotlinIdentifierPath(trimmed) && constants.has(trimmed)) {
+    return parseKotlinBooleanLiteralExpression(constants.get(trimmed));
+  }
+  if (trimmed.startsWith("!")) {
+    const value = evaluateBooleanExpression(trimmed.slice(1), constants);
+    if (value !== undefined) {
+      return value === "true" ? "false" : "true";
+    }
+  }
+  return undefined;
+}
+
 function evaluateIntegerAdditionExpression(parts) {
   const values = parts.map((part) => parseKotlinIntegerLiteralExpression(part));
   if (values.some((value) => value === undefined)) {
@@ -769,6 +794,10 @@ function evaluateStringExpression(expression, constants) {
   const booleanLiteral = parseKotlinBooleanLiteralExpression(trimmed);
   if (booleanLiteral !== undefined) {
     return booleanLiteral;
+  }
+  const booleanExpression = evaluateBooleanExpression(trimmed, constants);
+  if (booleanExpression !== undefined) {
+    return booleanExpression;
   }
   const integerArithmetic = evaluateIntegerArithmeticExpression(trimmed, constants);
   if (integerArithmetic !== undefined) {
