@@ -328,6 +328,57 @@ test("createSpecification reports spec directory provider failures", async () =>
   ]);
 });
 
+test("createSpecification reports existing file errors without overwriting", async () => {
+  const { createSpecification } = require("../src/specification");
+  const errors = [];
+  const existsChecks = [];
+  const fileSystem = {
+    existsSync(filename) {
+      existsChecks.push(filename);
+      return filename === "/project/specs/Login.spec";
+    },
+    promises: {
+      async mkdir() {
+        throw new Error("mkdir should not run");
+      },
+      async writeFile() {
+        throw new Error("writeFile should not run");
+      },
+    },
+  };
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+      async openTextDocument() {
+        throw new Error("openTextDocument should not run");
+      },
+    },
+    window: {
+      async showInputBox(options) {
+        assert.equal(options.placeHolder, "Enter the file name");
+        return "Login";
+      },
+      async showErrorMessage(message) {
+        errors.push(message);
+      },
+      async showTextDocument() {
+        throw new Error("showTextDocument should not run");
+      },
+    },
+  };
+
+  await createSpecification({
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+  });
+
+  assert.deepEqual(existsChecks, ["/project/specs/Login.spec"]);
+  assert.deepEqual(errors, [
+    "Unable to generate specification. File/project/specs/Login.spec already exists.",
+  ]);
+});
+
 test("createConcept writes a concept file under the workspace specs directory", async () => {
   const { createConcept } = require("../src/specification");
   const writes = new Map();
@@ -444,5 +495,56 @@ test("createConcept reports spec directory provider failures", async () => {
 
   assert.deepEqual(errors, [
     "Unable to generate concept. Error: LSP unavailable",
+  ]);
+});
+
+test("createConcept reports existing file errors without overwriting", async () => {
+  const { createConcept } = require("../src/specification");
+  const errors = [];
+  const existsChecks = [];
+  const fileSystem = {
+    existsSync(filename) {
+      existsChecks.push(filename);
+      return filename === "/project/specs/Shared.cpt";
+    },
+    promises: {
+      async mkdir() {
+        throw new Error("mkdir should not run");
+      },
+      async writeFile() {
+        throw new Error("writeFile should not run");
+      },
+    },
+  };
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+      async openTextDocument() {
+        throw new Error("openTextDocument should not run");
+      },
+    },
+    window: {
+      async showInputBox(options) {
+        assert.equal(options.placeHolder, "Enter the concept file name");
+        return "Shared";
+      },
+      async showErrorMessage(message) {
+        errors.push(message);
+      },
+      async showTextDocument() {
+        throw new Error("showTextDocument should not run");
+      },
+    },
+  };
+
+  await createConcept({
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+  });
+
+  assert.deepEqual(existsChecks, ["/project/specs/Shared.cpt"]);
+  assert.deepEqual(errors, [
+    "Unable to generate concept. File/project/specs/Shared.cpt already exists.",
   ]);
 });
