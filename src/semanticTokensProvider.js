@@ -75,6 +75,31 @@ function isEscapedPipe(line, index) {
   return index > 0 && line[index - 1] === "\\";
 }
 
+function keywordLinePrefix(line, keyword) {
+  const keywordRegex = new RegExp(`^(\\s*)${keyword}[ \\t\\f]?:`, "i");
+  const match = keywordRegex.exec(line);
+  if (!match) {
+    return undefined;
+  }
+  return {
+    leadingSpaces: match[1].length,
+    length: match[0].length - match[1].length,
+  };
+}
+
+function pushKeywordLine(builder, lineNumber, line, keyword, keywordTokenType, valueTokenType) {
+  const prefix = keywordLinePrefix(line, keyword);
+  if (!prefix) {
+    return false;
+  }
+  pushToken(builder, lineNumber, prefix.leadingSpaces, prefix.length, keywordTokenType);
+  const valueStart = prefix.leadingSpaces + prefix.length;
+  if (valueStart < line.length) {
+    pushToken(builder, lineNumber, valueStart, line.length - valueStart, valueTokenType);
+  }
+  return true;
+}
+
 class GaugeSemanticTokensProvider {
   constructor(options = {}) {
     this.vscode = options.vscode;
@@ -145,23 +170,9 @@ class GaugeSemanticTokensProvider {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
         }
         index += 1;
-      } else if (trimmedLine.toLowerCase().startsWith("table:")) {
-        const leadingSpaces = line.length - line.trimStart().length;
-        const keyword = "table:";
-        builder.push(index, leadingSpaces, keyword.length, tokenTypes.indexOf("tableKeyword"), 0);
-        const valueStart = leadingSpaces + keyword.length;
-        if (valueStart < line.length) {
-          builder.push(index, valueStart, line.length - valueStart, tokenTypes.indexOf("tableFileValue"), 0);
-        }
+      } else if (pushKeywordLine(builder, index, line, "table", "tableKeyword", "tableFileValue")) {
         index += 1;
-      } else if (trimmedLine.toLowerCase().startsWith("tags:")) {
-        const leadingSpaces = line.length - line.trimStart().length;
-        const keyword = "tags:";
-        builder.push(index, leadingSpaces, keyword.length, tokenTypes.indexOf("tagKeyword"), 0);
-        const valueStart = leadingSpaces + keyword.length;
-        if (valueStart < line.length) {
-          builder.push(index, valueStart, line.length - valueStart, tokenTypes.indexOf("tagValue"), 0);
-        }
+      } else if (pushKeywordLine(builder, index, line, "tags", "tagKeyword", "tagValue")) {
         index += 1;
       } else if (trimmedLine.startsWith("*")) {
         const markerStart = line.indexOf("*");

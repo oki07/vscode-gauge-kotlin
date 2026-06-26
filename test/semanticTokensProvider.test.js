@@ -68,6 +68,36 @@ test("GaugeSemanticTokensProvider tokenizes Gauge document elements", () => {
   ]);
 });
 
+test("GaugeSemanticTokensProvider tokenizes keyword lines with space before colon", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "table : users.csv",
+        "tags : smoke, fast",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "tableKeyword",
+    "tableFileValue",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "tagKeyword",
+    "tagValue",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider distinguishes specification scenario and concept headings", () => {
   const {
     GaugeSemanticTokensProvider,
