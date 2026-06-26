@@ -561,18 +561,142 @@ function evaluateIntegerComparisonExpression(expression, constants) {
   return undefined;
 }
 
-function evaluateBooleanExpression(expression, constants) {
+function splitTopLevelNumericComparisonToken(text, token) {
+  const parts = [];
+  let start = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (
+      text.startsWith(token, index)
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+    ) {
+      parts.push(text.slice(start, index).trim());
+      index += token.length - 1;
+      start = index + 1;
+    }
+  }
+
+  parts.push(text.slice(start).trim());
+  return parts;
+}
+
+function compareNumericValues(left, operator, right) {
+  if (!left.floating && !right.floating) {
+    if (operator === "==") {
+      return left.value === right.value;
+    }
+    if (operator === "!=") {
+      return left.value !== right.value;
+    }
+    if (operator === ">=") {
+      return left.value >= right.value;
+    }
+    if (operator === "<=") {
+      return left.value <= right.value;
+    }
+    if (operator === ">") {
+      return left.value > right.value;
+    }
+    return left.value < right.value;
+  }
+
+  const leftValue = numericValueAsNumber(left);
+  const rightValue = numericValueAsNumber(right);
+  if (operator === "==") {
+    return leftValue === rightValue;
+  }
+  if (operator === "!=") {
+    return leftValue !== rightValue;
+  }
+  if (operator === ">=") {
+    return leftValue >= rightValue;
+  }
+  if (operator === "<=") {
+    return leftValue <= rightValue;
+  }
+  if (operator === ">") {
+    return leftValue > rightValue;
+  }
+  return leftValue < rightValue;
+}
+
+function evaluateNumericBooleanExpression(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  const operators = ["==", "!=", ">=", "<=", ">", "<"];
+  for (const operator of operators) {
+    const parts = splitTopLevelNumericComparisonToken(trimmed, operator);
+    if (parts.length === 2) {
+      const left = evaluateNumericArithmetic(parts[0], constants, constantTypes);
+      const right = evaluateNumericArithmetic(parts[1], constants, constantTypes);
+      if (left === undefined || right === undefined) {
+        return undefined;
+      }
+      return compareNumericValues(left, operator, right) ? "true" : "false";
+    }
+    if (parts.length > 2) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function evaluateBooleanExpression(expression, constants, constantTypes = new Map()) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
     return undefined;
   }
   if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
-    return evaluateBooleanExpression(trimmed.slice(1, -1), constants);
+    return evaluateBooleanExpression(trimmed.slice(1, -1), constants, constantTypes);
   }
 
   const disjunctionParts = splitTopLevelToken(trimmed, "||");
   if (disjunctionParts.length > 1) {
-    const values = disjunctionParts.map((part) => evaluateBooleanExpression(part, constants));
+    const values = disjunctionParts.map((part) => evaluateBooleanExpression(part, constants, constantTypes));
     if (values.some((value) => value === undefined)) {
       return undefined;
     }
@@ -580,7 +704,7 @@ function evaluateBooleanExpression(expression, constants) {
   }
   const conjunctionParts = splitTopLevelToken(trimmed, "&&");
   if (conjunctionParts.length > 1) {
-    const values = conjunctionParts.map((part) => evaluateBooleanExpression(part, constants));
+    const values = conjunctionParts.map((part) => evaluateBooleanExpression(part, constants, constantTypes));
     if (values.some((value) => value === undefined)) {
       return undefined;
     }
@@ -595,6 +719,10 @@ function evaluateBooleanExpression(expression, constants) {
   if (integerComparison !== undefined) {
     return integerComparison;
   }
+  const numericBoolean = evaluateNumericBooleanExpression(trimmed, constants, constantTypes);
+  if (numericBoolean !== undefined) {
+    return numericBoolean;
+  }
 
   const literal = parseKotlinBooleanLiteralExpression(trimmed);
   if (literal !== undefined) {
@@ -604,7 +732,7 @@ function evaluateBooleanExpression(expression, constants) {
     return parseKotlinBooleanLiteralExpression(constants.get(trimmed));
   }
   if (trimmed.startsWith("!")) {
-    const value = evaluateBooleanExpression(trimmed.slice(1), constants);
+    const value = evaluateBooleanExpression(trimmed.slice(1), constants, constantTypes);
     if (value !== undefined) {
       return value === "true" ? "false" : "true";
     }
@@ -1114,7 +1242,7 @@ function evaluateStringExpression(expression, constants, constantTypes = new Map
   if (booleanLiteral !== undefined) {
     return booleanLiteral;
   }
-  const booleanExpression = evaluateBooleanExpression(trimmed, constants);
+  const booleanExpression = evaluateBooleanExpression(trimmed, constants, constantTypes);
   if (booleanExpression !== undefined) {
     return booleanExpression;
   }
