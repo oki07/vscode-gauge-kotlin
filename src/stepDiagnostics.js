@@ -2113,6 +2113,19 @@ function isKotlinFunctionName(name) {
   return /^[A-Za-z_]\w*$/.test(name) || /^`[^`\r\n]+`$/.test(name);
 }
 
+function isFunctionHeaderContinuationStart(char) {
+  return Boolean(
+    char
+    && (
+      char === "("
+      || char === "<"
+      || char === "`"
+      || char === "@"
+      || /[A-Za-z_]/.test(char)
+    ),
+  );
+}
+
 function isKotlinFunctionHeader(header) {
   const trimmed = stripLeadingTypeParameters(removeKotlinComments(header));
   const dotIndex = findTopLevelDot(trimmed);
@@ -2138,7 +2151,7 @@ function findFunctionParameterStart(text, startIndex) {
     }
     if ((char === "\r" || char === "\n") && !inBacktickIdentifier) {
       const next = skipWhitespaceAndComments(text, index);
-      if (text[next] === "(") {
+      if (isFunctionHeaderContinuationStart(text[next])) {
         index = next - 1;
         continue;
       }
