@@ -797,6 +797,31 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step setter use-site annotation
   assert.deepEqual(provider.provideDiagnostics(localSetterDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider accepts intervening Kotlin use-site annotations on Step properties", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "annotation class Audit",
+    "class Steps {",
+    "  @get:Step(\"Getter <value>\")",
+    "  @field:Audit",
+    "  val getterStep: String = \"\"",
+    "",
+    "  @set:Step(\"Setter <value> and <other>\")",
+    "  @property:Audit",
+    "  var setterStep: String = \"\"",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Getter <value>\". ",
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Setter <value> and <other>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks Kotlin Step setter accessor annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

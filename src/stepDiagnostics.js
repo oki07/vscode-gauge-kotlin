@@ -30,6 +30,18 @@ const KOTLIN_PROPERTY_MODIFIERS = new Set([
   "const",
   "lateinit",
 ]);
+const KOTLIN_ANNOTATION_USE_SITE_TARGETS = new Set([
+  "all",
+  "delegate",
+  "field",
+  "file",
+  "get",
+  "param",
+  "property",
+  "receiver",
+  "set",
+  "setparam",
+]);
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -2742,6 +2754,10 @@ function findNextSetterAccessor(text, startIndex, ignoredRanges = []) {
   });
 }
 
+function findNoAttachedDeclaration() {
+  return undefined;
+}
+
 function lineStartBefore(text, offset) {
   return text.lastIndexOf("\n", Math.max(0, offset - 1)) + 1;
 }
@@ -3485,8 +3501,8 @@ function readKotlinAnnotationApplication(text, startIndex) {
 
   let index = skipWhitespaceAndComments(text, startIndex + 1);
   let useSiteTarget;
-  const target = /^(?:get|set)\b/.exec(text.slice(index));
-  if (target) {
+  const target = /^[A-Za-z_]\w*/.exec(text.slice(index));
+  if (target && KOTLIN_ANNOTATION_USE_SITE_TARGETS.has(target[0])) {
     const colonIndex = skipWhitespaceAndComments(text, index + target[0].length);
     if (text[colonIndex] === ":") {
       useSiteTarget = target[0];
@@ -3673,6 +3689,9 @@ function findAttachedPropertyAccessor(useSiteTarget) {
   }
   if (useSiteTarget === "set") {
     return findAttachedPropertySetter;
+  }
+  if (useSiteTarget !== undefined) {
+    return findNoAttachedDeclaration;
   }
   return findAttachedFunction;
 }
