@@ -223,6 +223,25 @@ test("GaugeStepDiagnosticsProvider accepts Kotlin comments inside Step annotatio
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts newline-separated qualified Step annotation names", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@com.thoughtworks.gauge.",
+    "  Step(\"Qualified <value> and <other>\")",
+    "fun qualified(value: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Qualified <value> and <other>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores Gauge hook annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

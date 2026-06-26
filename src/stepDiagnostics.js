@@ -3833,15 +3833,13 @@ function readKotlinAnnotationApplication(text, startIndex) {
     };
   }
 
-  const namePattern = new RegExp(`^${KOTLIN_ANNOTATION_NAME_PATTERN}`);
-  const name = namePattern.exec(text.slice(index));
+  const name = readKotlinIdentifierPath(text, index);
   if (!name) {
     return undefined;
   }
 
-  const annotationName = name[0];
-  index += name[0].length;
-  index = skipWhitespaceAndComments(text, index);
+  const annotationName = name.path;
+  index = skipWhitespaceAndComments(text, name.end);
   if (text[index] === "(") {
     const closeParen = findMatchingParen(text, index);
     return {
