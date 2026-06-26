@@ -2373,9 +2373,12 @@ function stepAnnotationImports(text) {
   return imports;
 }
 
-function localAnnotationClassNames(text, ignoredRanges) {
+function localClassifierNames(text, ignoredRanges) {
   const names = new Set();
-  const pattern = new RegExp(`\\bannotation\\s+class\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "g");
+  const pattern = new RegExp(
+    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
+    "g",
+  );
   let match = pattern.exec(text);
   while (match) {
     if (!isInIgnoredRange(match.index, ignoredRanges)) {
@@ -2386,7 +2389,7 @@ function localAnnotationClassNames(text, ignoredRanges) {
   return names;
 }
 
-function isStepAnnotationAllowed(annotationName, stepImports, localAnnotationNames = new Set()) {
+function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNames = new Set()) {
   if (annotationName === GAUGE_STEP_ANNOTATION) {
     return true;
   }
@@ -2396,7 +2399,7 @@ function isStepAnnotationAllowed(annotationName, stepImports, localAnnotationNam
   if (stepImports.has(annotationName)) {
     return stepImports.get(annotationName) === GAUGE_STEP_ANNOTATION;
   }
-  if (localAnnotationNames.has(annotationName)) {
+  if (localClassifierNames.has(annotationName)) {
     return false;
   }
   return annotationName === "Step";
@@ -2408,7 +2411,7 @@ function findStepFunctions(text) {
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text);
-  const localAnnotationNames = localAnnotationClassNames(text, ignoredRanges);
+  const classifierNames = localClassifierNames(text, ignoredRanges);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -2416,7 +2419,7 @@ function findStepFunctions(text) {
       continue;
     }
     const annotationName = annotationMatch[1];
-    if (!isStepAnnotationAllowed(annotationName, stepImports, localAnnotationNames)) {
+    if (!isStepAnnotationAllowed(annotationName, stepImports, classifierNames)) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
