@@ -620,6 +620,67 @@ test("GaugeStepDiagnosticsProvider resolves backtick Step import aliases", () =>
   assert.deepEqual(provider.provideDiagnostics(nonGaugeAliasDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider resolves Step aliases with Kotlin comments", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const importAliasDocument = createDocument([
+    "import com.thoughtworks.gauge.Step /* comment */ as GaugeStep",
+    "",
+    "@GaugeStep(\"Imported <value>\")",
+    "fun imported() {}",
+  ].join("\n"));
+  const importAliasAfterAsDocument = createDocument([
+    "import com.thoughtworks.gauge.Step as /* comment */ GaugeStep",
+    "",
+    "@GaugeStep(\"Imported after as <value>\")",
+    "fun importedAfterAs() {}",
+  ].join("\n"));
+  const typeAliasDocument = createDocument([
+    "typealias ProjectStep /* comment */ = com.thoughtworks.gauge.Step",
+    "",
+    "@ProjectStep(\"Aliased <value>\")",
+    "fun aliased() {}",
+  ].join("\n"));
+  const typeAliasAfterEqualsDocument = createDocument([
+    "typealias ProjectStep = /* comment */ com.thoughtworks.gauge.Step",
+    "",
+    "@ProjectStep(\"Aliased after equals <value>\")",
+    "fun aliasedAfterEquals() {}",
+  ].join("\n"));
+  const nonGaugeImportAliasDocument = createDocument([
+    "import io.cucumber.java.en.Step /* comment */ as GaugeStep",
+    "",
+    "@GaugeStep(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(importAliasDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Imported <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(importAliasAfterAsDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Imported after as <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(typeAliasDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Aliased <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(typeAliasAfterEqualsDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Aliased after equals <value>\". ",
+    ],
+  );
+  assert.deepEqual(provider.provideDiagnostics(nonGaugeImportAliasDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores local Step annotation declarations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

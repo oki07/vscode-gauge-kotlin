@@ -2922,44 +2922,80 @@ function findAttachedPropertyAccessor(useSiteTarget) {
   return findAttachedFunction;
 }
 
+function firstSignificantLineOffset(text, lineStart, lineEnd) {
+  let index = lineStart;
+  while (index < lineEnd) {
+    if (/\s/.test(text[index])) {
+      index += 1;
+      continue;
+    }
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      if (commentEnd > lineEnd) {
+        return undefined;
+      }
+      index = commentEnd;
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function kotlinSourceLines(text, ignoredRanges) {
+  const lines = [];
+  let lineStart = 0;
+  while (lineStart <= text.length) {
+    let lineEnd = text.indexOf("\n", lineStart);
+    if (lineEnd === -1) {
+      lineEnd = text.length;
+    }
+    const significantOffset = firstSignificantLineOffset(text, lineStart, lineEnd);
+    if (
+      significantOffset !== undefined
+      && !isInIgnoredRange(significantOffset, ignoredRanges)
+    ) {
+      lines.push(removeKotlinComments(text.slice(lineStart, lineEnd)).replace(/\r$/, "").trim());
+    }
+    if (lineEnd === text.length) {
+      break;
+    }
+    lineStart = lineEnd + 1;
+  }
+  return lines;
+}
+
 function stepAnnotationImports(text, ignoredRanges = []) {
   const named = new Map();
   const wildcards = new Set();
   const importPattern = new RegExp(
-    `^\\s*import\\s+([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
-    "gm",
+    `^import\\s+([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
   );
-  let match = importPattern.exec(text);
-  while (match) {
-    if (isInIgnoredRange(match.index, ignoredRanges)) {
-      match = importPattern.exec(text);
-      continue;
-    }
-    const importedName = match[1];
-    const alias = match[2];
-    if (importedName.endsWith(".*")) {
-      wildcards.add(importedName.slice(0, -2));
-      match = importPattern.exec(text);
+  const typeAliasPattern = new RegExp(
+    `^(?:(?:public|private|internal|expect|actual)\\s+)*typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+  );
+  for (const line of kotlinSourceLines(text, ignoredRanges)) {
+    let match = importPattern.exec(line);
+    if (match) {
+      const importedName = match[1];
+      const alias = match[2];
+      if (importedName.endsWith(".*")) {
+        wildcards.add(importedName.slice(0, -2));
+        continue;
+      }
+
+      const importedParts = importedName.split(".");
+      const exposedName = alias || importedParts[importedParts.length - 1];
+      if (importedParts[importedParts.length - 1] === "Step") {
+        named.set(exposedName, importedName);
+      }
       continue;
     }
 
-    const importedParts = importedName.split(".");
-    const exposedName = alias || importedParts[importedParts.length - 1];
-    if (importedParts[importedParts.length - 1] === "Step") {
-      named.set(exposedName, importedName);
-    }
-    match = importPattern.exec(text);
-  }
-  const typeAliasPattern = new RegExp(
-    `\\btypealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)`,
-    "g",
-  );
-  match = typeAliasPattern.exec(text);
-  while (match) {
-    if (!isInIgnoredRange(match.index, ignoredRanges)) {
+    match = typeAliasPattern.exec(line);
+    if (match) {
       named.set(match[1], match[2]);
     }
-    match = typeAliasPattern.exec(text);
   }
   return { named, wildcards };
 }
