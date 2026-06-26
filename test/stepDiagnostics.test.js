@@ -686,6 +686,27 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin floating-point boolean expre
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin string equality expressions in templates", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "private const val FEATURE_NAME = \"login\"",
+    "private const val LOGIN_STEP = \"Feature ${FEATURE_NAME == \"login\"} for <user>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Feature true for <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider preserves numeric-looking Kotlin string constants in templates", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

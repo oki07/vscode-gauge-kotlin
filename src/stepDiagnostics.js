@@ -685,6 +685,56 @@ function evaluateNumericBooleanExpression(expression, constants, constantTypes) 
   return undefined;
 }
 
+function evaluateStringEqualityOperand(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateStringEqualityOperand(trimmed.slice(1, -1), constants, constantTypes);
+  }
+
+  const literal = parseStringLiteralTerm(trimmed, constants, constantTypes);
+  if (literal !== undefined) {
+    return literal;
+  }
+  if (
+    isKotlinIdentifierPath(trimmed)
+    && constants.has(trimmed)
+    && canonicalKotlinTypeName(constantTypes.get(trimmed)) === "String"
+  ) {
+    return constants.get(trimmed);
+  }
+  return undefined;
+}
+
+function evaluateStringEqualityExpression(expression, constants, constantTypes) {
+  const trimmed = removeKotlinComments(expression).trim();
+  const equalParts = splitTopLevelToken(trimmed, "==");
+  if (equalParts.length === 2) {
+    const left = evaluateStringEqualityOperand(equalParts[0], constants, constantTypes);
+    const right = evaluateStringEqualityOperand(equalParts[1], constants, constantTypes);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return left === right ? "true" : "false";
+  }
+  if (equalParts.length > 2) {
+    return undefined;
+  }
+
+  const notEqualParts = splitTopLevelToken(trimmed, "!=");
+  if (notEqualParts.length === 2) {
+    const left = evaluateStringEqualityOperand(notEqualParts[0], constants, constantTypes);
+    const right = evaluateStringEqualityOperand(notEqualParts[1], constants, constantTypes);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return left !== right ? "true" : "false";
+  }
+  return undefined;
+}
+
 function evaluateBooleanExpression(expression, constants, constantTypes = new Map()) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
@@ -722,6 +772,10 @@ function evaluateBooleanExpression(expression, constants, constantTypes = new Ma
   const numericBoolean = evaluateNumericBooleanExpression(trimmed, constants, constantTypes);
   if (numericBoolean !== undefined) {
     return numericBoolean;
+  }
+  const stringEquality = evaluateStringEqualityExpression(trimmed, constants, constantTypes);
+  if (stringEquality !== undefined) {
+    return stringEquality;
   }
 
   const literal = parseKotlinBooleanLiteralExpression(trimmed);
@@ -1112,7 +1166,7 @@ function interpolateStringTemplate(value, constants, constantTypes) {
     }
 
     if (value[index + 1] === "{") {
-      const closeIndex = value.indexOf("}", index + 2);
+      const closeIndex = findMatchingBrace(value, index + 1);
       if (closeIndex === -1) {
         return undefined;
       }
@@ -1197,6 +1251,15 @@ function parseStringLiteralTerm(text, constants, constantTypes) {
         continue;
       }
       return undefined;
+    }
+    if (char === "$" && trimmed[index + 1] === "{") {
+      const closeIndex = findMatchingBrace(trimmed, index + 1);
+      if (closeIndex === -1) {
+        return undefined;
+      }
+      value += trimmed.slice(index, closeIndex + 1);
+      index = closeIndex;
+      continue;
     }
     if (char === "\"") {
       if (trimmed.slice(index + 1).trim() !== "") {
