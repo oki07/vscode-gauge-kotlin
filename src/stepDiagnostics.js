@@ -3007,10 +3007,7 @@ function collectConstructorBodyRanges(text, ignoredRanges = []) {
     if (bodyStart !== -1) {
       const bodyEnd = findMatchingBrace(text, bodyStart);
       if (bodyEnd !== -1) {
-        ranges.push({
-          end: bodyEnd,
-          start: bodyStart + 1,
-        });
+        ranges.push(...splitRangeAroundObjectExpressionBodies(text, bodyStart + 1, bodyEnd));
         constructorPattern.lastIndex = bodyEnd + 1;
       }
     }
