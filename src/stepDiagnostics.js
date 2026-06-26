@@ -489,6 +489,33 @@ function splitTopLevelToken(text, token) {
   return parts;
 }
 
+function evaluateIntegerEqualityExpression(expression, constants) {
+  const trimmed = removeKotlinComments(expression).trim();
+  const equalParts = splitTopLevelToken(trimmed, "==");
+  if (equalParts.length === 2) {
+    const left = evaluateIntegerArithmeticExpression(equalParts[0], constants);
+    const right = evaluateIntegerArithmeticExpression(equalParts[1], constants);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return BigInt(left) === BigInt(right) ? "true" : "false";
+  }
+  if (equalParts.length > 2) {
+    return undefined;
+  }
+
+  const notEqualParts = splitTopLevelToken(trimmed, "!=");
+  if (notEqualParts.length === 2) {
+    const left = evaluateIntegerArithmeticExpression(notEqualParts[0], constants);
+    const right = evaluateIntegerArithmeticExpression(notEqualParts[1], constants);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return BigInt(left) !== BigInt(right) ? "true" : "false";
+  }
+  return undefined;
+}
+
 function evaluateBooleanExpression(expression, constants) {
   const trimmed = removeKotlinComments(expression).trim();
   if (!trimmed) {
@@ -513,6 +540,11 @@ function evaluateBooleanExpression(expression, constants) {
       return undefined;
     }
     return values.every((value) => value === "true") ? "true" : "false";
+  }
+
+  const integerEquality = evaluateIntegerEqualityExpression(trimmed, constants);
+  if (integerEquality !== undefined) {
+    return integerEquality;
   }
 
   const literal = parseKotlinBooleanLiteralExpression(trimmed);
