@@ -2920,6 +2920,31 @@ function collectFunctionBodyRanges(text, ignoredRanges = []) {
   return ranges;
 }
 
+function collectInitBlockBodyRanges(text, ignoredRanges = []) {
+  const ranges = [];
+  const initPattern = /\binit\b/g;
+  let match = initPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = initPattern.exec(text);
+      continue;
+    }
+    const bodyStart = skipWhitespaceAndComments(text, initPattern.lastIndex);
+    if (text[bodyStart] === "{") {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          start: bodyStart + 1,
+        });
+        initPattern.lastIndex = bodyEnd + 1;
+      }
+    }
+    match = initPattern.exec(text);
+  }
+  return ranges;
+}
+
 function skipWhitespaceAndComments(text, startIndex) {
   let index = startIndex;
   while (index < text.length) {
@@ -3448,7 +3473,10 @@ function findStepFunctions(text) {
   const { constants, constantTypes } = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
-  const functionBodyRanges = collectFunctionBodyRanges(text, ignoredRanges);
+  const functionBodyRanges = [
+    ...collectFunctionBodyRanges(text, ignoredRanges),
+    ...collectInitBlockBodyRanges(text, ignoredRanges),
+  ];
   addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
