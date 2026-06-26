@@ -115,6 +115,10 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isTeardownLine(line) {
+  return /^\s*___+\s*$/.test(line);
+}
+
 function isFirstTableLine(lines, lineNumber) {
   if (!isTableLine(lines[lineNumber] || "")) {
     return false;
@@ -231,10 +235,14 @@ function conceptDynamicArguments(text) {
   return unique(values);
 }
 
-function staticArguments(text) {
+function staticArguments(text, options = {}) {
   const values = [];
   const lines = text.split(/\r?\n/);
+  const excludeTeardown = Boolean(options.excludeTeardown);
   for (const line of lines) {
+    if (excludeTeardown && isTeardownLine(line)) {
+      break;
+    }
     if (!line.trimStart().startsWith("*")) {
       continue;
     }
@@ -302,7 +310,7 @@ class GaugeDynamicArgumentCompletionProvider {
           ? conceptDynamicArguments(document.getText())
           : specDataTableHeaders(document.getText())
       )
-      : staticArguments(document.getText());
+      : staticArguments(document.getText(), { excludeTeardown: !isConceptDocument(document) });
     const targetRange = argumentRange || quotedArgumentRange;
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     return labels.map((label) => completionItem(this.vscode, label, range));

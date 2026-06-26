@@ -386,6 +386,23 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments insi
   assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 12 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider excludes teardown static arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "## Successful checkout",
+    "* Confirm \"c\"",
+    "___",
+    "* Cleanup \"temp\"",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(2, 12));
+
+  assert.deepEqual(labels(items), ["c"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests escaped spec static arguments inside quotes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
