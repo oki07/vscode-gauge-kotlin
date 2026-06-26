@@ -394,6 +394,38 @@ function interpolateStringTemplate(value, constants) {
   return result;
 }
 
+function parseEscapedStringCharacter(text, slashIndex) {
+  const escaped = text[slashIndex + 1];
+  if (escaped === undefined) {
+    return undefined;
+  }
+  if (escaped === "u") {
+    const hex = text.slice(slashIndex + 2, slashIndex + 6);
+    if (/^[0-9A-Fa-f]{4}$/.test(hex)) {
+      return {
+        character: String.fromCharCode(Number.parseInt(hex, 16)),
+        nextIndex: slashIndex + 5,
+      };
+    }
+  }
+
+  const escapedCharacters = new Map([
+    ["b", "\b"],
+    ["n", "\n"],
+    ["r", "\r"],
+    ["t", "\t"],
+    ["\"", "\""],
+    ["'", "'"],
+    ["\\", "\\"],
+    ["$", "\u0000"],
+  ]);
+
+  return {
+    character: escapedCharacters.has(escaped) ? escapedCharacters.get(escaped) : escaped,
+    nextIndex: slashIndex + 1,
+  };
+}
+
 function parseStringLiteralTerm(text, constants) {
   const trimmed = text.trim();
   if (trimmed.startsWith("\"\"\"")) {
@@ -411,14 +443,10 @@ function parseStringLiteralTerm(text, constants) {
   for (let index = 1; index < trimmed.length; index += 1) {
     const char = trimmed[index];
     if (char === "\\") {
-      if (index + 1 < trimmed.length) {
-        const escaped = trimmed[index + 1];
-        if (escaped === "$") {
-          value += "\u0000";
-        } else {
-          value += escaped;
-        }
-        index += 1;
+      const escaped = parseEscapedStringCharacter(trimmed, index);
+      if (escaped !== undefined) {
+        value += escaped.character;
+        index = escaped.nextIndex;
         continue;
       }
       return undefined;
