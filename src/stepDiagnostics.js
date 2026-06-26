@@ -604,6 +604,13 @@ function normalizeKotlinIdentifierPath(value) {
 function readKotlinIdentifierPath(text, startIndex) {
   const segments = [];
   let index = skipWhitespaceAndComments(text, startIndex);
+  while (text[index] === "@") {
+    const next = skipKotlinAnnotation(text, index);
+    if (next === index) {
+      return undefined;
+    }
+    index = skipWhitespaceAndComments(text, next);
+  }
   while (index < text.length) {
     const match = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(text.slice(index));
     if (!match) {

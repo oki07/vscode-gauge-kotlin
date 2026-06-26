@@ -3002,6 +3002,30 @@ test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with comme
   );
 });
 
+test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with type-use annotated type annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Target(AnnotationTarget.TYPE)",
+    "annotation class StepType",
+    "typealias StepText = String",
+    "private const val USER_ARG: @StepType StepText = \"<user>\"",
+    "private const val LOGIN_STEP: @StepType kotlin.String = \"Log in as $USER_ARG\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin const expressions with typealias primitive types", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
