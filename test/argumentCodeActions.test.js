@@ -77,6 +77,26 @@ test("GaugeArgumentCodeActionProvider converts static arguments to dynamic param
   assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 12 });
 });
 
+test("GaugeArgumentCodeActionProvider converts escaped static arguments to dynamic parameters", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeArgumentCodeActionProvider({ vscode });
+
+  const actions = provider.provideCodeActions(
+    createDocument('* Open "Ada \\"The First\\"" for <user>'),
+    createRange(0, 10),
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Convert to Dynamic Parameter");
+  const replacement = actions[0].edit.replacements[0];
+  assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 7 });
+  assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 26 });
+  assert.equal(replacement.newText, '<Ada \\"The First\\">');
+  assert.deepEqual({ ...actions[0].command.arguments[1].start }, { line: 0, character: 8 });
+  assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 25 });
+});
+
 test("GaugeArgumentCodeActionProvider converts dynamic arguments to static parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();

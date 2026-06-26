@@ -4,7 +4,6 @@ const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
 const SELECT_ARGUMENT_RANGE_COMMAND = "gauge.selectArgumentRange";
 const SELECT_ARGUMENT_RANGE_TITLE = "Select Gauge Argument";
-const ARGUMENT_PATTERN = /"[^"\r\n]*"|<[^>\r\n]*>/g;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -79,16 +78,40 @@ function rangeIntersectsArgument(range, start, end) {
   return selectionStart < end && selectionEnd > start;
 }
 
-function findArgumentAt(line, range) {
-  ARGUMENT_PATTERN.lastIndex = 0;
-  let match = ARGUMENT_PATTERN.exec(line);
-  while (match) {
-    const start = match.index;
-    const end = start + match[0].length;
-    if (rangeIntersectsArgument(range, start, end)) {
-      return { start, end, text: match[0] };
+function closingQuoteIndex(line, openIndex) {
+  let index = openIndex + 1;
+  let escaped = false;
+  while (index < line.length) {
+    const character = line[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === "\"") {
+      return index;
     }
-    match = ARGUMENT_PATTERN.exec(line);
+    index += 1;
+  }
+  return -1;
+}
+
+function findArgumentAt(line, range) {
+  let index = 0;
+  while (index < line.length) {
+    const character = line[index];
+    const closeIndex = character === "\""
+      ? closingQuoteIndex(line, index)
+      : (character === "<" ? line.indexOf(">", index + 1) : -1);
+    if (closeIndex === -1) {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    const end = closeIndex + 1;
+    if (rangeIntersectsArgument(range, start, end)) {
+      return { start, end, text: line.slice(start, end) };
+    }
+    index = end;
   }
   return undefined;
 }
