@@ -349,6 +349,35 @@ function isKotlinIdentifierPath(value) {
   return /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(value);
 }
 
+function parseKotlinCharLiteralExpression(value) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("'")) {
+    return undefined;
+  }
+
+  let character;
+  let closeIndex;
+  if (trimmed[1] === "\\") {
+    const escaped = parseEscapedStringCharacter(trimmed, 1);
+    if (escaped === undefined) {
+      return undefined;
+    }
+    character = escaped.character === "\u0000" ? "$" : escaped.character;
+    closeIndex = escaped.nextIndex + 1;
+  } else {
+    character = trimmed[1];
+    closeIndex = 2;
+  }
+
+  if (character === undefined || trimmed[closeIndex] !== "'") {
+    return undefined;
+  }
+  if (trimmed.slice(closeIndex + 1).trim() !== "") {
+    return undefined;
+  }
+  return character;
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -370,9 +399,16 @@ function interpolateStringTemplate(value, constants) {
       if (closeIndex === -1) {
         return undefined;
       }
+      const expression = value.slice(index + 2, closeIndex).trim();
+      const charValue = parseKotlinCharLiteralExpression(expression);
+      if (charValue !== undefined) {
+        result += charValue;
+        index = closeIndex;
+        continue;
+      }
       const nextResult = appendStringTemplateValue(
         result,
-        value.slice(index + 2, closeIndex).trim(),
+        expression,
         constants,
       );
       if (nextResult === undefined) {
