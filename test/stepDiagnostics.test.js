@@ -81,6 +81,24 @@ test("GaugeStepDiagnosticsProvider ignores escaped dynamic Step parameter starts
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider counts static Step parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Log in as \\\"admin\\\" in <tenant>\")",
+    "fun login(tenant: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      `Parameter count mismatch(found [1] expected [2]) with step annotation : "Log in as "admin" in <tenant>". `,
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks each Step alias separately", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

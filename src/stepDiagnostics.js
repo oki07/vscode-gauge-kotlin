@@ -1946,12 +1946,16 @@ function countStepParameters(stepText) {
   let index = 0;
 
   while (index < stepText.length) {
-    const openIndex = findDynamicParameterStart(stepText, index);
-    if (openIndex === -1) {
+    const dynamicStart = findDynamicParameterStart(stepText, index);
+    const staticStart = findStaticParameterStart(stepText, index);
+    const parameter = findNextStepParameter(dynamicStart, staticStart);
+    if (!parameter) {
       break;
     }
 
-    const closeIndex = findDynamicParameterEnd(stepText, openIndex);
+    const closeIndex = parameter.type === "dynamic"
+      ? findDynamicParameterEnd(stepText, parameter.openIndex)
+      : findStaticParameterEnd(stepText, parameter.openIndex);
     if (closeIndex === -1) {
       break;
     }
@@ -1963,10 +1967,28 @@ function countStepParameters(stepText) {
   return count;
 }
 
+function findNextStepParameter(dynamicStart, staticStart) {
+  if (dynamicStart === -1 && staticStart === -1) {
+    return undefined;
+  }
+  if (staticStart === -1 || (dynamicStart !== -1 && dynamicStart < staticStart)) {
+    return { openIndex: dynamicStart, type: "dynamic" };
+  }
+  return { openIndex: staticStart, type: "static" };
+}
+
 function findDynamicParameterStart(text, startIndex) {
   let openIndex = text.indexOf("<", startIndex);
   while (openIndex !== -1 && isEscapedAt(text, openIndex)) {
     openIndex = text.indexOf("<", openIndex + 1);
+  }
+  return openIndex;
+}
+
+function findStaticParameterStart(text, startIndex) {
+  let openIndex = text.indexOf("\"", startIndex);
+  while (openIndex !== -1 && isEscapedAt(text, openIndex)) {
+    openIndex = text.indexOf("\"", openIndex + 1);
   }
   return openIndex;
 }
@@ -1994,6 +2016,28 @@ function findDynamicParameterEnd(text, openIndex) {
     } else if (character === "\\") {
       escaped = true;
     } else if (character === ">") {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function findStaticParameterEnd(text, openIndex) {
+  let escaped = false;
+
+  for (let index = openIndex + 1; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (character === "\r" || character === "\n") {
+      return -1;
+    }
+
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === "\"") {
       return index;
     }
   }
