@@ -2491,7 +2491,24 @@ function findNextPropertyGetter(text, startIndex, ignoredRanges = []) {
   return findNextPropertyAccessor(text, startIndex, "", ignoredRanges);
 }
 
-function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredRanges = []) {
+function isBareAccessorBoundary(text, startIndex) {
+  let index = startIndex;
+  while (index < text.length) {
+    if (text[index] === " " || text[index] === "\t") {
+      index += 1;
+      continue;
+    }
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd;
+      continue;
+    }
+    return text[index] === "\r" || text[index] === "\n" || text[index] === ";" || text[index] === "}";
+  }
+  return true;
+}
+
+function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredRanges = [], options = {}) {
   if (isInIgnoredRange(startIndex, ignoredRanges)) {
     return undefined;
   }
@@ -2501,6 +2518,13 @@ function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredR
   }
   const openParen = skipWhitespaceAndComments(text, startIndex + accessor[0].length);
   if (text[openParen] !== "(") {
+    if (options.implicitParameterText && isBareAccessorBoundary(text, startIndex + accessor[0].length)) {
+      return {
+        parameterEnd: startIndex + accessor[0].length,
+        parameterStart: startIndex,
+        parameterText: options.implicitParameterText,
+      };
+    }
     return undefined;
   }
   const closeParen = findMatchingParen(text, openParen);
@@ -2519,7 +2543,9 @@ function findNextGetterAccessor(text, startIndex, ignoredRanges = []) {
 }
 
 function findNextSetterAccessor(text, startIndex, ignoredRanges = []) {
-  return findNextDirectPropertyAccessor(text, startIndex, "set", ignoredRanges);
+  return findNextDirectPropertyAccessor(text, startIndex, "set", ignoredRanges, {
+    implicitParameterText: "value",
+  });
 }
 
 function lineStartBefore(text, offset) {
