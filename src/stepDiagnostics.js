@@ -2945,6 +2945,52 @@ function collectInitBlockBodyRanges(text, ignoredRanges = []) {
   return ranges;
 }
 
+function isSecondaryConstructorStart(text, startIndex) {
+  const lineStart = lineStartBefore(text, startIndex);
+  const prefix = text.slice(lineStart, startIndex);
+  const modifierPattern = [...KOTLIN_FUNCTION_MODIFIERS].join("|");
+  const pattern = new RegExp(`^[ \\t]*(?:(?:${modifierPattern})\\s+)*$`);
+  return pattern.test(prefix);
+}
+
+function collectConstructorBodyRanges(text, ignoredRanges = []) {
+  const ranges = [];
+  const constructorPattern = /\bconstructor\b/g;
+  let match = constructorPattern.exec(text);
+  while (match) {
+    if (
+      isInIgnoredRange(match.index, ignoredRanges)
+      || !isSecondaryConstructorStart(text, match.index)
+    ) {
+      match = constructorPattern.exec(text);
+      continue;
+    }
+    const openParen = skipWhitespaceAndComments(text, constructorPattern.lastIndex);
+    if (text[openParen] !== "(") {
+      match = constructorPattern.exec(text);
+      continue;
+    }
+    const closeParen = findMatchingParen(text, openParen);
+    if (closeParen === -1) {
+      match = constructorPattern.exec(text);
+      continue;
+    }
+    const bodyStart = findFunctionBlockBodyStart(text, closeParen + 1);
+    if (bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          start: bodyStart + 1,
+        });
+        constructorPattern.lastIndex = bodyEnd + 1;
+      }
+    }
+    match = constructorPattern.exec(text);
+  }
+  return ranges;
+}
+
 function collectPropertyInitializerRanges(text, ignoredRanges = []) {
   const ranges = [];
   const propertyPattern = /\b(?:val|var)\b/g;
@@ -3503,6 +3549,7 @@ function findStepFunctions(text) {
   const functionBodyRanges = [
     ...collectFunctionBodyRanges(text, ignoredRanges),
     ...collectInitBlockBodyRanges(text, ignoredRanges),
+    ...collectConstructorBodyRanges(text, ignoredRanges),
     ...collectPropertyInitializerRanges(text, ignoredRanges),
   ];
   addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges);
