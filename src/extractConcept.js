@@ -197,7 +197,24 @@ function tableCells(line) {
   if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
     return undefined;
   }
-  return trimmed.slice(1, -1).split("|").map((cell) => cell.trim());
+  const cells = [];
+  let cell = "";
+  const body = trimmed.slice(1, -1);
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (character === "|" && !isEscapedPipe(body, index)) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function isEscapedPipe(line, index) {
+  return index > 0 && line[index - 1] === "\\";
 }
 
 function isTableSeparator(cells) {
