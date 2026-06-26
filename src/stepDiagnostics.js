@@ -2360,7 +2360,10 @@ function findAttachedFunction(text, startIndex, ignoredRanges = []) {
 function stepAnnotationImports(text, ignoredRanges = []) {
   const named = new Map();
   const wildcards = new Set();
-  const importPattern = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:\.\*)?)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/gm;
+  const importPattern = new RegExp(
+    `^\\s*import\\s+([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+    "gm",
+  );
   let match = importPattern.exec(text);
   while (match) {
     const importedName = match[1];
