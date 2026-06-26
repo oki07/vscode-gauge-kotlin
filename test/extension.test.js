@@ -452,6 +452,99 @@ test("create specification command provides Gauge LSP spec directories", async (
   ]);
 });
 
+test("file creation commands use Gauge client project roots", async () => {
+  const extension = require("../src/extension");
+
+  const clientsMap = new Map([
+    [
+      "/workspace/gauge",
+      {
+        client: {
+          sendRequest() {
+            return Promise.resolve(["specs"]);
+          },
+        },
+      },
+    ],
+  ]);
+  const receivedOptions = {};
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/plain" } },
+      { uri: { fsPath: "/workspace/gauge" } },
+    ],
+  });
+
+  extension.activate(context, fakeVscode, {
+    clientsMap,
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    createSpecification(options) {
+      receivedOptions.specification = options;
+      return "specification";
+    },
+    createConcept(options) {
+      receivedOptions.concept = options;
+      return "concept";
+    },
+    showWelcomeNotification() {},
+    GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
+    semanticTokensLegend: { id: "legend" },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: class FakeConfigProvider {
+      dispose() {}
+    },
+    GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    ReferenceProvider: class FakeReferenceProvider {
+      dispose() {}
+    },
+    ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+  });
+
+  const createSpecificationCommand = registeredCommands.find(
+    (entry) => entry.command === "gauge.create.specification",
+  );
+  const createConceptCommand = registeredCommands.find(
+    (entry) => entry.command === "gauge.create.concept",
+  );
+
+  assert.ok(createSpecificationCommand);
+  assert.ok(createConceptCommand);
+  assert.equal(createSpecificationCommand.handler(), "specification");
+  assert.equal(createConceptCommand.handler(), "concept");
+  assert.deepEqual(receivedOptions.specification.projects, ["/workspace/gauge"]);
+  assert.deepEqual(receivedOptions.concept.projects, ["/workspace/gauge"]);
+});
+
 test("execution commands delegate to the Gauge execution controller", () => {
   const extension = require("../src/extension");
 

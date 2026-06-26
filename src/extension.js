@@ -111,6 +111,14 @@ function notify(vscode, message) {
   return undefined;
 }
 
+function activeProjectRoots() {
+  if (!activeClientsMap || typeof activeClientsMap.keys !== "function") {
+    return undefined;
+  }
+  const roots = Array.from(activeClientsMap.keys()).filter(Boolean);
+  return roots.length > 0 ? roots : undefined;
+}
+
 async function formatActiveGaugeDocument(vscode) {
   if (!hasActiveGaugeDocument(vscode)) {
     return notify(vscode, "No Gauge file is active.");
@@ -330,6 +338,7 @@ function createCommandHandler(command, vscode, executionController, options = {}
           fileSystem: options.fileSystem,
           pathModule: options.pathModule,
           eol: options.eol,
+          projects: activeProjectRoots(),
           specDirsProvider: options.specDirsProvider || createGaugeSpecDirsProvider(
             () => activeClientsMap,
             { vscode },
@@ -341,6 +350,7 @@ function createCommandHandler(command, vscode, executionController, options = {}
           fileSystem: options.fileSystem,
           pathModule: options.pathModule,
           eol: options.eol,
+          projects: activeProjectRoots(),
           specDirsProvider: options.specDirsProvider || createGaugeSpecDirsProvider(
             () => activeClientsMap,
             { vscode },
