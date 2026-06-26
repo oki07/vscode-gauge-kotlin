@@ -2136,7 +2136,15 @@ function findFunctionParameterStart(text, startIndex) {
     if (char === "(" && !inBacktickIdentifier) {
       return index;
     }
-    if ((char === "\r" || char === "\n" || char === "{") && !inBacktickIdentifier) {
+    if ((char === "\r" || char === "\n") && !inBacktickIdentifier) {
+      const next = skipWhitespaceAndComments(text, index);
+      if (text[next] === "(") {
+        index = next - 1;
+        continue;
+      }
+      return -1;
+    }
+    if (char === "{" && !inBacktickIdentifier) {
       return -1;
     }
   }

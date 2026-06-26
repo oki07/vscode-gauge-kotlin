@@ -378,6 +378,25 @@ test("GaugeStepDiagnosticsProvider accepts Kotlin step function header comments"
   );
 });
 
+test("GaugeStepDiagnosticsProvider accepts Kotlin step function parameter lists on the next line", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Line break <value>\")",
+    "fun lineBreak",
+    "() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Line break <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates Kotlin const step annotation values", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
