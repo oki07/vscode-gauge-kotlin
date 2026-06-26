@@ -84,8 +84,8 @@
     "grammars": [
       {
         "language": "gauge",
-        "scopeName": "source.gauge",
-        "path": "./syntaxes/gauge.tmLanguage.json"
+        "scopeName": "text.html.markdown",
+        "path": "./syntaxes/markdown.tmLanguage"
       }
     ],
     "commands": [

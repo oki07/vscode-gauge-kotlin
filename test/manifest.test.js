@@ -271,8 +271,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
 
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   assert.ok(grammar);
-  assert.equal(grammar.scopeName, "source.gauge");
-  assert.equal(grammar.path, "./syntaxes/gauge.tmLanguage.json");
+  assert.equal(grammar.scopeName, "text.html.markdown");
+  assert.equal(grammar.path, "./syntaxes/markdown.tmLanguage");
 
   assert.deepEqual(manifest.contributes.snippets, [
     {
