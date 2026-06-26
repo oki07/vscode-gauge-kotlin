@@ -441,21 +441,11 @@ function interpolateStringTemplate(value, constants) {
         return undefined;
       }
       const expression = value.slice(index + 2, closeIndex).trim();
-      const charValue = parseKotlinCharLiteralExpression(expression);
-      if (charValue !== undefined) {
-        result += charValue;
-        index = closeIndex;
-        continue;
-      }
-      const nextResult = appendStringTemplateValue(
-        result,
-        expression,
-        constants,
-      );
-      if (nextResult === undefined) {
+      const expressionValue = evaluateStringExpression(expression, constants);
+      if (expressionValue === undefined) {
         return undefined;
       }
-      result = nextResult;
+      result += expressionValue;
       index = closeIndex;
       continue;
     }
