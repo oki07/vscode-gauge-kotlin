@@ -31,8 +31,9 @@ function isConceptDocument(document) {
 
 function dynamicArgumentRange(line, position) {
   let openIndex = line.indexOf("<");
+  const stopAtUnescapedPipe = isTableLine(line);
   while (openIndex !== -1) {
-    const closeIndex = closingAngleIndex(line, openIndex);
+    const closeIndex = closingAngleIndex(line, openIndex, stopAtUnescapedPipe);
     if (position.character > openIndex && (closeIndex === -1 || position.character <= closeIndex)) {
       return {
         end: closeIndex === -1 ? position.character : closeIndex,
@@ -71,11 +72,11 @@ function closingQuoteIndex(line, openIndex) {
   return closingEscapedArgumentIndex(line, openIndex, "\"");
 }
 
-function closingAngleIndex(line, openIndex) {
-  return closingEscapedArgumentIndex(line, openIndex, ">");
+function closingAngleIndex(line, openIndex, stopAtUnescapedPipe = false) {
+  return closingEscapedArgumentIndex(line, openIndex, ">", stopAtUnescapedPipe);
 }
 
-function closingEscapedArgumentIndex(line, openIndex, closeCharacter) {
+function closingEscapedArgumentIndex(line, openIndex, closeCharacter, stopAtUnescapedPipe = false) {
   let index = openIndex + 1;
   let escaped = false;
   while (index < line.length) {
@@ -85,6 +86,8 @@ function closingEscapedArgumentIndex(line, openIndex, closeCharacter) {
     } else if (character === "\\") {
       escaped = true;
     } else if (character === closeCharacter) {
+      return index;
+    } else if (stopAtUnescapedPipe && character === "|") {
       return index;
     }
     index += 1;

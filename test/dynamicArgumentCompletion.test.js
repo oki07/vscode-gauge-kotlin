@@ -108,6 +108,33 @@ test("GaugeDynamicArgumentCompletionProvider suggests escaped table header pipes
   assert.deepEqual(labels(items), ["user \\| name", "role"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at unescaped pipes", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const tableRow = "| <u | admin> |";
+  const document = createDocument([
+    "# Checkout",
+    "| user | role |",
+    "| ---- | ---- |",
+    tableRow,
+  ].join("\n"));
+
+  const beforePipeItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(3, tableRow.indexOf("u") + 1),
+  );
+  const afterPipeItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(3, tableRow.indexOf("admin")),
+  );
+
+  assert.deepEqual(labels(beforePipeItems), ["user", "role"]);
+  assert.deepEqual({ ...beforePipeItems[0].range.start }, { line: 3, character: tableRow.indexOf("<") + 1 });
+  assert.deepEqual({ ...beforePipeItems[0].range.end }, { line: 3, character: tableRow.indexOf("|", tableRow.indexOf("<")) });
+  assert.deepEqual(afterPipeItems, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
