@@ -441,6 +441,14 @@ function evaluateIntegerSubtractionExpression(expression) {
   return String(BigInt(left) - BigInt(right));
 }
 
+function evaluateIntegerMultiplicationExpression(parts) {
+  const values = parts.map((part) => parseKotlinIntegerLiteralExpression(part));
+  if (values.some((value) => value === undefined)) {
+    return undefined;
+  }
+  return String(values.reduce((product, value) => product * BigInt(value), 1n));
+}
+
 function appendStringTemplateValue(result, name, constants) {
   if (!isKotlinIdentifierPath(name) || !constants.has(name)) {
     return undefined;
@@ -591,6 +599,13 @@ function evaluateStringExpression(expression, constants) {
   const integerSubtraction = evaluateIntegerSubtractionExpression(trimmed);
   if (integerSubtraction !== undefined) {
     return integerSubtraction;
+  }
+  const productParts = splitTopLevel(trimmed, "*").map((part) => part.trim());
+  if (productParts.length > 1) {
+    const integerMultiplication = evaluateIntegerMultiplicationExpression(productParts);
+    if (integerMultiplication !== undefined) {
+      return integerMultiplication;
+    }
   }
 
   const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
