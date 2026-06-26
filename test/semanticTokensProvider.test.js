@@ -98,6 +98,32 @@ test("GaugeSemanticTokensProvider tokenizes keyword lines with space before colo
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats mixed-case keyword lines as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "Table: users.csv",
+        "Tags: smoke, fast",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.map((entry) => entry.type), [
+    "gaugeComment",
+    "gaugeComment",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider treats concept keyword-like lines as comments", () => {
   const {
     GaugeSemanticTokensProvider,
