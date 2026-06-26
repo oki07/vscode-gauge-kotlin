@@ -1381,7 +1381,7 @@ function interpolateStringTemplate(value, constants, constantTypes) {
       continue;
     }
 
-    const match = /^[A-Za-z_]\w*/.exec(value.slice(index + 1));
+    const match = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(value.slice(index + 1));
     if (!match) {
       result += char;
       continue;
