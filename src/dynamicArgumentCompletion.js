@@ -171,6 +171,9 @@ function conceptDynamicArguments(text) {
   const values = [];
   const lines = text.split(/\r?\n/);
   for (const line of lines) {
+    if (!isConceptHeading(line) && !isStepLine(line)) {
+      continue;
+    }
     let openIndex = line.indexOf("<");
     while (openIndex !== -1) {
       const closeIndex = closingAngleIndex(line, openIndex);
