@@ -857,6 +857,43 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
   return aliases;
 }
 
+function collectKotlinPackageName(text, ignoredRanges = []) {
+  const packagePattern = new RegExp(
+    `^package\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+  );
+  for (const line of kotlinSourceLines(text, ignoredRanges)) {
+    const match = packagePattern.exec(normalizeKotlinQualifiedPathDots(line));
+    if (match) {
+      return normalizeKotlinIdentifierPath(match[1]);
+    }
+  }
+  return undefined;
+}
+
+function collectKotlinConstantImports(text, ignoredRanges = []) {
+  const imports = [];
+  const importPattern = new RegExp(
+    `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+  );
+  const lines = kotlinSourceLines(text, ignoredRanges);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
+    const match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
+    if (!match) {
+      continue;
+    }
+
+    const importedName = normalizeKotlinIdentifierPath(match[1]);
+    const importedParts = importedName.split(".");
+    const exposedName = match[2] === undefined
+      ? importedParts[importedParts.length - 1]
+      : normalizeKotlinIdentifier(match[2]);
+    imports.push({ exposedName, importedName });
+    lineIndex = importStatement.endIndex;
+  }
+  return imports;
+}
+
 function resolveKotlinConstTypeName(typeName, typeAliases, seen = new Set()) {
   if (typeName === undefined) {
     return undefined;
@@ -2465,6 +2502,19 @@ function addConstantVisibility(visibility, name, scope) {
   visibility.set(name, scopes);
 }
 
+function ensureConstantGloballyVisible(visibility, name) {
+  if (name.includes(".")) {
+    return false;
+  }
+  const scopes = visibility.get(name) || [];
+  if (scopes.some((scope) => scope.global)) {
+    return false;
+  }
+  scopes.push({ global: true });
+  visibility.set(name, scopes);
+  return true;
+}
+
 function constantSimpleVisibilityScopes(declarationOffset, objectRanges, classesByPath) {
   const objectScopes = enclosingRanges(objectRanges, declarationOffset);
   if (objectScopes.length === 0) {
@@ -2512,6 +2562,60 @@ function constantsVisibleAtOffset(constants, constantTypes, visibility, offset) 
     constants: visibleConstants,
     constantTypes: visibleTypes,
   };
+}
+
+function addPackageQualifiedConstantNames(names, packageName, declarationName, objectPaths, classPaths) {
+  if (packageName === undefined) {
+    return;
+  }
+
+  const hasObjectPath = objectPaths.some((objectPath) => objectPath.length > 0);
+  const effectiveClassPaths = classPaths.filter((classPath) => classPath.length > 0);
+  const namesToQualify = new Set();
+  if (!hasObjectPath && effectiveClassPaths.length === 0) {
+    namesToQualify.add(declarationName);
+  }
+  for (const name of names) {
+    if (!name.includes(".")) {
+      continue;
+    }
+    if (
+      effectiveClassPaths.length === 0
+      || effectiveClassPaths.some((classPath) => pathHasPrefix(name.split("."), classPath))
+    ) {
+      namesToQualify.add(name);
+    }
+  }
+
+  for (const name of namesToQualify) {
+    names.add(`${packageName}.${name}`);
+  }
+}
+
+function applyKotlinConstantImports(constants, constantTypes, constantVisibility, constantImports) {
+  let changed = false;
+  for (const { exposedName, importedName } of constantImports) {
+    if (!constants.has(importedName)) {
+      continue;
+    }
+
+    const importedValue = constants.get(importedName);
+    if (!constants.has(exposedName)) {
+      constants.set(exposedName, importedValue);
+      changed = true;
+    } else if (constants.get(exposedName) !== importedValue) {
+      continue;
+    }
+
+    if (constantTypes.has(importedName) && !constantTypes.has(exposedName)) {
+      constantTypes.set(exposedName, constantTypes.get(importedName));
+      changed = true;
+    }
+    if (ensureConstantGloballyVisible(constantVisibility, exposedName)) {
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
@@ -2588,6 +2692,8 @@ function collectStringConstants(text) {
   ];
   const classesByPath = classScopeMap(classRanges);
   const typeAliases = collectKotlinTypeAliases(text, ignoredRanges);
+  const packageName = collectKotlinPackageName(text, ignoredRanges);
+  const constantImports = collectKotlinConstantImports(text, ignoredRanges);
   const pattern = /\bconst\b/g;
   let match = pattern.exec(text);
   while (match) {
@@ -2623,6 +2729,13 @@ function collectStringConstants(text) {
         }
       }
     }
+    addPackageQualifiedConstantNames(
+      names,
+      packageName,
+      declaration.name,
+      objectPaths,
+      classPaths,
+    );
     expressions.push({
       expression: text.slice(expressionStart, expressionEnd),
       offset: expressionStart,
@@ -2643,7 +2756,12 @@ function collectStringConstants(text) {
 
   let changed = true;
   while (changed) {
-    changed = false;
+    changed = applyKotlinConstantImports(
+      constants,
+      constantTypes,
+      constantVisibility,
+      constantImports,
+    );
     for (const { expression, names, offset, typeName } of expressions) {
       if (names.every((name) => constants.has(name))) {
         continue;
