@@ -132,6 +132,10 @@ function buildExtractSelection(document, selection) {
   let expandedEndLine = endLine;
   while (line <= endLine) {
     const text = lineText(document, line);
+    if (text.trim() === "") {
+      line += 1;
+      continue;
+    }
     if (!isStepLine(text)) {
       return undefined;
     }

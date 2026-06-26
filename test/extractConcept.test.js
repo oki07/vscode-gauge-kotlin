@@ -225,6 +225,66 @@ test("ExtractConceptCommandProvider extracts selected Gauge steps into an existi
   );
 });
 
+test("ExtractConceptCommandProvider extracts selected steps separated by blank lines", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+    "",
+    "* Logout",
+    "",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "",
+    },
+    document,
+    inputResponses: ["Shared flow"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 5, character: 8 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/example.spec",
+  );
+  assert.equal(sourceReplacement.newText, "* Shared flow\n");
+
+  const conceptReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
+  );
+  assert.equal(
+    conceptReplacement.newText,
+    [
+      "# Shared flow",
+      "* Login",
+      "* Logout",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("ExtractConceptCommandProvider parameterizes selected inline tables", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
