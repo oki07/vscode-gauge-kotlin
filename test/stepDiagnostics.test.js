@@ -286,6 +286,22 @@ test("GaugeStepDiagnosticsProvider ignores comments inside Kotlin Step function 
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores commas inside backtick parameter names", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Use <first> and <second>\")",
+    "fun use(`first,second`: String) {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Use <first> and <second>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider counts Kotlin default comparison parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
