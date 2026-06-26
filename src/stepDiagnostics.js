@@ -2945,6 +2945,33 @@ function collectInitBlockBodyRanges(text, ignoredRanges = []) {
   return ranges;
 }
 
+function collectPropertyInitializerRanges(text, ignoredRanges = []) {
+  const ranges = [];
+  const propertyPattern = /\b(?:val|var)\b/g;
+  let match = propertyPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = propertyPattern.exec(text);
+      continue;
+    }
+    const headerStart = skipWhitespaceAndComments(text, propertyPattern.lastIndex);
+    const headerEnd = findPropertyHeaderEnd(text, headerStart);
+    if (text[headerEnd] === "=") {
+      const initializerStart = skipWhitespaceAndComments(text, headerEnd + 1);
+      const initializerEnd = findFunctionExpressionBodyEnd(text, initializerStart);
+      if (initializerEnd > initializerStart) {
+        ranges.push({
+          end: initializerEnd,
+          start: initializerStart,
+        });
+        propertyPattern.lastIndex = initializerEnd;
+      }
+    }
+    match = propertyPattern.exec(text);
+  }
+  return ranges;
+}
+
 function skipWhitespaceAndComments(text, startIndex) {
   let index = startIndex;
   while (index < text.length) {
@@ -3476,6 +3503,7 @@ function findStepFunctions(text) {
   const functionBodyRanges = [
     ...collectFunctionBodyRanges(text, ignoredRanges),
     ...collectInitBlockBodyRanges(text, ignoredRanges),
+    ...collectPropertyInitializerRanges(text, ignoredRanges),
   ];
   addGroupedStepFunctions(entries, text, constants, constantTypes, ignoredRanges, stepImports, functionBodyRanges);
   let annotationMatch = annotationPattern.exec(text);
