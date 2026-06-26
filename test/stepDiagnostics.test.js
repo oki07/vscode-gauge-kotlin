@@ -235,6 +235,19 @@ test("GaugeStepDiagnosticsProvider ignores non-Gauge imported Step annotations",
   assert.deepEqual(provider.provideDiagnostics(document), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores local Step annotation declarations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "annotation class Step(val value: String)",
+    "",
+    "@Step(\"Local <value>\")",
+    "fun localStep() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores Step text in Kotlin comments and strings", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

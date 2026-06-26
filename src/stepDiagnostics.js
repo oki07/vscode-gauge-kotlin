@@ -2373,7 +2373,20 @@ function stepAnnotationImports(text) {
   return imports;
 }
 
-function isStepAnnotationAllowed(annotationName, stepImports) {
+function localAnnotationClassNames(text, ignoredRanges) {
+  const names = new Set();
+  const pattern = new RegExp(`\\bannotation\\s+class\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "g");
+  let match = pattern.exec(text);
+  while (match) {
+    if (!isInIgnoredRange(match.index, ignoredRanges)) {
+      names.add(match[1]);
+    }
+    match = pattern.exec(text);
+  }
+  return names;
+}
+
+function isStepAnnotationAllowed(annotationName, stepImports, localAnnotationNames = new Set()) {
   if (annotationName === GAUGE_STEP_ANNOTATION) {
     return true;
   }
@@ -2382,6 +2395,9 @@ function isStepAnnotationAllowed(annotationName, stepImports) {
   }
   if (stepImports.has(annotationName)) {
     return stepImports.get(annotationName) === GAUGE_STEP_ANNOTATION;
+  }
+  if (localAnnotationNames.has(annotationName)) {
+    return false;
   }
   return annotationName === "Step";
 }
@@ -2392,6 +2408,7 @@ function findStepFunctions(text) {
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text);
+  const localAnnotationNames = localAnnotationClassNames(text, ignoredRanges);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -2399,7 +2416,7 @@ function findStepFunctions(text) {
       continue;
     }
     const annotationName = annotationMatch[1];
-    if (!isStepAnnotationAllowed(annotationName, stepImports)) {
+    if (!isStepAnnotationAllowed(annotationName, stepImports, localAnnotationNames)) {
       annotationMatch = annotationPattern.exec(text);
       continue;
     }
