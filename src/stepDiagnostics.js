@@ -1946,7 +1946,7 @@ function countStepParameters(stepText) {
   let index = 0;
 
   while (index < stepText.length) {
-    const openIndex = stepText.indexOf("<", index);
+    const openIndex = findDynamicParameterStart(stepText, index);
     if (openIndex === -1) {
       break;
     }
@@ -1961,6 +1961,22 @@ function countStepParameters(stepText) {
   }
 
   return count;
+}
+
+function findDynamicParameterStart(text, startIndex) {
+  let openIndex = text.indexOf("<", startIndex);
+  while (openIndex !== -1 && isEscapedAt(text, openIndex)) {
+    openIndex = text.indexOf("<", openIndex + 1);
+  }
+  return openIndex;
+}
+
+function isEscapedAt(text, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function findDynamicParameterEnd(text, openIndex) {
