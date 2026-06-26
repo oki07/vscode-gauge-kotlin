@@ -447,6 +447,40 @@ test("GaugeStepDiagnosticsProvider ignores accessor-body-local Step functions", 
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores expression-bodied accessor-local Step functions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  val getterValue: Int",
+    "    get() = run {",
+    "      @Step(\"Getter local <value>\")",
+    "      fun localGetterStep() {}",
+    "      1",
+    "    }",
+    "",
+    "  var setterValue: Int = 0",
+    "    set(value) = run {",
+    "      @Step(\"Setter local <value>\")",
+    "      fun localSetterStep() {}",
+    "      field = value",
+    "    }",
+    "",
+    "  @Step(\"Member <value>\")",
+    "  fun memberStep() {}",
+    "}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Member <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores constructor-body-local Step functions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

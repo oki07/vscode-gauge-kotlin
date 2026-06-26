@@ -3054,6 +3054,18 @@ function collectPropertyAccessorBodyRanges(text, ignoredRanges = []) {
         });
         accessorPattern.lastIndex = bodyEnd + 1;
       }
+    } else {
+      const expressionBodyStart = findFunctionExpressionBodyStart(text, bodyStart);
+      if (expressionBodyStart !== -1) {
+        const expressionBodyEnd = findFunctionExpressionBodyEnd(text, expressionBodyStart);
+        if (expressionBodyEnd > expressionBodyStart) {
+          ranges.push({
+            end: expressionBodyEnd,
+            start: expressionBodyStart,
+          });
+          accessorPattern.lastIndex = expressionBodyEnd;
+        }
+      }
     }
     match = accessorPattern.exec(text);
   }
