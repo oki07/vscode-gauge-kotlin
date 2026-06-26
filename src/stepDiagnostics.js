@@ -2741,6 +2741,137 @@ function findFunctionBlockBodyStart(text, startIndex) {
   return -1;
 }
 
+function findFunctionExpressionBodyStart(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let quote;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (angleDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+      if (char === "=") {
+        return index + 1;
+      }
+      if (char === "{" || char === ";" || startsDeclarationLine(text, index)) {
+        return -1;
+      }
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+  }
+  return -1;
+}
+
+function findFunctionExpressionBodyEnd(text, startIndex) {
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let quote;
+  let hasExpression = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (quote === "\"\"\"" && text.startsWith("\"\"\"", index)) {
+        quote = undefined;
+        index += 2;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      hasExpression = true;
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      hasExpression = true;
+      continue;
+    }
+    if (
+      hasExpression
+      && angleDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && parenDepth === 0
+      && (char === ";" || char === "}" || startsDeclarationLine(text, index))
+    ) {
+      return index;
+    }
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    }
+    if (!/\s/.test(char)) {
+      hasExpression = true;
+    }
+  }
+  return text.length;
+}
+
 function collectFunctionBodyRanges(text, ignoredRanges = []) {
   const ranges = [];
   const funPattern = /\bfun\b/g;
@@ -2767,6 +2898,17 @@ function collectFunctionBodyRanges(text, ignoredRanges = []) {
               end: bodyEnd,
               start: bodyStart + 1,
             });
+          }
+        } else {
+          const expressionBodyStart = findFunctionExpressionBodyStart(text, closeParen + 1);
+          if (expressionBodyStart !== -1) {
+            const expressionBodyEnd = findFunctionExpressionBodyEnd(text, expressionBodyStart);
+            if (expressionBodyEnd > expressionBodyStart) {
+              ranges.push({
+                end: expressionBodyEnd,
+                start: expressionBodyStart,
+              });
+            }
           }
         }
         break;
