@@ -9,11 +9,11 @@ function documentLines(document) {
 }
 
 function isSingleHashHeading(line) {
-  return /^\s*#[^#].*$/.test(line);
+  return /^\s*#(?!#).*$/.test(line);
 }
 
 function isDoubleHashHeading(line) {
-  return /^\s*##[^#].*$/.test(line);
+  return /^\s*##.*$/.test(line);
 }
 
 function isLegacySpecUnderline(line) {

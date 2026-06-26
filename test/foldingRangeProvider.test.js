@@ -66,3 +66,25 @@ test("GaugeFoldingRangeProvider folds legacy underline headings and concepts", (
     { start: 8, end: 9 },
   ]);
 });
+
+test("GaugeFoldingRangeProvider folds hash headings accepted by the Gauge lexer", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider();
+  const document = createDocument([
+    "#",
+    "* Open cart",
+    "",
+    "##",
+    "* Pay",
+    "",
+    "### Nested scenario syntax",
+    "* Reuse",
+    "",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 1 },
+    { start: 3, end: 4 },
+    { start: 6, end: 7 },
+  ]);
+});
