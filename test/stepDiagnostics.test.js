@@ -378,6 +378,24 @@ test("GaugeStepDiagnosticsProvider accepts Kotlin step function header comments"
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores parentheses inside Kotlin step function header comments", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Header comment <value>\")",
+    "fun /* ignored ( */ headerComment() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Header comment <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider accepts Kotlin step function parameter lists on the next line", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

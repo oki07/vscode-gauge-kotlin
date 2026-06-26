@@ -2142,6 +2142,11 @@ function isKotlinFunctionHeader(header) {
 function findFunctionParameterStart(text, startIndex) {
   let inBacktickIdentifier = false;
   for (let index = startIndex; index < text.length; index += 1) {
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
     const char = text[index];
     if (char === "`") {
       inBacktickIdentifier = !inBacktickIdentifier;
