@@ -30,11 +30,11 @@ function isHashHeading(line, conceptDocument) {
 }
 
 function isLegacySpecUnderline(line) {
-  return /^\s*=+\s*$/.test(line);
+  return /^=+$/.test(line);
 }
 
 function isLegacyScenarioUnderline(line) {
-  return /^\s*-+\s*$/.test(line);
+  return /^-+$/.test(line);
 }
 
 function isTeardown(line) {

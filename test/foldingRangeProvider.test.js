@@ -68,6 +68,36 @@ test("GaugeFoldingRangeProvider folds legacy underline headings and concepts", (
   ]);
 });
 
+test("GaugeFoldingRangeProvider ignores indented legacy underline headings", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider();
+  const specDocument = createDocument([
+    "Checkout",
+    "  ========",
+    "* Still specification text",
+    "",
+    "# Real specification",
+    "* Open cart",
+    "",
+  ].join("\n"));
+  const conceptDocument = createDocument([
+    "Shared checkout",
+    "  ========",
+    "* Still concept text",
+    "",
+    "# Real concept",
+    "* Reuse",
+    "",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  assert.deepEqual(provider.provideFoldingRanges(specDocument), [
+    { start: 4, end: 5 },
+  ]);
+  assert.deepEqual(provider.provideFoldingRanges(conceptDocument), [
+    { start: 4, end: 5 },
+  ]);
+});
+
 test("GaugeFoldingRangeProvider folds hash headings accepted by the Gauge lexer", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();

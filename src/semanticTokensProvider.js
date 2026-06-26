@@ -163,10 +163,8 @@ class GaugeSemanticTokensProvider {
 
       if (index + 1 < lines.length) {
         const nextLine = lines[index + 1];
-        const trimmedNextLine = nextLine.trim();
         if (
-          trimmedNextLine.length > 0
-          && /^[=]+$/.test(trimmedNextLine)
+          /^[=]+$/.test(nextLine)
           && (!conceptDocument || isConceptLegacyUnderlineHeadingText(line))
         ) {
           const leadingSpaces = line.length - line.trimStart().length;
@@ -175,7 +173,7 @@ class GaugeSemanticTokensProvider {
           index += 2;
           continue;
         }
-        if (!conceptDocument && trimmedNextLine.length > 0 && /^[-]+$/.test(trimmedNextLine)) {
+        if (!conceptDocument && /^[-]+$/.test(nextLine)) {
           const leadingSpaces = line.length - line.trimStart().length;
           builder.push(index, leadingSpaces, line.length - leadingSpaces, tokenTypes.indexOf("scenario"), 0);
           builder.push(index + 1, 0, nextLine.length, tokenTypes.indexOf("scenario"), 0);

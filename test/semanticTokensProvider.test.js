@@ -304,6 +304,58 @@ test("GaugeSemanticTokensProvider ignores concept equals underline after identif
   ]);
 });
 
+test("GaugeSemanticTokensProvider ignores indented legacy underline headings", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const specDocument = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "Checkout",
+        "  ========",
+        "* Open cart",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return [
+        "Shared checkout",
+        "  ========",
+        "* Reuse",
+      ].join("\n");
+    },
+  };
+
+  const specTokens = provider.provideDocumentSemanticTokens(specDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+  const conceptTokens = provider.provideDocumentSemanticTokens(conceptDocument)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(specTokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
+    "gaugeComment",
+    "gaugeComment",
+  ]);
+  assert.deepEqual(specTokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+  ]);
+  assert.deepEqual(conceptTokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
+    "gaugeComment",
+    "gaugeComment",
+  ]);
+  assert.deepEqual(conceptTokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () => {
   const {
     GaugeSemanticTokensProvider,
