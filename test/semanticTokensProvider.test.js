@@ -163,6 +163,30 @@ test("GaugeSemanticTokensProvider keeps quoted concept heading text as heading",
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats concept double-hash headings as concept headings", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/concepts/shared.cpt" },
+    getText() {
+      return "## Shared checkout <item>";
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.map((entry) => entry.type), [
+    "specification",
+    "argument",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider ignores concept hyphen underline headings", () => {
   const {
     GaugeSemanticTokensProvider,

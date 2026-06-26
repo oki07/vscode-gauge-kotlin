@@ -148,7 +148,7 @@ class GaugeSemanticTokensProvider {
 
       if (trimmedLine.startsWith("#")) {
         let lastIndex = line.search(/\S/);
-        const isScenarioHeading = trimmedLine.startsWith("##");
+        const isScenarioHeading = !conceptDocument && trimmedLine.startsWith("##");
         const headingToken = isScenarioHeading ? "scenario" : "specification";
         if (isScenarioHeading || !conceptDocument) {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
