@@ -3919,6 +3919,28 @@ function kotlinSourceLines(text, ignoredRanges) {
   return lines;
 }
 
+function startsKotlinTypeAliasDeclaration(line) {
+  return /^typealias(?:\s|$)/.test(stripKotlinTypeAliasPreamble(line));
+}
+
+function readKotlinTypeAliasStatement(lines, startIndex, typeAliasPattern) {
+  let statement = lines[startIndex];
+  if (!startsKotlinTypeAliasDeclaration(statement)) {
+    return { endIndex: startIndex, statement };
+  }
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    if (typeAliasPattern.test(stripKotlinTypeAliasPreamble(statement))) {
+      return { endIndex: index, statement };
+    }
+    if (index + 1 >= lines.length || startsKotlinTypeAliasDeclaration(lines[index + 1])) {
+      return { endIndex: index, statement };
+    }
+    statement = `${statement} ${lines[index + 1]}`;
+  }
+  return { endIndex: lines.length - 1, statement };
+}
+
 function stepAnnotationImports(text, ignoredRanges = []) {
   const named = new Map();
   const wildcards = new Set();
@@ -3928,7 +3950,9 @@ function stepAnnotationImports(text, ignoredRanges = []) {
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
   );
-  for (const line of kotlinSourceLines(text, ignoredRanges)) {
+  const lines = kotlinSourceLines(text, ignoredRanges);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     let match = importPattern.exec(line);
     if (match) {
       const importedName = normalizeKotlinIdentifierPath(match[1]);
@@ -3946,9 +3970,11 @@ function stepAnnotationImports(text, ignoredRanges = []) {
       continue;
     }
 
-    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(line));
+    const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
+    match = typeAliasPattern.exec(stripKotlinTypeAliasPreamble(statement.statement));
     if (match) {
       named.set(normalizeKotlinIdentifier(match[1]), normalizeKotlinIdentifierPath(match[2]));
+      lineIndex = statement.endIndex;
     }
   }
   return { named, wildcards };

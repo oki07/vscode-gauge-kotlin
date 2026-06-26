@@ -1253,6 +1253,52 @@ test("GaugeStepDiagnosticsProvider resolves Step type aliases through wildcard i
   assert.deepEqual(provider.provideDiagnostics(ambiguousWildcardDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider resolves multiline Step type aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const splitAfterEqualsDocument = createDocument([
+    "typealias GaugeStep =",
+    "  com.thoughtworks.gauge.Step",
+    "",
+    "@GaugeStep(\"Split alias <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+  const splitBeforeEqualsDocument = createDocument([
+    "typealias GaugeStep",
+    "  = com.thoughtworks.gauge.Step",
+    "",
+    "@GaugeStep(\"Split before equals <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+  const wildcardTargetDocument = createDocument([
+    "import com.thoughtworks.gauge.*",
+    "typealias GaugeStep =",
+    "  Step",
+    "",
+    "@GaugeStep(\"Split wildcard target <value>\")",
+    "fun gauge() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(splitAfterEqualsDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Split alias <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(splitBeforeEqualsDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Split before equals <value>\". ",
+    ],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(wildcardTargetDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Split wildcard target <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider lets local classifiers shadow Step typealias targets", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
