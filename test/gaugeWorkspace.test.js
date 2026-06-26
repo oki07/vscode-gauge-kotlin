@@ -243,7 +243,7 @@ test("GaugeWorkspace shares one output channel across workspace project clients"
   assert.deepEqual(outputChannels.map((channel) => channel.name), ["gauge"]);
 });
 
-test("GaugeWorkspace generates Java config for non-Maven Java projects", async () => {
+test("GaugeWorkspace generates Java config for mixed-case Java plugins", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
@@ -260,7 +260,7 @@ test("GaugeWorkspace generates Java config for non-Maven Java projects", async (
   const { vscode } = createFakeVscode();
   const cli = new CLI(new Command("gauge"), {
     version: "1.2.3",
-    plugins: [{ name: "java", version: "1.0.0" }],
+    plugins: [{ name: "JAVA", version: "1.0.0" }],
   });
 
   class FakeJavaProjectConfig {

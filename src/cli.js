@@ -104,7 +104,7 @@ class CLI {
   }
 
   getGaugePluginVersion(language) {
-    const plugin = this.gaugePlugins.find((entry) => entry.name === language);
+    const plugin = this.gaugePlugins.find((entry) => pluginNameEquals(entry.name, language));
     return plugin && plugin.version;
   }
 
