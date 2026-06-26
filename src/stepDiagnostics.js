@@ -2505,6 +2505,82 @@ function localClassifierNames(text, ignoredRanges) {
   return names;
 }
 
+function collectClassifierScopeRanges(text, ignoredRanges) {
+  const ranges = [];
+  const pattern = new RegExp(
+    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
+    "g",
+  );
+  let match = pattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = pattern.exec(text);
+      continue;
+    }
+
+    const bodyStart = findObjectBodyStart(text, pattern.lastIndex);
+    if (bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          start: bodyStart + 1,
+        });
+        pattern.lastIndex = bodyStart + 1;
+      }
+    }
+    match = pattern.exec(text);
+  }
+  return ranges;
+}
+
+function isInsideRange(offset, range) {
+  return offset >= range.start && offset < range.end;
+}
+
+function isInsideChildScope(offset, scope, scopes) {
+  return scopes.some((candidate) => (
+    candidate.start > scope.start
+    && candidate.end <= scope.end
+    && isInsideRange(offset, candidate)
+  ));
+}
+
+function directClassifierNamesInScope(text, ignoredRanges, scope, scopes) {
+  const names = new Set();
+  const pattern = new RegExp(
+    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
+    "g",
+  );
+  pattern.lastIndex = scope.start;
+  let match = pattern.exec(text);
+  while (match && match.index < scope.end) {
+    if (
+      !isInIgnoredRange(match.index, ignoredRanges)
+      && !isInsideChildScope(match.index, scope, scopes)
+    ) {
+      names.add(match[1]);
+    }
+    match = pattern.exec(text);
+  }
+  return names;
+}
+
+function localClassifierNamesAtOffset(text, ignoredRanges, offset) {
+  const names = localClassifierNames(text, ignoredRanges);
+  const scopes = collectClassifierScopeRanges(text, ignoredRanges);
+  const enclosingScopes = scopes
+    .filter((scope) => isInsideRange(offset, scope))
+    .sort((left, right) => left.start - right.start);
+
+  for (const scope of enclosingScopes) {
+    for (const name of directClassifierNamesInScope(text, ignoredRanges, scope, scopes)) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
 function resolveStepAnnotationTarget(annotationName, namedImports, seen = new Set()) {
   if (annotationName === GAUGE_STEP_ANNOTATION) {
     return annotationName;
@@ -2541,11 +2617,11 @@ function addStepFunctionEntry(
   constants,
   ignoredRanges,
   stepImports,
-  classifierNames,
   annotationName,
   openParen,
   functionSearchStart,
 ) {
+  const classifierNames = localClassifierNamesAtOffset(text, ignoredRanges, openParen);
   if (!isStepAnnotationAllowed(annotationName, stepImports, classifierNames)) {
     return;
   }
@@ -2560,7 +2636,7 @@ function addStepFunctionEntry(
   }
 }
 
-function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, classifierNames) {
+function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports) {
   const groupPattern = /@\[/g;
   let groupMatch = groupPattern.exec(text);
   while (groupMatch) {
@@ -2606,7 +2682,6 @@ function addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepIm
         constants,
         ignoredRanges,
         stepImports,
-        classifierNames,
         annotationMatch[0],
         openParen,
         () => closeBracket + 1,
@@ -2625,8 +2700,7 @@ function findStepFunctions(text) {
   const constants = collectStringConstants(text);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const stepImports = stepAnnotationImports(text, ignoredRanges);
-  const classifierNames = localClassifierNames(text, ignoredRanges);
-  addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports, classifierNames);
+  addGroupedStepFunctions(entries, text, constants, ignoredRanges, stepImports);
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
     if (isInIgnoredRange(annotationMatch.index, ignoredRanges)) {
@@ -2654,7 +2728,6 @@ function findStepFunctions(text) {
       constants,
       ignoredRanges,
       stepImports,
-      classifierNames,
       annotationName,
       openParen,
       () => closeParen + 1,

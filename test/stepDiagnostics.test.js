@@ -438,6 +438,37 @@ test("GaugeStepDiagnosticsProvider ignores local Step classifier declarations", 
   assert.deepEqual(provider.provideDiagnostics(localObjectDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores nested local Step classifier declarations in scope", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const localAnnotationDocument = createDocument([
+    "class Steps {",
+    "  annotation class Step(val value: String)",
+    "",
+    "  @Step(\"Local <value>\")",
+    "  fun localStep() {}",
+    "}",
+  ].join("\n"));
+  const siblingObjectDocument = createDocument([
+    "class Steps {",
+    "  object Helpers {",
+    "    annotation class Step(val value: String)",
+    "  }",
+    "",
+    "  @Step(\"Gauge <value>\")",
+    "  fun gaugeStep() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(localAnnotationDocument), []);
+  assert.deepEqual(
+    provider.provideDiagnostics(siblingObjectDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Gauge <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores nested Step classifiers outside annotation scope", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
