@@ -78,6 +78,7 @@ function createFakeVscode(overrides = {}) {
         },
       },
       workspace: {
+        textDocuments: overrides.textDocuments || [],
         workspaceFolders,
         getWorkspaceFolder(uri) {
           return workspaceFolders.find((folder) => folder.uri.fsPath === uri.fsPath);
@@ -110,6 +111,21 @@ function createFakeVscode(overrides = {}) {
     errors,
     warnings,
     workspaceFolderListeners,
+  };
+}
+
+function createDocument(text, languageId, fsPath) {
+  const lines = text.split(/\r?\n/);
+  return {
+    languageId,
+    lineCount: lines.length,
+    uri: { fsPath },
+    getText() {
+      return text;
+    },
+    lineAt(line) {
+      return { text: lines[line] || "" };
+    },
   };
 }
 
@@ -223,7 +239,23 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     }),
     "/workspace/gauge/build.gradle.kts": "",
   });
-  const { vscode } = createFakeVscode();
+  const conceptDocument = createDocument([
+    "# Shared login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const { vscode } = createFakeVscode({
+    textDocuments: [conceptDocument, kotlinDocument],
+  });
   const cli = new CLI(new Command("gauge"), {
     version: "1.2.3",
     plugins: [{ name: "kotlin", version: "0.9.0" }],
@@ -265,6 +297,19 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     () => Promise.reject(nestedExternalError),
   );
   assert.deepEqual(suppressedNested, []);
+
+  const localDefinitions = await middleware.provideDefinition(
+    conceptDocument,
+    { line: 1, character: 5 },
+    {},
+    () => Promise.reject(externalError),
+  );
+  assert.equal(localDefinitions.length, 1);
+  assert.equal(localDefinitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...localDefinitions[0].range.start },
+    { line: 6, character: 2 },
+  );
 
   await assert.rejects(
     () => middleware.provideDefinition({}, {}, {}, () => Promise.reject(new Error("definition failed"))),

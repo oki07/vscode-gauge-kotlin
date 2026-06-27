@@ -8,6 +8,7 @@ const { GaugeClients } = require("./gaugeClients");
 const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
 const { MavenProject } = require("./project/mavenProject");
 const { createProjectFactory } = require("./project/projectFactory");
+const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
 const GAUGE_LAUNCH_CONFIG = "gauge.launch";
@@ -98,14 +99,22 @@ function errorMessages(error, seen = new Set()) {
   return messages;
 }
 
-function clientMiddleware() {
+function clientMiddleware(options = {}) {
+  const localDefinitionProvider = options.stepDefinitionProvider || new GaugeStepDefinitionProvider({
+    projectFactory: options.projectFactory,
+    vscode: options.vscode,
+  });
   return {
     async provideDefinition(document, position, token, next) {
       try {
         return await next(document, position, token);
       } catch (error) {
         if (isExternalImplementationSourceError(error)) {
-          return [];
+          try {
+            return await localDefinitionProvider.provideDefinition(document, position, token);
+          } catch (_fallbackError) {
+            return [];
+          }
         }
         throw error;
       }
@@ -381,7 +390,10 @@ class GaugeWorkspace {
       diagnosticCollectionName: "gauge",
       outputChannel: this.outputChannel,
       revealOutputChannelOn: this.revealOutputChannelOnNever,
-      middleware: clientMiddleware(),
+      middleware: clientMiddleware({
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      }),
       synchronize: {
         configurationSection: "gauge",
       },
