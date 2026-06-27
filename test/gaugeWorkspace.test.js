@@ -22,6 +22,7 @@ function createFakeVscode(overrides = {}) {
   const configurationChangeListeners = [];
   const contexts = [];
   const errors = [];
+  const infos = [];
   const outputChannels = [];
   const quickPicks = [];
   const warnings = [];
@@ -76,6 +77,10 @@ function createFakeVscode(overrides = {}) {
           errors.push({ message, reason });
           return Promise.resolve(undefined);
         },
+        showInformationMessage(message, ...actions) {
+          infos.push({ message, actions });
+          return Promise.resolve(undefined);
+        },
       },
       workspace: {
         textDocuments: overrides.textDocuments || [],
@@ -109,6 +114,7 @@ function createFakeVscode(overrides = {}) {
     configurations,
     outputChannels,
     errors,
+    infos,
     warnings,
     workspaceFolderListeners,
   };
@@ -138,11 +144,18 @@ class FakeLanguageClient {
     this.started = false;
     this.stopped = false;
     this.features = [];
+    this.notificationHandlers = new Map();
   }
 
   start() {
     this.started = true;
     return Promise.resolve();
+  }
+
+  onNotification(type, handler) {
+    const method = typeof type === "string" ? type : type.method;
+    this.notificationHandlers.set(method, handler);
+    return { dispose() {} };
   }
 
   stop() {
@@ -315,6 +328,59 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     () => middleware.provideDefinition({}, {}, {}, () => Promise.reject(new Error("definition failed"))),
     /definition failed/,
   );
+});
+
+test("GaugeWorkspace suppresses the external implementation source popup from Gauge LSP", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode, errors, warnings, infos } = createFakeVscode({});
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  }, new Command("mvn"), new Command("gradle"));
+
+  const workspace = new GaugeWorkspace({
+    cli,
+    clientsMap: clients,
+    fileSystem,
+    execSync() {
+      return Buffer.from("");
+    },
+    LanguageClient: FakeLanguageClient,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+  const handler = entry.client.notificationHandlers.get("window/showMessage");
+  assert.equal(typeof handler, "function");
+
+  handler({
+    type: 1,
+    message: "implementation source not found: Step implementation referred from an external project or library",
+  });
+  assert.deepEqual(errors, []);
+
+  handler({ type: 1, message: "Gauge runner crashed" });
+  assert.deepEqual(errors.map((entry) => entry.message), ["Gauge runner crashed"]);
+
+  handler({ type: 2, message: "deprecated plugin" });
+  assert.deepEqual(warnings.map((entry) => entry.message), ["deprecated plugin"]);
+
+  handler({ type: 3, message: "runner ready" });
+  assert.deepEqual(infos.map((entry) => entry.message), ["runner ready"]);
 });
 
 test("GaugeWorkspace shares one output channel across workspace project clients", async () => {

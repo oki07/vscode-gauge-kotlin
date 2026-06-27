@@ -33,6 +33,8 @@ function getLanguageClientModule(options) {
     return {
       LanguageClient: options.LanguageClient,
       RevealOutputChannelOn: options.RevealOutputChannelOn,
+      ShowMessageNotification: options.ShowMessageNotification,
+      MessageType: options.MessageType,
     };
   }
   return require("vscode-languageclient/node");
@@ -145,6 +147,8 @@ class GaugeWorkspace {
     this.revealOutputChannelOnNever = languageClientModule.RevealOutputChannelOn
       ? languageClientModule.RevealOutputChannelOn.Never
       : "never";
+    this.ShowMessageNotification = languageClientModule.ShowMessageNotification;
+    this.MessageType = languageClientModule.MessageType;
     this.projectFactory = options.projectFactory || createProjectFactory({
       execSync: options.execSync,
       fileSystem: options.fileSystem,
@@ -421,8 +425,45 @@ class GaugeWorkspace {
     this.clientsMap.set(project.root(), { project, client: languageClient });
     this.registerDynamicFeatures(languageClient);
     await languageClient.start();
+    this.registerServerMessageFilter(languageClient);
     await this.setLanguageId(languageClient, project.root());
     return languageClient;
+  }
+
+  registerServerMessageFilter(languageClient) {
+    if (typeof languageClient.onNotification !== "function" || !this.ShowMessageNotification) {
+      return;
+    }
+    languageClient.onNotification(this.ShowMessageNotification.type, (params) => {
+      // The Gauge runner statically scans only Java sources, so every Kotlin
+      // @Step is reported as external and the Gauge LSP raises this error for
+      // valid step-to-implementation navigation, including from .cpt concept
+      // steps. The local Kotlin definition provider resolves those steps, so
+      // suppress only this misleading server popup and forward everything else.
+      if (isExternalImplementationSourceError(params)) {
+        return;
+      }
+      this.showServerMessage(params);
+    });
+  }
+
+  showServerMessage(params) {
+    if (!params || typeof params.message !== "string") {
+      return;
+    }
+    const window = this.vscode.window || {};
+    const messageType = this.MessageType || {};
+    if (params.type === messageType.Error && typeof window.showErrorMessage === "function") {
+      window.showErrorMessage(params.message);
+      return;
+    }
+    if (params.type === messageType.Warning && typeof window.showWarningMessage === "function") {
+      window.showWarningMessage(params.message);
+      return;
+    }
+    if (typeof window.showInformationMessage === "function") {
+      window.showInformationMessage(params.message);
+    }
   }
 
   registerDynamicFeatures(languageClient) {
