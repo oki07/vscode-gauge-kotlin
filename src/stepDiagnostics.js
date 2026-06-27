@@ -5409,6 +5409,14 @@ function mismatchMessage(actual, expected, alias) {
   return `${PARAMETER_MISMATCH_PREFIX}(found [${actual}] expected [${expected}]) with step annotation : "${alias}". `;
 }
 
+function documentPath(document) {
+  return document && document.uri && document.uri.fsPath;
+}
+
+function uriPath(uri) {
+  return uri && uri.fsPath;
+}
+
 class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -5440,7 +5448,7 @@ class GaugeStepDiagnosticsProvider {
     );
   }
 
-  collectWorkspaceConstants(document) {
+  collectWorkspaceConstants(document, workspaceDocuments) {
     const workspace = this.vscode.workspace || {};
     const constants = new Map();
     const constantTypes = new Map();
@@ -5451,17 +5459,19 @@ class GaugeStepDiagnosticsProvider {
     const stepAliasDocuments = [];
     const stepAliasDeclarationNames = new Set();
     const ambiguousWorkspaceStepAliases = new Set();
-    const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
-    const documentPath = document.uri && document.uri.fsPath;
+    const textDocuments = Array.isArray(workspaceDocuments)
+      ? workspaceDocuments
+      : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    const activeDocumentPath = documentPath(document);
     const activeText = document.getText();
     const activeIgnoredRanges = collectIgnoredKotlinRanges(activeText);
     const activePackageName = collectKotlinPackageName(activeText, activeIgnoredRanges);
     for (const candidate of textDocuments) {
-      const candidatePath = candidate && candidate.uri && candidate.uri.fsPath;
+      const candidatePath = documentPath(candidate);
       if (
         !candidate
         || candidate === document
-        || candidatePath === documentPath
+        || candidatePath === activeDocumentPath
         || candidate.languageId !== KOTLIN_LANGUAGE
         || typeof candidate.getText !== "function"
         || !this.isGaugeProjectDocument(candidate)
@@ -5572,7 +5582,7 @@ class GaugeStepDiagnosticsProvider {
     };
   }
 
-  provideDiagnostics(document) {
+  provideDiagnostics(document, workspaceDocuments) {
     if (!this.shouldDiagnose(document)) {
       return [];
     }
@@ -5590,7 +5600,7 @@ class GaugeStepDiagnosticsProvider {
       return diagnostics;
     }
 
-    const externalConstants = this.collectWorkspaceConstants(document);
+    const externalConstants = this.collectWorkspaceConstants(document, workspaceDocuments);
     for (const entry of findStepFunctions(text, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart);
@@ -5610,7 +5620,7 @@ class GaugeStepDiagnosticsProvider {
     return diagnostics;
   }
 
-  updateDocument(collection, document) {
+  updateDocument(collection, document, workspaceDocuments) {
     if (!document || !document.uri) {
       return;
     }
@@ -5620,14 +5630,89 @@ class GaugeStepDiagnosticsProvider {
       }
       return;
     }
-    collection.set(document.uri, this.provideDiagnostics(document));
+    collection.set(document.uri, this.provideDiagnostics(document, workspaceDocuments));
+  }
+
+  addWorkspaceDocument(documents, seenPaths, candidate) {
+    if (!candidate || typeof candidate.getText !== "function") {
+      return;
+    }
+    const file = documentPath(candidate);
+    if (file) {
+      if (seenPaths.has(file)) {
+        return;
+      }
+      seenPaths.add(file);
+    } else if (documents.includes(candidate)) {
+      return;
+    }
+    documents.push(candidate);
+  }
+
+  workspaceDocuments() {
+    const workspace = this.vscode.workspace || {};
+    const documents = [];
+    const seenPaths = new Set();
+    const openDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
+    for (const candidate of openDocuments) {
+      this.addWorkspaceDocument(documents, seenPaths, candidate);
+    }
+
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return documents;
+    }
+
+    return (async () => {
+      let uris;
+      try {
+        uris = await workspace.findFiles("**/*.kt");
+      } catch (_error) {
+        return documents;
+      }
+
+      for (const uri of uris || []) {
+        const file = uriPath(uri);
+        if (file && seenPaths.has(file)) {
+          continue;
+        }
+        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+          try {
+            this.projectFactory.getGaugeRootFromFilePath(file);
+          } catch (_error) {
+            continue;
+          }
+        }
+
+        try {
+          const document = await workspace.openTextDocument(uri);
+          if (document && document.languageId === KOTLIN_LANGUAGE) {
+            this.addWorkspaceDocument(documents, seenPaths, document);
+          }
+        } catch (_error) {
+          // Keep diagnostics available when one workspace URI is stale or unreadable.
+        }
+      }
+      return documents;
+    })();
+  }
+
+  refreshDocumentsWith(collection, workspaceDocuments) {
+    const workspace = this.vscode.workspace || {};
+    for (const document of workspace.textDocuments || []) {
+      this.updateDocument(collection, document, workspaceDocuments);
+    }
   }
 
   refreshDocuments(collection) {
-    const workspace = this.vscode.workspace || {};
-    for (const document of workspace.textDocuments || []) {
-      this.updateDocument(collection, document);
+    const workspaceDocuments = this.workspaceDocuments();
+    if (workspaceDocuments && typeof workspaceDocuments.then === "function") {
+      return workspaceDocuments.then((documents) => this.refreshDocumentsWith(collection, documents));
     }
+    this.refreshDocumentsWith(collection, workspaceDocuments);
+    return undefined;
   }
 
   register() {

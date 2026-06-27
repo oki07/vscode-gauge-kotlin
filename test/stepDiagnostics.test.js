@@ -4550,3 +4550,51 @@ test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection"
   assert.deepEqual(deletes, [document.uri]);
   assert.deepEqual(disposals, ["gauge-kotlin", "open", "change", "close"]);
 });
+
+test("GaugeStepDiagnosticsProvider resolves unopened workspace Kotlin constants during refresh", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const sets = [];
+  const stepDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const constantsDocument = createDocument([
+    "package steps",
+    "",
+    "const val LOGIN_STEP = \"Log in as <user>\"",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/StepText.kt");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [stepDocument],
+      async findFiles(pattern) {
+        assert.equal(pattern, "**/*.kt");
+        return [constantsDocument.uri];
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, constantsDocument.uri);
+        return constantsDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  await provider.refreshDocuments({
+    set(uri, diagnostics) {
+      sets.push({ uri, diagnostics });
+    },
+  });
+
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].uri, stepDocument.uri);
+  assert.deepEqual(
+    sets[0].diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Log in as <user>\". ",
+    ],
+  );
+});
