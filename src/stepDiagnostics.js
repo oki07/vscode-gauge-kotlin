@@ -3592,7 +3592,10 @@ function findNextFunction(text, startIndex, ignoredRanges = []) {
         return undefined;
       }
       if (isKotlinFunctionHeader(header)) {
+        const bodyStart = skipWhitespaceAndComments(text, closeParen + 1);
         return {
+          declarationEnd: bodyStart < text.length ? bodyStart : closeParen + 1,
+          declarationStart: match.index,
           parameterEnd: closeParen,
           parameterStart: openParen + 1,
           parameterText: text.slice(openParen + 1, closeParen),
@@ -3717,6 +3720,8 @@ function findNextPropertyAccessor(text, startIndex, parameterText, ignoredRanges
   }
   const nameStart = headerStart + nameOffset;
   return {
+    declarationEnd: headerEnd,
+    declarationStart: startIndex,
     parameterEnd: nameStart + propertyName.length,
     parameterStart: nameStart,
     parameterText,
@@ -3759,6 +3764,8 @@ function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredR
       && isBareAccessorBoundary(text, startIndex + accessor[0].length)
     ) {
       return {
+        declarationEnd: startIndex + accessor[0].length,
+        declarationStart: startIndex,
         parameterEnd: startIndex + accessor[0].length,
         parameterStart: startIndex,
         parameterText: options.implicitParameterText,
@@ -3771,6 +3778,8 @@ function findNextDirectPropertyAccessor(text, startIndex, accessorName, ignoredR
     return undefined;
   }
   return {
+    declarationEnd: closeParen + 1,
+    declarationStart: startIndex,
     parameterEnd: closeParen,
     parameterStart: openParen + 1,
     parameterText: text.slice(openParen + 1, closeParen),
@@ -5235,7 +5244,12 @@ function addStepFunctionEntry(
   );
   const method = findAttachedDeclaration(text, functionSearchStart(closeParen), ignoredRanges, annotationStart);
   if (aliases.length > 0 && method) {
-    entries.push({ aliases, ...method });
+    entries.push({
+      aliases,
+      annotationEnd: closeParen + 1,
+      annotationStart,
+      ...method,
+    });
   }
 }
 
@@ -5660,4 +5674,6 @@ module.exports = {
   GaugeStepDiagnosticsProvider,
   countKotlinParameters,
   countStepParameters,
+  findStepFunctions,
+  positionAt,
 };

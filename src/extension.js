@@ -29,6 +29,7 @@ const {
   GaugeSemanticTokensProvider,
   createLegend,
 } = require("./semanticTokensProvider");
+const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const {
   createConcept,
@@ -275,6 +276,25 @@ function registerStepDiagnosticsProvider(context, vscode, options) {
   }
 }
 
+function registerStepDefinitionProvider(context, vscode, options) {
+  const StepDefinitionProviderCtor = options.GaugeStepDefinitionProvider || GaugeStepDefinitionProvider;
+  const provider = new StepDefinitionProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = typeof provider.register === "function"
+    ? provider.register()
+    : (
+      vscode.languages
+      && typeof vscode.languages.registerDefinitionProvider === "function"
+        ? vscode.languages.registerDefinitionProvider({ language: "gauge" }, provider)
+        : undefined
+    );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerSemanticTokensProvider(context, vscode, options) {
   if (!vscode.languages || typeof vscode.languages.registerDocumentSemanticTokensProvider !== "function") {
     return;
@@ -418,6 +438,10 @@ function startGaugeServices(context, vscode, options = {}) {
   registerArgumentCodeActionProvider(context, vscode, options);
   registerDynamicArgumentCompletionProvider(context, vscode, options);
   registerFoldingRangeProvider(context, vscode, options);
+  registerStepDefinitionProvider(context, vscode, {
+    ...options,
+    projectFactory,
+  });
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
     projectFactory,
