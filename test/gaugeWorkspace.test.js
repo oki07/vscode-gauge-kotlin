@@ -243,18 +243,18 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     "# Shared login",
     "* Log in as \"alice\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
-  const kotlinDocument = createDocument([
-    "package steps",
+  const externalKotlinDocument = createDocument([
+    "package external.steps",
     "",
     "import com.thoughtworks.gauge.Step",
     "",
-    "class LoginSteps {",
+    "class ExternalLoginSteps {",
     "  @Step(\"Log in as <user>\")",
     "  fun login(user: String) {}",
     "}",
-  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  ].join("\n"), "kotlin", "/workspace/shared-steps/src/test/kotlin/ExternalLoginSteps.kt");
   const { vscode } = createFakeVscode({
-    textDocuments: [conceptDocument, kotlinDocument],
+    textDocuments: [conceptDocument, externalKotlinDocument],
   });
   const cli = new CLI(new Command("gauge"), {
     version: "1.2.3",
@@ -305,7 +305,7 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     () => Promise.reject(externalError),
   );
   assert.equal(localDefinitions.length, 1);
-  assert.equal(localDefinitions[0].uri, kotlinDocument.uri);
+  assert.equal(localDefinitions[0].uri, externalKotlinDocument.uri);
   assert.deepEqual(
     { ...localDefinitions[0].range.start },
     { line: 6, character: 2 },

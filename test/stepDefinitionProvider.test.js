@@ -142,6 +142,80 @@ test("GaugeStepDefinitionProvider resolves concept steps to Kotlin Step function
   );
 });
 
+test("GaugeStepDefinitionProvider falls back to external workspace Kotlin Step functions", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const conceptDocument = createDocument([
+    "# Shared login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
+  const externalKotlinDocument = createDocument([
+    "package external.steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class ExternalLoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/shared-steps/src/test/kotlin/ExternalLoginSteps.kt");
+  const vscode = createFakeVscode([conceptDocument, externalKotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(conceptDocument, { line: 1, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, externalKotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+});
+
+test("GaugeStepDefinitionProvider prefers Gauge project Kotlin Step functions over external fallback", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const conceptDocument = createDocument([
+    "# Shared login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
+  const projectKotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const externalKotlinDocument = createDocument([
+    "package external.steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class ExternalLoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/shared-steps/src/test/kotlin/ExternalLoginSteps.kt");
+  const vscode = createFakeVscode([conceptDocument, externalKotlinDocument, projectKotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(conceptDocument, { line: 1, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, projectKotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+});
+
 test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

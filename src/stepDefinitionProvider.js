@@ -204,15 +204,6 @@ class GaugeStepDefinitionProvider {
       return documents;
     }
     for (const uri of uris || []) {
-      const file = uriPath(uri);
-      if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-        try {
-          this.projectFactory.getGaugeRootFromFilePath(file);
-        } catch (_error) {
-          continue;
-        }
-      }
-
       try {
         const document = await workspace.openTextDocument(uri);
         documents.push(document);
@@ -223,9 +214,10 @@ class GaugeStepDefinitionProvider {
     return documents;
   }
 
-  async kotlinDocuments(sourceDocument) {
+  async kotlinDocumentGroups(sourceDocument) {
     const workspace = this.vscode.workspace || {};
-    const documents = [];
+    const projectDocuments = [];
+    const externalDocuments = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
       if (
@@ -233,7 +225,6 @@ class GaugeStepDefinitionProvider {
         || sameDocument(candidate, sourceDocument)
         || candidate.languageId !== KOTLIN_LANGUAGE
         || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
       ) {
         return;
       }
@@ -243,10 +234,14 @@ class GaugeStepDefinitionProvider {
           return;
         }
         seenPaths.add(file);
-      } else if (documents.includes(candidate)) {
+      } else if (projectDocuments.includes(candidate) || externalDocuments.includes(candidate)) {
         return;
       }
-      documents.push(candidate);
+      if (this.isGaugeProjectDocument(candidate)) {
+        projectDocuments.push(candidate);
+      } else {
+        externalDocuments.push(candidate);
+      }
     };
 
     for (const candidate of workspace.textDocuments || []) {
@@ -255,10 +250,10 @@ class GaugeStepDefinitionProvider {
     for (const candidate of await this.findWorkspaceKotlinDocuments()) {
       addDocument(candidate);
     }
-    return documents;
+    return { externalDocuments, projectDocuments };
   }
 
-  collectWorkspaceConstants(document, kotlinDocuments) {
+  collectWorkspaceConstants(document, kotlinDocuments, options = {}) {
     const workspace = this.vscode.workspace || {};
     const diagnosticVscode = {
       ...this.vscode,
@@ -268,23 +263,17 @@ class GaugeStepDefinitionProvider {
       },
     };
     const diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      projectFactory: this.projectFactory,
+      projectFactory: options.includeExternalWorkspace ? undefined : this.projectFactory,
       vscode: diagnosticVscode,
     });
     return diagnosticsProvider.collectWorkspaceConstants(document);
   }
 
-  async provideDefinition(document, position) {
-    const wantedStep = stepTextAt(document, position);
-    if (!wantedStep || !this.isGaugeProjectDocument(document)) {
-      return [];
-    }
-
+  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}) {
     const definitions = [];
-    const kotlinDocuments = await this.kotlinDocuments(document);
-    for (const candidate of kotlinDocuments) {
+    for (const candidate of documents) {
       const text = candidate.getText();
-      const externalConstants = this.collectWorkspaceConstants(candidate, kotlinDocuments);
+      const externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
       for (const entry of findStepFunctions(text, externalConstants)) {
         if (!entry.aliases.some((alias) => normalizeStepTemplate(alias) === wantedStep)) {
           continue;
@@ -297,6 +286,32 @@ class GaugeStepDefinitionProvider {
       }
     }
     return definitions;
+  }
+
+  async provideDefinition(document, position) {
+    const wantedStep = stepTextAt(document, position);
+    if (!wantedStep || !this.isGaugeProjectDocument(document)) {
+      return [];
+    }
+
+    const {
+      externalDocuments,
+      projectDocuments,
+    } = await this.kotlinDocumentGroups(document);
+    const projectDefinitions = this.definitionsForDocuments(
+      wantedStep,
+      projectDocuments,
+      projectDocuments,
+    );
+    if (projectDefinitions.length > 0) {
+      return projectDefinitions;
+    }
+    return this.definitionsForDocuments(
+      wantedStep,
+      externalDocuments,
+      [...projectDocuments, ...externalDocuments],
+      { includeExternalWorkspace: true },
+    );
   }
 
   register() {
