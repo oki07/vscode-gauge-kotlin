@@ -4808,7 +4808,7 @@ function recordStepAnnotationTypeAlias(named, ambiguousNamed, exposedName, targe
   named.set(exposedName, targetName);
 }
 
-function stepAnnotationImports(text, ignoredRanges = []) {
+function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = new Map()) {
   const ambiguousNamed = new Set();
   const named = new Map();
   const wildcards = new Set();
@@ -4836,6 +4836,13 @@ function stepAnnotationImports(text, ignoredRanges = []) {
       const exposedName = alias || importedParts[importedParts.length - 1];
       if (importedParts[importedParts.length - 1] === "Step") {
         recordNamedStepAnnotationImport(named, ambiguousNamed, exposedName, importedName);
+      } else if (externalStepAliases.has(importedName)) {
+        recordNamedStepAnnotationImport(
+          named,
+          ambiguousNamed,
+          exposedName,
+          externalStepAliases.get(importedName),
+        );
       }
       lineIndex = importStatement.endIndex;
       continue;
@@ -4854,6 +4861,59 @@ function stepAnnotationImports(text, ignoredRanges = []) {
     }
   }
   return { ambiguousNamed, named, wildcards };
+}
+
+function collectKotlinStepTypeAliasDeclarations(text, ignoredRanges = []) {
+  const aliases = new Map();
+  const typeAliasPattern = new RegExp(
+    `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+  );
+  const lines = kotlinSourceLines(text, ignoredRanges);
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
+    const match = typeAliasPattern.exec(normalizeKotlinTypeAliasStatementForMatch(statement.statement));
+    if (match) {
+      aliases.set(
+        normalizeKotlinIdentifier(match[1]),
+        normalizeKotlinIdentifierPath(match[2]),
+      );
+      lineIndex = statement.endIndex;
+    }
+  }
+  return aliases;
+}
+
+function resolvePackageQualifiedStepTypeAliasTarget(aliasName, stepImports) {
+  const resolvedName = resolveStepAnnotationTarget(aliasName, stepImports.named);
+  if (resolvedName === aliasName) {
+    return undefined;
+  }
+  if (resolvedName.includes(".")) {
+    return resolvedName;
+  }
+  if (resolvedName === "Step" && stepImports.wildcards.size === 1) {
+    return `${[...stepImports.wildcards][0]}.Step`;
+  }
+  return undefined;
+}
+
+function collectPackageQualifiedStepTypeAliases(text, packageName, ignoredRanges = []) {
+  const aliases = new Map();
+  const stepImports = stepAnnotationImports(text, ignoredRanges);
+  const declarations = collectKotlinStepTypeAliasDeclarations(text, ignoredRanges);
+  const packagePrefix = `${packageName}.`;
+
+  for (const aliasName of declarations.keys()) {
+    if (stepImports.ambiguousNamed.has(aliasName)) {
+      continue;
+    }
+    const targetName = resolvePackageQualifiedStepTypeAliasTarget(aliasName, stepImports);
+    if (targetName !== undefined) {
+      aliases.set(`${packagePrefix}${aliasName}`, targetName);
+    }
+  }
+  return aliases;
 }
 
 function isTopLevelOffset(text, offset) {
@@ -5165,7 +5225,11 @@ function findStepFunctions(text, externalConstants) {
   const annotationPattern = /@/g;
   const { constants, constantTypes, constantVisibility } = collectStringConstants(text, externalConstants);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
-  const stepImports = stepAnnotationImports(text, ignoredRanges);
+  const stepImports = stepAnnotationImports(
+    text,
+    ignoredRanges,
+    externalConstants && externalConstants.stepAliases,
+  );
   const functionBodyRanges = [
     ...collectFunctionBodyRanges(text, ignoredRanges),
     ...collectInitBlockBodyRanges(text, ignoredRanges),
@@ -5263,6 +5327,7 @@ class GaugeStepDiagnosticsProvider {
     const workspace = this.vscode.workspace || {};
     const constants = new Map();
     const constantTypes = new Map();
+    const stepAliases = new Map();
     const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
     const documentPath = document.uri && document.uri.fsPath;
     for (const candidate of textDocuments) {
@@ -5296,8 +5361,17 @@ class GaugeStepDiagnosticsProvider {
           constantTypes.set(name, collected.constantTypes.get(name));
         }
       }
+      for (const [name, targetName] of collectPackageQualifiedStepTypeAliases(
+        text,
+        packageName,
+        ignoredRanges,
+      )) {
+        if (!stepAliases.has(name)) {
+          stepAliases.set(name, targetName);
+        }
+      }
     }
-    return { constants, constantTypes };
+    return { constants, constantTypes, stepAliases };
   }
 
   provideDiagnostics(document) {
