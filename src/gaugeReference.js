@@ -153,6 +153,10 @@ function gaugeStepText(line) {
   return stepText || undefined;
 }
 
+function isInlineTableLine(line) {
+  return line.trimStart().startsWith("|");
+}
+
 function localGaugeStepReferences(document, targetTemplate) {
   const uri = documentUri(document);
   if (!uri || typeof document.getText !== "function") {
@@ -162,7 +166,10 @@ function localGaugeStepReferences(document, targetTemplate) {
   const locations = [];
   const lines = document.getText().split(/\r?\n/);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const stepText = gaugeStepText(lines[lineIndex]);
+    let stepText = gaugeStepText(lines[lineIndex]);
+    if (stepText && lines[lineIndex + 1] && isInlineTableLine(lines[lineIndex + 1])) {
+      stepText = `${stepText} <table>`;
+    }
     if (!stepText || normalizeStepTemplate(stepText) !== targetTemplate) {
       continue;
     }
