@@ -1193,6 +1193,28 @@ test("GaugeStepDiagnosticsProvider ignores ambiguous Step wildcard imports", () 
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores ambiguous named Step imports", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const ambiguousDocument = createDocument([
+    "import io.cucumber.java.en.Step",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Ambiguous <value>\")",
+    "fun ambiguous() {}",
+  ].join("\n"));
+  const ambiguousAliasDocument = createDocument([
+    "import io.cucumber.java.en.Step as GaugeStep",
+    "import com.thoughtworks.gauge.Step as GaugeStep",
+    "",
+    "@GaugeStep(\"Ambiguous alias <value>\")",
+    "fun ambiguousAlias() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(ambiguousDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(ambiguousAliasDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider resolves Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

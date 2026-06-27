@@ -4788,7 +4788,28 @@ function readKotlinTypeAliasStatement(lines, startIndex, typeAliasPattern) {
   return { endIndex: lines.length - 1, statement };
 }
 
+function recordNamedStepAnnotationImport(named, ambiguousNamed, exposedName, importedName) {
+  if (ambiguousNamed.has(exposedName)) {
+    return;
+  }
+  if (!named.has(exposedName)) {
+    named.set(exposedName, importedName);
+    return;
+  }
+  if (named.get(exposedName) === importedName) {
+    return;
+  }
+  named.delete(exposedName);
+  ambiguousNamed.add(exposedName);
+}
+
+function recordStepAnnotationTypeAlias(named, ambiguousNamed, exposedName, targetName) {
+  ambiguousNamed.delete(exposedName);
+  named.set(exposedName, targetName);
+}
+
 function stepAnnotationImports(text, ignoredRanges = []) {
+  const ambiguousNamed = new Set();
   const named = new Map();
   const wildcards = new Set();
   const importPattern = new RegExp(
@@ -4814,7 +4835,7 @@ function stepAnnotationImports(text, ignoredRanges = []) {
       const importedParts = importedName.split(".");
       const exposedName = alias || importedParts[importedParts.length - 1];
       if (importedParts[importedParts.length - 1] === "Step") {
-        named.set(exposedName, importedName);
+        recordNamedStepAnnotationImport(named, ambiguousNamed, exposedName, importedName);
       }
       lineIndex = importStatement.endIndex;
       continue;
@@ -4823,11 +4844,16 @@ function stepAnnotationImports(text, ignoredRanges = []) {
     const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
     match = typeAliasPattern.exec(normalizeKotlinTypeAliasStatementForMatch(statement.statement));
     if (match) {
-      named.set(normalizeKotlinIdentifier(match[1]), normalizeKotlinIdentifierPath(match[2]));
+      recordStepAnnotationTypeAlias(
+        named,
+        ambiguousNamed,
+        normalizeKotlinIdentifier(match[1]),
+        normalizeKotlinIdentifierPath(match[2]),
+      );
       lineIndex = statement.endIndex;
     }
   }
-  return { named, wildcards };
+  return { ambiguousNamed, named, wildcards };
 }
 
 function isTopLevelOffset(text, offset) {
@@ -4989,6 +5015,9 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
     return false;
   }
   if (localClassifierNames.has(normalizedName)) {
+    return false;
+  }
+  if (stepImports.ambiguousNamed && stepImports.ambiguousNamed.has(normalizedName)) {
     return false;
   }
   if (stepImports.named.has(normalizedName)) {
