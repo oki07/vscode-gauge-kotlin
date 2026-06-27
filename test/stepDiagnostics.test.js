@@ -1653,6 +1653,48 @@ test("GaugeStepDiagnosticsProvider lets local classifiers shadow Step typealias 
   assert.deepEqual(provider.provideDiagnostics(explicitImportDocument), []);
 });
 
+test("GaugeStepDiagnosticsProvider lets same-package workspace classifiers shadow Step typealias targets", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const classifierDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "annotation class Step(val value: String)",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Annotations.kt");
+  const stepDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "import com.thoughtworks.gauge.*",
+    "",
+    "typealias GaugeStep = Step",
+    "",
+    "@GaugeStep(\"Same package alias target <value>\")",
+    "fun local() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Steps.kt");
+  const aliasDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "import com.thoughtworks.gauge.*",
+    "",
+    "typealias ImportedGaugeStep = Step",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Aliases.kt");
+  const importedStepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import fixtures.steps.ImportedGaugeStep",
+    "",
+    "@ImportedGaugeStep(\"Imported alias target <value>\")",
+    "fun local() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [classifierDocument, stepDocument, aliasDocument, importedStepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  assert.deepEqual(provider.provideDiagnostics(stepDocument), []);
+  assert.deepEqual(provider.provideDiagnostics(importedStepDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider resolves backtick Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

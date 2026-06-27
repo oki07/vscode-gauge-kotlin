@@ -5002,12 +5002,22 @@ function collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ign
 }
 
 function resolvePackageQualifiedStepTypeAliasTarget(aliasName, stepImports) {
-  const resolvedName = resolveStepAnnotationTarget(aliasName, stepImports.named);
+  const resolvedName = resolveStepAnnotationTarget(
+    aliasName,
+    stepImports.named,
+    stepImports.samePackageClassifiers,
+  );
   if (resolvedName === aliasName) {
     return undefined;
   }
   if (resolvedName.includes(".")) {
     return resolvedName;
+  }
+  if (
+    stepImports.samePackageClassifiers
+    && stepImports.samePackageClassifiers.has(resolvedName)
+  ) {
+    return undefined;
   }
   if (resolvedName === "Step" && stepImports.wildcards.size === 1) {
     return `${[...stepImports.wildcards][0]}.Step`;
@@ -5020,9 +5030,15 @@ function collectPackageQualifiedStepTypeAliases(
   packageName,
   ignoredRanges = [],
   externalStepAliases = new Map(),
+  samePackageClassifiers = new Set(),
 ) {
   const aliases = new Map();
-  const stepImports = stepAnnotationImports(text, ignoredRanges, externalStepAliases);
+  const stepImports = stepAnnotationImports(
+    text,
+    ignoredRanges,
+    externalStepAliases,
+    samePackageClassifiers,
+  );
   const declarations = collectKotlinStepTypeAliasDeclarations(text, ignoredRanges);
   const packagePrefix = `${packageName}.`;
 
@@ -5036,6 +5052,16 @@ function collectPackageQualifiedStepTypeAliases(
     }
   }
   return aliases;
+}
+
+function stepAnnotationClassifierNames(stepImports, localClassifierNames = new Set()) {
+  const names = new Set(localClassifierNames);
+  if (stepImports.samePackageClassifiers) {
+    for (const name of stepImports.samePackageClassifiers) {
+      names.add(name);
+    }
+  }
+  return names;
 }
 
 function isTopLevelOffset(text, offset) {
@@ -5196,15 +5222,16 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
   if (normalizedName.includes(".")) {
     return false;
   }
-  if (localClassifierNames.has(normalizedName)) {
+  const classifierNames = stepAnnotationClassifierNames(stepImports, localClassifierNames);
+  if (classifierNames.has(normalizedName)) {
     return false;
   }
   if (stepImports.ambiguousNamed && stepImports.ambiguousNamed.has(normalizedName)) {
     return false;
   }
   if (stepImports.named.has(normalizedName)) {
-    const resolvedName = resolveStepAnnotationTarget(normalizedName, stepImports.named, localClassifierNames);
-    if (!resolvedName.includes(".") && localClassifierNames.has(resolvedName)) {
+    const resolvedName = resolveStepAnnotationTarget(normalizedName, stepImports.named, classifierNames);
+    if (!resolvedName.includes(".") && classifierNames.has(resolvedName)) {
       return false;
     }
     return resolvedName === GAUGE_STEP_ANNOTATION
@@ -5213,9 +5240,6 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
         && stepImports.wildcards.size === 1
         && stepImports.wildcards.has(GAUGE_STEP_PACKAGE)
       );
-  }
-  if (stepImports.samePackageClassifiers && stepImports.samePackageClassifiers.has(normalizedName)) {
-    return false;
   }
   if (normalizedName === "Step" && stepImports.wildcards.size > 0) {
     return stepImports.wildcards.size === 1 && stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
@@ -5474,6 +5498,7 @@ class GaugeStepDiagnosticsProvider {
     const stepAliasDocuments = [];
     const stepAliasDeclarationNames = new Set();
     const ambiguousWorkspaceStepAliases = new Set();
+    const packageClassifiers = new Map();
     const textDocuments = Array.isArray(workspaceDocuments)
       ? workspaceDocuments
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
@@ -5481,6 +5506,21 @@ class GaugeStepDiagnosticsProvider {
     const activeText = document.getText();
     const activeIgnoredRanges = collectIgnoredKotlinRanges(activeText);
     const activePackageName = collectKotlinPackageName(activeText, activeIgnoredRanges);
+    const addPackageClassifiers = (packageName, names) => {
+      if (packageName === undefined || names.size === 0) {
+        return;
+      }
+      if (!packageClassifiers.has(packageName)) {
+        packageClassifiers.set(packageName, new Set());
+      }
+      const target = packageClassifiers.get(packageName);
+      for (const name of names) {
+        target.add(name);
+      }
+    };
+    if (activePackageName !== undefined) {
+      addPackageClassifiers(activePackageName, localClassifierNames(activeText, activeIgnoredRanges));
+    }
     for (const candidate of textDocuments) {
       const candidatePath = documentPath(candidate);
       if (
@@ -5501,8 +5541,10 @@ class GaugeStepDiagnosticsProvider {
         continue;
       }
 
+      const candidateClassifiers = localClassifierNames(text, ignoredRanges);
+      addPackageClassifiers(packageName, candidateClassifiers);
       if (activePackageName === packageName) {
-        for (const name of localClassifierNames(text, ignoredRanges)) {
+        for (const name of candidateClassifiers) {
           samePackageClassifiers.add(name);
         }
       }
@@ -5562,6 +5604,7 @@ class GaugeStepDiagnosticsProvider {
           source.packageName,
           source.ignoredRanges,
           stepAliases,
+          packageClassifiers.get(source.packageName),
         );
         for (const [name, targetName] of collected) {
           if (ambiguousWorkspaceStepAliases.has(name)) {
