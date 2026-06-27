@@ -1042,3 +1042,60 @@ test("debug node executes with JVM debug env and starts debugger on runner readi
     ["start"],
   ]);
 });
+
+test("debug node cancels Gauge execution when the debug session terminates", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const cancelCalls = [];
+  let finish;
+  let stopCallback;
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    debuggerFactory() {
+      return {
+        async addDebugEnv(env) {
+          return {
+            ...env,
+            DEBUGGING: true,
+            DEBUG_PORT: 5005,
+            GAUGE_DEBUG_OPTS: 5005,
+          };
+        },
+        registerStopDebugger(callback) {
+          stopCallback = callback;
+        },
+        stopDebugger() {},
+      };
+    },
+    runner() {
+      const run = new Promise((resolve) => {
+        finish = resolve;
+      });
+      run.cancel = (aborted) => {
+        cancelCalls.push(aborted);
+        finish(false);
+      };
+      return run;
+    },
+  });
+
+  const run = controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(typeof stopCallback, "function");
+  stopCallback({ name: "Gauge Debugger" });
+
+  assert.equal(await run, false);
+  assert.deepEqual(cancelCalls, [false]);
+});

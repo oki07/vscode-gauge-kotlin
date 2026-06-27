@@ -395,6 +395,11 @@ function createGaugeExecutionController(options = {}) {
         baseEnv: options.env || process.env,
         debugPortProvider: options.debugPortProvider,
       });
+      if (typeof activeDebugger.registerStopDebugger === "function") {
+        activeDebugger.registerStopDebugger(() => {
+          stopExecution(false);
+        });
+      }
       command.env = await activeDebugger.addDebugEnv(options.env || process.env);
     }
 

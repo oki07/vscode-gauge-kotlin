@@ -153,3 +153,36 @@ test("GaugeDebugger resolves the configured debug port to an available port", as
   assert.equal(env.GAUGE_DEBUG_OPTS, 6010);
   assert.equal(debuggerSession.getDebuggerConfiguration().port, 6010);
 });
+
+test("GaugeDebugger registers debug session termination callbacks", () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const callbacks = [];
+  const calls = [];
+  const vscode = {
+    debug: {
+      onDidTerminateDebugSession(callback) {
+        callbacks.push(callback);
+        return {
+          dispose() {
+            calls.push(["dispose"]);
+          },
+        };
+      },
+    },
+  };
+
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+  });
+  debuggerSession.registerStopDebugger((session) => {
+    calls.push(["terminated", session.name]);
+  });
+
+  callbacks[0]({ name: "Gauge Debugger" });
+
+  assert.deepEqual(calls, [
+    ["terminated", "Gauge Debugger"],
+  ]);
+});

@@ -99,6 +99,16 @@ function createGaugeDebugger(options = {}) {
     return vscode.debug.startDebugging(folder, getDebuggerConfiguration());
   }
 
+  function registerStopDebugger(callback) {
+    vscode = vscode || require("vscode");
+    if (!vscode.debug || typeof vscode.debug.onDidTerminateDebugSession !== "function") {
+      return undefined;
+    }
+    return vscode.debug.onDidTerminateDebugSession((session) => {
+      callback(session);
+    });
+  }
+
   function stopDebugger() {
     if (vscode && vscode.debug && vscode.debug.activeDebugSession) {
       return vscode.debug.activeDebugSession.customRequest("disconnect");
@@ -110,6 +120,7 @@ function createGaugeDebugger(options = {}) {
     addDebugEnv,
     addProcessId,
     getDebuggerConfiguration,
+    registerStopDebugger,
     startDebugger,
     stopDebugger,
   };
