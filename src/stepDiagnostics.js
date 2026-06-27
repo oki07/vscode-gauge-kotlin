@@ -5454,7 +5454,7 @@ class GaugeStepDiagnosticsProvider {
         }
         if (activePackageName === packageName) {
           const exposedName = name.slice(packagePrefix.length);
-          if (!exposedName.includes(".") && !samePackageConstants.has(exposedName)) {
+          if (!samePackageConstants.has(exposedName)) {
             samePackageConstants.set(exposedName, value);
             if (collected.constantTypes.has(name)) {
               samePackageConstantTypes.set(exposedName, collected.constantTypes.get(name));
