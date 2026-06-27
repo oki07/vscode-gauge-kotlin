@@ -2748,12 +2748,12 @@ function collectKotlinWildcardConstantImportCandidates(
 }
 
 function findUnambiguousKotlinWildcardConstantImport(constants, constantTypes, candidateNames) {
-  const candidateValues = new Set(candidateNames.map((candidateName) => constants.get(candidateName)));
-  if (candidateValues.size !== 1) {
+  const uniqueCandidateNames = [...new Set(candidateNames)];
+  if (uniqueCandidateNames.length !== 1) {
     return undefined;
   }
 
-  return candidateNames.find((candidateName) => constantTypes.has(candidateName)) || candidateNames[0];
+  return uniqueCandidateNames[0];
 }
 
 function removeKotlinWildcardConstantImport(
