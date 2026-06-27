@@ -3,11 +3,11 @@
 const {
   GaugeStepDiagnosticsProvider,
   findStepFunctions,
+  isKotlinDocument,
   positionAt,
 } = require("./stepDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
-const KOTLIN_LANGUAGE = "kotlin";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -223,7 +223,7 @@ class GaugeStepDefinitionProvider {
       if (
         !candidate
         || sameDocument(candidate, sourceDocument)
-        || candidate.languageId !== KOTLIN_LANGUAGE
+        || !isKotlinDocument(candidate)
         || typeof candidate.getText !== "function"
       ) {
         return;

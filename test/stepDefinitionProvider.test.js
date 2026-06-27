@@ -142,6 +142,50 @@ test("GaugeStepDefinitionProvider resolves concept steps to Kotlin Step function
   );
 });
 
+test("GaugeStepDefinitionProvider resolves concept steps when Kotlin files open as plaintext", async () => {
+  // VS Code ships no Kotlin language. Without a separate Kotlin extension the
+  // workspace .kt files open with languageId "plaintext", which previously hid
+  // every step implementation from navigation. The provider discovers the files
+  // via a `**/*.kt` search, so it must key off the extension, not languageId.
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const conceptDocument = createDocument([
+    "# Shared login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([conceptDocument], {
+    findFiles: async () => [kotlinDocument.uri],
+    openTextDocument: async (uri) => {
+      if (uri === kotlinDocument.uri) {
+        return kotlinDocument;
+      }
+      throw new Error(`unexpected uri ${uri && uri.fsPath}`);
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(conceptDocument, { line: 1, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+});
+
 test("GaugeStepDefinitionProvider falls back to external workspace Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([

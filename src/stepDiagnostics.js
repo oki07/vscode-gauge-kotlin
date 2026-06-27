@@ -5455,6 +5455,25 @@ function uriPath(uri) {
   return uri && uri.fsPath;
 }
 
+const KOTLIN_FILE_PATTERN = /\.kts?$/i;
+
+// Identify Kotlin sources by file extension rather than relying on the editor
+// languageId. VS Code ships no built-in Kotlin language, so without a separate
+// Kotlin extension installed `.kt` files open as "plaintext"; keying off
+// languageId would then hide every step implementation from navigation and
+// diagnostics. The provider already discovers these files via a `**/*.kt`
+// search, so the extension is an authoritative signal.
+function isKotlinDocument(candidate) {
+  if (!candidate) {
+    return false;
+  }
+  if (candidate.languageId === KOTLIN_LANGUAGE) {
+    return true;
+  }
+  const file = documentPath(candidate);
+  return typeof file === "string" && KOTLIN_FILE_PATTERN.test(file);
+}
+
 class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -5527,7 +5546,7 @@ class GaugeStepDiagnosticsProvider {
         !candidate
         || candidate === document
         || candidatePath === activeDocumentPath
-        || candidate.languageId !== KOTLIN_LANGUAGE
+        || !isKotlinDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.isGaugeProjectDocument(candidate)
       ) {
@@ -5825,5 +5844,6 @@ module.exports = {
   countKotlinParameters,
   countStepParameters,
   findStepFunctions,
+  isKotlinDocument,
   positionAt,
 };
