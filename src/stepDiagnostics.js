@@ -2523,6 +2523,26 @@ function ensureConstantGloballyVisible(visibility, name) {
   return true;
 }
 
+function removeConstantGlobalVisibility(visibility, name) {
+  if (name.includes(".")) {
+    return false;
+  }
+  const scopes = visibility.get(name);
+  if (scopes === undefined) {
+    return false;
+  }
+  const localScopes = scopes.filter((scope) => !scope.global);
+  if (localScopes.length === scopes.length) {
+    return false;
+  }
+  if (localScopes.length === 0) {
+    visibility.delete(name);
+  } else {
+    visibility.set(name, localScopes);
+  }
+  return true;
+}
+
 function hasGloballyVisibleConstant(visibility, name) {
   const scopes = visibility.get(name) || [];
   return scopes.some((scope) => scope.global);
@@ -2635,7 +2655,12 @@ function applyKotlinNamedConstantImport(
   return changed;
 }
 
-function collectKotlinWildcardConstantImportCandidates(constants, constantVisibility, constantImports) {
+function collectKotlinWildcardConstantImportCandidates(
+  constants,
+  constantVisibility,
+  constantImports,
+  wildcardImportState,
+) {
   const candidates = new Map();
   const constantNames = Array.from(constants.keys());
 
@@ -2654,7 +2679,10 @@ function collectKotlinWildcardConstantImportCandidates(constants, constantVisibi
       if (wildcardName.length === 0 || wildcardName.includes(".")) {
         continue;
       }
-      if (hasGloballyVisibleConstant(constantVisibility, wildcardName)) {
+      if (
+        !wildcardImportState.has(wildcardName)
+        && hasGloballyVisibleConstant(constantVisibility, wildcardName)
+      ) {
         continue;
       }
 
@@ -2676,12 +2704,57 @@ function findUnambiguousKotlinWildcardConstantImport(constants, constantTypes, c
   return candidateNames.find((candidateName) => constantTypes.has(candidateName)) || candidateNames[0];
 }
 
-function applyKotlinWildcardConstantImports(constants, constantTypes, constantVisibility, constantImports) {
+function removeKotlinWildcardConstantImport(
+  constants,
+  constantTypes,
+  constantVisibility,
+  wildcardImportState,
+  exposedName,
+) {
+  const previousImport = wildcardImportState.get(exposedName);
+  if (previousImport === undefined) {
+    return false;
+  }
+
+  let changed = false;
+  if (constants.get(exposedName) === previousImport.value) {
+    constants.delete(exposedName);
+    changed = true;
+  }
+  if (
+    previousImport.typeName !== undefined
+    && constantTypes.get(exposedName) === previousImport.typeName
+  ) {
+    constantTypes.delete(exposedName);
+    changed = true;
+  }
+  if (removeConstantGlobalVisibility(constantVisibility, exposedName)) {
+    changed = true;
+  }
+  wildcardImportState.delete(exposedName);
+  return changed;
+}
+
+function recordKotlinWildcardConstantImport(constants, constantTypes, wildcardImportState, exposedName) {
+  wildcardImportState.set(exposedName, {
+    typeName: constantTypes.get(exposedName),
+    value: constants.get(exposedName),
+  });
+}
+
+function applyKotlinWildcardConstantImports(
+  constants,
+  constantTypes,
+  constantVisibility,
+  constantImports,
+  wildcardImportState,
+) {
   let changed = false;
   const candidates = collectKotlinWildcardConstantImportCandidates(
     constants,
     constantVisibility,
     constantImports,
+    wildcardImportState,
   );
 
   for (const [wildcardName, candidateNames] of candidates) {
@@ -2691,29 +2764,61 @@ function applyKotlinWildcardConstantImports(constants, constantTypes, constantVi
       candidateNames,
     );
     if (importedName === undefined) {
+      if (removeKotlinWildcardConstantImport(
+        constants,
+        constantTypes,
+        constantVisibility,
+        wildcardImportState,
+        wildcardName,
+      )) {
+        changed = true;
+      }
       continue;
     }
-    if (applyKotlinNamedConstantImport(
+    const hadWildcardImport = wildcardImportState.has(wildcardName);
+    const appliedWildcardImport = applyKotlinNamedConstantImport(
       constants,
       constantTypes,
       constantVisibility,
       wildcardName,
       importedName,
-    )) {
+    );
+    if (appliedWildcardImport) {
       changed = true;
+    }
+    if (appliedWildcardImport || hadWildcardImport) {
+      recordKotlinWildcardConstantImport(constants, constantTypes, wildcardImportState, wildcardName);
     }
   }
 
   return changed;
 }
 
-function applyKotlinConstantImports(constants, constantTypes, constantVisibility, constantImports) {
+function applyKotlinConstantImports(
+  constants,
+  constantTypes,
+  constantVisibility,
+  constantImports,
+  wildcardImportState,
+) {
   let changed = false;
   for (const { exposedName, importedName, wildcardPrefix } of constantImports) {
     if (wildcardPrefix !== undefined) {
       continue;
     }
 
+    if (
+      constants.has(importedName)
+      && removeKotlinWildcardConstantImport(
+        constants,
+        constantTypes,
+        constantVisibility,
+        wildcardImportState,
+        exposedName,
+      )
+    ) {
+      changed = true;
+    }
     if (applyKotlinNamedConstantImport(
       constants,
       constantTypes,
@@ -2724,7 +2829,13 @@ function applyKotlinConstantImports(constants, constantTypes, constantVisibility
       changed = true;
     }
   }
-  if (applyKotlinWildcardConstantImports(constants, constantTypes, constantVisibility, constantImports)) {
+  if (applyKotlinWildcardConstantImports(
+    constants,
+    constantTypes,
+    constantVisibility,
+    constantImports,
+    wildcardImportState,
+  )) {
     changed = true;
   }
   return changed;
@@ -2806,6 +2917,7 @@ function collectStringConstants(text, externalConstants = {}) {
   const typeAliases = collectKotlinTypeAliases(text, ignoredRanges);
   const packageName = collectKotlinPackageName(text, ignoredRanges);
   const constantImports = collectKotlinConstantImports(text, ignoredRanges);
+  const wildcardImportState = new Map();
   const pattern = /\bconst\b/g;
   let match = pattern.exec(text);
   while (match) {
@@ -2873,6 +2985,7 @@ function collectStringConstants(text, externalConstants = {}) {
       constantTypes,
       constantVisibility,
       constantImports,
+      wildcardImportState,
     );
     for (const { expression, names, offset, typeName } of expressions) {
       if (names.every((name) => constants.has(name))) {

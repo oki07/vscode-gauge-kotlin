@@ -3627,6 +3627,43 @@ test("GaugeStepDiagnosticsProvider ignores ambiguous wildcard-imported Kotlin co
   );
 });
 
+test("GaugeStepDiagnosticsProvider rechecks delayed ambiguous wildcard-imported Kotlin const aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const firstConstantsDocument = createDocument([
+    "package fixtures.first",
+    "",
+    "object StepText {",
+    "  const val LOGIN_STEP = \"First <user> and <tenant>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/first/StepText.kt");
+  const stepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.first.StepText.*",
+    "import fixtures.impl.StepText.*",
+    "",
+    "object StepText {",
+    "  const val LOGIN_STEP = \"Local <user>\"",
+    "}",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [firstConstantsDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores unqualified object Kotlin const references outside scope", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
