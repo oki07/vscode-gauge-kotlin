@@ -305,6 +305,84 @@ test("GaugeStepDefinitionProvider uses package wildcard top-level Kotlin constan
   );
 });
 
+test("GaugeStepDefinitionProvider resolves grouped and accessor Kotlin Step annotations", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const cases = [
+    {
+      expectedStart: { line: 6, character: 2 },
+      kotlinLines: [
+        "package steps",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "class LoginSteps {",
+        "  @[Step(\"Grouped login as <user>\")]",
+        "  fun grouped(user: String) {}",
+        "}",
+      ],
+      step: "Grouped login as \"alice\"",
+    },
+    {
+      expectedStart: { line: 7, character: 4 },
+      kotlinLines: [
+        "package steps",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "class LoginSteps {",
+        "  val getterStep: String",
+        "    @[Step(\"Getter login as <user>\")]",
+        "    get() = \"\"",
+        "}",
+      ],
+      step: "Getter login as \"alice\"",
+    },
+    {
+      expectedStart: { line: 7, character: 4 },
+      kotlinLines: [
+        "package steps",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "class LoginSteps {",
+        "  var setterStep: String = \"\"",
+        "    @[Step(\"Setter login as <user>\")]",
+        "    set(value) { field = value }",
+        "}",
+      ],
+      step: "Setter login as \"alice\"",
+    },
+  ];
+
+  for (const entry of cases) {
+    const specDocument = createDocument([
+      "# Login specification",
+      "",
+      "## Successful login",
+      `* ${entry.step}`,
+    ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+    const kotlinDocument = createDocument(
+      entry.kotlinLines.join("\n"),
+      "kotlin",
+      "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt",
+    );
+    const vscode = createFakeVscode([specDocument, kotlinDocument]);
+    const provider = new GaugeStepDefinitionProvider({
+      projectFactory: createProjectFactory(),
+      vscode,
+    });
+
+    const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+    assert.equal(definitions.length, 1);
+    assert.equal(definitions[0].uri, kotlinDocument.uri);
+    assert.deepEqual(
+      { ...definitions[0].range.start },
+      entry.expectedStart,
+    );
+  }
+});
+
 test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
