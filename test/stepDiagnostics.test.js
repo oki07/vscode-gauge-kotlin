@@ -3551,6 +3551,42 @@ test("GaugeStepDiagnosticsProvider evaluates wildcard-imported workspace Kotlin 
   );
 });
 
+test("GaugeStepDiagnosticsProvider lets package Kotlin const aliases shadow wildcard-imported aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const constantsDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "object StepText {",
+    "  const val LOGIN_STEP = \"Imported <user>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/StepText.kt");
+  const stepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.steps.StepText.*",
+    "",
+    "const val LOGIN_STEP = \"Local <user> and <tenant>\"",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [constantsDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Local <user> and <tenant>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores unqualified object Kotlin const references outside scope", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

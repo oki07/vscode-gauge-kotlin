@@ -2523,6 +2523,11 @@ function ensureConstantGloballyVisible(visibility, name) {
   return true;
 }
 
+function hasGloballyVisibleConstant(visibility, name) {
+  const scopes = visibility.get(name) || [];
+  return scopes.some((scope) => scope.global);
+}
+
 function constantSimpleVisibilityScopes(declarationOffset, objectRanges, classesByPath) {
   const objectScopes = enclosingRanges(objectRanges, declarationOffset);
   if (objectScopes.length === 0) {
@@ -2641,6 +2646,9 @@ function applyKotlinConstantImports(constants, constantTypes, constantVisibility
         }
         const wildcardName = candidateName.slice(prefix.length);
         if (wildcardName.length === 0 || wildcardName.includes(".")) {
+          continue;
+        }
+        if (hasGloballyVisibleConstant(constantVisibility, wildcardName)) {
           continue;
         }
         if (applyKotlinNamedConstantImport(
