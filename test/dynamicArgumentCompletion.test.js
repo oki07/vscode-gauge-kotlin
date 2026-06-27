@@ -366,6 +366,44 @@ test("GaugeDynamicArgumentCompletionProvider ignores indented top-level table ma
   assert.deepEqual(labels(items), []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores standalone indented table body arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const specBody = "  | <u>  | admin |";
+  const specDocument = createDocument([
+    "# Checkout",
+    "| user | role |",
+    "| ---- | ---- |",
+    "| Bob  | admin |",
+    "",
+    "  | name | role |",
+    "  | ---- | ---- |",
+    specBody,
+    "* Login as <u>",
+  ].join("\n"));
+  const conceptBody = "  | <i> |";
+  const conceptDocument = createDocument([
+    "# Shared checkout <item>",
+    "  | name |",
+    "  | ---- |",
+    conceptBody,
+    "* Select <user>",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const specItems = provider.provideCompletionItems(
+    specDocument,
+    new vscode.Position(7, specBody.indexOf("u") + 1),
+  );
+  const conceptItems = provider.provideCompletionItems(
+    conceptDocument,
+    new vscode.Position(3, conceptBody.indexOf("i") + 1),
+  );
+
+  assert.deepEqual(specItems, []);
+  assert.deepEqual(conceptItems, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores non-step spec arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

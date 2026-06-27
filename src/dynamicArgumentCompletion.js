@@ -143,6 +143,19 @@ function isTableBlockLine(lines, lineNumber, options = {}) {
   return tableBlockStartLine(lines, lineNumber, options) !== -1;
 }
 
+function isIndentedInlineTableBlockLine(lines, lineNumber) {
+  const startLine = tableBlockStartLine(lines, lineNumber, { allowIndented: true });
+  if (startLine <= 0) {
+    return false;
+  }
+  const startText = lines[startLine] || "";
+  return isTableLine(startText) && !startText.startsWith("|") && isStepLine(lines[startLine - 1] || "");
+}
+
+function isCompletionTableBlockLine(lines, lineNumber) {
+  return isTableBlockLine(lines, lineNumber) || isIndentedInlineTableBlockLine(lines, lineNumber);
+}
+
 function isTableHeaderLine(document, lineNumber, options = {}) {
   const lines = document.getText().split(/\r?\n/);
   return isFirstTableLine(lines, lineNumber, options);
@@ -277,7 +290,7 @@ function allowsDynamicArgumentCompletion(line, document, lineNumber) {
     return true;
   }
   const lines = document.getText().split(/\r?\n/);
-  return isStepLine(line) || isTableBlockLine(lines, lineNumber, { allowIndented: true });
+  return isStepLine(line) || isCompletionTableBlockLine(lines, lineNumber);
 }
 
 function allowsStaticArgumentCompletion(line) {
