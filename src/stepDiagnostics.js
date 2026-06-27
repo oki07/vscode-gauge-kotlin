@@ -4943,9 +4943,14 @@ function resolvePackageQualifiedStepTypeAliasTarget(aliasName, stepImports) {
   return undefined;
 }
 
-function collectPackageQualifiedStepTypeAliases(text, packageName, ignoredRanges = []) {
+function collectPackageQualifiedStepTypeAliases(
+  text,
+  packageName,
+  ignoredRanges = [],
+  externalStepAliases = new Map(),
+) {
   const aliases = new Map();
-  const stepImports = stepAnnotationImports(text, ignoredRanges);
+  const stepImports = stepAnnotationImports(text, ignoredRanges, externalStepAliases);
   const declarations = collectKotlinStepTypeAliasDeclarations(text, ignoredRanges);
   const packagePrefix = `${packageName}.`;
 
@@ -5373,6 +5378,7 @@ class GaugeStepDiagnosticsProvider {
     const constants = new Map();
     const constantTypes = new Map();
     const stepAliases = new Map();
+    const stepAliasDocuments = [];
     const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
     const documentPath = document.uri && document.uri.fsPath;
     for (const candidate of textDocuments) {
@@ -5395,6 +5401,8 @@ class GaugeStepDiagnosticsProvider {
         continue;
       }
 
+      stepAliasDocuments.push({ ignoredRanges, packageName, text });
+
       const collected = collectStringConstants(text);
       const packagePrefix = `${packageName}.`;
       for (const [name, value] of collected.constants) {
@@ -5406,13 +5414,25 @@ class GaugeStepDiagnosticsProvider {
           constantTypes.set(name, collected.constantTypes.get(name));
         }
       }
-      for (const [name, targetName] of collectPackageQualifiedStepTypeAliases(
-        text,
-        packageName,
-        ignoredRanges,
-      )) {
-        if (!stepAliases.has(name)) {
+
+    }
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const source of stepAliasDocuments) {
+        const collected = collectPackageQualifiedStepTypeAliases(
+          source.text,
+          source.packageName,
+          source.ignoredRanges,
+          stepAliases,
+        );
+        for (const [name, targetName] of collected) {
+          if (stepAliases.has(name)) {
+            continue;
+          }
           stepAliases.set(name, targetName);
+          changed = true;
         }
       }
     }
