@@ -1491,6 +1491,38 @@ test("GaugeStepDiagnosticsProvider resolves same-package workspace Step type ali
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores ambiguous same-package workspace Step type aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const gaugeAliasesDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "typealias GaugeStep = com.thoughtworks.gauge.Step",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/GaugeAliases.kt");
+  const cucumberAliasesDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "typealias GaugeStep = io.cucumber.java.en.Step",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/CucumberAliases.kt");
+  const stepDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "@GaugeStep(\"Ambiguous same package alias <value>\")",
+    "fun gauge() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [gaugeAliasesDocument, cucumberAliasesDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider resolves multiline Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

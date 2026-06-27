@@ -4963,6 +4963,25 @@ function collectKotlinStepTypeAliasDeclarations(text, ignoredRanges = []) {
   return aliases;
 }
 
+function collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges = []) {
+  const names = [];
+  const typeAliasPattern = new RegExp(
+    `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+  );
+  const packagePrefix = `${packageName}.`;
+  const lines = kotlinSourceLines(text, ignoredRanges);
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
+    const match = typeAliasPattern.exec(normalizeKotlinTypeAliasStatementForMatch(statement.statement));
+    if (match) {
+      names.push(`${packagePrefix}${normalizeKotlinIdentifier(match[1])}`);
+      lineIndex = statement.endIndex;
+    }
+  }
+  return names;
+}
+
 function resolvePackageQualifiedStepTypeAliasTarget(aliasName, stepImports) {
   const resolvedName = resolveStepAnnotationTarget(aliasName, stepImports.named);
   if (resolvedName === aliasName) {
@@ -5416,6 +5435,8 @@ class GaugeStepDiagnosticsProvider {
     const ambiguousWorkspaceConstants = new Set();
     const stepAliases = new Map();
     const stepAliasDocuments = [];
+    const stepAliasDeclarationNames = new Set();
+    const ambiguousWorkspaceStepAliases = new Set();
     const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
     const documentPath = document.uri && document.uri.fsPath;
     const activeText = document.getText();
@@ -5442,6 +5463,17 @@ class GaugeStepDiagnosticsProvider {
       }
 
       stepAliasDocuments.push({ ignoredRanges, packageName, text });
+      for (const name of collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges)) {
+        if (ambiguousWorkspaceStepAliases.has(name)) {
+          continue;
+        }
+        if (stepAliasDeclarationNames.has(name)) {
+          ambiguousWorkspaceStepAliases.add(name);
+          stepAliases.delete(name);
+          continue;
+        }
+        stepAliasDeclarationNames.add(name);
+      }
 
       const collected = collectStringConstants(text);
       const packagePrefix = `${packageName}.`;
@@ -5487,6 +5519,12 @@ class GaugeStepDiagnosticsProvider {
           stepAliases,
         );
         for (const [name, targetName] of collected) {
+          if (ambiguousWorkspaceStepAliases.has(name)) {
+            if (stepAliases.delete(name)) {
+              changed = true;
+            }
+            continue;
+          }
           if (stepAliases.has(name)) {
             continue;
           }
@@ -5499,6 +5537,9 @@ class GaugeStepDiagnosticsProvider {
       const packagePrefix = `${activePackageName}.`;
       for (const [name, targetName] of [...stepAliases]) {
         if (!name.startsWith(packagePrefix)) {
+          continue;
+        }
+        if (ambiguousWorkspaceStepAliases.has(name)) {
           continue;
         }
         const exposedName = name.slice(packagePrefix.length);
