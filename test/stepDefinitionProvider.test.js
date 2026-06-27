@@ -244,6 +244,71 @@ test("GaugeStepDefinitionProvider matches steps across NFC/NFD unicode normaliza
   assert.equal(definitions[0].uri, kotlinDocument.uri);
 });
 
+test("GaugeStepDefinitionProvider resolves argument steps on Unicode Kotlin function names", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Display",
+    "",
+    "## Shows a value",
+    "* Text \"hello\" is visible",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/display.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class DisplaySteps {",
+    "  @Step(\"Text <value> is visible\")",
+    "  fun \u8868\u793a\u3059\u308b(value: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/DisplaySteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 8 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+});
+
+test("GaugeStepDefinitionProvider resolves docstring steps through Unicode Kotlin constants", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Execution specification",
+    "",
+    "## Runs content",
+    "* Execute the following content",
+    "\"\"\"",
+    "payload",
+    "\"\"\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/execution.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "const val \u5b9f\u884c_STEP = \"Execute the following content\"",
+    "",
+    "class ExecutionSteps {",
+    "  @Step(\u5b9f\u884c_STEP)",
+    "  fun execute(content: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/ExecutionSteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 5, character: 1 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+});
+
 test("GaugeStepDefinitionProvider resolves concept steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([

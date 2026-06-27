@@ -544,11 +544,26 @@ function findTopLevelChar(text, target) {
   return -1;
 }
 
-const KOTLIN_IDENTIFIER_PATTERN = "(?:[A-Za-z_]\\w*|`[^`\\r\\n]+`)";
+const KOTLIN_BARE_IDENTIFIER_PATTERN = "[\\p{L}_][\\p{L}\\p{N}_]*";
+const KOTLIN_BACKTICK_IDENTIFIER_PATTERN = "`[^`\\r\\n]+`";
+const KOTLIN_IDENTIFIER_PATTERN =
+  `(?:${KOTLIN_BARE_IDENTIFIER_PATTERN}|${KOTLIN_BACKTICK_IDENTIFIER_PATTERN})`;
 const KOTLIN_ANNOTATION_NAME_PATTERN = `${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*`;
 const KOTLIN_IDENTIFIER_PATH_PATTERN = new RegExp(
   `^${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*$`,
+  "u",
 );
+const KOTLIN_IDENTIFIER_START_CHARACTER_PATTERN = /^[\p{L}_]$/u;
+const KOTLIN_IDENTIFIER_REGEXP = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`, "u");
+const KOTLIN_BARE_IDENTIFIER_REGEXP = new RegExp(`^${KOTLIN_BARE_IDENTIFIER_PATTERN}$`, "u");
+
+function matchKotlinIdentifierStart(text) {
+  return KOTLIN_IDENTIFIER_REGEXP.exec(text);
+}
+
+function isKotlinIdentifierStartCharacter(char) {
+  return Boolean(char && KOTLIN_IDENTIFIER_START_CHARACTER_PATTERN.test(char));
+}
 
 function isKotlinIdentifierPath(value) {
   return KOTLIN_IDENTIFIER_PATH_PATTERN.test(value);
@@ -574,7 +589,7 @@ function splitKotlinIdentifierPath(value) {
       segments.push(value.slice(index, end + 1));
       index = end + 1;
     } else {
-      const match = /^[A-Za-z_]\w*/.exec(value.slice(index));
+      const match = matchKotlinIdentifierStart(value.slice(index));
       if (!match) {
         return undefined;
       }
@@ -612,7 +627,7 @@ function readKotlinIdentifierPath(text, startIndex) {
     index = skipWhitespaceAndComments(text, next);
   }
   while (index < text.length) {
-    const match = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(text.slice(index));
+    const match = matchKotlinIdentifierStart(text.slice(index));
     if (!match) {
       break;
     }
@@ -822,9 +837,11 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
   const aliases = new Map();
   const importPattern = new RegExp(
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+    "u",
   );
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    "u",
   );
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -860,6 +877,7 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
 function collectKotlinPackageName(text, ignoredRanges = []) {
   const packagePattern = new RegExp(
     `^package\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    "u",
   );
   for (const line of kotlinSourceLines(text, ignoredRanges)) {
     const match = packagePattern.exec(normalizeKotlinQualifiedPathDots(line));
@@ -874,6 +892,7 @@ function collectKotlinConstantImports(text, ignoredRanges = []) {
   const imports = [];
   const importPattern = new RegExp(
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+    "u",
   );
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -1907,7 +1926,7 @@ function interpolateStringTemplate(value, constants, constantTypes) {
       continue;
     }
 
-    const match = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(value.slice(index + 1));
+    const match = matchKotlinIdentifierStart(value.slice(index + 1));
     if (!match) {
       result += char;
       continue;
@@ -2359,7 +2378,7 @@ function findObjectBodyStart(text, startIndex) {
 
 function collectObjectRanges(text, ignoredRanges) {
   const ranges = [];
-  const objectPattern = new RegExp(`\\bobject\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "g");
+  const objectPattern = new RegExp(`\\bobject\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "gu");
   let match = objectPattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges) || isCompanionObjectKeyword(text, match.index)) {
@@ -2391,7 +2410,7 @@ function isCompanionObjectKeyword(text, objectIndex) {
 
 function collectNamedTypeRanges(text, ignoredRanges) {
   const ranges = [];
-  const typePattern = new RegExp(`\\b(?:class|interface)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "g");
+  const typePattern = new RegExp(`\\b(?:class|interface)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`, "gu");
   let match = typePattern.exec(text);
   while (match) {
     if (isInIgnoredRange(match.index, ignoredRanges)) {
@@ -2421,7 +2440,7 @@ function collectCompanionObjectRanges(text, ignoredRanges, classRanges) {
   const ranges = [];
   const companionPattern = new RegExp(
     `\\bcompanion\\s+object(?:\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?`,
-    "g",
+    "gu",
   );
   let match = companionPattern.exec(text);
   while (match) {
@@ -3111,7 +3130,7 @@ function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
 
   index = skipWhitespaceAndComments(text, index + "val".length);
 
-  const nameMatch = new RegExp(`^${KOTLIN_IDENTIFIER_PATTERN}`).exec(text.slice(index));
+  const nameMatch = matchKotlinIdentifierStart(text.slice(index));
   if (!nameMatch) {
     return undefined;
   }
@@ -3514,7 +3533,7 @@ function stripLeadingTypeParameters(header) {
 }
 
 function isKotlinFunctionName(name) {
-  return /^[A-Za-z_]\w*$/.test(name) || /^`[^`\r\n]+`$/.test(name);
+  return KOTLIN_BARE_IDENTIFIER_REGEXP.test(name) || /^`[^`\r\n]+`$/.test(name);
 }
 
 function isFunctionHeaderContinuationStart(char) {
@@ -3527,7 +3546,7 @@ function isFunctionHeaderContinuationStart(char) {
       || char === "."
       || char === "`"
       || char === "@"
-      || /[A-Za-z_]/.test(char)
+      || isKotlinIdentifierStartCharacter(char)
     ),
   );
 }
@@ -4563,7 +4582,7 @@ function readKotlinAnnotationApplication(text, startIndex) {
 
   let index = skipWhitespaceAndComments(text, startIndex + 1);
   let useSiteTarget;
-  const target = /^[A-Za-z_]\w*/.exec(text.slice(index));
+  const target = matchKotlinIdentifierStart(text.slice(index));
   if (target && KOTLIN_ANNOTATION_USE_SITE_TARGETS.has(target[0])) {
     const colonIndex = skipWhitespaceAndComments(text, index + target[0].length);
     if (text[colonIndex] === ":") {
@@ -4905,9 +4924,11 @@ function stepAnnotationImports(
   const wildcards = new Set();
   const importPattern = new RegExp(
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+    "u",
   );
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    "u",
   );
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -4965,6 +4986,7 @@ function collectKotlinStepTypeAliasDeclarations(text, ignoredRanges = []) {
   const aliases = new Map();
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    "u",
   );
   const lines = kotlinSourceLines(text, ignoredRanges);
 
@@ -4986,6 +5008,7 @@ function collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ign
   const names = [];
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
+    "u",
   );
   const packagePrefix = `${packageName}.`;
   const lines = kotlinSourceLines(text, ignoredRanges);
@@ -5109,7 +5132,7 @@ function localClassifierNames(text, ignoredRanges) {
   const searchableText = replaceKotlinCommentsWithSpaces(text);
   const pattern = new RegExp(
     `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
-    "g",
+    "gu",
   );
   let match = pattern.exec(searchableText);
   while (match) {
@@ -5126,7 +5149,7 @@ function collectClassifierScopeRanges(text, ignoredRanges) {
   const searchableText = replaceKotlinCommentsWithSpaces(text);
   const pattern = new RegExp(
     `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
-    "g",
+    "gu",
   );
   let match = pattern.exec(searchableText);
   while (match) {
@@ -5168,7 +5191,7 @@ function directClassifierNamesInScope(text, ignoredRanges, scope, scopes) {
   const searchableText = replaceKotlinCommentsWithSpaces(text);
   const pattern = new RegExp(
     `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
-    "g",
+    "gu",
   );
   pattern.lastIndex = scope.start;
   let match = pattern.exec(searchableText);
