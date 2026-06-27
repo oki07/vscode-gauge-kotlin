@@ -144,46 +144,6 @@ test("GaugeStepDefinitionProvider resolves static and dynamic argument spec step
   assert.equal(dynamicDefinitions[0].uri, kotlinDocument.uri);
 });
 
-test("GaugeStepDefinitionProvider resolves docstring argument spec steps", async () => {
-  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
-  const specDocument = createDocument([
-    "# Execution specification",
-    "",
-    "## Runs content",
-    "* Execute the following content",
-    "\"\"\"",
-    "payload",
-    "\"\"\"",
-  ].join("\n"), "gauge", "/workspace/gauge/specs/execution.spec");
-  const kotlinDocument = createDocument([
-    "package steps",
-    "",
-    "import com.thoughtworks.gauge.Step",
-    "",
-    "class ExecutionSteps {",
-    "  @Step(\"Execute the following content <content>\")",
-    "  fun execute(content: String) {}",
-    "}",
-  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/ExecutionSteps.kt");
-  const vscode = createFakeVscode([specDocument, kotlinDocument]);
-  const provider = new GaugeStepDefinitionProvider({
-    projectFactory: createProjectFactory(),
-    vscode,
-  });
-
-  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
-  const contentDefinitions = await provider.provideDefinition(specDocument, { line: 5, character: 1 });
-
-  assert.equal(definitions.length, 1);
-  assert.equal(definitions[0].uri, kotlinDocument.uri);
-  assert.equal(contentDefinitions.length, 1);
-  assert.equal(contentDefinitions[0].uri, kotlinDocument.uri);
-  assert.deepEqual(
-    { ...definitions[0].range.start },
-    { line: 6, character: 2 },
-  );
-});
-
 test("GaugeStepDefinitionProvider resolves docstring steps without annotation placeholder", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

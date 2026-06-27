@@ -164,10 +164,6 @@ function docStringStepLineAt(document, line) {
   return undefined;
 }
 
-function uniqueValues(values) {
-  return [...new Set(values)];
-}
-
 function stepTextCandidatesAt(document, position) {
   if (!document || document.languageId !== GAUGE_LANGUAGE || !position) {
     return [];
@@ -192,11 +188,6 @@ function stepTextCandidatesAt(document, position) {
   const nextLine = documentLine(document, lineNumber + 1);
   if (isInlineTableLine(nextLine)) {
     stepText = `${stepText} <table>`;
-  } else if (isDocStringFenceLine(nextLine)) {
-    return uniqueValues([
-      normalizeStepTemplate(stepText),
-      normalizeStepTemplate(`${stepText} <text>`),
-    ]);
   }
   return [normalizeStepTemplate(stepText)];
 }
