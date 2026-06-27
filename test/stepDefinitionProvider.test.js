@@ -1,7 +1,16 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-function createFakeVscode(textDocuments) {
+function createFakeVscode(textDocuments, options = {}) {
+  const workspace = {
+    textDocuments,
+  };
+  if (options.findFiles) {
+    workspace.findFiles = options.findFiles;
+  }
+  if (options.openTextDocument) {
+    workspace.openTextDocument = options.openTextDocument;
+  }
   return {
     Location: class Location {
       constructor(uri, range) {
@@ -21,9 +30,7 @@ function createFakeVscode(textDocuments) {
         this.end = end;
       }
     },
-    workspace: {
-      textDocuments,
-    },
+    workspace,
   };
 }
 
@@ -52,7 +59,7 @@ function createProjectFactory() {
   };
 }
 
-test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions", () => {
+test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Login specification",
@@ -76,7 +83,7 @@ test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions",
     vscode,
   });
 
-  const definitions = provider.provideDefinition(specDocument, { line: 3, character: 5 });
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
 
   assert.equal(definitions.length, 1);
   assert.equal(definitions[0].uri, kotlinDocument.uri);
@@ -90,7 +97,50 @@ test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions",
   );
 });
 
-test("GaugeStepDefinitionProvider uses workspace Kotlin constants when matching steps", () => {
+test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functions", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument], {
+    async findFiles(pattern) {
+      assert.equal(pattern, "**/*.kt");
+      return [kotlinDocument.uri];
+    },
+    async openTextDocument(uri) {
+      assert.equal(uri, kotlinDocument.uri);
+      return kotlinDocument;
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+});
+
+test("GaugeStepDefinitionProvider uses workspace Kotlin constants when matching steps", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Login specification",
@@ -122,7 +172,7 @@ test("GaugeStepDefinitionProvider uses workspace Kotlin constants when matching 
     vscode,
   });
 
-  const definitions = provider.provideDefinition(specDocument, { line: 3, character: 5 });
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
 
   assert.equal(definitions.length, 1);
   assert.equal(definitions[0].uri, kotlinDocument.uri);
@@ -132,7 +182,7 @@ test("GaugeStepDefinitionProvider uses workspace Kotlin constants when matching 
   );
 });
 
-test("GaugeStepDefinitionProvider ignores non-step positions", () => {
+test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Login specification",
@@ -153,7 +203,7 @@ test("GaugeStepDefinitionProvider ignores non-step positions", () => {
   });
 
   assert.deepEqual(
-    provider.provideDefinition(specDocument, { line: 0, character: 2 }),
+    await provider.provideDefinition(specDocument, { line: 0, character: 2 }),
     [],
   );
 });

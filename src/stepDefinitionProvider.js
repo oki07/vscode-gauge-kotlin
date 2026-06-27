@@ -141,6 +141,14 @@ function sameDocument(left, right) {
   return Boolean(leftPath && rightPath && leftPath === rightPath);
 }
 
+function documentPath(document) {
+  return document && document.uri && document.uri.fsPath;
+}
+
+function uriPath(uri) {
+  return uri && uri.fsPath;
+}
+
 function targetRange(vscode, text, entry) {
   const startOffset = entry.declarationStart !== undefined
     ? entry.declarationStart
@@ -169,26 +177,99 @@ class GaugeStepDefinitionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
-  provideDefinition(document, position) {
+  async findWorkspaceKotlinDocuments() {
+    const workspace = this.vscode.workspace || {};
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return [];
+    }
+
+    const documents = [];
+    const uris = await workspace.findFiles("**/*.kt");
+    for (const uri of uris || []) {
+      const file = uriPath(uri);
+      if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+        try {
+          this.projectFactory.getGaugeRootFromFilePath(file);
+        } catch (_error) {
+          continue;
+        }
+      }
+
+      try {
+        const document = await workspace.openTextDocument(uri);
+        documents.push(document);
+      } catch (_error) {
+        // Ignore unreadable files so one stale workspace URI does not block navigation.
+      }
+    }
+    return documents;
+  }
+
+  async kotlinDocuments(sourceDocument) {
+    const workspace = this.vscode.workspace || {};
+    const documents = [];
+    const seenPaths = new Set();
+    const addDocument = (candidate) => {
+      if (
+        !candidate
+        || sameDocument(candidate, sourceDocument)
+        || candidate.languageId !== KOTLIN_LANGUAGE
+        || typeof candidate.getText !== "function"
+        || !this.isGaugeProjectDocument(candidate)
+      ) {
+        return;
+      }
+      const file = documentPath(candidate);
+      if (file) {
+        if (seenPaths.has(file)) {
+          return;
+        }
+        seenPaths.add(file);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+
+    for (const candidate of workspace.textDocuments || []) {
+      addDocument(candidate);
+    }
+    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+      addDocument(candidate);
+    }
+    return documents;
+  }
+
+  collectWorkspaceConstants(document, kotlinDocuments) {
+    const workspace = this.vscode.workspace || {};
+    const diagnosticVscode = {
+      ...this.vscode,
+      workspace: {
+        ...workspace,
+        textDocuments: kotlinDocuments,
+      },
+    };
+    const diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      projectFactory: this.projectFactory,
+      vscode: diagnosticVscode,
+    });
+    return diagnosticsProvider.collectWorkspaceConstants(document);
+  }
+
+  async provideDefinition(document, position) {
     const wantedStep = stepTextAt(document, position);
     if (!wantedStep || !this.isGaugeProjectDocument(document)) {
       return [];
     }
 
-    const workspace = this.vscode.workspace || {};
     const definitions = [];
-    for (const candidate of workspace.textDocuments || []) {
-      if (
-        !candidate
-        || sameDocument(candidate, document)
-        || candidate.languageId !== KOTLIN_LANGUAGE
-        || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
-      ) {
-        continue;
-      }
+    const kotlinDocuments = await this.kotlinDocuments(document);
+    for (const candidate of kotlinDocuments) {
       const text = candidate.getText();
-      const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(candidate);
+      const externalConstants = this.collectWorkspaceConstants(candidate, kotlinDocuments);
       for (const entry of findStepFunctions(text, externalConstants)) {
         if (!entry.aliases.some((alias) => normalizeStepTemplate(alias) === wantedStep)) {
           continue;
