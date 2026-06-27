@@ -130,21 +130,61 @@ function isInlineTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isDocStringFenceLine(line) {
+  return line.trim() === "\"\"\"";
+}
+
+function isStepLine(line) {
+  return line.startsWith("*");
+}
+
+function docStringStepLineAt(document, line) {
+  for (let openLine = line; openLine >= 0; openLine -= 1) {
+    if (!isDocStringFenceLine(documentLine(document, openLine))) {
+      continue;
+    }
+
+    const stepLine = openLine - 1;
+    if (!isStepLine(documentLine(document, stepLine))) {
+      continue;
+    }
+
+    for (let closeLine = openLine + 1; closeLine <= line; closeLine += 1) {
+      if (isDocStringFenceLine(documentLine(document, closeLine))) {
+        return closeLine === line ? stepLine : undefined;
+      }
+    }
+    return stepLine;
+  }
+  return undefined;
+}
+
 function stepTextAt(document, position) {
   if (!document || document.languageId !== GAUGE_LANGUAGE || !position) {
     return undefined;
   }
-  const line = documentLine(document, position.line);
-  if (!line.startsWith("*")) {
+  let lineNumber = position.line;
+  let line = documentLine(document, lineNumber);
+  if (!isStepLine(line)) {
+    const docStringStepLine = docStringStepLineAt(document, lineNumber);
+    if (docStringStepLine === undefined) {
+      return undefined;
+    }
+    lineNumber = docStringStepLine;
+    line = documentLine(document, lineNumber);
+  }
+  if (!isStepLine(line)) {
     return undefined;
   }
   let stepText = line.slice(1).trim();
   if (!stepText) {
     return undefined;
   }
-  const nextLine = documentLine(document, position.line + 1);
+  const nextLine = documentLine(document, lineNumber + 1);
   if (isInlineTableLine(nextLine)) {
     stepText = `${stepText} <table>`;
+  } else if (isDocStringFenceLine(nextLine)) {
+    stepText = `${stepText} <text>`;
   }
   return normalizeStepTemplate(stepText);
 }
