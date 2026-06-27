@@ -2639,6 +2639,21 @@ function constantsVisibleAtOffset(constants, constantTypes, visibility, offset) 
   };
 }
 
+function addMissingConstants(constants, constantTypes, additions, additionTypes) {
+  let changed = false;
+  for (const [name, value] of additions) {
+    if (constants.has(name)) {
+      continue;
+    }
+    constants.set(name, value);
+    if (additionTypes && additionTypes.has(name)) {
+      constantTypes.set(name, additionTypes.get(name));
+    }
+    changed = true;
+  }
+  return changed;
+}
+
 function addPackageQualifiedConstantNames(names, packageName, declarationName, objectPaths, classPaths) {
   if (packageName === undefined) {
     return;
@@ -3130,6 +3145,8 @@ function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
 function collectStringConstants(text, externalConstants = {}) {
   const constants = new Map(externalConstants.constants || []);
   const constantTypes = new Map(externalConstants.constantTypes || []);
+  const samePackageConstants = new Map(externalConstants.samePackageConstants || []);
+  const samePackageConstantTypes = new Map(externalConstants.samePackageConstantTypes || []);
   const constantVisibility = new Map();
   const expressions = [];
   const ignoredRanges = collectIgnoredKotlinRanges(text);
@@ -3224,6 +3241,12 @@ function collectStringConstants(text, externalConstants = {}) {
         continue;
       }
       const visible = constantsVisibleAtOffset(constants, constantTypes, constantVisibility, offset);
+      addMissingConstants(
+        visible.constants,
+        visible.constantTypes,
+        samePackageConstants,
+        samePackageConstantTypes,
+      );
       const value = evaluateStringExpression(expression, visible.constants, visible.constantTypes);
       if (value !== undefined) {
         const resolvedType = typeName
@@ -3241,6 +3264,7 @@ function collectStringConstants(text, externalConstants = {}) {
       }
     }
   }
+  addMissingConstants(constants, constantTypes, samePackageConstants, samePackageConstantTypes);
 
   return { constants, constantTypes, constantVisibility };
 }
@@ -5387,6 +5411,8 @@ class GaugeStepDiagnosticsProvider {
     const workspace = this.vscode.workspace || {};
     const constants = new Map();
     const constantTypes = new Map();
+    const samePackageConstants = new Map();
+    const samePackageConstantTypes = new Map();
     const stepAliases = new Map();
     const stepAliasDocuments = [];
     const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
@@ -5426,6 +5452,15 @@ class GaugeStepDiagnosticsProvider {
         if (collected.constantTypes.has(name)) {
           constantTypes.set(name, collected.constantTypes.get(name));
         }
+        if (activePackageName === packageName) {
+          const exposedName = name.slice(packagePrefix.length);
+          if (!exposedName.includes(".") && !samePackageConstants.has(exposedName)) {
+            samePackageConstants.set(exposedName, value);
+            if (collected.constantTypes.has(name)) {
+              samePackageConstantTypes.set(exposedName, collected.constantTypes.get(name));
+            }
+          }
+        }
       }
 
     }
@@ -5462,7 +5497,13 @@ class GaugeStepDiagnosticsProvider {
         stepAliases.set(exposedName, targetName);
       }
     }
-    return { constants, constantTypes, stepAliases };
+    return {
+      constants,
+      constantTypes,
+      samePackageConstants,
+      samePackageConstantTypes,
+      stepAliases,
+    };
   }
 
   provideDiagnostics(document) {
