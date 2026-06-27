@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  GaugeStepDiagnosticsProvider,
+  findStepFunctions,
+} = require("./stepDiagnostics");
+
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
@@ -214,6 +219,75 @@ function unique(values) {
   return result;
 }
 
+function isThenable(value) {
+  return value && typeof value.then === "function";
+}
+
+function stepCompletionRange(line, position) {
+  if (!line.trimStart().startsWith("*") || position.character === 0) {
+    return undefined;
+  }
+  const marker = /^[ \t]*\*[ \t]*/.exec(line);
+  if (!marker) {
+    return undefined;
+  }
+  return {
+    start: Math.min(marker[0].length, position.character),
+    end: Math.max(line.length, position.character),
+  };
+}
+
+function stepParameterRanges(stepText) {
+  const ranges = [];
+  let openIndex = stepText.indexOf("<");
+  while (openIndex !== -1) {
+    if (isEscapedCharacter(stepText, openIndex)) {
+      openIndex = stepText.indexOf("<", openIndex + 1);
+      continue;
+    }
+    const closeIndex = closingAngleIndex(stepText, openIndex);
+    if (closeIndex === -1) {
+      break;
+    }
+    ranges.push({
+      end: closeIndex,
+      name: stepText.slice(openIndex + 1, closeIndex),
+      start: openIndex,
+    });
+    openIndex = stepText.indexOf("<", closeIndex + 1);
+  }
+  return ranges;
+}
+
+function escapeSnippetPlaceholder(value) {
+  return value.replace(/[\\$}]/g, "\\$&");
+}
+
+function stepSnippetText(stepText) {
+  const ranges = stepParameterRanges(stepText);
+  if (ranges.length === 0) {
+    return stepText;
+  }
+
+  let result = "";
+  let offset = 0;
+  for (let index = 0; index < ranges.length; index += 1) {
+    const range = ranges[index];
+    const tabstop = index === ranges.length - 1 ? 0 : index + 1;
+    result += stepText.slice(offset, range.start);
+    result += `"${"${"}${tabstop}:${escapeSnippetPlaceholder(range.name)}}"`;
+    offset = range.end + 1;
+  }
+  return result + stepText.slice(offset);
+}
+
+function snippetString(vscode, value) {
+  if (typeof vscode.SnippetString === "function") {
+    return new vscode.SnippetString(value);
+  }
+  return value;
+}
+
 function specDataTableHeaders(text) {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length - 1; index += 1) {
@@ -297,25 +371,90 @@ function allowsStaticArgumentCompletion(line) {
   return isStepLine(line);
 }
 
-function completionItem(vscode, label, range) {
-  const kind = vscode.CompletionItemKind && vscode.CompletionItemKind.Variable;
+function completionItem(vscode, label, range, options = {}) {
+  const kind = options.kind || (vscode.CompletionItemKind && vscode.CompletionItemKind.Variable);
   const item = typeof vscode.CompletionItem === "function"
     ? new vscode.CompletionItem(label, kind)
     : { label, kind };
   item.range = range;
+  if (options.detail !== undefined) {
+    item.detail = options.detail;
+  }
+  if (options.insertText !== undefined) {
+    item.insertText = options.insertText;
+  }
+  if (options.filterText !== undefined) {
+    item.filterText = options.filterText;
+  }
   return item;
 }
 
 class GaugeDynamicArgumentCompletionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.projectFactory = options.projectFactory;
+    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      projectFactory: this.projectFactory,
+      vscode: this.vscode,
+    });
+  }
+
+  isGaugeProjectDocument(document) {
+    return this.diagnosticsProvider.isGaugeProjectDocument(document);
+  }
+
+  workspaceDocuments() {
+    return this.diagnosticsProvider.workspaceDocuments();
+  }
+
+  stepAliases(workspaceDocuments) {
+    const aliases = [];
+    for (const candidate of workspaceDocuments || []) {
+      if (
+        !candidate
+        || candidate.languageId !== "kotlin"
+        || typeof candidate.getText !== "function"
+        || !this.isGaugeProjectDocument(candidate)
+      ) {
+        continue;
+      }
+      const text = candidate.getText();
+      const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
+        candidate,
+        workspaceDocuments,
+      );
+      for (const entry of findStepFunctions(text, externalConstants)) {
+        aliases.push(...entry.aliases);
+      }
+    }
+    return unique(aliases);
+  }
+
+  stepCompletionItems(document, position, targetRange, workspaceDocuments) {
+    if (!document || document.languageId !== "gauge" || !this.isGaugeProjectDocument(document)) {
+      return [];
+    }
+    const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
+    const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
+    return this.stepAliases(workspaceDocuments).map((label) => completionItem(
+      this.vscode,
+      label,
+      range,
+      {
+        detail: "step",
+        filterText: label,
+        insertText: snippetString(this.vscode, stepSnippetText(label)),
+        kind,
+      },
+    ));
   }
 
   provideCompletionItems(document, position) {
     const line = document.lineAt(position.line).text;
     const argumentRange = dynamicArgumentRange(line, position);
     const quotedArgumentRange = staticArgumentRange(line, position);
-    if (!argumentRange && !quotedArgumentRange) {
+    const stepRange = stepCompletionRange(line, position);
+    if (!argumentRange && !quotedArgumentRange && !stepRange) {
       return [];
     }
     if (argumentRange && isTableHeaderLine(document, position.line, { allowIndented: true })) {
@@ -327,17 +466,30 @@ class GaugeDynamicArgumentCompletionProvider {
     if (quotedArgumentRange && !allowsStaticArgumentCompletion(line)) {
       return [];
     }
+    if (argumentRange || quotedArgumentRange) {
+      const labels = argumentRange
+        ? (
+          isConceptDocument(document)
+            ? conceptDynamicArguments(document.getText())
+            : specDataTableHeaders(document.getText())
+        )
+        : staticArguments(document.getText(), { excludeTeardown: !isConceptDocument(document) });
+      const targetRange = argumentRange || quotedArgumentRange;
+      const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
+      return labels.map((label) => completionItem(this.vscode, label, range));
+    }
 
-    const labels = argumentRange
-      ? (
-        isConceptDocument(document)
-          ? conceptDynamicArguments(document.getText())
-          : specDataTableHeaders(document.getText())
-      )
-      : staticArguments(document.getText(), { excludeTeardown: !isConceptDocument(document) });
-    const targetRange = argumentRange || quotedArgumentRange;
-    const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
-    return labels.map((label) => completionItem(this.vscode, label, range));
+    if (!stepRange) {
+      return [];
+    }
+
+    const workspaceDocuments = this.workspaceDocuments();
+    if (isThenable(workspaceDocuments)) {
+      return workspaceDocuments.then((documents) => (
+        this.stepCompletionItems(document, position, stepRange, documents)
+      ));
+    }
+    return this.stepCompletionItems(document, position, stepRange, workspaceDocuments);
   }
 }
 

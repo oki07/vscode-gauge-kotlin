@@ -10,7 +10,13 @@ function createFakeVscode() {
       }
     },
     CompletionItemKind: {
+      Function: "function",
       Variable: "variable",
+    },
+    SnippetString: class SnippetString {
+      constructor(value) {
+        this.value = value;
+      }
     },
     Position: class Position {
       constructor(line, character) {
@@ -27,10 +33,10 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(text, fsPath = "/workspace/specs/example.spec") {
+function createDocument(text, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
   const lines = text.split(/\r?\n/);
   return {
-    languageId: "gauge",
+    languageId,
     uri: { fsPath },
     getText() {
       return text;
@@ -43,6 +49,17 @@ function createDocument(text, fsPath = "/workspace/specs/example.spec") {
 
 function labels(items) {
   return items.map((item) => item.label);
+}
+
+function createProjectFactory() {
+  return {
+    getGaugeRootFromFilePath(filename) {
+      if (!filename.startsWith("/workspace/gauge/")) {
+        throw new Error("not a Gauge project file");
+      }
+      return "/workspace/gauge";
+    },
+  };
 }
 
 test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers inside dynamic arguments", () => {
@@ -631,4 +648,83 @@ test("GaugeDynamicArgumentCompletionProvider ignores non-argument positions", ()
   assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(3, 3)), []);
   assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(3, 17)), []);
   assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(4, 16)), []);
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on step lines", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Log",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class CheckoutSteps {",
+    "  @Step(\"Log in as <user>\", \"Sign in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Log in as <user>", "Sign in as <user>"]);
+  assert.equal(items[0].kind, "function");
+  assert.equal(items[0].detail, "step");
+  assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
+  assert.equal(items[0].filterText, "Log in as <user>");
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 2 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 5 });
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests unopened workspace Kotlin Step aliases", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <card>\")",
+    "fun pay(card: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/PaymentSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+        async findFiles(pattern) {
+          assert.equal(pattern, "**/*.kt");
+          return [kotlinDocument.uri];
+        },
+        async openTextDocument(uri) {
+          assert.equal(uri, kotlinDocument.uri);
+          return kotlinDocument;
+        },
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Pay with <card>"]);
+  assert.equal(items[0].insertText.value, "Pay with \"${0:card}\"");
 });

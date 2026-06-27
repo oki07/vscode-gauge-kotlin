@@ -237,7 +237,10 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
   }
   const CompletionProviderCtor = options.DynamicArgumentCompletionProvider
     || GaugeDynamicArgumentCompletionProvider;
-  const provider = new CompletionProviderCtor({ vscode });
+  const provider = new CompletionProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+  });
   const disposable = vscode.languages.registerCompletionItemProvider(
     { language: "gauge" },
     provider,
@@ -436,7 +439,10 @@ function startGaugeServices(context, vscode, options = {}) {
   registerGaugeEnterHandler(context, vscode, options);
   registerDebugConfigurationProvider(context, vscode);
   registerArgumentCodeActionProvider(context, vscode, options);
-  registerDynamicArgumentCompletionProvider(context, vscode, options);
+  registerDynamicArgumentCompletionProvider(context, vscode, {
+    ...options,
+    projectFactory,
+  });
   registerFoldingRangeProvider(context, vscode, options);
   registerStepDefinitionProvider(context, vscode, {
     ...options,
