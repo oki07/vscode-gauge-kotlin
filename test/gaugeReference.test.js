@@ -323,6 +323,176 @@ test("ReferenceProvider falls back to unopened workspace Kotlin constants", asyn
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
 
+test("ReferenceProvider falls back to local Gauge references for Kotlin Step aliases", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/example.spec",
+      toString() {
+        return "file:///workspace/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "## Scenario",
+        "* Say hello to \"alice\"",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 3, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.spec" || pattern === "**/*.cpt") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [activeDocument, specDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.equal(requestCalls[1].method, "gauge/stepReferences");
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.deepEqual(calls.information, []);
+  assert.deepEqual(calls.commands, [
+    {
+      command: "editor.action.showReferences",
+      args: [
+        { fsPath: "/workspace/tests/Steps.kt", uri: "file:///workspace/tests/Steps.kt" },
+        { line: 3, character: 5, converted: "position" },
+        [
+          {
+            uri: "file:///workspace/specs/example.spec",
+            range: {
+              start: { line: 3, character: 0 },
+              end: { line: 3, character: 22 },
+            },
+            converted: "location",
+          },
+        ],
+      ],
+    },
+  ]);
+});
+
+test("ReferenceProvider falls back to unopened local Gauge references for Kotlin Step aliases", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/unopened.spec",
+      toString() {
+        return "file:///workspace/specs/unopened.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "## Scenario",
+        "* Say hello to \"bob\"",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 3, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+          return [];
+        }
+        if (pattern === "**/*.spec") {
+          return [specDocument.uri];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, specDocument.uri);
+        return specDocument;
+      },
+      textDocuments: [activeDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.deepEqual(calls.information, []);
+  assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/unopened.spec");
+});
+
 test("ReferenceProvider registers reference commands", () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
@@ -334,4 +504,69 @@ test("ReferenceProvider registers reference commands", () => {
     "gauge.showReferences.atCursor",
     "gauge.showReferences",
   ]);
+});
+
+test("ReferenceProvider filters unopened local Gauge references outside Gauge projects", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const outsideSpecUri = {
+    fsPath: "/outside/specs/example.spec",
+    toString() {
+      return "file:///outside/specs/example.spec";
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 3, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+          return [];
+        }
+        if (pattern === "**/*.spec") {
+          return [outsideSpecUri];
+        }
+        return [];
+      },
+      async openTextDocument() {
+        throw new Error("out-of-project Gauge files should not be opened");
+      },
+      textDocuments: [activeDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, false);
+  assert.deepEqual(calls.information, ["Action NA: Try this on an implementation."]);
+  assert.deepEqual(calls.commands, []);
 });
