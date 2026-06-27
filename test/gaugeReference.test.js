@@ -212,6 +212,42 @@ test("ReferenceProvider falls back to Kotlin Step aliases at the active cursor",
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
 
+test("ReferenceProvider uses the Kotlin Step alias under the active cursor", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const { calls, vscode } = createFakeVscode({
+    activePosition: { line: 2, character: 33 },
+    activeText: [
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "@Step(\"First alias <name>\", \"Second alias <name>\")",
+      "fun say(name: String) {}",
+    ].join("\n"),
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": [
+      { uri: "file:///workspace/specs/second.spec", range: { start: { line: 4, character: 0 } } },
+    ],
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.equal(requestCalls[1].method, "gauge/stepReferences");
+  assert.equal(requestCalls[1].params, "Second alias <name>");
+  assert.deepEqual(calls.information, []);
+  assert.equal(calls.commands[0].command, "editor.action.showReferences");
+});
+
 test("ReferenceProvider registers reference commands", () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");

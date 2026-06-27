@@ -41,6 +41,78 @@ function offsetAt(text, position) {
   return Math.min(offset + position.character, text.length);
 }
 
+function commentEnd(text, index) {
+  if (text.startsWith("//", index)) {
+    const lineEnd = text.indexOf("\n", index + 2);
+    return lineEnd === -1 ? text.length : lineEnd;
+  }
+  if (text.startsWith("/*", index)) {
+    const blockEnd = text.indexOf("*/", index + 2);
+    return blockEnd === -1 ? text.length : blockEnd + 2;
+  }
+  return undefined;
+}
+
+function stringLiteralEnd(text, start, limit) {
+  if (text.startsWith("\"\"\"", start)) {
+    const end = text.indexOf("\"\"\"", start + 3);
+    return end === -1 || end + 3 > limit ? -1 : end + 3;
+  }
+
+  for (let index = start + 1; index < limit; index += 1) {
+    if (text[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (text[index] === "\"") {
+      return index + 1;
+    }
+  }
+  return -1;
+}
+
+function stringLiteralRanges(text, start, end) {
+  const ranges = [];
+  for (let index = start; index < end; index += 1) {
+    const nextCommentEnd = commentEnd(text, index);
+    if (nextCommentEnd !== undefined) {
+      index = nextCommentEnd - 1;
+      continue;
+    }
+    if (text[index] !== "\"") {
+      continue;
+    }
+    const literalEnd = stringLiteralEnd(text, index, end);
+    if (literalEnd === -1) {
+      continue;
+    }
+    ranges.push({ start: index, end: literalEnd });
+    index = literalEnd - 1;
+  }
+  return ranges;
+}
+
+function aliasAtOffset(entry, text, offset) {
+  if (
+    entry.annotationStart !== undefined
+    && entry.annotationEnd !== undefined
+    && offset >= entry.annotationStart
+    && offset <= entry.annotationEnd
+  ) {
+    const ranges = stringLiteralRanges(text, entry.annotationStart, entry.annotationEnd);
+    const rangeIndex = ranges.findIndex((range) => offset >= range.start && offset <= range.end);
+    if (rangeIndex !== -1) {
+      if (entry.aliases.length === 1) {
+        return entry.aliases[0];
+      }
+      if (ranges.length === entry.aliases.length && entry.aliases[rangeIndex] !== undefined) {
+        return entry.aliases[rangeIndex];
+      }
+    }
+  }
+  return entry.aliases[0];
+}
+
 class ReferenceProvider {
   constructor(clients, options = {}) {
     this.clients = clients;
@@ -125,7 +197,7 @@ class ReferenceProvider {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset >= start && offset <= end) {
-        return entry.aliases[0];
+        return aliasAtOffset(entry, text, offset);
       }
     }
     return undefined;
