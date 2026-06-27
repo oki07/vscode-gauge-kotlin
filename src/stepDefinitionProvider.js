@@ -291,26 +291,33 @@ class GaugeStepDefinitionProvider {
   }
 
   collectWorkspaceConstants(document, kotlinDocuments, options = {}) {
-    const workspace = this.vscode.workspace || {};
-    const diagnosticVscode = {
-      ...this.vscode,
-      workspace: {
-        ...workspace,
-        textDocuments: kotlinDocuments,
-      },
-    };
+    // Pass the Kotlin documents directly as the workspace document list. Do NOT
+    // spread `this.vscode` or `vscode.workspace`: object spread enumerates every
+    // own getter, and VS Code / Cursor expose proposed-API getters (e.g.
+    // workspace.tunnels) that throw for extensions that did not declare the
+    // proposal, which would abort the entire definition lookup.
     const diagnosticsProvider = new GaugeStepDiagnosticsProvider({
       projectFactory: options.includeExternalWorkspace ? undefined : this.projectFactory,
-      vscode: diagnosticVscode,
+      vscode: this.vscode,
     });
-    return diagnosticsProvider.collectWorkspaceConstants(document);
+    return diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
   }
 
   definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}, trace = NULL_TRACE) {
     const definitions = [];
     for (const candidate of documents) {
       const text = candidate.getText();
-      const externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
+      let externalConstants;
+      try {
+        externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
+      } catch (error) {
+        // Never let workspace-constant collection abort navigation: plain
+        // @Step("literal") matching still works without resolved constants.
+        if (trace.enabled) {
+          trace.log(`  collectWorkspaceConstants threw for ${documentPath(candidate)}: ${error && error.message ? error.message : error}`);
+        }
+        externalConstants = undefined;
+      }
       const stepFunctions = findStepFunctions(text, externalConstants);
       let matched = 0;
       const aliasesSeen = [];

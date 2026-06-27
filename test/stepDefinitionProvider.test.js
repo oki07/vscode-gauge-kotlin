@@ -234,6 +234,45 @@ test("GaugeStepDefinitionProvider writes a measured trace to the output channel"
   assert.ok(appended.some((line) => line.includes("1 definition(s) from project group")));
 });
 
+test("GaugeStepDefinitionProvider resolves steps when workspace exposes a throwing proposed-API getter", async () => {
+  // Real VS Code / Cursor expose proposed-API getters (e.g. workspace.tunnels)
+  // that throw when accessed by an extension that did not declare the proposal.
+  // Spreading `vscode.workspace` enumerates and invokes those getters, which
+  // previously aborted the whole definition lookup.
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const conceptDocument = createDocument([
+    "# Shared login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([conceptDocument, kotlinDocument]);
+  Object.defineProperty(vscode.workspace, "tunnels", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      throw new Error("Extension 'gauge-kotlin' CANNOT use API proposal: tunnels.");
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(conceptDocument, { line: 1, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+});
+
 test("GaugeStepDefinitionProvider falls back to external workspace Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([
