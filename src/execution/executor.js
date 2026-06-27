@@ -551,13 +551,13 @@ function createGaugeExecutionController(options = {}) {
     return chooseAndExecuteScenario(scenarios);
   }
 
-  async function stopExecution() {
+  async function stopExecution(aborted = true) {
     if (activeRun && typeof activeRun.cancel === "function") {
       try {
         if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
           activeDebugger.stopDebugger();
         }
-        return activeRun.cancel();
+        return activeRun.cancel(aborted);
       } catch (error) {
         if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
           return vscode.window.showErrorMessage(`Failed to Stop Run: ${error.message}`);

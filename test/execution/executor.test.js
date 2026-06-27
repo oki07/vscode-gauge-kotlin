@@ -649,6 +649,41 @@ test("executor reports stop failures without rejecting the command", async () =>
   assert.deepEqual(errors, ["Failed to Stop Run: kill failed"]);
 });
 
+test("executor treats debugger attach cancellation as a non-user abort", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const cancelCalls = [];
+  let finish;
+  const { errors, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner() {
+      const run = new Promise((resolve) => {
+        finish = resolve;
+      });
+      run.cancel = (aborted) => {
+        cancelCalls.push(aborted);
+        finish(false);
+      };
+      return run;
+    },
+  });
+
+  const run = controller.handleCommand("gauge.execute.specification.all");
+  await Promise.resolve();
+  controller.processOutputLine("No debugger attached");
+
+  assert.equal(await run, false);
+  assert.deepEqual(errors, ["No debugger attached. Stopping the execution"]);
+  assert.deepEqual(cancelCalls, [false]);
+});
+
 test("executor shows the last execution status in the status bar", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const statusRequests = [];

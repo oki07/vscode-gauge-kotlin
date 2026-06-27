@@ -120,8 +120,8 @@ function createGaugeProcessRunner(options = {}) {
       });
     });
 
-    run.cancel = function cancel() {
-      aborted = true;
+    run.cancel = function cancel(userAborted = true) {
+      aborted = userAborted;
       if (child && !child.killed && platform === "win32") {
         terminateWindowsProcessTree(child, processTree, killProcess);
       } else if (child && !child.killed) {
