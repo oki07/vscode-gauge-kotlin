@@ -4808,6 +4808,50 @@ function recordStepAnnotationTypeAlias(named, ambiguousNamed, exposedName, targe
   named.set(exposedName, targetName);
 }
 
+function wildcardStepTypeAliasExposedName(importedName, wildcardPrefix) {
+  const prefix = `${wildcardPrefix}.`;
+  if (!importedName.startsWith(prefix)) {
+    return undefined;
+  }
+  const exposedName = importedName.slice(prefix.length);
+  return exposedName.includes(".") ? undefined : exposedName;
+}
+
+function collectWildcardStepTypeAliasImportCandidates(wildcards, externalStepAliases) {
+  const candidates = new Map();
+  for (const wildcardPrefix of wildcards) {
+    for (const importedName of externalStepAliases.keys()) {
+      const exposedName = wildcardStepTypeAliasExposedName(importedName, wildcardPrefix);
+      if (exposedName === undefined) {
+        continue;
+      }
+      if (!candidates.has(exposedName)) {
+        candidates.set(exposedName, new Set());
+      }
+      candidates.get(exposedName).add(importedName);
+    }
+  }
+  return candidates;
+}
+
+function applyWildcardStepTypeAliasImports(named, ambiguousNamed, wildcards, externalStepAliases) {
+  if (wildcards.size === 0 || externalStepAliases.size === 0) {
+    return;
+  }
+  const candidates = collectWildcardStepTypeAliasImportCandidates(wildcards, externalStepAliases);
+  for (const [exposedName, importedNames] of candidates) {
+    if (named.has(exposedName) || ambiguousNamed.has(exposedName)) {
+      continue;
+    }
+    if (importedNames.size !== 1) {
+      ambiguousNamed.add(exposedName);
+      continue;
+    }
+    const [importedName] = importedNames;
+    named.set(exposedName, externalStepAliases.get(importedName));
+  }
+}
+
 function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = new Map()) {
   const ambiguousNamed = new Set();
   const named = new Map();
@@ -4860,6 +4904,7 @@ function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = n
       lineIndex = statement.endIndex;
     }
   }
+  applyWildcardStepTypeAliasImports(named, ambiguousNamed, wildcards, externalStepAliases);
   return { ambiguousNamed, named, wildcards };
 }
 
