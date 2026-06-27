@@ -199,6 +199,57 @@ test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at un
   assert.deepEqual(afterPipeItems, []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests dynamic arguments inside inline table body cells", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const specHeader = "  | <field> | value |";
+  const specBody = "  | <u>     | admin |";
+  const specDocument = createDocument([
+    "# Checkout",
+    "| user | role |",
+    "| ---- | ---- |",
+    "| Bob  | admin |",
+    "",
+    "## Successful checkout",
+    "* Login with table",
+    specHeader,
+    "  | ------- | ----- |",
+    specBody,
+  ].join("\n"));
+  const conceptHeader = "  | <field> | value |";
+  const conceptBody = "  | <i>     | admin |";
+  const conceptDocument = createDocument([
+    "# Shared checkout <item>",
+    "* Select <user>",
+    conceptHeader,
+    "  | ------- | ----- |",
+    conceptBody,
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const specItems = provider.provideCompletionItems(
+    specDocument,
+    new vscode.Position(9, specBody.indexOf("u") + 1),
+  );
+  const specHeaderItems = provider.provideCompletionItems(
+    specDocument,
+    new vscode.Position(7, specHeader.indexOf("field")),
+  );
+  const conceptItems = provider.provideCompletionItems(
+    conceptDocument,
+    new vscode.Position(4, conceptBody.indexOf("i") + 1),
+  );
+  const conceptHeaderItems = provider.provideCompletionItems(
+    conceptDocument,
+    new vscode.Position(2, conceptHeader.indexOf("field")),
+  );
+
+  assert.deepEqual(labels(specItems), ["user", "role"]);
+  assert.deepEqual(specHeaderItems, []);
+  assert.deepEqual(labels(conceptItems), ["item", "user"]);
+  assert.deepEqual(conceptHeaderItems, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores dynamic-looking table headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

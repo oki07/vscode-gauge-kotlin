@@ -115,15 +115,15 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
-function isTableBlockStartLine(line) {
-  return line.startsWith("|");
+function isTableBlockStartLine(line, options = {}) {
+  return options.allowIndented ? isTableLine(line) : line.startsWith("|");
 }
 
 function isTeardownLine(line) {
   return /^___+\s*$/.test(line);
 }
 
-function tableBlockStartLine(lines, lineNumber) {
+function tableBlockStartLine(lines, lineNumber, options = {}) {
   if (!isTableLine(lines[lineNumber] || "")) {
     return -1;
   }
@@ -132,20 +132,20 @@ function tableBlockStartLine(lines, lineNumber) {
   while (startLine > 0 && isTableLine(lines[startLine - 1] || "")) {
     startLine -= 1;
   }
-  return isTableBlockStartLine(lines[startLine] || "") ? startLine : -1;
+  return isTableBlockStartLine(lines[startLine] || "", options) ? startLine : -1;
 }
 
-function isFirstTableLine(lines, lineNumber) {
-  return tableBlockStartLine(lines, lineNumber) === lineNumber;
+function isFirstTableLine(lines, lineNumber, options = {}) {
+  return tableBlockStartLine(lines, lineNumber, options) === lineNumber;
 }
 
-function isTableBlockLine(lines, lineNumber) {
-  return tableBlockStartLine(lines, lineNumber) !== -1;
+function isTableBlockLine(lines, lineNumber, options = {}) {
+  return tableBlockStartLine(lines, lineNumber, options) !== -1;
 }
 
-function isTableHeaderLine(document, lineNumber) {
+function isTableHeaderLine(document, lineNumber, options = {}) {
   const lines = document.getText().split(/\r?\n/);
-  return isFirstTableLine(lines, lineNumber);
+  return isFirstTableLine(lines, lineNumber, options);
 }
 
 function tableCells(line) {
@@ -277,7 +277,7 @@ function allowsDynamicArgumentCompletion(line, document, lineNumber) {
     return true;
   }
   const lines = document.getText().split(/\r?\n/);
-  return isStepLine(line) || isTableBlockLine(lines, lineNumber);
+  return isStepLine(line) || isTableBlockLine(lines, lineNumber, { allowIndented: true });
 }
 
 function allowsStaticArgumentCompletion(line) {
@@ -305,7 +305,7 @@ class GaugeDynamicArgumentCompletionProvider {
     if (!argumentRange && !quotedArgumentRange) {
       return [];
     }
-    if (argumentRange && isTableHeaderLine(document, position.line)) {
+    if (argumentRange && isTableHeaderLine(document, position.line, { allowIndented: true })) {
       return [];
     }
     if (argumentRange && !allowsDynamicArgumentCompletion(line, document, position.line)) {
