@@ -27,6 +27,23 @@ function textDocumentIdentifier(uri) {
   return { uri };
 }
 
+function documentPath(document) {
+  return document && document.uri && document.uri.fsPath;
+}
+
+function uriPath(uri) {
+  return uri && uri.fsPath;
+}
+
+function sameDocument(left, right) {
+  if (left === right) {
+    return true;
+  }
+  const leftPath = documentPath(left);
+  const rightPath = documentPath(right);
+  return Boolean(leftPath && rightPath && leftPath === rightPath);
+}
+
 function offsetAt(text, position) {
   let offset = 0;
   let line = 0;
@@ -170,8 +187,10 @@ class ReferenceProvider {
 
     return languageClient
       .sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode))
-      .then((stepValue) => {
-        const localStepValue = this.kotlinStepValueAt(editor.document, position);
+      .then(async (stepValue) => {
+        const localStepValue = stepValue
+          ? undefined
+          : await this.kotlinStepValueAt(editor.document, position);
         return this.showStepReferences(
           documentId.uri,
           position,
@@ -180,7 +199,78 @@ class ReferenceProvider {
       });
   }
 
-  kotlinStepValueAt(document, position) {
+  async findWorkspaceKotlinDocuments() {
+    const workspace = this.vscode.workspace || {};
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return [];
+    }
+
+    let uris;
+    try {
+      uris = await workspace.findFiles("**/*.kt");
+    } catch (_error) {
+      return [];
+    }
+
+    const documents = [];
+    for (const uri of uris || []) {
+      const file = uriPath(uri);
+      if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+        try {
+          this.projectFactory.getGaugeRootFromFilePath(file);
+        } catch (_error) {
+          continue;
+        }
+      }
+
+      try {
+        documents.push(await workspace.openTextDocument(uri));
+      } catch (_error) {
+        // Ignore unreadable files so one stale workspace URI does not block references.
+      }
+    }
+    return documents;
+  }
+
+  async kotlinDocuments(sourceDocument) {
+    const workspace = this.vscode.workspace || {};
+    const documents = [];
+    const seenPaths = new Set();
+    const addDocument = (candidate) => {
+      if (
+        !candidate
+        || sameDocument(candidate, sourceDocument)
+        || candidate.languageId !== KOTLIN_LANGUAGE
+        || typeof candidate.getText !== "function"
+        || !this.diagnosticsProvider.isGaugeProjectDocument(candidate)
+      ) {
+        return;
+      }
+      const file = documentPath(candidate);
+      if (file) {
+        if (seenPaths.has(file)) {
+          return;
+        }
+        seenPaths.add(file);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+
+    for (const candidate of workspace.textDocuments || []) {
+      addDocument(candidate);
+    }
+    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+      addDocument(candidate);
+    }
+    return documents;
+  }
+
+  async kotlinStepValueAt(document, position) {
     if (
       !document
       || document.languageId !== KOTLIN_LANGUAGE
@@ -192,7 +282,10 @@ class ReferenceProvider {
 
     const text = document.getText();
     const offset = offsetAt(text, position);
-    const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document);
+    const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
+      document,
+      await this.kotlinDocuments(document),
+    );
     for (const entry of findStepFunctions(text, externalConstants)) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;

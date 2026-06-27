@@ -51,6 +51,7 @@ function createFakeVscode(overrides = {}) {
           return Promise.resolve(undefined);
         },
       },
+      workspace: overrides.workspace || {},
     },
   };
 }
@@ -244,6 +245,80 @@ test("ReferenceProvider uses the Kotlin Step alias under the active cursor", asy
   assert.equal(result, true);
   assert.equal(requestCalls[1].method, "gauge/stepReferences");
   assert.equal(requestCalls[1].params, "Second alias <name>");
+  assert.deepEqual(calls.information, []);
+  assert.equal(calls.commands[0].command, "editor.action.showReferences");
+});
+
+test("ReferenceProvider falls back to unopened workspace Kotlin constants", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const constantsDocument = {
+    languageId: "kotlin",
+    uri: { fsPath: "/workspace/tests/StepText.kt" },
+    getText() {
+      return [
+        "package tests",
+        "",
+        "object StepText {",
+        "  const val LOGIN = \"Log in as <user>\"",
+        "}",
+      ].join("\n");
+    },
+  };
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "package tests",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(StepText.LOGIN)",
+        "fun login(user: String) {}",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 5, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        assert.equal(pattern, "**/*.kt");
+        return [constantsDocument.uri];
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, constantsDocument.uri);
+        return constantsDocument;
+      },
+      textDocuments: [activeDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": [
+      { uri: "file:///workspace/specs/login.spec", range: { start: { line: 3, character: 0 } } },
+    ],
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.equal(requestCalls[1].method, "gauge/stepReferences");
+  assert.equal(requestCalls[1].params, "Log in as <user>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
