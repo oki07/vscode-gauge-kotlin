@@ -790,6 +790,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.workspace.options.vscode, fakeVscode);
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
+  assert.equal(created.referenceProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(created.configProvider.context, context);
   assert.equal(created.configProvider.options.vscode, fakeVscode);
   assert.equal(created.extractConceptProvider.clients, created.clientsMap);

@@ -478,7 +478,10 @@ function startGaugeServices(context, vscode, options = {}) {
     state,
     vscode,
   });
-  const referenceProvider = new ReferenceProviderCtor(clientsMap, { vscode });
+  const referenceProvider = new ReferenceProviderCtor(clientsMap, {
+    projectFactory,
+    vscode,
+  });
   const configProvider = new ConfigProviderCtor(context, { vscode });
   const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
     pathModule: options.pathModule,
