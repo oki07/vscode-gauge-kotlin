@@ -1094,6 +1094,32 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step setter accessors with modi
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks grouped Kotlin Step accessor annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  val getterStep: String",
+    "    @[Step(\"Grouped getter <value>\")]",
+    "    public get() = \"value\"",
+    "",
+    "  var setterStep: String = \"\"",
+    "    @[Step(\"Grouped setter <value> and <other>\")]",
+    "    private set(value) {",
+    "      field = value",
+    "    }",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Grouped getter <value>\". ",
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Grouped setter <value> and <other>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks same-indent Kotlin Step setter accessors", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
