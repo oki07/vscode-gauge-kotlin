@@ -211,6 +211,53 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   ]);
 });
 
+test("GaugeWorkspace suppresses external implementation definition errors from Gauge LSP", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode();
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  }, new Command("mvn"), new Command("gradle"));
+
+  const workspace = new GaugeWorkspace({
+    cli,
+    clientsMap: clients,
+    fileSystem,
+    execSync() {
+      return Buffer.from("");
+    },
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/concepts/shared.cpt");
+  const middleware = entry.client.clientOptions.middleware;
+  assert.equal(typeof middleware.provideDefinition, "function");
+
+  const externalError = new Error(
+    "implementation source not found: Step implementation referred from an external project or library",
+  );
+  const suppressed = await middleware.provideDefinition({}, {}, {}, () => Promise.reject(externalError));
+  assert.deepEqual(suppressed, []);
+
+  await assert.rejects(
+    () => middleware.provideDefinition({}, {}, {}, () => Promise.reject(new Error("definition failed"))),
+    /definition failed/,
+  );
+});
+
 test("GaugeWorkspace shares one output channel across workspace project clients", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

@@ -20,6 +20,8 @@ const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
 const RESTART_ACTION = "Restart Now";
+const EXTERNAL_IMPLEMENTATION_SOURCE_ERROR =
+  "implementation source not found: Step implementation referred from an external project or library";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -65,6 +67,26 @@ function minimalEnv(project, cli, baseEnv) {
   return {
     ...env,
     ...(project.envs(cli) || {}),
+  };
+}
+
+function isExternalImplementationSourceError(error) {
+  const message = error && error.message ? error.message : String(error || "");
+  return message.includes(EXTERNAL_IMPLEMENTATION_SOURCE_ERROR);
+}
+
+function clientMiddleware() {
+  return {
+    async provideDefinition(document, position, token, next) {
+      try {
+        return await next(document, position, token);
+      } catch (error) {
+        if (isExternalImplementationSourceError(error)) {
+          return [];
+        }
+        throw error;
+      }
+    },
   };
 }
 
@@ -336,6 +358,7 @@ class GaugeWorkspace {
       diagnosticCollectionName: "gauge",
       outputChannel: this.outputChannel,
       revealOutputChannelOn: this.revealOutputChannelOnNever,
+      middleware: clientMiddleware(),
       synchronize: {
         configurationSection: "gauge",
       },
