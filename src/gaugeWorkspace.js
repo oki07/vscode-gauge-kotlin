@@ -71,8 +71,31 @@ function minimalEnv(project, cli, baseEnv) {
 }
 
 function isExternalImplementationSourceError(error) {
-  const message = error && error.message ? error.message : String(error || "");
-  return message.includes(EXTERNAL_IMPLEMENTATION_SOURCE_ERROR);
+  return errorMessages(error).some((message) => message.includes(EXTERNAL_IMPLEMENTATION_SOURCE_ERROR));
+}
+
+function errorMessages(error, seen = new Set()) {
+  if (error == null) {
+    return [];
+  }
+  if (typeof error === "string") {
+    return [error];
+  }
+  if (typeof error !== "object") {
+    return [String(error)];
+  }
+  if (seen.has(error)) {
+    return [];
+  }
+  seen.add(error);
+
+  const messages = [];
+  for (const key of ["message", "data", "error", "reason", "response"]) {
+    if (Object.prototype.hasOwnProperty.call(error, key)) {
+      messages.push(...errorMessages(error[key], seen));
+    }
+  }
+  return messages;
 }
 
 function clientMiddleware() {

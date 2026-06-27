@@ -252,6 +252,20 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
   const suppressed = await middleware.provideDefinition({}, {}, {}, () => Promise.reject(externalError));
   assert.deepEqual(suppressed, []);
 
+  const nestedExternalError = {
+    code: -32603,
+    data: {
+      error: "implementation source not found: Step implementation referred from an external project or library",
+    },
+  };
+  const suppressedNested = await middleware.provideDefinition(
+    {},
+    {},
+    {},
+    () => Promise.reject(nestedExternalError),
+  );
+  assert.deepEqual(suppressedNested, []);
+
   await assert.rejects(
     () => middleware.provideDefinition({}, {}, {}, () => Promise.reject(new Error("definition failed"))),
     /definition failed/,
