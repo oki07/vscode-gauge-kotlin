@@ -38,6 +38,7 @@ function createDocument(text, languageId, fsPath) {
   const lines = text.split(/\r?\n/);
   return {
     languageId,
+    lineCount: lines.length,
     uri: { fsPath },
     getText() {
       return text;
@@ -46,6 +47,18 @@ function createDocument(text, languageId, fsPath) {
       return { text: lines[line] || "" };
     },
   };
+}
+
+function createStrictDocument(text, languageId, fsPath) {
+  const document = createDocument(text, languageId, fsPath);
+  const lines = text.split(/\r?\n/);
+  document.lineAt = (line) => {
+    if (line < 0 || line >= lines.length) {
+      throw new RangeError("line out of range");
+    }
+    return { text: lines[line] };
+  };
+  return document;
 }
 
 function createProjectFactory() {
@@ -138,6 +151,36 @@ test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functi
     { ...definitions[0].range.start },
     { line: 6, character: 2 },
   );
+});
+
+test("GaugeStepDefinitionProvider resolves final-line spec steps", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createStrictDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
 });
 
 test("GaugeStepDefinitionProvider uses workspace Kotlin constants when matching steps", async () => {

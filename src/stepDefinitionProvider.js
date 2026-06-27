@@ -100,8 +100,18 @@ function normalizeStepTemplate(text) {
 }
 
 function documentLine(document, line) {
+  if (line < 0) {
+    return "";
+  }
+  if (typeof document.lineCount === "number" && line >= document.lineCount) {
+    return "";
+  }
   if (typeof document.lineAt === "function") {
-    return document.lineAt(line).text;
+    try {
+      return document.lineAt(line).text;
+    } catch (_error) {
+      return "";
+    }
   }
   if (typeof document.getText !== "function") {
     return "";
