@@ -263,19 +263,35 @@ function escapeSnippetPlaceholder(value) {
   return value.replace(/[\\$}]/g, "\\$&");
 }
 
-function stepSnippetText(stepText) {
+function filledStaticArguments(prefix) {
+  const values = [];
+  let openIndex = nextUnescapedCharacterIndex(prefix, "\"");
+  while (openIndex !== -1) {
+    const closeIndex = closingQuoteIndex(prefix, openIndex);
+    if (closeIndex === -1) {
+      break;
+    }
+    values.push(prefix.slice(openIndex + 1, closeIndex));
+    openIndex = nextUnescapedCharacterIndex(prefix, "\"", closeIndex + 1);
+  }
+  return values;
+}
+
+function stepSnippetText(stepText, prefix = "") {
   const ranges = stepParameterRanges(stepText);
   if (ranges.length === 0) {
     return stepText;
   }
 
+  const filledArgs = filledStaticArguments(prefix);
   let result = "";
   let offset = 0;
   for (let index = 0; index < ranges.length; index += 1) {
     const range = ranges[index];
     const tabstop = index === ranges.length - 1 ? 0 : index + 1;
+    const placeholder = filledArgs[index] !== undefined ? filledArgs[index] : range.name;
     result += stepText.slice(offset, range.start);
-    result += `"${"${"}${tabstop}:${escapeSnippetPlaceholder(range.name)}}"`;
+    result += `"${"${"}${tabstop}:${escapeSnippetPlaceholder(placeholder)}}"`;
     offset = range.end + 1;
   }
   return result + stepText.slice(offset);
@@ -434,6 +450,8 @@ class GaugeDynamicArgumentCompletionProvider {
     if (!document || document.languageId !== "gauge" || !this.isGaugeProjectDocument(document)) {
       return [];
     }
+    const line = document.lineAt(position.line).text;
+    const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
     return this.stepAliases(workspaceDocuments).map((label) => completionItem(
@@ -443,7 +461,7 @@ class GaugeDynamicArgumentCompletionProvider {
       {
         detail: "step",
         filterText: label,
-        insertText: snippetString(this.vscode, stepSnippetText(label)),
+        insertText: snippetString(this.vscode, stepSnippetText(label, prefix)),
         kind,
       },
     ));

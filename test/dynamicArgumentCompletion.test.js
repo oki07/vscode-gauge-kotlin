@@ -689,6 +689,37 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on ste
   assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 5 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider keeps filled static args in Kotlin Step alias snippets", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const stepLine = "* Log in as \"Alice\"";
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    stepLine,
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, stepLine.length));
+
+  assert.deepEqual(labels(items), ["Log in as <user>"]);
+  assert.equal(items[0].insertText.value, "Log in as \"${0:Alice}\"");
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores indented step lines for Kotlin Step aliases", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
