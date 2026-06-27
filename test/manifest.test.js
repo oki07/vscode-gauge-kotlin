@@ -57,21 +57,16 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "test:unit": "node --test",
     "test:lsp": "node --test test/gaugeClients.test.js test/gaugeWorkspace.test.js",
     "test:vscode": "node --test test/extension.test.js test/manifest.test.js",
-    package: "npm pack --dry-run",
+    package: "node scripts/package-vsix.js",
     check: "npm run typecheck && npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
     test: "npm run test:unit",
   });
   assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");
   assert.deepEqual(manifest.categories, ["Programming Languages", "Testing"]);
-  assert.deepEqual(manifest.files, [
-    "images/**",
-    "language-configuration.json",
-    "resources/**",
-    "snippets/**",
-    "src/**",
-    "syntaxes/**",
-    ".vscodeignore",
-  ]);
+  assert.equal(Object.hasOwn(manifest, "files"), false);
+  assert.equal(fs.existsSync(path.join(root, "README.md")), true);
+  assert.equal(fs.existsSync(path.join(root, "LICENSE")), true);
+  assert.equal(fs.existsSync(path.join(root, "package-lock.json")), true);
   assert.equal(fs.existsSync(path.join(root, manifest.icon)), true);
 
   assert.deepEqual(manifest.activationEvents, [
@@ -353,7 +348,10 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
 });
 
 test("extension package ignores development-only files while keeping runtime sources", () => {
+  const manifest = readPackageJson();
   const ignored = readVscodeIgnore();
+
+  assert.equal(Object.hasOwn(manifest, "files"), false);
 
   for (const pattern of [
     ".vscode/**",

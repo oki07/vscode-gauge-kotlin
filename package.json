@@ -25,15 +25,6 @@
     "testing",
     "specification"
   ],
-  "files": [
-    "images/**",
-    "language-configuration.json",
-    "resources/**",
-    "snippets/**",
-    "src/**",
-    "syntaxes/**",
-    ".vscodeignore"
-  ],
   "engines": {
     "vscode": "^1.82.0"
   },
@@ -52,7 +43,7 @@
     "test:unit": "node --test",
     "test:lsp": "node --test test/gaugeClients.test.js test/gaugeWorkspace.test.js",
     "test:vscode": "node --test test/extension.test.js test/manifest.test.js",
-    "package": "npm pack --dry-run",
+    "package": "node scripts/package-vsix.js",
     "check": "npm run typecheck && npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
     "test": "npm run test:unit"
   },
