@@ -184,6 +184,40 @@ test("GaugeStepDefinitionProvider resolves docstring argument spec steps", async
   );
 });
 
+test("GaugeStepDefinitionProvider matches steps across NFC/NFD unicode normalization", async () => {
+  // macOS commonly stores text decomposed (NFD). A spec saved as NFD and a
+  // Kotlin @Step saved as NFC render identically but are not byte-equal, so a
+  // strict comparison fails for any step containing combining marks. Steps with
+  // no combining marks match either way, which is why only some steps appeared
+  // broken. This is script-agnostic: "e" + combining acute (U+0301, NFD) versus
+  // the precomposed e-acute (U+00E9, NFC) stands in for a Japanese dakuten.
+  // \u escapes keep this source ASCII while the runtime strings differ in form.
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Display",
+    "## Scenario",
+    "* show \"hi\" in cafe\u0301", // NFD: e + combining acute
+  ].join("\n"), "gauge", "/workspace/gauge/specs/display.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "class DisplaySteps {",
+    "  @Step(\"show <text> in caf\u00e9\")", // NFC: precomposed e-acute
+    "  fun shown(text: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/DisplaySteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 2, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+});
+
 test("GaugeStepDefinitionProvider resolves concept steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([

@@ -103,7 +103,12 @@ function normalizeStepTemplate(text) {
     result += `${text.slice(index, parameter.start)}{}`;
     index = end + 1;
   }
-  return result.trim();
+  // Normalize to NFC so a spec and a Kotlin @Step that render identically but
+  // were saved in different unicode forms (common on macOS, where text is often
+  // stored decomposed/NFD) compare equal. Steps without combining marks are
+  // unaffected, which is why only steps containing combining marks (such as a
+  // Japanese dakuten) appeared broken.
+  return result.trim().normalize("NFC");
 }
 
 function documentLine(document, line) {
@@ -379,7 +384,13 @@ class GaugeStepDefinitionProvider {
       if (trace.enabled) {
         trace.log(`  ${documentPath(candidate)}: @Step functions=${stepFunctions.length} matched=${matched}`);
         if (matched === 0 && aliasesSeen.length > 0) {
-          trace.log(`     available aliases: ${JSON.stringify(aliasesSeen.slice(0, 12))}`);
+          trace.log(`     available aliases (${aliasesSeen.length}): ${JSON.stringify(aliasesSeen.slice(0, 40))}`);
+          const collapse = (value) => value.replace(/\s+/g, " ").trim();
+          const wantedCollapsed = collapse(wantedStep);
+          const whitespaceOnly = aliasesSeen.filter((alias) => alias !== wantedStep && collapse(alias) === wantedCollapsed);
+          if (whitespaceOnly.length > 0) {
+            trace.log(`     NEAR-MISS (whitespace only): ${JSON.stringify(whitespaceOnly)} vs wanted ${JSON.stringify(wantedStep)}`);
+          }
         }
       }
     }
