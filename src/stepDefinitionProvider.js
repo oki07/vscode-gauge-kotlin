@@ -164,34 +164,45 @@ function docStringStepLineAt(document, line) {
   return undefined;
 }
 
-function stepTextAt(document, position) {
+function uniqueValues(values) {
+  return [...new Set(values)];
+}
+
+function stepTextCandidatesAt(document, position) {
   if (!document || document.languageId !== GAUGE_LANGUAGE || !position) {
-    return undefined;
+    return [];
   }
   let lineNumber = position.line;
   let line = documentLine(document, lineNumber);
   if (!isStepLine(line)) {
     const docStringStepLine = docStringStepLineAt(document, lineNumber);
     if (docStringStepLine === undefined) {
-      return undefined;
+      return [];
     }
     lineNumber = docStringStepLine;
     line = documentLine(document, lineNumber);
   }
   if (!isStepLine(line)) {
-    return undefined;
+    return [];
   }
   let stepText = line.slice(1).trim();
   if (!stepText) {
-    return undefined;
+    return [];
   }
   const nextLine = documentLine(document, lineNumber + 1);
   if (isInlineTableLine(nextLine)) {
     stepText = `${stepText} <table>`;
   } else if (isDocStringFenceLine(nextLine)) {
-    stepText = `${stepText} <text>`;
+    return uniqueValues([
+      normalizeStepTemplate(stepText),
+      normalizeStepTemplate(`${stepText} <text>`),
+    ]);
   }
-  return normalizeStepTemplate(stepText);
+  return [normalizeStepTemplate(stepText)];
+}
+
+function stepTextAt(document, position) {
+  return stepTextCandidatesAt(document, position)[0];
 }
 
 function sameDocument(left, right) {
@@ -349,6 +360,8 @@ class GaugeStepDefinitionProvider {
   }
 
   definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}, trace = NULL_TRACE) {
+    const wantedSteps = Array.isArray(wantedStep) ? wantedStep : [wantedStep];
+    const wantedStepSet = new Set(wantedSteps);
     const definitions = [];
     for (const candidate of documents) {
       const text = candidate.getText();
@@ -371,7 +384,7 @@ class GaugeStepDefinitionProvider {
         if (trace.enabled) {
           aliasesSeen.push(...normalizedAliases);
         }
-        if (!normalizedAliases.some((alias) => alias === wantedStep)) {
+        if (!normalizedAliases.some((alias) => wantedStepSet.has(alias))) {
           continue;
         }
         matched += 1;
@@ -386,10 +399,10 @@ class GaugeStepDefinitionProvider {
         if (matched === 0 && aliasesSeen.length > 0) {
           trace.log(`     available aliases (${aliasesSeen.length}): ${JSON.stringify(aliasesSeen.slice(0, 40))}`);
           const collapse = (value) => value.replace(/\s+/g, " ").trim();
-          const wantedCollapsed = collapse(wantedStep);
-          const whitespaceOnly = aliasesSeen.filter((alias) => alias !== wantedStep && collapse(alias) === wantedCollapsed);
+          const wantedCollapsed = new Set(wantedSteps.map((step) => collapse(step)));
+          const whitespaceOnly = aliasesSeen.filter((alias) => !wantedStepSet.has(alias) && wantedCollapsed.has(collapse(alias)));
           if (whitespaceOnly.length > 0) {
-            trace.log(`     NEAR-MISS (whitespace only): ${JSON.stringify(whitespaceOnly)} vs wanted ${JSON.stringify(wantedStep)}`);
+            trace.log(`     NEAR-MISS (whitespace only): ${JSON.stringify(whitespaceOnly)} vs wanted ${JSON.stringify(wantedSteps)}`);
           }
         }
       }
@@ -400,17 +413,20 @@ class GaugeStepDefinitionProvider {
   async provideDefinition(document, position) {
     const trace = createDefinitionTrace(this.vscode);
     try {
-      const wantedStep = stepTextAt(document, position);
+      const wantedSteps = stepTextCandidatesAt(document, position);
       const gaugeProject = this.isGaugeProjectDocument(document);
       if (trace.enabled) {
         trace.log("provideDefinition called");
         trace.log(`  file=${document && document.uri && document.uri.fsPath}`);
         trace.log(`  languageId=${document && document.languageId} position=${position && position.line}:${position && position.character}`);
         trace.log(`  line=${JSON.stringify(documentLine(document, position && position.line))}`);
-        trace.log(`  wantedStep=${JSON.stringify(wantedStep)}`);
+        trace.log(`  wantedStep=${JSON.stringify(wantedSteps[0])}`);
+        if (wantedSteps.length > 1) {
+          trace.log(`  wantedStepCandidates=${JSON.stringify(wantedSteps)}`);
+        }
         trace.log(`  isGaugeProjectDocument=${gaugeProject}`);
       }
-      if (!wantedStep || !gaugeProject) {
+      if (wantedSteps.length === 0 || !gaugeProject) {
         trace.log("  -> returning [] (no step text or not a Gauge project)");
         return [];
       }
@@ -421,7 +437,7 @@ class GaugeStepDefinitionProvider {
       } = await this.kotlinDocumentGroups(document, trace);
       trace.log("project group matches:");
       const projectDefinitions = this.definitionsForDocuments(
-        wantedStep,
+        wantedSteps,
         projectDocuments,
         projectDocuments,
         {},
@@ -433,7 +449,7 @@ class GaugeStepDefinitionProvider {
       }
       trace.log("external group matches:");
       const externalDefinitions = this.definitionsForDocuments(
-        wantedStep,
+        wantedSteps,
         externalDocuments,
         [...projectDocuments, ...externalDocuments],
         { includeExternalWorkspace: true },
