@@ -6,6 +6,13 @@ const {
   isKotlinDocument,
   positionAt,
 } = require("./stepDiagnostics");
+const { createDefinitionTrace, NULL_TRACE } = require("./definitionTrace");
+
+function describeDocument(candidate) {
+  const file = candidate && candidate.uri && candidate.uri.fsPath;
+  const languageId = candidate && candidate.languageId;
+  return `${file || "<no-path>"} (languageId=${languageId})`;
+}
 
 const GAUGE_LANGUAGE = "gauge";
 
@@ -187,12 +194,13 @@ class GaugeStepDefinitionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
-  async findWorkspaceKotlinDocuments() {
+  async findWorkspaceKotlinDocuments(trace = NULL_TRACE) {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
       || typeof workspace.openTextDocument !== "function"
     ) {
+      trace.log(`findWorkspaceKotlinDocuments: workspace.findFiles=${typeof workspace.findFiles} openTextDocument=${typeof workspace.openTextDocument}`);
       return [];
     }
 
@@ -200,56 +208,85 @@ class GaugeStepDefinitionProvider {
     let uris;
     try {
       uris = await workspace.findFiles("**/*.kt");
-    } catch (_error) {
+    } catch (error) {
+      trace.log(`findFiles("**/*.kt") threw: ${error && error.message ? error.message : error}`);
       return documents;
     }
+    trace.log(`findFiles("**/*.kt") returned ${(uris || []).length} uri(s)`);
     for (const uri of uris || []) {
       try {
         const document = await workspace.openTextDocument(uri);
         documents.push(document);
-      } catch (_error) {
+      } catch (error) {
         // Ignore unreadable files so one stale workspace URI does not block navigation.
+        trace.log(`openTextDocument failed for ${uri && uri.fsPath}: ${error && error.message ? error.message : error}`);
       }
     }
     return documents;
   }
 
-  async kotlinDocumentGroups(sourceDocument) {
+  async kotlinDocumentGroups(sourceDocument, trace = NULL_TRACE) {
     const workspace = this.vscode.workspace || {};
     const projectDocuments = [];
     const externalDocuments = [];
     const seenPaths = new Set();
+    let rejected = 0;
+    const reject = (reason, candidate) => {
+      rejected += 1;
+      if (trace.enabled && reason !== "duplicate") {
+        trace.log(`  reject [${reason}] ${describeDocument(candidate)}`);
+      }
+    };
     const addDocument = (candidate) => {
-      if (
-        !candidate
-        || sameDocument(candidate, sourceDocument)
-        || !isKotlinDocument(candidate)
-        || typeof candidate.getText !== "function"
-      ) {
+      if (!candidate) {
+        reject("null", candidate);
+        return;
+      }
+      if (sameDocument(candidate, sourceDocument)) {
+        reject("source-document", candidate);
+        return;
+      }
+      if (!isKotlinDocument(candidate)) {
+        reject("not-kotlin", candidate);
+        return;
+      }
+      if (typeof candidate.getText !== "function") {
+        reject("no-getText", candidate);
         return;
       }
       const file = documentPath(candidate);
       if (file) {
         if (seenPaths.has(file)) {
+          reject("duplicate", candidate);
           return;
         }
         seenPaths.add(file);
       } else if (projectDocuments.includes(candidate) || externalDocuments.includes(candidate)) {
+        reject("duplicate", candidate);
         return;
       }
       if (this.isGaugeProjectDocument(candidate)) {
         projectDocuments.push(candidate);
+        if (trace.enabled) {
+          trace.log(`  accept [project]  ${describeDocument(candidate)}`);
+        }
       } else {
         externalDocuments.push(candidate);
+        if (trace.enabled) {
+          trace.log(`  accept [external] ${describeDocument(candidate)}`);
+        }
       }
     };
 
-    for (const candidate of workspace.textDocuments || []) {
+    const openDocuments = workspace.textDocuments || [];
+    trace.log(`open textDocuments: ${openDocuments.length}`);
+    for (const candidate of openDocuments) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+    for (const candidate of await this.findWorkspaceKotlinDocuments(trace)) {
       addDocument(candidate);
     }
+    trace.log(`kotlin groups: project=${projectDocuments.length} external=${externalDocuments.length} rejected=${rejected}`);
     return { externalDocuments, projectDocuments };
   }
 
@@ -269,59 +306,103 @@ class GaugeStepDefinitionProvider {
     return diagnosticsProvider.collectWorkspaceConstants(document);
   }
 
-  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}) {
+  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}, trace = NULL_TRACE) {
     const definitions = [];
     for (const candidate of documents) {
       const text = candidate.getText();
       const externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
-      for (const entry of findStepFunctions(text, externalConstants)) {
-        if (!entry.aliases.some((alias) => normalizeStepTemplate(alias) === wantedStep)) {
+      const stepFunctions = findStepFunctions(text, externalConstants);
+      let matched = 0;
+      const aliasesSeen = [];
+      for (const entry of stepFunctions) {
+        const normalizedAliases = entry.aliases.map((alias) => normalizeStepTemplate(alias));
+        if (trace.enabled) {
+          aliasesSeen.push(...normalizedAliases);
+        }
+        if (!normalizedAliases.some((alias) => alias === wantedStep)) {
           continue;
         }
+        matched += 1;
         definitions.push(createLocation(
           this.vscode,
           candidate.uri,
           targetRange(this.vscode, text, entry),
         ));
       }
+      if (trace.enabled) {
+        trace.log(`  ${documentPath(candidate)}: @Step functions=${stepFunctions.length} matched=${matched}`);
+        if (matched === 0 && aliasesSeen.length > 0) {
+          trace.log(`     available aliases: ${JSON.stringify(aliasesSeen.slice(0, 12))}`);
+        }
+      }
     }
     return definitions;
   }
 
   async provideDefinition(document, position) {
-    const wantedStep = stepTextAt(document, position);
-    if (!wantedStep || !this.isGaugeProjectDocument(document)) {
-      return [];
-    }
+    const trace = createDefinitionTrace(this.vscode);
+    try {
+      const wantedStep = stepTextAt(document, position);
+      const gaugeProject = this.isGaugeProjectDocument(document);
+      if (trace.enabled) {
+        trace.log("provideDefinition called");
+        trace.log(`  file=${document && document.uri && document.uri.fsPath}`);
+        trace.log(`  languageId=${document && document.languageId} position=${position && position.line}:${position && position.character}`);
+        trace.log(`  line=${JSON.stringify(documentLine(document, position && position.line))}`);
+        trace.log(`  wantedStep=${JSON.stringify(wantedStep)}`);
+        trace.log(`  isGaugeProjectDocument=${gaugeProject}`);
+      }
+      if (!wantedStep || !gaugeProject) {
+        trace.log("  -> returning [] (no step text or not a Gauge project)");
+        return [];
+      }
 
-    const {
-      externalDocuments,
-      projectDocuments,
-    } = await this.kotlinDocumentGroups(document);
-    const projectDefinitions = this.definitionsForDocuments(
-      wantedStep,
-      projectDocuments,
-      projectDocuments,
-    );
-    if (projectDefinitions.length > 0) {
-      return projectDefinitions;
+      const {
+        externalDocuments,
+        projectDocuments,
+      } = await this.kotlinDocumentGroups(document, trace);
+      trace.log("project group matches:");
+      const projectDefinitions = this.definitionsForDocuments(
+        wantedStep,
+        projectDocuments,
+        projectDocuments,
+        {},
+        trace,
+      );
+      if (projectDefinitions.length > 0) {
+        trace.log(`  -> ${projectDefinitions.length} definition(s) from project group`);
+        return projectDefinitions;
+      }
+      trace.log("external group matches:");
+      const externalDefinitions = this.definitionsForDocuments(
+        wantedStep,
+        externalDocuments,
+        [...projectDocuments, ...externalDocuments],
+        { includeExternalWorkspace: true },
+        trace,
+      );
+      trace.log(`  -> ${externalDefinitions.length} definition(s) from external group`);
+      return externalDefinitions;
+    } catch (error) {
+      trace.log(`  !! threw: ${error && error.stack ? error.stack : error}`);
+      throw error;
+    } finally {
+      trace.flush();
     }
-    return this.definitionsForDocuments(
-      wantedStep,
-      externalDocuments,
-      [...projectDocuments, ...externalDocuments],
-      { includeExternalWorkspace: true },
-    );
   }
 
   register() {
     if (!this.vscode.languages || typeof this.vscode.languages.registerDefinitionProvider !== "function") {
       return { dispose() {} };
     }
-    return this.vscode.languages.registerDefinitionProvider(
+    const disposable = this.vscode.languages.registerDefinitionProvider(
       { language: GAUGE_LANGUAGE },
       this,
     );
+    const trace = createDefinitionTrace(this.vscode);
+    trace.log(`definition provider registered for language "${GAUGE_LANGUAGE}"`);
+    trace.flush({ reveal: false });
+    return disposable;
   }
 }
 

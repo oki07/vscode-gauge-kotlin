@@ -186,6 +186,54 @@ test("GaugeStepDefinitionProvider resolves concept steps when Kotlin files open 
   );
 });
 
+test("GaugeStepDefinitionProvider writes a measured trace to the output channel", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const conceptDocument = createDocument([
+    "# Shared login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const appended = [];
+  const vscode = createFakeVscode([conceptDocument], {
+    findFiles: async () => [kotlinDocument.uri],
+    openTextDocument: async () => kotlinDocument,
+  });
+  vscode.window = {
+    createOutputChannel() {
+      return {
+        appendLine(message) {
+          appended.push(message);
+        },
+        show() {},
+        clear() {},
+      };
+    },
+  };
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(conceptDocument, { line: 1, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.ok(appended.some((line) => line.includes("provideDefinition called")));
+  assert.ok(appended.some((line) => line.includes("languageId=gauge")));
+  assert.ok(appended.some((line) => line.includes("wantedStep=\"Log in as {}\"")));
+  assert.ok(appended.some((line) => line.includes("findFiles(\"**/*.kt\") returned 1")));
+  assert.ok(appended.some((line) => line.includes("@Step functions=1 matched=1")));
+  assert.ok(appended.some((line) => line.includes("1 definition(s) from project group")));
+});
+
 test("GaugeStepDefinitionProvider falls back to external workspace Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([
