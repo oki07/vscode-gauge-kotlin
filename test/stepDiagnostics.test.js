@@ -3512,6 +3512,46 @@ test("GaugeStepDiagnosticsProvider evaluates imported workspace Kotlin const ste
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores ambiguous imported workspace Kotlin const step aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const firstConstantsDocument = createDocument([
+    "package fixtures.first",
+    "",
+    "object StepText {",
+    "  const val LOGIN_STEP = \"First <user> and <tenant>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/first/StepText.kt");
+  const secondConstantsDocument = createDocument([
+    "package fixtures.second",
+    "",
+    "object StepText {",
+    "  const val LOGIN_STEP = \"Second <user>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/second/StepText.kt");
+  const stepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.first.StepText.LOGIN_STEP",
+    "import fixtures.second.StepText.LOGIN_STEP",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [firstConstantsDocument, secondConstantsDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider evaluates wildcard-imported workspace Kotlin const step aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const constantsDocument = createDocument([
