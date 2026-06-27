@@ -3664,6 +3664,41 @@ test("GaugeStepDiagnosticsProvider rechecks delayed ambiguous wildcard-imported 
   );
 });
 
+test("GaugeStepDiagnosticsProvider resolves same-file wildcard-imported Kotlin const aliases outside local object scopes", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const stepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.impl.ImportedText.*",
+    "",
+    "object LocalText {",
+    "  const val LOGIN_STEP = \"Local <user>\"",
+    "}",
+    "",
+    "object ImportedText {",
+    "  const val LOGIN_STEP = \"Imported <user> and <tenant>\"",
+    "}",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Imported <user> and <tenant>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores unqualified object Kotlin const references outside scope", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

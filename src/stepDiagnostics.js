@@ -2503,14 +2503,16 @@ function classScopeMap(classRanges) {
 
 function addConstantVisibility(visibility, name, scope) {
   if (name.includes(".")) {
-    return;
+    return undefined;
   }
   const scopes = visibility.get(name) || [];
-  scopes.push(scope || { global: true });
+  const entry = scope === undefined ? { global: true } : { ...scope };
+  scopes.push(entry);
   visibility.set(name, scopes);
+  return entry;
 }
 
-function ensureConstantGloballyVisible(visibility, name) {
+function ensureConstantGloballyVisible(visibility, name, value, typeName) {
   if (name.includes(".")) {
     return false;
   }
@@ -2518,7 +2520,14 @@ function ensureConstantGloballyVisible(visibility, name) {
   if (scopes.some((scope) => scope.global)) {
     return false;
   }
-  scopes.push({ global: true });
+  const globalScope = { global: true };
+  if (value !== undefined) {
+    globalScope.value = value;
+  }
+  if (typeName !== undefined) {
+    globalScope.typeName = typeName;
+  }
+  scopes.push(globalScope);
   visibility.set(name, scopes);
   return true;
 }
@@ -2548,6 +2557,15 @@ function hasGloballyVisibleConstant(visibility, name) {
   return scopes.some((scope) => scope.global);
 }
 
+function setConstantVisibilityEntryValues(entries, value, typeName) {
+  for (const entry of entries) {
+    entry.value = value;
+    if (typeName !== undefined) {
+      entry.typeName = typeName;
+    }
+  }
+}
+
 function constantSimpleVisibilityScopes(declarationOffset, objectRanges, classesByPath) {
   const objectScopes = enclosingRanges(objectRanges, declarationOffset);
   if (objectScopes.length === 0) {
@@ -2563,6 +2581,24 @@ function constantSimpleVisibilityScopes(declarationOffset, objectRanges, classes
   return [{ end: innermostObject.end, start: innermostObject.start }];
 }
 
+function isConstantScopeVisibleAtOffset(scope, offset) {
+  return scope.global || (offset >= scope.start && offset < scope.end);
+}
+
+function constantScopeSpecificity(scope) {
+  if (scope.global) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return Math.max(0, scope.end - scope.start);
+}
+
+function visibleConstantScopeAtOffset(scopes, offset) {
+  const visibleScopes = scopes
+    .filter((scope) => isConstantScopeVisibleAtOffset(scope, offset))
+    .sort((left, right) => constantScopeSpecificity(left) - constantScopeSpecificity(right));
+  return visibleScopes[0];
+}
+
 function isConstantVisibleAtOffset(name, visibility, offset) {
   if (name.includes(".") || visibility === undefined) {
     return true;
@@ -2571,9 +2607,7 @@ function isConstantVisibleAtOffset(name, visibility, offset) {
   if (scopes === undefined) {
     return true;
   }
-  return scopes.some((scope) => (
-    scope.global || (offset >= scope.start && offset < scope.end)
-  ));
+  return visibleConstantScopeAtOffset(scopes, offset) !== undefined;
 }
 
 function constantsVisibleAtOffset(constants, constantTypes, visibility, offset) {
@@ -2584,11 +2618,19 @@ function constantsVisibleAtOffset(constants, constantTypes, visibility, offset) 
   const visibleConstants = new Map();
   const visibleTypes = new Map();
   for (const [name, value] of constants) {
-    if (isConstantVisibleAtOffset(name, visibility, offset)) {
-      visibleConstants.set(name, value);
-      if (constantTypes && constantTypes.has(name)) {
-        visibleTypes.set(name, constantTypes.get(name));
-      }
+    if (!isConstantVisibleAtOffset(name, visibility, offset)) {
+      continue;
+    }
+
+    const scope = name.includes(".") ? undefined : visibleConstantScopeAtOffset(visibility.get(name) || [], offset);
+    const visibleValue = scope && Object.prototype.hasOwnProperty.call(scope, "value")
+      ? scope.value
+      : value;
+    visibleConstants.set(name, visibleValue);
+    if (scope && Object.prototype.hasOwnProperty.call(scope, "typeName")) {
+      visibleTypes.set(name, scope.typeName);
+    } else if (constantTypes && constantTypes.has(name)) {
+      visibleTypes.set(name, constantTypes.get(name));
     }
   }
   return {
@@ -2638,18 +2680,28 @@ function applyKotlinNamedConstantImport(
 
   let changed = false;
   const importedValue = constants.get(importedName);
-  if (!constants.has(exposedName)) {
+  const importedTypeName = constantTypes.get(importedName);
+  const hasExposedName = constants.has(exposedName);
+  if (!hasExposedName) {
     constants.set(exposedName, importedValue);
     changed = true;
-  } else if (constants.get(exposedName) !== importedValue) {
+  } else if (
+    constants.get(exposedName) !== importedValue
+    && hasGloballyVisibleConstant(constantVisibility, exposedName)
+  ) {
     return false;
   }
 
-  if (constantTypes.has(importedName) && !constantTypes.has(exposedName)) {
-    constantTypes.set(exposedName, constantTypes.get(importedName));
+  if (!hasExposedName && importedTypeName !== undefined && !constantTypes.has(exposedName)) {
+    constantTypes.set(exposedName, importedTypeName);
     changed = true;
   }
-  if (ensureConstantGloballyVisible(constantVisibility, exposedName)) {
+  if (ensureConstantGloballyVisible(
+    constantVisibility,
+    exposedName,
+    importedValue,
+    importedTypeName,
+  )) {
     changed = true;
   }
   return changed;
@@ -2960,20 +3012,25 @@ function collectStringConstants(text, externalConstants = {}) {
       objectPaths,
       classPaths,
     );
-    expressions.push({
-      expression: text.slice(expressionStart, expressionEnd),
-      offset: expressionStart,
-      names: [...names],
-      typeName: declaration.typeName,
-    });
     const simpleScopes = constantSimpleVisibilityScopes(
       match.index,
       objectRanges,
       classesByPath,
     );
+    const simpleVisibilityEntries = [];
     for (const scope of simpleScopes) {
-      addConstantVisibility(constantVisibility, declaration.name, scope);
+      const visibilityEntry = addConstantVisibility(constantVisibility, declaration.name, scope);
+      if (visibilityEntry !== undefined) {
+        simpleVisibilityEntries.push(visibilityEntry);
+      }
     }
+    expressions.push({
+      expression: text.slice(expressionStart, expressionEnd),
+      names: [...names],
+      offset: expressionStart,
+      simpleVisibilityEntries,
+      typeName: declaration.typeName,
+    });
     pattern.lastIndex = expressionEnd;
     match = pattern.exec(text);
   }
@@ -2987,7 +3044,7 @@ function collectStringConstants(text, externalConstants = {}) {
       constantImports,
       wildcardImportState,
     );
-    for (const { expression, names, offset, typeName } of expressions) {
+    for (const { expression, names, offset, simpleVisibilityEntries, typeName } of expressions) {
       if (names.every((name) => constants.has(name))) {
         continue;
       }
@@ -3004,6 +3061,7 @@ function collectStringConstants(text, externalConstants = {}) {
             }
           }
         }
+        setConstantVisibilityEntryValues(simpleVisibilityEntries, value, resolvedType);
         changed = true;
       }
     }
