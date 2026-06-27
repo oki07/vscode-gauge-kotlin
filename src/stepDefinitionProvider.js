@@ -197,7 +197,12 @@ class GaugeStepDefinitionProvider {
     }
 
     const documents = [];
-    const uris = await workspace.findFiles("**/*.kt");
+    let uris;
+    try {
+      uris = await workspace.findFiles("**/*.kt");
+    } catch (_error) {
+      return documents;
+    }
     for (const uri of uris || []) {
       const file = uriPath(uri);
       if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {

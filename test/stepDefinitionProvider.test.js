@@ -153,6 +153,48 @@ test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functi
   );
 });
 
+test("GaugeStepDefinitionProvider keeps open Kotlin definitions when workspace search fails", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument], {
+    async findFiles(pattern) {
+      assert.equal(pattern, "**/*.kt");
+      throw new Error("workspace search failed");
+    },
+    async openTextDocument() {
+      throw new Error("openTextDocument should not run after a search failure");
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+});
+
 test("GaugeStepDefinitionProvider resolves final-line spec steps", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createStrictDocument([
