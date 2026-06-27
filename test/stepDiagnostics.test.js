@@ -954,6 +954,30 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step getter accessors without p
   );
 });
 
+test("GaugeStepDiagnosticsProvider checks Kotlin Step getter accessors with modifiers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  val getterStep: String",
+    "    @Step(\"Getter accessor <value>\")",
+    "    public get() = \"value\"",
+    "",
+    "  val bodylessGetterStep: String",
+    "    @Step(\"Bodyless getter accessor <value>\")",
+    "    private get",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Getter accessor <value>\". ",
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Bodyless getter accessor <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider checks Kotlin Step setter use-site annotations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -1040,6 +1064,32 @@ test("GaugeStepDiagnosticsProvider checks Kotlin Step setter accessors without p
     provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
     [
       "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Setter accessor <value> and <other>\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider checks Kotlin Step setter accessors with modifiers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "class Steps {",
+    "  var setterStep: String = \"\"",
+    "    @Step(\"Setter accessor <value> and <other>\")",
+    "    private set(value) {",
+    "      field = value",
+    "    }",
+    "",
+    "  var bodylessSetterStep: String = \"\"",
+    "    @Step(\"Bodyless setter accessor <value> and <other>\")",
+    "    internal set",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Setter accessor <value> and <other>\". ",
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Bodyless setter accessor <value> and <other>\". ",
     ],
   );
 });
