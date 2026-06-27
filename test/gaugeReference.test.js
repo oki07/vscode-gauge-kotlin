@@ -416,6 +416,116 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
   ]);
 });
 
+test("ReferenceProvider resolves package wildcard const Step aliases for local references", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const constantsDocument = {
+    languageId: "kotlin",
+    uri: { fsPath: "/workspace/gauge/src/test/kotlin/fixtures/steps/StepText.kt" },
+    getText() {
+      return [
+        "package fixtures.steps",
+        "",
+        "const val LOGIN_STEP = \"Log in as <user>\"",
+      ].join("\n");
+    },
+  };
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt",
+      toString() {
+        return "file:///workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt";
+      },
+    },
+    getText() {
+      return [
+        "package fixtures.impl",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "import fixtures.steps.*",
+        "",
+        "@Step(LOGIN_STEP)",
+        "fun login(user: String) {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/gauge/specs/login.spec",
+      toString() {
+        return "file:///workspace/gauge/specs/login.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Login",
+        "",
+        "## Scenario",
+        "* Log in as \"alice\"",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 6, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.spec" || pattern === "**/*.cpt") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [activeDocument, constantsDocument, specDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace/gauge", {
+    project: new GaugeProject("/workspace/gauge", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.equal(requestCalls[1].method, "gauge/stepReferences");
+  assert.equal(requestCalls[1].params, "Log in as <user>");
+  assert.deepEqual(calls.information, []);
+  assert.deepEqual(calls.commands, [
+    {
+      command: "editor.action.showReferences",
+      args: [
+        {
+          fsPath: "/workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt",
+          uri: "file:///workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt",
+        },
+        { line: 6, character: 5, converted: "position" },
+        [
+          {
+            uri: "file:///workspace/gauge/specs/login.spec",
+            range: {
+              start: { line: 3, character: 0 },
+              end: { line: 3, character: 19 },
+            },
+            converted: "location",
+          },
+        ],
+      ],
+    },
+  ]);
+});
+
 test("ReferenceProvider matches local Gauge inline table references for Kotlin Step aliases", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");

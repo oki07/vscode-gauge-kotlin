@@ -267,6 +267,44 @@ test("GaugeStepDefinitionProvider uses workspace Kotlin constants when matching 
   );
 });
 
+test("GaugeStepDefinitionProvider uses package wildcard top-level Kotlin constants", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "const val LOGIN_STEP = \"Log in as <user>\"",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/StepText.kt");
+  const kotlinDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.steps.*",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, constantsDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 0 },
+  );
+});
+
 test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

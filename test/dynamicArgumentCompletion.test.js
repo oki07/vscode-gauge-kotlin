@@ -788,3 +788,41 @@ test("GaugeDynamicArgumentCompletionProvider suggests unopened workspace Kotlin 
   assert.deepEqual(labels(items), ["Pay with <card>"]);
   assert.equal(items[0].insertText.value, "Pay with \"${0:card}\"");
 });
+
+test("GaugeDynamicArgumentCompletionProvider suggests package wildcard const Step aliases", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Login",
+    "",
+    "* Log",
+  ].join("\n"), "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "const val LOGIN_STEP = \"Log in as <user>\"",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/fixtures/steps/StepText.kt", "kotlin");
+  const kotlinDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.steps.*",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, constantsDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Log in as <user>"]);
+  assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
+});
