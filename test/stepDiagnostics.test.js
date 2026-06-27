@@ -1491,6 +1491,28 @@ test("GaugeStepDiagnosticsProvider resolves same-package workspace Step type ali
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores same-package workspace Step classifiers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const classifierDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "annotation class Step(val value: String)",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Annotations.kt");
+  const stepDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "@Step(\"Same package local <value>\")",
+    "fun local() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [classifierDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  assert.deepEqual(provider.provideDiagnostics(stepDocument), []);
+});
+
 test("GaugeStepDiagnosticsProvider ignores ambiguous same-package workspace Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const gaugeAliasesDocument = createDocument([

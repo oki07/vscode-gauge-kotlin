@@ -4894,7 +4894,12 @@ function applySamePackageStepTypeAliasImports(named, ambiguousNamed, externalSte
   }
 }
 
-function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = new Map()) {
+function stepAnnotationImports(
+  text,
+  ignoredRanges = [],
+  externalStepAliases = new Map(),
+  samePackageClassifiers = new Set(),
+) {
   const ambiguousNamed = new Set();
   const named = new Map();
   const wildcards = new Set();
@@ -4948,7 +4953,12 @@ function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = n
   }
   applyWildcardStepTypeAliasImports(named, ambiguousNamed, wildcards, externalStepAliases);
   applySamePackageStepTypeAliasImports(named, ambiguousNamed, externalStepAliases);
-  return { ambiguousNamed, named, wildcards };
+  return {
+    ambiguousNamed,
+    named,
+    samePackageClassifiers,
+    wildcards,
+  };
 }
 
 function collectKotlinStepTypeAliasDeclarations(text, ignoredRanges = []) {
@@ -5204,6 +5214,9 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
         && stepImports.wildcards.has(GAUGE_STEP_PACKAGE)
       );
   }
+  if (stepImports.samePackageClassifiers && stepImports.samePackageClassifiers.has(normalizedName)) {
+    return false;
+  }
   if (normalizedName === "Step" && stepImports.wildcards.size > 0) {
     return stepImports.wildcards.size === 1 && stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
   }
@@ -5346,6 +5359,7 @@ function findStepFunctions(text, externalConstants) {
     text,
     ignoredRanges,
     externalConstants && externalConstants.stepAliases,
+    externalConstants && externalConstants.samePackageClassifiers,
   );
   const functionBodyRanges = [
     ...collectFunctionBodyRanges(text, ignoredRanges),
@@ -5454,6 +5468,7 @@ class GaugeStepDiagnosticsProvider {
     const constantTypes = new Map();
     const samePackageConstants = new Map();
     const samePackageConstantTypes = new Map();
+    const samePackageClassifiers = new Set();
     const ambiguousWorkspaceConstants = new Set();
     const stepAliases = new Map();
     const stepAliasDocuments = [];
@@ -5484,6 +5499,12 @@ class GaugeStepDiagnosticsProvider {
       const packageName = collectKotlinPackageName(text, ignoredRanges);
       if (packageName === undefined) {
         continue;
+      }
+
+      if (activePackageName === packageName) {
+        for (const name of localClassifierNames(text, ignoredRanges)) {
+          samePackageClassifiers.add(name);
+        }
       }
 
       stepAliasDocuments.push({ ignoredRanges, packageName, text });
@@ -5577,6 +5598,7 @@ class GaugeStepDiagnosticsProvider {
       constants,
       constantTypes,
       samePackageConstants,
+      samePackageClassifiers,
       samePackageConstantTypes,
       stepAliases,
     };
