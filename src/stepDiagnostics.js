@@ -873,13 +873,21 @@ function collectKotlinPackageName(text, ignoredRanges = []) {
 function collectKotlinConstantImports(text, ignoredRanges = []) {
   const imports = [];
   const importPattern = new RegExp(
-    `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
+    `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
   );
   const lines = kotlinSourceLines(text, ignoredRanges);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
     const match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
     if (!match) {
+      continue;
+    }
+
+    if (match[1].endsWith(".*")) {
+      imports.push({
+        wildcardPrefix: normalizeKotlinIdentifierPath(match[1].slice(0, -2)),
+      });
+      lineIndex = importStatement.endIndex;
       continue;
     }
 
@@ -2592,26 +2600,69 @@ function addPackageQualifiedConstantNames(names, packageName, declarationName, o
   }
 }
 
+function applyKotlinNamedConstantImport(
+  constants,
+  constantTypes,
+  constantVisibility,
+  exposedName,
+  importedName,
+) {
+  if (!constants.has(importedName)) {
+    return false;
+  }
+
+  let changed = false;
+  const importedValue = constants.get(importedName);
+  if (!constants.has(exposedName)) {
+    constants.set(exposedName, importedValue);
+    changed = true;
+  } else if (constants.get(exposedName) !== importedValue) {
+    return false;
+  }
+
+  if (constantTypes.has(importedName) && !constantTypes.has(exposedName)) {
+    constantTypes.set(exposedName, constantTypes.get(importedName));
+    changed = true;
+  }
+  if (ensureConstantGloballyVisible(constantVisibility, exposedName)) {
+    changed = true;
+  }
+  return changed;
+}
+
 function applyKotlinConstantImports(constants, constantTypes, constantVisibility, constantImports) {
   let changed = false;
-  for (const { exposedName, importedName } of constantImports) {
-    if (!constants.has(importedName)) {
+  for (const { exposedName, importedName, wildcardPrefix } of constantImports) {
+    if (wildcardPrefix !== undefined) {
+      const prefix = `${wildcardPrefix}.`;
+      for (const [candidateName] of Array.from(constants.entries())) {
+        if (!candidateName.startsWith(prefix)) {
+          continue;
+        }
+        const wildcardName = candidateName.slice(prefix.length);
+        if (wildcardName.length === 0 || wildcardName.includes(".")) {
+          continue;
+        }
+        if (applyKotlinNamedConstantImport(
+          constants,
+          constantTypes,
+          constantVisibility,
+          wildcardName,
+          candidateName,
+        )) {
+          changed = true;
+        }
+      }
       continue;
     }
 
-    const importedValue = constants.get(importedName);
-    if (!constants.has(exposedName)) {
-      constants.set(exposedName, importedValue);
-      changed = true;
-    } else if (constants.get(exposedName) !== importedValue) {
-      continue;
-    }
-
-    if (constantTypes.has(importedName) && !constantTypes.has(exposedName)) {
-      constantTypes.set(exposedName, constantTypes.get(importedName));
-      changed = true;
-    }
-    if (ensureConstantGloballyVisible(constantVisibility, exposedName)) {
+    if (applyKotlinNamedConstantImport(
+      constants,
+      constantTypes,
+      constantVisibility,
+      exposedName,
+      importedName,
+    )) {
       changed = true;
     }
   }
