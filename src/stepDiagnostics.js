@@ -4852,6 +4852,15 @@ function applyWildcardStepTypeAliasImports(named, ambiguousNamed, wildcards, ext
   }
 }
 
+function applySamePackageStepTypeAliasImports(named, ambiguousNamed, externalStepAliases) {
+  for (const [exposedName, targetName] of externalStepAliases) {
+    if (exposedName.includes(".") || named.has(exposedName) || ambiguousNamed.has(exposedName)) {
+      continue;
+    }
+    named.set(exposedName, targetName);
+  }
+}
+
 function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = new Map()) {
   const ambiguousNamed = new Set();
   const named = new Map();
@@ -4905,6 +4914,7 @@ function stepAnnotationImports(text, ignoredRanges = [], externalStepAliases = n
     }
   }
   applyWildcardStepTypeAliasImports(named, ambiguousNamed, wildcards, externalStepAliases);
+  applySamePackageStepTypeAliasImports(named, ambiguousNamed, externalStepAliases);
   return { ambiguousNamed, named, wildcards };
 }
 
@@ -5381,6 +5391,9 @@ class GaugeStepDiagnosticsProvider {
     const stepAliasDocuments = [];
     const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
     const documentPath = document.uri && document.uri.fsPath;
+    const activeText = document.getText();
+    const activeIgnoredRanges = collectIgnoredKotlinRanges(activeText);
+    const activePackageName = collectKotlinPackageName(activeText, activeIgnoredRanges);
     for (const candidate of textDocuments) {
       const candidatePath = candidate && candidate.uri && candidate.uri.fsPath;
       if (
@@ -5434,6 +5447,19 @@ class GaugeStepDiagnosticsProvider {
           stepAliases.set(name, targetName);
           changed = true;
         }
+      }
+    }
+    if (activePackageName !== undefined) {
+      const packagePrefix = `${activePackageName}.`;
+      for (const [name, targetName] of [...stepAliases]) {
+        if (!name.startsWith(packagePrefix)) {
+          continue;
+        }
+        const exposedName = name.slice(packagePrefix.length);
+        if (exposedName.includes(".") || stepAliases.has(exposedName)) {
+          continue;
+        }
+        stepAliases.set(exposedName, targetName);
       }
     }
     return { constants, constantTypes, stepAliases };

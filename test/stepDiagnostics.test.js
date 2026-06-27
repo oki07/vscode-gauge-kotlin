@@ -1458,6 +1458,39 @@ test("GaugeStepDiagnosticsProvider resolves imported workspace Step typealias ch
   );
 });
 
+test("GaugeStepDiagnosticsProvider resolves same-package workspace Step type aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const aliasesDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "typealias GaugeStep = com.thoughtworks.gauge.Step",
+    "typealias CucumberStep = io.cucumber.java.en.Step",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Aliases.kt");
+  const stepDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "@GaugeStep(\"Same package alias <value>\")",
+    "fun gauge() {}",
+    "",
+    "@CucumberStep(\"Cucumber <value>\")",
+    "fun cucumber() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [aliasesDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Same package alias <value>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider resolves multiline Step type aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
