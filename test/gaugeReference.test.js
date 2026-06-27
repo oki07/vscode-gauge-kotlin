@@ -1,10 +1,23 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-function createFakeVscode() {
+function createFakeVscode(overrides = {}) {
   const commands = [];
   const information = [];
   const registered = [];
+  const activeText = overrides.activeText || "";
+  const activeDocument = overrides.activeDocument || {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return activeText;
+    },
+  };
   return {
     calls: { commands, information, registered },
     vscode: {
@@ -30,15 +43,8 @@ function createFakeVscode() {
       },
       window: {
         activeTextEditor: {
-          selection: { active: { line: 4, character: 2 } },
-          document: {
-            uri: {
-              fsPath: "/workspace/tests/Steps.kt",
-              toString() {
-                return "file:///workspace/tests/Steps.kt";
-              },
-            },
-          },
+          selection: { active: overrides.activePosition || { line: 4, character: 2 } },
+          document: activeDocument,
         },
         showInformationMessage(message) {
           information.push(message);
@@ -165,6 +171,45 @@ test("ReferenceProvider does not show references outside step context", async ()
   assert.equal(requestCalls[1].params, null);
   assert.deepEqual(calls.commands, []);
   assert.deepEqual(calls.information, ["Action NA: Try this on an implementation."]);
+});
+
+test("ReferenceProvider falls back to Kotlin Step aliases at the active cursor", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const { calls, vscode } = createFakeVscode({
+    activePosition: { line: 3, character: 5 },
+    activeText: [
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "@Step(\"Say hello to <name>\")",
+      "fun say(name: String) {}",
+    ].join("\n"),
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": [
+      { uri: "file:///workspace/specs/example.spec", range: { start: { line: 2, character: 0 } } },
+    ],
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.deepEqual(requestCalls.map((entry) => entry.method), [
+    "gauge/stepValueAt",
+    "gauge/stepReferences",
+  ]);
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.deepEqual(calls.information, []);
+  assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
 
 test("ReferenceProvider registers reference commands", () => {

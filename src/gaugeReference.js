@@ -5,6 +5,12 @@ const SHOW_REFERENCES_AT_CURSOR = "gauge.showReferences.atCursor";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
 const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
+const KOTLIN_LANGUAGE = "kotlin";
+
+const {
+  GaugeStepDiagnosticsProvider,
+  findStepFunctions,
+} = require("./stepDiagnostics");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -21,10 +27,29 @@ function textDocumentIdentifier(uri) {
   return { uri };
 }
 
+function offsetAt(text, position) {
+  let offset = 0;
+  let line = 0;
+  while (line < position.line && offset < text.length) {
+    const nextLine = text.indexOf("\n", offset);
+    if (nextLine === -1) {
+      return text.length;
+    }
+    offset = nextLine + 1;
+    line += 1;
+  }
+  return Math.min(offset + position.character, text.length);
+}
+
 class ReferenceProvider {
   constructor(clients, options = {}) {
     this.clients = clients;
     this.vscode = getVscode(options.vscode);
+    this.projectFactory = options.projectFactory;
+    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      projectFactory: this.projectFactory,
+      vscode: this.vscode,
+    });
     this.disposables = [];
     this.registerCommands();
   }
@@ -73,7 +98,37 @@ class ReferenceProvider {
 
     return languageClient
       .sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode))
-      .then((stepValue) => this.showStepReferences(documentId.uri, position, stepValue));
+      .then((stepValue) => {
+        const localStepValue = this.kotlinStepValueAt(editor.document, position);
+        return this.showStepReferences(
+          documentId.uri,
+          position,
+          stepValue || localStepValue || stepValue,
+        );
+      });
+  }
+
+  kotlinStepValueAt(document, position) {
+    if (
+      !document
+      || document.languageId !== KOTLIN_LANGUAGE
+      || typeof document.getText !== "function"
+      || !position
+    ) {
+      return undefined;
+    }
+
+    const text = document.getText();
+    const offset = offsetAt(text, position);
+    const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document);
+    for (const entry of findStepFunctions(text, externalConstants)) {
+      const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
+      const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
+      if (offset >= start && offset <= end) {
+        return entry.aliases[0];
+      }
+    }
+    return undefined;
   }
 
   showReferences(locations, uri, languageClient, position) {
