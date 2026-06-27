@@ -3758,6 +3758,40 @@ test("GaugeStepDiagnosticsProvider evaluates same-package workspace object Kotli
   );
 });
 
+test("GaugeStepDiagnosticsProvider ignores ambiguous same-package workspace Kotlin const aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const firstConstantsDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "const val LOGIN_STEP = \"First <user> and <tenant>\"",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/FirstText.kt");
+  const secondConstantsDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "const val LOGIN_STEP = \"Second <user>\"",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/SecondText.kt");
+  const stepDocument = createDocument([
+    "package fixtures.steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/steps/Steps.kt");
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [firstConstantsDocument, secondConstantsDocument, stepDocument],
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const diagnostics = provider.provideDiagnostics(stepDocument);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider ignores ambiguous imported workspace Kotlin const step aliases", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const firstConstantsDocument = createDocument([

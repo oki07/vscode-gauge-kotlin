@@ -5413,6 +5413,7 @@ class GaugeStepDiagnosticsProvider {
     const constantTypes = new Map();
     const samePackageConstants = new Map();
     const samePackageConstantTypes = new Map();
+    const ambiguousWorkspaceConstants = new Set();
     const stepAliases = new Map();
     const stepAliasDocuments = [];
     const textDocuments = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
@@ -5445,7 +5446,18 @@ class GaugeStepDiagnosticsProvider {
       const collected = collectStringConstants(text);
       const packagePrefix = `${packageName}.`;
       for (const [name, value] of collected.constants) {
-        if (!name.startsWith(packagePrefix) || constants.has(name)) {
+        if (!name.startsWith(packagePrefix) || ambiguousWorkspaceConstants.has(name)) {
+          continue;
+        }
+        const exposedName = name.slice(packagePrefix.length);
+        if (constants.has(name)) {
+          constants.delete(name);
+          constantTypes.delete(name);
+          ambiguousWorkspaceConstants.add(name);
+          if (activePackageName === packageName) {
+            samePackageConstants.delete(exposedName);
+            samePackageConstantTypes.delete(exposedName);
+          }
           continue;
         }
         constants.set(name, value);
@@ -5453,7 +5465,6 @@ class GaugeStepDiagnosticsProvider {
           constantTypes.set(name, collected.constantTypes.get(name));
         }
         if (activePackageName === packageName) {
-          const exposedName = name.slice(packagePrefix.length);
           if (!samePackageConstants.has(exposedName)) {
             samePackageConstants.set(exposedName, value);
             if (collected.constantTypes.has(name)) {
