@@ -224,10 +224,10 @@ function isThenable(value) {
 }
 
 function stepCompletionRange(line, position) {
-  if (!line.trimStart().startsWith("*") || position.character === 0) {
+  if (!line.startsWith("*") || position.character === 0) {
     return undefined;
   }
-  const marker = /^[ \t]*\*[ \t]*/.exec(line);
+  const marker = /^\*[ \t]*/.exec(line);
   if (!marker) {
     return undefined;
   }
