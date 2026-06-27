@@ -562,10 +562,12 @@ test("execution commands delegate to the Gauge execution controller", () => {
   const handledCommands = [];
   const context = { subscriptions: [] };
   const { fakeVscode, registeredCommands } = createFakeVscode();
+  const projectFactory = {};
 
   extension.activate(context, fakeVscode, {
     createExecutionController(options) {
       assert.equal(options.vscode, fakeVscode);
+      assert.equal(options.projectFactory, projectFactory);
       return {
         handleCommand(command, ...args) {
           handledCommands.push({ command, args });
@@ -573,6 +575,7 @@ test("execution commands delegate to the Gauge execution controller", () => {
         },
       };
     },
+    projectFactory,
   });
 
   const command = registeredCommands.find(

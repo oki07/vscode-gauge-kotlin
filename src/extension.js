@@ -508,6 +508,15 @@ function startGaugeServices(context, vscode, options = {}) {
 function activate(context, vscodeApi, options = {}) {
   const vscode = getVscode(vscodeApi);
   const state = createGaugeState(context, options);
+  const projectFactory = options.projectFactory || createProjectFactory({
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    vscode,
+  });
+  const serviceOptions = {
+    ...options,
+    projectFactory,
+  };
   const executionController = (options.createExecutionController || createGaugeExecutionController)({
     vscode,
     executionStatusProvider: options.executionStatusProvider || createGaugeExecutionStatusProvider(
@@ -516,6 +525,7 @@ function activate(context, vscodeApi, options = {}) {
     ),
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
+    projectFactory,
     runner: options.runner,
     scenariosProvider: options.scenariosProvider || createGaugeScenariosProvider(
       () => activeClientsMap,
@@ -536,13 +546,13 @@ function activate(context, vscodeApi, options = {}) {
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
       command,
-      createCommandHandler(command, vscode, executionController, options),
+      createCommandHandler(command, vscode, executionController, serviceOptions),
     );
     context.subscriptions.push(disposable);
   }
 
   startGaugeServices(context, vscode, {
-    ...options,
+    ...serviceOptions,
     executionController,
     state,
   });
