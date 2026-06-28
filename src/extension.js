@@ -718,12 +718,15 @@ function activate(context, vscodeApi, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
+  const GaugeClientsCtor = options.GaugeClients || GaugeClients;
+  const clientsMap = options.clientsMap || new GaugeClientsCtor();
   const serviceOptions = {
     ...options,
+    clientsMap,
     projectFactory,
   };
   const GaugeTestControllerCtor = options.GaugeTestController || GaugeTestController;
-  const testController = new GaugeTestControllerCtor({ vscode });
+  const testController = new GaugeTestControllerCtor({ clientsMap, vscode });
   const executionEventSink = typeof testController.createExecutionEventSink === "function"
     ? testController.createExecutionEventSink()
     : undefined;
@@ -778,11 +781,20 @@ function activate(context, vscodeApi, options = {}) {
     context.subscriptions.push(disposable);
   }
 
-  startGaugeServices(context, vscode, {
+  const gaugeWorkspace = startGaugeServices(context, vscode, {
     ...serviceOptions,
     executionController,
     state,
   });
+  if (
+    gaugeWorkspace
+    && typeof gaugeWorkspace.ready === "function"
+    && typeof testController.discoverWorkspaceTests === "function"
+  ) {
+    Promise.resolve(gaugeWorkspace.ready())
+      .then(() => testController.discoverWorkspaceTests())
+      .catch(() => undefined);
+  }
 }
 
 function deactivate() {

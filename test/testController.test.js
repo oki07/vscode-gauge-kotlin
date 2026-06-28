@@ -243,6 +243,78 @@ test("GaugeTestController discovers specification and scenario test items from o
   ]);
 });
 
+test("GaugeTestController resolves unopened workspace specs from Gauge LSP", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const requests = [];
+  const clientsMap = new Map([
+    [
+      "/workspace/gauge",
+      {
+        client: {
+          sendRequest(method, params, token) {
+            requests.push({ method, params, token });
+            if (method === "gauge/specs") {
+              return Promise.resolve([
+                {
+                  heading: "Checkout",
+                  executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+                },
+              ]);
+            }
+            if (method === "gauge/scenarios") {
+              return Promise.resolve([
+                {
+                  heading: "Successful checkout",
+                  executionIdentifier: "/workspace/gauge/specs/checkout.spec:12",
+                  lineNo: 12,
+                },
+              ]);
+            }
+            return Promise.resolve([]);
+          },
+        },
+      },
+    ],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+
+  gaugeTests.register();
+  await gaugeTests.discoverWorkspaceTests();
+
+  const spec = controller.items.get("/workspace/gauge/specs/checkout.spec");
+  assert.equal(spec.label, "Checkout");
+  assert.deepEqual(spec.uri, { fsPath: "/workspace/gauge/specs/checkout.spec" });
+  assert.deepEqual(spec.children.values().map((item) => ({
+    id: item.id,
+    label: item.label,
+    range: {
+      start: { ...item.range.start },
+      end: { ...item.range.end },
+    },
+  })), [
+    {
+      id: "/workspace/gauge/specs/checkout.spec:12",
+      label: "Successful checkout",
+      range: {
+        start: { line: 11, character: 0 },
+        end: { line: 11, character: 0 },
+      },
+    },
+  ]);
+  assert.deepEqual(requests.map((request) => request.method), [
+    "gauge/specs",
+    "gauge/scenarios",
+  ]);
+  assert.deepEqual({
+    ...requests[1].params,
+    position: { ...requests[1].params.position },
+  }, {
+    textDocument: { uri: "/workspace/gauge/specs/checkout.spec" },
+    position: { line: 1, character: 1 },
+  });
+});
+
 test("GaugeTestController runs included Gauge test items instead of all specs", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, controller, vscode } = createFakeVscode();

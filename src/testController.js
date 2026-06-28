@@ -8,6 +8,8 @@ const GAUGE_LANGUAGE = "gauge";
 const DEBUG_PROFILE_LABEL = "Debug";
 const RUN_PROFILE_LABEL = "Run";
 const ROOT_PARENT_ID = "suite";
+const SCENARIOS_REQUEST = "gauge/scenarios";
+const SPECS_REQUEST = "gauge/specs";
 const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
@@ -58,6 +60,13 @@ function createRange(vscode, line, startCharacter = 0, endCharacter = 0) {
   return typeof vscode.Range === "function"
     ? new vscode.Range(start, end)
     : { start, end };
+}
+
+function createToken(vscode) {
+  if (typeof vscode.CancellationTokenSource === "function") {
+    return new vscode.CancellationTokenSource().token;
+  }
+  return undefined;
 }
 
 function documentPath(document) {
@@ -166,6 +175,20 @@ function canBatchSpecificationTargets(targets) {
   return targets.length > 1 && targets.every((target) => !isScenarioTarget(target));
 }
 
+function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
+  const value = String(executionIdentifier || "");
+  const suffix = `:${lineNo}`;
+  if (value.endsWith(suffix)) {
+    return value.slice(0, -suffix.length);
+  }
+  return value.replace(/:\d+$/, "");
+}
+
+function lineNoToZeroBased(lineNo) {
+  const value = Number.parseInt(lineNo, 10);
+  return Number.isFinite(value) ? Math.max(0, value - 1) : 0;
+}
+
 function testUiRunFlags() {
   return { ...TEST_UI_RUN_FLAGS };
 }
@@ -177,6 +200,7 @@ function testUiDebugFlags() {
 class GaugeTestController {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.clientsMap = options.clientsMap;
     this.executionController = options.executionController;
     this.controller = undefined;
     this.currentRun = undefined;
@@ -323,6 +347,85 @@ class GaugeTestController {
 
     this.removeDocumentItems(document, discoveredIds);
     return discoveredItems;
+  }
+
+  setClientsMap(clientsMap) {
+    this.clientsMap = clientsMap;
+  }
+
+  async discoverWorkspaceTests() {
+    if (!this.controller || !this.clientsMap || typeof this.clientsMap.values !== "function") {
+      return [];
+    }
+    const discovered = [];
+    for (const entry of this.clientsMap.values()) {
+      const client = entry && entry.client;
+      if (!client || typeof client.sendRequest !== "function") {
+        continue;
+      }
+      discovered.push(...await this.discoverClientTests(client));
+    }
+    return discovered;
+  }
+
+  async discoverClientTests(client) {
+    let specs;
+    try {
+      specs = await client.sendRequest(SPECS_REQUEST, {}, createToken(this.vscode));
+    } catch (_error) {
+      return [];
+    }
+    const discovered = [];
+    for (const spec of specs || []) {
+      if (!spec || !spec.heading || !spec.executionIdentifier) {
+        continue;
+      }
+      const specId = spec.executionIdentifier;
+      const specItem = this.upsertItem(
+        specId,
+        spec.heading,
+        fileUri(this.vscode, specId),
+        undefined,
+        undefined,
+      );
+      if (specItem) {
+        discovered.push(specItem);
+      }
+
+      let scenarios;
+      try {
+        scenarios = await client.sendRequest(
+          SCENARIOS_REQUEST,
+          {
+            textDocument: { uri: specId },
+            position: createPosition(this.vscode, 1, 1),
+          },
+          createToken(this.vscode),
+        );
+      } catch (_error) {
+        scenarios = [];
+      }
+      for (const scenario of scenarios || []) {
+        if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
+          continue;
+        }
+        const scenarioFile = specFileFromExecutionIdentifier(
+          scenario.executionIdentifier,
+          scenario.lineNo,
+        ) || specId;
+        const scenarioItem = this.upsertItem(
+          scenario.executionIdentifier,
+          scenario.heading,
+          fileUri(this.vscode, scenarioFile),
+          createRange(this.vscode, lineNoToZeroBased(scenario.lineNo)),
+          specId,
+        );
+        if (scenarioItem) {
+          discovered.push(scenarioItem);
+        }
+      }
+    }
+    return discovered;
   }
 
   setExecutionController(executionController) {
