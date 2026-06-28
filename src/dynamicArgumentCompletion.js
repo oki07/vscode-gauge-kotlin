@@ -7,6 +7,9 @@ const {
   isKotlinDocument,
 } = require("./stepDiagnostics");
 
+const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
+const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
+
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
@@ -27,9 +30,30 @@ function createRange(vscode, line, start, end) {
   return { start: startPosition, end: endPosition };
 }
 
+function createRangeFromPositions(vscode, start, end) {
+  const startPosition = createPosition(vscode, start.line, start.character);
+  const endPosition = createPosition(vscode, end.line, end.character);
+  if (typeof vscode.Range === "function") {
+    return new vscode.Range(startPosition, endPosition);
+  }
+  return { start: startPosition, end: endPosition };
+}
+
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || document.fileName || "";
+}
+
+function documentUri(document) {
+  const uri = document && document.uri;
+  if (!uri) {
+    return undefined;
+  }
+  if (typeof uri.toString === "function") {
+    return uri.toString();
+  }
+  const file = uri.fsPath || uri.path;
+  return file ? `file://${file}` : undefined;
 }
 
 function isConceptDocument(document) {
@@ -471,9 +495,75 @@ function completionItem(vscode, label, range, options = {}) {
   return item;
 }
 
+function lspCompletionItems(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+  if (response && Array.isArray(response.items)) {
+    return response.items;
+  }
+  return [];
+}
+
+function lspCompletionRange(vscode, item, fallbackRange) {
+  const range = item && item.textEdit && item.textEdit.range;
+  if (!range || !range.start || !range.end) {
+    return fallbackRange;
+  }
+  return createRangeFromPositions(vscode, range.start, range.end);
+}
+
+function lspCompletionInsertText(vscode, item) {
+  const text = item && item.textEdit && item.textEdit.newText !== undefined
+    ? item.textEdit.newText
+    : item && item.insertText;
+  if (text === undefined) {
+    return undefined;
+  }
+  return item.insertTextFormat === LSP_SNIPPET_INSERT_TEXT_FORMAT
+    ? snippetString(vscode, text)
+    : text;
+}
+
+function lspCompletionItem(vscode, item, fallbackRange) {
+  if (!item || !item.label) {
+    return undefined;
+  }
+  const options = {
+    detail: item.detail,
+    filterText: item.filterText,
+    insertText: lspCompletionInsertText(vscode, item),
+    kind: item.kind || (vscode.CompletionItemKind && vscode.CompletionItemKind.Function),
+  };
+  return completionItem(
+    vscode,
+    item.label,
+    lspCompletionRange(vscode, item, fallbackRange),
+    options,
+  );
+}
+
+function mergeCompletionItems(localItems, serverItems) {
+  const seen = new Set(localItems.map((item) => item.label));
+  const merged = localItems.slice();
+  for (const item of serverItems) {
+    if (!item || seen.has(item.label)) {
+      continue;
+    }
+    seen.add(item.label);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function resolveClientsMap(clientsMap) {
+  return typeof clientsMap === "function" ? clientsMap() : clientsMap;
+}
+
 class GaugeDynamicArgumentCompletionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.clientsMap = options.clientsMap;
     this.projectFactory = options.projectFactory;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
       projectFactory: this.projectFactory,
@@ -537,6 +627,35 @@ class GaugeDynamicArgumentCompletionProvider {
     return entries;
   }
 
+  projectClientFor(document) {
+    const clientsMap = resolveClientsMap(this.clientsMap);
+    if (!clientsMap || typeof clientsMap.get !== "function") {
+      return undefined;
+    }
+    return clientsMap.get(documentPath(document));
+  }
+
+  serverStepCompletionItems(document, position, fallbackRange) {
+    const projectClient = this.projectClientFor(document);
+    const client = projectClient && projectClient.client;
+    const uri = documentUri(document);
+    if (!client || typeof client.sendRequest !== "function" || !uri) {
+      return [];
+    }
+    return client.sendRequest(TEXT_DOCUMENT_COMPLETION_REQUEST, {
+      position: {
+        line: position.line,
+        character: position.character,
+      },
+      textDocument: { uri },
+    }).then(
+      (response) => lspCompletionItems(response)
+        .map((item) => lspCompletionItem(this.vscode, item, fallbackRange))
+        .filter(Boolean),
+      () => [],
+    );
+  }
+
   stepCompletionItems(document, position, targetRange, workspaceDocuments) {
     if (!document || document.languageId !== "gauge" || !this.isGaugeProjectDocument(document)) {
       return [];
@@ -545,7 +664,7 @@ class GaugeDynamicArgumentCompletionProvider {
     const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
-    return this.stepCompletionEntries(workspaceDocuments).map((entry) => completionItem(
+    const localItems = this.stepCompletionEntries(workspaceDocuments).map((entry) => completionItem(
       this.vscode,
       entry.label,
       range,
@@ -556,6 +675,11 @@ class GaugeDynamicArgumentCompletionProvider {
         kind,
       },
     ));
+    const serverItems = this.serverStepCompletionItems(document, position, range);
+    if (isThenable(serverItems)) {
+      return serverItems.then((items) => mergeCompletionItems(localItems, items));
+    }
+    return mergeCompletionItems(localItems, serverItems);
   }
 
   provideCompletionItems(document, position) {

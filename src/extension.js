@@ -345,6 +345,7 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
   const CompletionProviderCtor = options.DynamicArgumentCompletionProvider
     || GaugeDynamicArgumentCompletionProvider;
   const provider = new CompletionProviderCtor({
+    clientsMap: options.clientsMap,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -629,6 +630,8 @@ function startGaugeServices(context, vscode, options = {}) {
     return (options.showInstallGaugeNotification || showInstallGaugeNotification)(vscode);
   }
 
+  const GaugeClientsCtor = options.GaugeClients || GaugeClients;
+  const clientsMap = options.clientsMap || new GaugeClientsCtor();
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
@@ -637,6 +640,7 @@ function startGaugeServices(context, vscode, options = {}) {
   registerArgumentCodeActionProvider(context, vscode, options);
   registerDynamicArgumentCompletionProvider(context, vscode, {
     ...options,
+    clientsMap,
     projectFactory,
   });
   registerCodeLensProvider(context, vscode, {
@@ -669,8 +673,6 @@ function startGaugeServices(context, vscode, options = {}) {
   registerSemanticTokensProvider(context, vscode, options);
   registerSemanticTokenColorUpdates(context, vscode);
 
-  const GaugeClientsCtor = options.GaugeClients || GaugeClients;
-  const clientsMap = options.clientsMap || new GaugeClientsCtor();
   const state = createGaugeState(context, options);
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;

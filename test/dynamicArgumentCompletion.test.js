@@ -769,6 +769,76 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept headings on step l
   assert.equal(items[0].insertText.value, "Reuse payment \"${0:method}\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests Gauge LSP step completions on step lines", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const requests = [];
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Log",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  specDocument.uri.toString = () => "file:///workspace/gauge/specs/example.spec";
+  const clientsMap = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/gauge/specs/example.spec");
+      return {
+        client: {
+          sendRequest(method, params) {
+            requests.push({ method, params });
+            return Promise.resolve({
+              items: [
+                {
+                  detail: "Step",
+                  filterText: "Log in as <user>",
+                  insertTextFormat: 2,
+                  kind: "function",
+                  label: "Log in as <user>",
+                  textEdit: {
+                    newText: "Log in as \"${0:user}\"",
+                    range: {
+                      start: { line: 2, character: 2 },
+                      end: { line: 2, character: 5 },
+                    },
+                  },
+                },
+              ],
+            });
+          },
+        },
+      };
+    },
+  };
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap,
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(requests, [
+    {
+      method: "textDocument/completion",
+      params: {
+        position: { line: 2, character: 5 },
+        textDocument: { uri: "file:///workspace/gauge/specs/example.spec" },
+      },
+    },
+  ]);
+  assert.deepEqual(labels(items), ["Log in as <user>"]);
+  assert.equal(items[0].detail, "Step");
+  assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
+  assert.equal(items[0].filterText, "Log in as <user>");
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 2 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 5 });
+});
+
 test("GaugeDynamicArgumentCompletionProvider keeps filled static args in Kotlin Step alias snippets", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
