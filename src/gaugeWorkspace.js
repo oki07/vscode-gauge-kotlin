@@ -539,16 +539,23 @@ class GaugeWorkspace {
       return this.clientsMap.get(project.root()).client;
     }
 
-    this.generateJavaConfig(project);
+    const javaConfigGenerated = this.generateJavaConfig(project);
+    const serverOptions = this.serverOptionsFor(project);
     const languageClient = new this.LanguageClient(
       "gauge",
       "Gauge",
-      this.serverOptionsFor(project),
+      serverOptions,
       this.clientOptionsFor(project, folder),
     );
     this.clientsMap.set(project.root(), { project, client: languageClient });
     try {
       await this.installRunnerFor(project);
+      if (!javaConfigGenerated && this.generateJavaConfig(project)) {
+        const refreshedServerOptions = this.serverOptionsFor(project);
+        serverOptions.command = refreshedServerOptions.command;
+        serverOptions.args = refreshedServerOptions.args;
+        serverOptions.options = refreshedServerOptions.options;
+      }
       this.registerDynamicFeatures(languageClient);
       await languageClient.start();
     } catch (error) {
@@ -637,7 +644,7 @@ class GaugeWorkspace {
 
   generateJavaConfig(project) {
     if (!project.isProjectLanguage(JAVA_RUNNER) || !this.cli.isPluginInstalled(JAVA_RUNNER)) {
-      return;
+      return false;
     }
     if (!(project instanceof MavenProject)) {
       const gaugeConfig = this.gaugeConfigFactory(this.platform());
@@ -648,6 +655,7 @@ class GaugeWorkspace {
       ).generate();
     }
     this.env.SHOULD_BUILD_PROJECT = "false";
+    return true;
   }
 
   async installRunnerFor(project) {
