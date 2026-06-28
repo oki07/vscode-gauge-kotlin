@@ -372,6 +372,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   const snippetPrefixes = Object.values(snippets).map((entry) => entry.prefix);
   assert.deepEqual(snippetPrefixes, [
     "spec",
+    "spec",
+    "sce",
     "sce",
     "cpt",
     "table:1",
@@ -385,9 +387,19 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "# ${1:SPECIFICATION_HEADING}",
     "$0",
   ]);
+  assert.deepEqual(snippets["Legacy Specification"].body, [
+    "${1:SPECIFICATION_HEADING}",
+    "=====================",
+    "$0",
+  ]);
   assert.deepEqual(snippets.Scenario.body, [
     "## ${1:Scenario Heading}",
     "* $0",
+  ]);
+  assert.deepEqual(snippets["Legacy Scenario"].body, [
+    "${1:SCENARIO_HEADING}",
+    "----------------",
+    "$0",
   ]);
   assert.deepEqual(snippets.Concept.body, [
     "# ${1:Concept Heading}",

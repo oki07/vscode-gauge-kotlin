@@ -7,6 +7,15 @@
     ],
     "description": "New Specification"
   },
+  "Legacy Specification": {
+    "prefix": "spec",
+    "body": [
+      "${1:SPECIFICATION_HEADING}",
+      "=====================",
+      "$0"
+    ],
+    "description": "Specification Heading"
+  },
   "Scenario": {
     "prefix": "sce",
     "body": [
@@ -14,6 +23,15 @@
       "* $0"
     ],
     "description": "New Scenario"
+  },
+  "Legacy Scenario": {
+    "prefix": "sce",
+    "body": [
+      "${1:SCENARIO_HEADING}",
+      "----------------",
+      "$0"
+    ],
+    "description": "Scenario Heading"
   },
   "Concept": {
     "prefix": "cpt",
