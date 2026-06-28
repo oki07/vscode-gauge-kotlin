@@ -74,6 +74,24 @@ function assertPatternDoesNotMatch(pattern, text) {
   assert.equal(grammarRegex(source).test(text), false, `${source} should not match ${text}`);
 }
 
+function firstMatchingTopLevelPattern(grammar, text) {
+  for (const include of grammar.patterns) {
+    const key = include.include && include.include.replace(/^#/, "");
+    const entry = key && grammar.repository[key];
+    if (!entry) {
+      continue;
+    }
+    const patterns = entry.match || entry.begin ? [entry] : (entry.patterns || [entry]);
+    for (const pattern of patterns) {
+      const source = pattern.match || pattern.begin;
+      if (source && grammarRegex(source).test(text)) {
+        return { include: include.include, pattern };
+      }
+    }
+  }
+  return undefined;
+}
+
 test("extension manifest exposes the core Gauge VS Code surface for Kotlin projects", () => {
   const manifest = readPackageJson();
 
@@ -581,7 +599,7 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(grammarJson.repository.tags, "TAGS : smoke", "TAGS : ");
   assertPatternMatches(grammarJson.repository.tableKeyword, "Table : users.csv", "Table : ");
 
-  assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title");
+  assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title", "#");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "##Scenario");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes");
 
@@ -607,6 +625,19 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
   assertPatternMatches(fallbackComment, "plain comment");
+});
+
+test("Gauge TextMate grammar keeps arguments reachable in hash concept headings", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+
+  const firstMatch = firstMatchingTopLevelPattern(grammarJson, "# Shared checkout <item> \"card\"");
+
+  assert.ok(firstMatch, "hash heading should match a top-level pattern");
+  assert.deepEqual(firstMatch.pattern.patterns, [{ include: "#arguments" }]);
+  assertPatternMatches(repositoryPattern(grammarJson, "arguments", 0), "<item>");
+  assertPatternMatches(repositoryPattern(grammarJson, "arguments", 1), "\"card\"", "\"");
 });
 
 test("Gauge TextMate grammar preserves common Markdown constructs", () => {
