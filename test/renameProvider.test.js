@@ -107,3 +107,57 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
     ],
   );
 });
+
+test("GaugeRenameProvider preserves inline table step identity when renaming", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with account",
+    "  | id |",
+    "  | 42 |",
+    "* Pay with account",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with account <table>\")",
+    "fun pay(table: Table) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with ledger",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 18 },
+        },
+        newText: "Pay with ledger",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 31 },
+        },
+        newText: "Pay with ledger <table>",
+      },
+    ],
+  );
+});

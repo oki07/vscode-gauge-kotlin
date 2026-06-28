@@ -71,6 +71,33 @@ function documentLine(document, line) {
   return "";
 }
 
+function documentLines(document) {
+  if (typeof document.getText !== "function") {
+    return [];
+  }
+  return document.getText().split(/\r?\n/);
+}
+
+function isInlineTableLine(line) {
+  return String(line || "").trimStart().startsWith("|");
+}
+
+function removeInlineTableSuffix(value) {
+  return String(value || "").replace(/\s+<table>\s*$/, "").trim();
+}
+
+function withInlineTableSuffix(value) {
+  return `${removeInlineTableSuffix(value)} <table>`;
+}
+
+function gaugeReplacementName(value, hasInlineTable) {
+  return hasInlineTable ? removeInlineTableSuffix(value) : value;
+}
+
+function kotlinReplacementName(value, hasInlineTable) {
+  return hasInlineTable ? withInlineTableSuffix(value) : value;
+}
+
 function offsetAt(text, position) {
   let offset = 0;
   let line = 0;
@@ -85,8 +112,11 @@ function offsetAt(text, position) {
   return Math.min(offset + position.character, text.length);
 }
 
-function gaugeStepOnLine(vscode, document, lineNumber) {
-  const line = documentLine(document, lineNumber).replace(/\r$/, "");
+function gaugeStepOnLine(vscode, document, lineNumber, lines) {
+  const sourceLines = lines || documentLines(document);
+  const line = (sourceLines[lineNumber] !== undefined
+    ? sourceLines[lineNumber]
+    : documentLine(document, lineNumber)).replace(/\r$/, "");
   const marker = line.search(/\S/);
   if (marker === -1 || line[marker] !== "*") {
     return undefined;
@@ -101,13 +131,15 @@ function gaugeStepOnLine(vscode, document, lineNumber) {
     return undefined;
   }
   const textEnd = textStart + text.length;
+  const hasInlineTable = isInlineTableLine(sourceLines[lineNumber + 1]);
   return {
+    hasInlineTable,
     range: createRange(
       vscode,
       { line: lineNumber, character: textStart },
       { line: lineNumber, character: textEnd },
     ),
-    template: normalizeStepTemplate(text),
+    template: normalizeStepTemplate(hasInlineTable ? `${text} <table>` : text),
     text,
   };
 }
@@ -289,6 +321,7 @@ class GaugeRenameProvider {
         continue;
       }
       return {
+        hasInlineTable: /\s+<table>\s*$/.test(alias),
         range: createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
         template: normalizeStepTemplate(alias),
         text: alias,
@@ -312,16 +345,16 @@ class GaugeRenameProvider {
   }
 
   addGaugeRenames(edit, document, template, newName) {
-    const lines = document.getText().split(/\r?\n/);
+    const lines = documentLines(document);
     for (let line = 0; line < lines.length; line += 1) {
-      const step = gaugeStepOnLine(this.vscode, document, line);
+      const step = gaugeStepOnLine(this.vscode, document, line, lines);
       if (step && step.template === template) {
-        edit.replace(document.uri, step.range, newName);
+        edit.replace(document.uri, step.range, gaugeReplacementName(newName, step.hasInlineTable));
       }
     }
   }
 
-  addKotlinRenames(edit, document, kotlinDocuments, template, newName) {
+  addKotlinRenames(edit, document, kotlinDocuments, template, newName, hasInlineTable) {
     const text = document.getText();
     let externalConstants;
     try {
@@ -340,7 +373,7 @@ class GaugeRenameProvider {
       edit.replace(
         document.uri,
         createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
-        replacementForLiteral(newName, literal),
+        replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), literal),
       );
     }
   }
@@ -357,7 +390,7 @@ class GaugeRenameProvider {
       if (isGaugeDocument(candidate)) {
         this.addGaugeRenames(edit, candidate, step.template, newName);
       } else if (isKotlinDocument(candidate)) {
-        this.addKotlinRenames(edit, candidate, kotlinDocuments, step.template, newName);
+        this.addKotlinRenames(edit, candidate, kotlinDocuments, step.template, newName, step.hasInlineTable);
       }
     }
     return edit;
