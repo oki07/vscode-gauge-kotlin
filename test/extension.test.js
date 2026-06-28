@@ -1575,7 +1575,10 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
   });
 
   assert.equal(formattingProviders.length, 1);
-  assert.deepEqual(formattingProviders[0].selector, { language: "gauge" });
+  assert.deepEqual(formattingProviders[0].selector, [
+    { language: "gauge" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
+  ]);
   assert.equal(formattingProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(formattingProviders[0].provider.options.cli, cli);
   assert.equal(typeof formattingProviders[0].provider.options.projectFactory.isGaugeProject, "function");

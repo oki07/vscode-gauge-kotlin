@@ -128,6 +128,97 @@ test("GaugeFormatProvider returns full document edits from gauge format output",
   ]);
 });
 
+test("GaugeFormatProvider formats Markdown language Gauge specs inside Gauge projects", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const spawned = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawned.push({ args, options });
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          process.nextTick(() => child.emit("exit", 0));
+          return child;
+        },
+      };
+    },
+  };
+  const provider = new GaugeFormatProvider({
+    cli,
+    fileSystem: {
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.md");
+        return Buffer.from("# Example\n\n* formatted\n");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.md");
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument(
+    [
+      "# Example",
+      "* unformatted",
+      "",
+    ].join("\n"),
+    "/workspace/gauge/specs/example.md",
+    "markdown",
+  ));
+
+  assert.deepEqual(spawned, [
+    {
+      args: ["format", "/workspace/gauge/specs/example.md"],
+      options: { cwd: "/workspace/gauge" },
+    },
+  ]);
+  assert.deepEqual(edits.map((edit) => edit.newText), [
+    "# Example\n\n* formatted\n",
+  ]);
+});
+
+test("GaugeFormatProvider ignores Markdown files outside Gauge projects", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const errors = [];
+  const spawned = [];
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawn(args, options) {
+            spawned.push({ args, options });
+            throw new Error("should not spawn");
+          },
+        };
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        throw new Error("No Gauge project");
+      },
+    },
+    vscode: createFakeVscode({ errors }),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument(
+    "# Notes\n",
+    "/workspace/readme.md",
+    "markdown",
+  ));
+
+  assert.deepEqual(edits, []);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spawned, []);
+});
+
 test("GaugeFormatProvider passes configured Gauge home and project environment", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
 

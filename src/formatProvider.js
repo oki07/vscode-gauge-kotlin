@@ -5,6 +5,8 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const FORMAT_COMMAND = "format";
 const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_EXTENSION = ".md";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -13,6 +15,14 @@ function getVscode(vscode) {
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function isMarkdownSpecDocument(document, filePath) {
+  return Boolean(
+    document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && filePath.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+  );
 }
 
 function collectOutput(stream, chunks) {
@@ -174,11 +184,15 @@ class GaugeFormatProvider {
   }
 
   shouldFormat(document) {
+    const filePath = documentPath(document);
     return Boolean(
       document
-      && document.languageId === GAUGE_LANGUAGE
       && typeof document.getText === "function"
-      && documentPath(document),
+      && filePath
+      && (
+        document.languageId === GAUGE_LANGUAGE
+        || isMarkdownSpecDocument(document, filePath)
+      ),
     );
   }
 
@@ -210,25 +224,33 @@ class GaugeFormatProvider {
     if (!this.shouldFormat(document)) {
       return [];
     }
-    if (typeof document.save === "function") {
-      await document.save();
-    }
 
     const filePath = documentPath(document);
+    const markdownSpecDocument = isMarkdownSpecDocument(document, filePath);
     let project;
     let root;
     try {
       project = this.projectForFile(filePath);
       root = projectRoot(project);
     } catch (error) {
+      if (markdownSpecDocument) {
+        return [];
+      }
       showError(this.vscode, formatFailureMessage({ error }));
       return [];
     }
     if (!root) {
+      if (markdownSpecDocument) {
+        return [];
+      }
       showError(this.vscode, formatFailureMessage({
         error: new Error("Gauge project root is not available."),
       }));
       return [];
+    }
+
+    if (typeof document.save === "function") {
+      await document.save();
     }
 
     const cli = this.createCliIfNeeded();
