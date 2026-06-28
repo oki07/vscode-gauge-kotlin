@@ -17,6 +17,7 @@ const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
+const EXECUTING_CONTEXT = "gauge:executing";
 const COMMAND_FLAG_KEYS = ["failed", "repeat", "parallel"];
 
 const EXECUTION_COMMANDS = new Set([
@@ -219,6 +220,13 @@ function createStatusBarItem(vscode, priority) {
     return undefined;
   }
   return vscode.window.createStatusBarItem(statusBarAlignment(vscode), priority);
+}
+
+function setExecutingContext(vscode, value) {
+  if (!vscode.commands || typeof vscode.commands.executeCommand !== "function") {
+    return undefined;
+  }
+  return vscode.commands.executeCommand("setContext", EXECUTING_CONTEXT, value);
 }
 
 function formatExecutionTooltip(status) {
@@ -458,6 +466,7 @@ function createGaugeExecutionController(options = {}) {
     }
 
     executing = true;
+    setExecutingContext(vscode, true);
     executionStatusBar.beforeExecute(
       command,
       formatRunningStatus(projectRoot, command.status, pathModule),
@@ -469,6 +478,7 @@ function createGaugeExecutionController(options = {}) {
       return result;
     } finally {
       await executionStatusBar.afterExecute(projectRoot, result === false);
+      await setExecutingContext(vscode, false);
       executing = false;
       activeRun = undefined;
       activeDebugger = undefined;

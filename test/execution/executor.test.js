@@ -3,6 +3,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 function createFakeVscode(overrides = {}) {
+  const commandCalls = [];
   const errors = [];
   const quickPicks = [];
   const statusBarItems = [];
@@ -10,12 +11,19 @@ function createFakeVscode(overrides = {}) {
     { uri: { fsPath: "/workspace" } },
   ];
   return {
+    commandCalls,
     errors,
     quickPicks,
     statusBarItems,
     vscode: {
       StatusBarAlignment: {
         Left: "left",
+      },
+      commands: {
+        executeCommand(command, ...args) {
+          commandCalls.push({ command, args });
+          return Promise.resolve(undefined);
+        },
       },
       workspace: {
         workspaceFolders,
@@ -768,6 +776,37 @@ test("executor shows a stop status bar item while a run is active", async () => 
   await run;
 
   assert.equal(stopItem.hideCalls, 1);
+});
+
+test("executor sets the executing context while a run is active", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { commandCalls, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      assert.deepEqual(commandCalls, [
+        { command: "setContext", args: ["gauge:executing", true] },
+      ]);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all");
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(commandCalls, [
+    { command: "setContext", args: ["gauge:executing", true] },
+    { command: "setContext", args: ["gauge:executing", false] },
+  ]);
 });
 
 test("executor reports stop failures without rejecting the command", async () => {
