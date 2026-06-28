@@ -102,6 +102,20 @@ function createFakeVscode(options = {}) {
           return controller;
         },
       },
+      window: {
+        showErrorMessage(message) {
+          calls.push(["errorMessage", message]);
+          return Promise.resolve(undefined);
+        },
+        showInformationMessage(message) {
+          calls.push(["informationMessage", message]);
+          return Promise.resolve(undefined);
+        },
+        showWarningMessage(message) {
+          calls.push(["warningMessage", message]);
+          return Promise.resolve(undefined);
+        },
+      },
       workspace: {
         textDocuments: options.textDocuments || [],
         onDidChangeTextDocument() {
@@ -314,5 +328,38 @@ test("GaugeTestController delays failed and skipped results until finish events 
     ["failed", "scenario-1", "Expected success", 7],
     ["started", "scenario-2"],
     ["skipped", "scenario-2"],
+  ]);
+});
+
+test("GaugeTestController displays Gauge notification events through VS Code messages", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({
+    type: "notification",
+    title: "Gauge",
+    message: "Install plugin",
+    severity: "warning",
+  });
+  sink({
+    type: "notification",
+    title: "Gauge",
+    message: "Execution failed",
+    severity: "error",
+  });
+  sink({
+    type: "notification",
+    title: "Gauge",
+    message: "Execution completed",
+    severity: "info",
+  });
+
+  assert.deepEqual(calls.filter((entry) => entry[0].endsWith("Message")), [
+    ["warningMessage", "Gauge: Install plugin"],
+    ["errorMessage", "Gauge: Execution failed"],
+    ["informationMessage", "Gauge: Execution completed"],
   ]);
 });

@@ -120,6 +120,26 @@ function createMessage(vscode, message) {
   return message || "";
 }
 
+function notificationText(event) {
+  const title = String((event && event.title) || "").trim();
+  const message = String((event && event.message) || "").trim();
+  if (title && message) {
+    return `${title}: ${message}`;
+  }
+  return title || message;
+}
+
+function notificationMethod(severity) {
+  const normalized = String(severity || "").toLowerCase();
+  if (normalized === "error") {
+    return "showErrorMessage";
+  }
+  if (normalized === "warning" || normalized === "warn") {
+    return "showWarningMessage";
+  }
+  return "showInformationMessage";
+}
+
 function headingLabel(document, marker) {
   const line = documentLine(document, marker.line).slice(marker.start, marker.end).trim();
   return line.replace(/^#+[ \t]*/, "").trim();
@@ -376,6 +396,15 @@ class GaugeTestController {
     }
   }
 
+  showNotification(event) {
+    const text = notificationText(event);
+    const window = this.vscode.window || {};
+    const method = notificationMethod(event && event.severity);
+    if (text && typeof window[method] === "function") {
+      window[method](text);
+    }
+  }
+
   handleExecutionEvent(event) {
     if (!event || !event.type) {
       return;
@@ -414,6 +443,9 @@ class GaugeTestController {
         if (run && typeof run.appendOutput === "function") {
           run.appendOutput("\n");
         }
+        break;
+      case "notification":
+        this.showNotification(event);
         break;
       default:
         break;
