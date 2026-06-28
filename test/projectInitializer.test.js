@@ -587,6 +587,61 @@ test("ProjectInitializer prefers the configured Kotlin project template", async 
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });
 
+test("ProjectInitializer falls back to all templates when Kotlin templates are unavailable", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    quickPicks,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const spawns = [];
+  const child = createChildProcess();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn(args) {
+          spawns.push(args);
+          setImmediate(() => child.emit("close", 0));
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "java", Description: "Java", value: "java" },
+              { key: "js", Description: "JavaScript", value: "js" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+      removeSync() {},
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(quickPicks[0].map((template) => template.label), [
+    "java",
+    "js",
+  ]);
+  assert.deepEqual(spawns, [["init", "java"]]);
+});
+
 test("ProjectInitializer reports template list parsing failures", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {

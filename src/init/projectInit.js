@@ -265,7 +265,8 @@ class ProjectInitializer {
         description: template.Description,
         value: template.value,
       }));
-      return this.sortTemplatesByPreference(templates.filter(isKotlinTemplate));
+      const kotlinTemplates = templates.filter(isKotlinTemplate);
+      return this.sortTemplatesByPreference(kotlinTemplates.length > 0 ? kotlinTemplates : templates);
     } catch (_error) {
       await this.vscode.window.showErrorMessage(
         "Failed to get list of templates.",
