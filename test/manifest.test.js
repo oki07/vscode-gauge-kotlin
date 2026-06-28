@@ -181,6 +181,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.extract.concept"));
   assert.ok(commandPaletteIds.includes("gauge.format"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
+  assert.equal(commandById(manifest, "gauge.preview").icon, "$(open-preview)");
   assert.deepEqual(manifest.contributes.keybindings, [
     {
       command: "gauge.format",
@@ -208,6 +209,30 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       command: "gauge.execute.specification",
       when: "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec || resourceExtname == .md)",
       group: "gauge@3",
+    },
+  ]);
+  assert.deepEqual(manifest.contributes.menus["editor/title"], [
+    {
+      command: "gauge.preview",
+      when: "gauge:activated && editorLangId == gauge",
+      group: "navigation@10",
+    },
+  ]);
+  assert.deepEqual(manifest.contributes.menus["editor/context"], [
+    {
+      command: "gauge.preview",
+      when: "gauge:activated && editorLangId == gauge",
+      group: "navigation@10",
+    },
+    {
+      command: "gauge.extract.concept",
+      when: "gauge:activated && editorLangId == gauge",
+      group: "1_modification",
+    },
+    {
+      command: "gauge.format",
+      when: "gauge:activated && editorLangId == gauge",
+      group: "1_modification",
     },
   ]);
 

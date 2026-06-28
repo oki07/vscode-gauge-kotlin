@@ -130,7 +130,8 @@
       {
         "command": "gauge.preview",
         "title": "Preview Gauge File",
-        "category": "Gauge"
+        "category": "Gauge",
+        "icon": "$(open-preview)"
       },
       {
         "command": "gauge.config.saveRecommended",
@@ -310,7 +311,19 @@
           "when": "config.noExists"
         }
       ],
+      "editor/title": [
+        {
+          "command": "gauge.preview",
+          "when": "gauge:activated && editorLangId == gauge",
+          "group": "navigation@10"
+        }
+      ],
       "editor/context": [
+        {
+          "command": "gauge.preview",
+          "when": "gauge:activated && editorLangId == gauge",
+          "group": "navigation@10"
+        },
         {
           "command": "gauge.extract.concept",
           "when": "gauge:activated && editorLangId == gauge",
