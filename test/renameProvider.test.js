@@ -24,6 +24,16 @@ function createFakeVscode(textDocuments) {
         this.replacements.push({ uri, range, newText });
       }
     },
+    Uri: {
+      parse(value) {
+        return {
+          fsPath: value.startsWith("file://") ? value.slice("file://".length) : value,
+          toString() {
+            return value;
+          },
+        };
+      },
+    },
     workspace: {
       textDocuments,
     },
@@ -49,7 +59,12 @@ function createDocument(text, languageId, fsPath) {
   const lines = text.split(/\r?\n/);
   return {
     languageId,
-    uri: { fsPath },
+    uri: {
+      fsPath,
+      toString() {
+        return `file://${fsPath}`;
+      },
+    },
     getText() {
       return text;
     },
@@ -58,6 +73,125 @@ function createDocument(text, languageId, fsPath) {
     },
   };
 }
+
+test("GaugeRenameProvider delegates Gauge renames to the Gauge language server", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const requests = [];
+  const client = {
+    sendRequest(method, params, token) {
+      requests.push({ method, params, token });
+      return {
+        changes: {
+          "file:///workspace/gauge/specs/checkout.spec": [
+            {
+              range: {
+                start: { line: 1, character: 0 },
+                end: { line: 1, character: 19 },
+              },
+              newText: "* Pay with \"value\"",
+            },
+          ],
+          "file:///workspace/gauge/src/test/kotlin/Steps.kt": [
+            {
+              range: {
+                start: { line: 2, character: 7 },
+                end: { line: 2, character: 24 },
+              },
+              newText: "Pay with <value>",
+            },
+          ],
+        },
+      };
+    },
+  };
+  const clientsMap = {
+    get(file) {
+      assert.equal(file, "/workspace/gauge/specs/checkout.spec");
+      return { client };
+    },
+  };
+  const vscode = createFakeVscode([specDocument]);
+  const provider = new GaugeRenameProvider({ clientsMap, vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(requests, [
+    {
+      method: "textDocument/rename",
+      params: {
+        textDocument: { uri: "file:///workspace/gauge/specs/checkout.spec" },
+        position: { line: 1, character: 4 },
+        newName: "Pay with <value>",
+      },
+      token: undefined,
+    },
+  ]);
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 0 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "* Pay with \"value\"",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 24 },
+        },
+        newText: "Pay with <value>",
+      },
+    ],
+  );
+});
+
+test("GaugeRenameProvider reports Gauge language server rename errors", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const client = {
+    sendRequest() {
+      throw new Error("refactoring failed due to parse errors");
+    },
+  };
+  const clientsMap = {
+    get() {
+      return { client };
+    },
+  };
+  const vscode = createFakeVscode([specDocument]);
+  const provider = new GaugeRenameProvider({ clientsMap, vscode });
+
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /refactoring failed due to parse errors/,
+  );
+});
 
 test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");

@@ -402,6 +402,7 @@ function registerStepDefinitionProvider(context, vscode, options) {
 function registerRenameProvider(context, vscode, options) {
   const RenameProviderCtor = options.GaugeRenameProvider || GaugeRenameProvider;
   const provider = new RenameProviderCtor({
+    clientsMap: options.clientsMap,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -598,6 +599,7 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerRenameProvider(context, vscode, {
     ...options,
+    clientsMap,
     projectFactory,
   });
   registerStepDiagnosticsProvider(context, vscode, {

@@ -14,6 +14,7 @@ const GAUGE_LANGUAGE = "gauge";
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const KOTLIN_FILE_PATTERN = "**/*.kt";
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
+const LSP_RENAME_REQUEST = "textDocument/rename";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -39,6 +40,13 @@ function createRangeFromOffsets(vscode, text, startOffset, endOffset) {
   return createRange(vscode, positionAt(text, startOffset), positionAt(text, endOffset));
 }
 
+function createToken(vscode) {
+  if (typeof vscode.CancellationTokenSource === "function") {
+    return new vscode.CancellationTokenSource().token;
+  }
+  return undefined;
+}
+
 function createWorkspaceEdit(vscode) {
   if (typeof vscode.WorkspaceEdit === "function") {
     return new vscode.WorkspaceEdit();
@@ -54,6 +62,38 @@ function createWorkspaceEdit(vscode) {
 
 function documentPath(document) {
   return document && document.uri && document.uri.fsPath;
+}
+
+function documentUriString(vscode, document) {
+  if (!document || !document.uri) {
+    return undefined;
+  }
+  if (typeof document.uri.toString === "function") {
+    const value = document.uri.toString();
+    if (value && value !== "[object Object]") {
+      return value;
+    }
+  }
+  const filename = documentPath(document);
+  if (!filename) {
+    return undefined;
+  }
+  if (vscode.Uri && typeof vscode.Uri.file === "function") {
+    return vscode.Uri.file(filename).toString();
+  }
+  return `file://${filename}`;
+}
+
+function uriFromString(vscode, value) {
+  if (vscode.Uri && typeof vscode.Uri.parse === "function") {
+    return vscode.Uri.parse(value);
+  }
+  return {
+    fsPath: value && value.startsWith("file://") ? value.slice("file://".length) : value,
+    toString() {
+      return value;
+    },
+  };
 }
 
 function uriPath(uri) {
@@ -137,6 +177,7 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
   const hasInlineTable = isInlineTableLine(sourceLines[lineNumber + 1]);
   return {
     hasInlineTable,
+    engineRename: true,
     range: createRange(
       vscode,
       { line: lineNumber, character: textStart },
@@ -157,6 +198,7 @@ function conceptHeadingOnLine(vscode, document, lineNumber) {
     }
     return {
       hasInlineTable: false,
+      engineRename: false,
       range: createRange(vscode, heading.start, heading.end),
       template: heading.normalized,
       text: heading.text,
@@ -242,6 +284,7 @@ function stepEntryHasTemplate(entry, template) {
 class GaugeRenameProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.clientsMap = options.clientsMap;
     this.projectFactory = options.projectFactory;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
       projectFactory: this.projectFactory,
@@ -348,6 +391,7 @@ class GaugeRenameProvider {
       }
       return {
         hasInlineTable: /\s+<table>\s*$/.test(alias),
+        engineRename: false,
         range: createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
         template: normalizeStepTemplate(alias),
         text: alias,
@@ -390,6 +434,67 @@ class GaugeRenameProvider {
         }
       }
     }
+  }
+
+  projectClientFor(document) {
+    const filename = documentPath(document);
+    if (!filename || !this.clientsMap || typeof this.clientsMap.get !== "function") {
+      return undefined;
+    }
+    return this.clientsMap.get(filename);
+  }
+
+  lspWorkspaceEditToVscodeEdit(lspEdit) {
+    if (!lspEdit || typeof lspEdit !== "object") {
+      return undefined;
+    }
+
+    const edit = createWorkspaceEdit(this.vscode);
+    const addTextEdit = (uri, textEdit) => {
+      if (!uri || !textEdit || !textEdit.range) {
+        return;
+      }
+      edit.replace(
+        uriFromString(this.vscode, uri),
+        createRange(this.vscode, textEdit.range.start, textEdit.range.end),
+        textEdit.newText || "",
+      );
+    };
+
+    for (const [uri, edits] of Object.entries(lspEdit.changes || {})) {
+      for (const textEdit of edits || []) {
+        addTextEdit(uri, textEdit);
+      }
+    }
+
+    for (const change of lspEdit.documentChanges || []) {
+      const uri = change && change.textDocument && change.textDocument.uri;
+      for (const textEdit of (change && change.edits) || []) {
+        addTextEdit(uri, textEdit);
+      }
+    }
+
+    return edit;
+  }
+
+  async provideLanguageServerRenameEdits(document, position, newName) {
+    const projectClient = this.projectClientFor(document);
+    const client = projectClient && projectClient.client;
+    const uri = documentUriString(this.vscode, document);
+    if (!client || typeof client.sendRequest !== "function" || !uri) {
+      return undefined;
+    }
+
+    const params = {
+      textDocument: { uri },
+      position: {
+        line: position.line,
+        character: position.character,
+      },
+      newName,
+    };
+    const lspEdit = await client.sendRequest(LSP_RENAME_REQUEST, params, createToken(this.vscode));
+    return this.lspWorkspaceEditToVscodeEdit(lspEdit);
   }
 
   addGaugeRenames(edit, document, template, newName) {
@@ -443,6 +548,12 @@ class GaugeRenameProvider {
       return undefined;
     }
     this.validateRenameTarget(documents, step);
+    if (step.engineRename) {
+      const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
+      if (languageServerEdit) {
+        return languageServerEdit;
+      }
+    }
 
     const edit = createWorkspaceEdit(this.vscode);
     const kotlinDocuments = this.kotlinDocuments(documents);
