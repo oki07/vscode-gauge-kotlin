@@ -65,6 +65,7 @@ const SEMANTIC_TOKEN_COLOR_KEYS = [
   "argument",
   "stepMarker",
   "step",
+  "dynamicArgument",
   "table",
   "tableHeader",
   "tableHeaderSeparator",

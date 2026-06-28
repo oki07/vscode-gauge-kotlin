@@ -41,6 +41,7 @@ function createFakeVscode(overrides = {}) {
   const semanticTokenProviders = [];
   const semanticTokenColors = {
     argument: "#ae81ff",
+    dynamicArgument: "#ae81ff",
     stepMarker: "#ffffff",
     step: "#a6e22e",
     table: "#ae81ff",
@@ -1327,6 +1328,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     value: {
       rules: {
         argument: { foreground: "#ae81ff" },
+        dynamicArgument: { foreground: "#ae81ff" },
         stepMarker: { foreground: "#ffffff" },
         step: { foreground: "#a6e22e" },
         table: { foreground: "#ae81ff" },

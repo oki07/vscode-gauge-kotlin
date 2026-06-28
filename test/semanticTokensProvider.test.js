@@ -48,7 +48,7 @@ test("GaugeSemanticTokensProvider tokenizes Gauge document elements", () => {
     "step",
     "argument",
     "step",
-    "argument",
+    "dynamicArgument",
   ]);
   assert.deepEqual(namedTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
     "tableKeyword",
@@ -190,7 +190,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
   assert.deepEqual(conceptTokens.map((entry) => entry.type), [
     "specification",
-    "argument",
+    "dynamicArgument",
     "specification",
   ]);
 });
@@ -273,7 +273,7 @@ test("GaugeSemanticTokensProvider treats concept double-hash headings as concept
 
   assert.deepEqual(tokens.map((entry) => entry.type), [
     "specification",
-    "argument",
+    "dynamicArgument",
   ]);
 });
 
@@ -344,12 +344,12 @@ test("GaugeSemanticTokensProvider treats indented step markers as comments", () 
   assert.deepEqual(specTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
     "stepMarker",
     "step",
-    "argument",
+    "dynamicArgument",
   ]);
   assert.deepEqual(conceptTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
     "stepMarker",
     "step",
-    "argument",
+    "dynamicArgument",
   ]);
 });
 
@@ -531,16 +531,16 @@ test("GaugeSemanticTokensProvider tokenizes dynamic table cell arguments", () =>
 
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
-  const argumentTokens = tokens.filter((entry) => entry.line === 2 && entry.type === "argument");
+  const argumentTokens = tokens.filter((entry) => entry.line === 2 && entry.type === "dynamicArgument");
 
   assert.deepEqual(argumentTokens, [
     {
       line: 2,
       start: 2,
       length: 6,
-      tokenType: tokenTypes.indexOf("argument"),
+      tokenType: tokenTypes.indexOf("dynamicArgument"),
       tokenModifiers: 0,
-      type: "argument",
+      type: "dynamicArgument",
     },
   ]);
 });
@@ -678,7 +678,7 @@ test("GaugeSemanticTokensProvider keeps contiguous table rows as body rows befor
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
   assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "tableHeader"), false);
-  assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "argument"), true);
+  assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "dynamicArgument"), true);
   assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "tableHeaderSeparator"), false);
 });
 
@@ -710,7 +710,7 @@ test("GaugeSemanticTokensProvider treats indented top-level table markers as com
   assert.deepEqual(tokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
     "stepMarker",
     "step",
-    "argument",
+    "dynamicArgument",
   ]);
 });
 
@@ -822,7 +822,7 @@ test("GaugeSemanticTokensProvider does not span dynamic table arguments across p
 
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
-  const argumentTokens = tokens.filter((entry) => entry.type === "argument");
+  const argumentTokens = tokens.filter((entry) => entry.type === "dynamicArgument");
   const dynamicBoundary = row.indexOf("|", row.indexOf("<"));
   const borderStarts = tokens
     .filter((entry) => entry.type === "tableBorder")
@@ -849,16 +849,16 @@ test("GaugeSemanticTokensProvider tokenizes escaped dynamic step arguments", () 
 
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
-  const argumentTokens = tokens.filter((entry) => entry.type === "argument");
+  const argumentTokens = tokens.filter((entry) => entry.type === "dynamicArgument");
 
   assert.deepEqual(argumentTokens, [
     {
       line: 0,
       start: step.indexOf("<"),
       length: step.length - step.indexOf("<"),
-      tokenType: tokenTypes.indexOf("argument"),
+      tokenType: tokenTypes.indexOf("dynamicArgument"),
       tokenModifiers: 0,
-      type: "argument",
+      type: "dynamicArgument",
     },
   ]);
 });
@@ -913,7 +913,9 @@ test("GaugeSemanticTokensProvider ignores escaped argument starts", () => {
 
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
-  const argumentTokens = tokens.filter((entry) => entry.type === "argument");
+  const argumentTokens = tokens.filter((entry) => (
+    entry.type === "argument" || entry.type === "dynamicArgument"
+  ));
 
   assert.deepEqual(argumentTokens, []);
 });

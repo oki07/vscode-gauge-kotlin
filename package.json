@@ -432,6 +432,11 @@
           "default": "#ae81ff",
           "description": "Color for arguments."
         },
+        "gauge.semanticTokenColors.dynamicArgument": {
+          "type": "string",
+          "default": "#ae81ff",
+          "description": "Color for dynamic arguments."
+        },
         "gauge.semanticTokenColors.stepMarker": {
           "type": "string",
           "default": "#ffffff",

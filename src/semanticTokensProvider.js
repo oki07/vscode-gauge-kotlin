@@ -12,6 +12,7 @@ const tokenTypes = [
   "stepMarker",
   "step",
   "argument",
+  "dynamicArgument",
   "table",
   "tableHeader",
   "tableHeaderSeparator",
@@ -53,6 +54,16 @@ function pushToken(builder, line, start, length, tokenType) {
     return;
   }
   builder.push(line, start, length, tokenTypes.indexOf(tokenType), 0);
+}
+
+function pushArgumentToken(builder, line, start, text) {
+  pushToken(
+    builder,
+    line,
+    start,
+    text.length,
+    text.startsWith("<") ? "dynamicArgument" : "argument",
+  );
 }
 
 function pushTableSegment(builder, lineNumber, line, start, end, textTokenType = "table") {
@@ -235,7 +246,7 @@ class GaugeSemanticTokensProvider {
           if (matchStart > lastIndex) {
             builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf(headingToken), 0);
           }
-          builder.push(index, matchStart, match[0].length, tokenTypes.indexOf("argument"), 0);
+          pushArgumentToken(builder, index, matchStart, match[0]);
           lastIndex = argumentRegex.lastIndex;
           match = argumentRegex.exec(line);
         }
@@ -266,7 +277,7 @@ class GaugeSemanticTokensProvider {
             if (matchStart > lastIndex) {
               builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf("step"), 0);
             }
-            builder.push(index, matchStart, match[0].length, tokenTypes.indexOf("argument"), 0);
+            pushArgumentToken(builder, index, matchStart, match[0]);
             lastIndex = argumentRegex.lastIndex;
             match = argumentRegex.exec(line);
           }
@@ -305,7 +316,7 @@ class GaugeSemanticTokensProvider {
               continue;
             }
             pushTableSegment(builder, index, line, lastIndex, match.index);
-            pushToken(builder, index, match.index, match[0].length, "argument");
+            pushToken(builder, index, match.index, match[0].length, "dynamicArgument");
             lastIndex = tableDynamicArgumentRegex.lastIndex;
             match = tableDynamicArgumentRegex.exec(line);
           }
