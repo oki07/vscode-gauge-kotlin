@@ -210,6 +210,16 @@ function projectKindFromProject(project) {
   return undefined;
 }
 
+function projectRunnerLanguage(project, fallbackLanguage) {
+  if (project && typeof project.language === "function") {
+    const language = project.language();
+    if (language) {
+      return language;
+    }
+  }
+  return fallbackLanguage;
+}
+
 function commandForProjectKind(projectKind, options) {
   if (projectKind === "gradle") {
     return options.gradleCommand || "gradle";
@@ -703,7 +713,7 @@ function createGaugeExecutionController(options = {}) {
         activeDebugger = debuggerFactory({
           vscode,
           projectRoot,
-          language: options.language || "kotlin",
+          language: options.language || projectRunnerLanguage(project, "kotlin"),
           baseEnv: command.env || executionEnv,
           debugPortProvider: options.debugPortProvider,
         });

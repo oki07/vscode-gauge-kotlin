@@ -1943,6 +1943,55 @@ test("debug node executes with JVM debug env and starts debugger on runner readi
   ]);
 });
 
+test("debug node uses the project runner language for debugger selection", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const languages = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    projectFactory: {
+      get(projectRoot) {
+        assert.equal(projectRoot, "/workspace");
+        return {
+          language() {
+            return "csharp";
+          },
+        };
+      },
+    },
+    debuggerFactory(debugOptions) {
+      languages.push(debugOptions.language);
+      return {
+        async addDebugEnv(env) {
+          return {
+            ...env,
+            DEBUGGING: true,
+          };
+        },
+        registerStopDebugger() {},
+        stopDebugger() {},
+      };
+    },
+    async runner() {
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  });
+
+  assert.deepEqual(languages, ["csharp"]);
+});
+
 test("debug node ignores launch parallel options", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
