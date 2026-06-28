@@ -86,6 +86,54 @@ test("process runner spawns Gauge and routes stdout through output and line proc
   assert.ok(outputChannel.lines.includes("      Specification: /workspace/specs/example.spec:19"));
 });
 
+test("process runner uses Command object spawning when available", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const toolSpawns = [];
+  const fallbackSpawns = [];
+  const commandTool = {
+    command: "./gradlew",
+    argsForSpawnType(args) {
+      return args.map((arg) => `wrapped:${arg}`);
+    },
+    spawn(args, options) {
+      toolSpawns.push({ args, options });
+      return child;
+    },
+  };
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    spawn(command, args, options) {
+      fallbackSpawns.push({ command, args, options });
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "./gradlew",
+    tool: commandTool,
+    args: ["clean", "gauge"],
+    cwd: "/workspace",
+  });
+
+  child.emit("exit", 0);
+
+  assert.equal(await run, true);
+  assert.deepEqual(fallbackSpawns, []);
+  assert.deepEqual(toolSpawns, [
+    {
+      args: ["clean", "gauge"],
+      options: {
+        cwd: "/workspace",
+        detached: process.platform !== "win32",
+        env: process.env,
+      },
+    },
+  ]);
+  assert.ok(outputChannel.lines.includes("Running tool: ./gradlew wrapped:clean wrapped:gauge"));
+});
+
 test("process runner reports failed exits", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

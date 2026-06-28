@@ -98,18 +98,24 @@ function createGaugeProcessRunner(options = {}) {
     let settle;
     const run = new Promise((resolve) => {
       settle = resolve;
-      const initial = ["Running tool:", command.command, command.args.join(" ")].join(" ");
+      const displayArgs = command.tool && typeof command.tool.argsForSpawnType === "function"
+        ? command.tool.argsForSpawnType(command.args)
+        : command.args;
+      const initial = ["Running tool:", command.command, displayArgs.join(" ")].join(" ");
       const channel = new OutputChannel(outputChannel, initial, command.cwd, { pathModule });
       const emitStdoutLine = createLineEmitter((lineText) => {
         channel.appendOutBuf(lineText);
         processOutputLine(lineText);
       });
 
-      child = spawn(command.command, command.args, {
+      const spawnOptions = {
         cwd: command.cwd,
         detached: platform !== "win32",
         env: command.env || baseEnv,
-      });
+      };
+      child = command.tool && typeof command.tool.spawn === "function"
+        ? command.tool.spawn(command.args, spawnOptions)
+        : spawn(command.command, command.args, spawnOptions);
       child.stdout.on("data", emitStdoutLine);
       child.stderr.on("data", (chunk) => channel.appendErrBuf(chunk.toString()));
       child.on("exit", (code) => {

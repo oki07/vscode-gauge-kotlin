@@ -112,6 +112,73 @@ test("execute specification uses Gradle Gauge args for Kotlin Gradle projects", 
   ]);
 });
 
+test("execute specification uses the project execution Command object", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const cli = { id: "cli" };
+  const executionCommand = {
+    command: "./gradlew",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
+  let receivedCli;
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", tags: "smoke" },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    cli,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    projectFactory: {
+      get(root) {
+        assert.equal(root, "/workspace");
+        return {
+          getExecutionCommand(candidateCli) {
+            receivedCli = candidateCli;
+            return executionCommand;
+          },
+          root() {
+            return root;
+          },
+        };
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.specification");
+
+  assert.equal(result, true);
+  assert.equal(receivedCli, cli);
+  assert.equal(calls[0].command, "./gradlew");
+  assert.equal(calls[0].tool, executionCommand);
+  assert.deepEqual(calls[0].args, [
+    "clean",
+    "gauge",
+    "-Ptags=smoke",
+    "-PadditionalFlags=--hide-suggestion --simple-console",
+    "-PspecsDir=specs/example.spec",
+  ]);
+});
+
 test("execute specification resolves the project root from the active Gauge file", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

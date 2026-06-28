@@ -631,6 +631,8 @@ function activate(context, vscodeApi, options = {}) {
   };
   const executionController = (options.createExecutionController || createGaugeExecutionController)({
     vscode,
+    cli: options.cli,
+    createCli: options.createCli,
     executionStatusProvider: options.executionStatusProvider || createGaugeExecutionStatusProvider(
       () => activeClientsMap,
       { vscode },

@@ -10,6 +10,7 @@ const {
 } = require("./lineProcessors");
 const { createGaugeProcessRunner } = require("./processRunner");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
+const { CLI } = require("../cli");
 const { createProjectFactory } = require("../project/projectFactory");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
@@ -154,6 +155,32 @@ function commandForProjectKind(projectKind, options) {
     return options.mavenCommand || "mvn";
   }
   return options.gaugeCommand || "gauge";
+}
+
+function getProjectForExecution(projectFactory, projectRoot) {
+  if (!projectFactory || typeof projectFactory.get !== "function") {
+    return undefined;
+  }
+  try {
+    return projectFactory.get(projectRoot);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function commandFromProject(project, cli) {
+  if (
+    !project
+    || !cli
+    || typeof project.getExecutionCommand !== "function"
+  ) {
+    return undefined;
+  }
+  const command = project.getExecutionCommand(cli);
+  if (!command || !command.command) {
+    return undefined;
+  }
+  return command;
 }
 
 function getWorkspaceFolderForProject(vscode, projectRoot) {
@@ -334,6 +361,7 @@ function createGaugeExecutionController(options = {}) {
   let executing = false;
   let activeRun;
   let activeDebugger;
+  let cachedCli;
 
   function setReportPath(nextReportPath) {
     return reportState.setReportPath(nextReportPath && nextReportPath.trim());
@@ -341,6 +369,18 @@ function createGaugeExecutionController(options = {}) {
 
   function getReportPath() {
     return reportState.getReportPath();
+  }
+
+  function getCli() {
+    if (options.cli) {
+      return options.cli;
+    }
+    if (cachedCli !== undefined) {
+      return cachedCli;
+    }
+    const cliFactory = options.createCli || ((cliOptions) => CLI.instance(cliOptions));
+    cachedCli = cliFactory({ vscode });
+    return cachedCli;
   }
 
   let lineProcessors;
@@ -369,6 +409,8 @@ function createGaugeExecutionController(options = {}) {
     }
 
     const projectKind = detectProjectKind(projectRoot, fileSystem, pathModule);
+    const project = getProjectForExecution(projectFactory, projectRoot);
+    const executionTool = project ? commandFromProject(project, getCli()) : undefined;
     const option = {
       ...extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
       failed: Boolean(flags.failed),
@@ -381,11 +423,14 @@ function createGaugeExecutionController(options = {}) {
       option["retry-only"] = null;
     }
     const command = {
-      command: commandForProjectKind(projectKind, options),
+      command: executionTool ? executionTool.command : commandForProjectKind(projectKind, options),
       args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
       cwd: projectRoot,
       status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
     };
+    if (executionTool) {
+      command.tool = executionTool;
+    }
 
     if (flags.debug) {
       activeDebugger = debuggerFactory({
