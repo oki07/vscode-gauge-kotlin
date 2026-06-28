@@ -164,6 +164,80 @@ test("GaugeRenameProvider delegates Gauge renames to the Gauge language server",
   );
 });
 
+test("GaugeRenameProvider augments language server Gauge renames with Kotlin Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const client = {
+    sendRequest() {
+      return {
+        changes: {
+          "file:///workspace/gauge/specs/checkout.spec": [
+            {
+              range: {
+                start: { line: 1, character: 2 },
+                end: { line: 1, character: 19 },
+              },
+              newText: "Pay with <value>",
+            },
+          ],
+        },
+      };
+    },
+  };
+  const clientsMap = {
+    get(file) {
+      assert.equal(file, "/workspace/gauge/specs/checkout.spec");
+      return { client };
+    },
+  };
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ clientsMap, vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 24 },
+        },
+        newText: "Pay with <value>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider reports Gauge language server rename errors", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

@@ -281,6 +281,59 @@ function stepEntryHasTemplate(entry, template) {
   return (entry.aliases || []).some((alias) => normalizeStepTemplate(alias) === template);
 }
 
+function uriKey(uri) {
+  if (!uri) {
+    return undefined;
+  }
+  if (uri.fsPath) {
+    return uri.fsPath;
+  }
+  if (typeof uri.toString === "function") {
+    return uri.toString();
+  }
+  return undefined;
+}
+
+function sameUri(left, right) {
+  const leftKey = uriKey(left);
+  const rightKey = uriKey(right);
+  return Boolean(leftKey && rightKey && leftKey === rightKey);
+}
+
+function sameRange(left, right) {
+  if (!left || !right || !left.start || !left.end || !right.start || !right.end) {
+    return false;
+  }
+  return left.start.line === right.start.line
+    && left.start.character === right.start.character
+    && left.end.line === right.end.line
+    && left.end.character === right.end.character;
+}
+
+function editHasReplacement(edit, uri, range) {
+  if (!edit || !uri || !range) {
+    return false;
+  }
+  for (const replacement of edit.replacements || []) {
+    if (sameUri(replacement.uri, uri) && sameRange(replacement.range, range)) {
+      return true;
+    }
+  }
+  if (typeof edit.entries === "function") {
+    for (const [entryUri, textEdits] of edit.entries()) {
+      if (!sameUri(entryUri, uri)) {
+        continue;
+      }
+      for (const textEdit of textEdits || []) {
+        if (sameRange(textEdit.range, range)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 class GaugeRenameProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -534,9 +587,13 @@ class GaugeRenameProvider {
       if (!literal) {
         continue;
       }
+      const range = createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd);
+      if (editHasReplacement(edit, document.uri, range)) {
+        continue;
+      }
       edit.replace(
         document.uri,
-        createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
+        range,
         replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), literal),
       );
     }
@@ -551,6 +608,17 @@ class GaugeRenameProvider {
     if (step.engineRename) {
       const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
       if (languageServerEdit) {
+        const kotlinDocuments = this.kotlinDocuments(documents);
+        for (const candidate of kotlinDocuments) {
+          this.addKotlinRenames(
+            languageServerEdit,
+            candidate,
+            kotlinDocuments,
+            step.template,
+            newName,
+            step.hasInlineTable,
+          );
+        }
         return languageServerEdit;
       }
     }
