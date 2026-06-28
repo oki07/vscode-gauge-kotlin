@@ -327,9 +327,15 @@ function registerFoldingRangeProvider(context, vscode, options) {
     return;
   }
   const FoldingRangeProviderCtor = options.GaugeFoldingRangeProvider || GaugeFoldingRangeProvider;
-  const provider = new FoldingRangeProviderCtor({ vscode });
+  const provider = new FoldingRangeProviderCtor({
+    vscode,
+    projectFactory: options.projectFactory,
+  });
   const disposable = vscode.languages.registerFoldingRangeProvider(
-    { language: "gauge" },
+    [
+      { language: "gauge" },
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+    ],
     provider,
   );
   if (disposable) {

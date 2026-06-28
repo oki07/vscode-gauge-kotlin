@@ -1289,12 +1289,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.semanticTokensProvider.options.vscode, fakeVscode);
   assert.deepEqual(foldingRangeProviders, [
     {
-      selector: { language: "gauge" },
+      selector: [
+        { language: "gauge" },
+        { language: "markdown", scheme: "file", pattern: "**/*.md" },
+      ],
       provider: created.foldingRangeProvider,
       disposable: foldingRangeProviders[0].disposable,
     },
   ]);
   assert.equal(created.foldingRangeProvider.options.vscode, fakeVscode);
+  assert.equal(created.foldingRangeProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.deepEqual(renameProviders, [
     {
       selector: [

@@ -1,9 +1,10 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-function createDocument(text, fsPath = "/workspace/specs/example.spec") {
+function createDocument(text, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
   const lines = text.split("\n");
   return {
+    languageId,
     uri: { fsPath },
     lineAt(line) {
       return { text: lines[line] };
@@ -197,4 +198,53 @@ test("GaugeFoldingRangeProvider ignores indented teardown markers", () => {
     { start: 0, end: 3 },
     { start: 5, end: 6 },
   ]);
+});
+
+test("GaugeFoldingRangeProvider folds markdown Gauge specs in Gauge projects", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/specs/example.md");
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        return root === "/workspace";
+      },
+    },
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Open cart",
+    "",
+    "## Successful checkout",
+    "* Pay",
+    "",
+  ].join("\n"), "/workspace/specs/example.md", "markdown");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 1 },
+    { start: 3, end: 4 },
+  ]);
+});
+
+test("GaugeFoldingRangeProvider ignores markdown outside Gauge projects", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        throw new Error("not a Gauge project");
+      },
+    },
+  });
+  const document = createDocument([
+    "# Readme",
+    "General documentation.",
+    "",
+    "## Setup",
+    "Install dependencies.",
+    "",
+  ].join("\n"), "/workspace/README.md", "markdown");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), []);
 });

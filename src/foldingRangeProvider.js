@@ -5,6 +5,10 @@ const {
   isGaugeHashHeading,
 } = require("./gaugeHeadings");
 
+const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_EXTENSION = ".md";
+
 function documentLines(document) {
   const lines = [];
   for (let line = 0; line < document.lineCount; line += 1) {
@@ -20,6 +24,14 @@ function documentPath(document) {
 
 function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
+function isMarkdownSpecDocument(document, filePath) {
+  return Boolean(
+    document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && filePath.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+  );
 }
 
 function isHashHeading(line, conceptDocument) {
@@ -85,7 +97,46 @@ function trimEndLine(lines, startLine, endLine) {
 }
 
 class GaugeFoldingRangeProvider {
+  constructor(options = {}) {
+    this.projectFactory = options.projectFactory;
+  }
+
+  isGaugeProjectDocument(document) {
+    const file = documentPath(document);
+    if (!file) {
+      return false;
+    }
+    if (!this.projectFactory) {
+      return document && document.languageId === GAUGE_LANGUAGE;
+    }
+    if (typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return document && document.languageId === GAUGE_LANGUAGE;
+    }
+
+    try {
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      if (!root) {
+        return false;
+      }
+      if (typeof this.projectFactory.isGaugeProject === "function") {
+        return this.projectFactory.isGaugeProject(root) !== false;
+      }
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   provideFoldingRanges(document) {
+    const file = documentPath(document);
+    const supportedDocument = document && (
+      document.languageId === GAUGE_LANGUAGE
+      || isMarkdownSpecDocument(document, file)
+    );
+    if (!supportedDocument || !this.isGaugeProjectDocument(document)) {
+      return [];
+    }
+
     const lines = documentLines(document);
     const markers = foldingMarkers(lines, { conceptDocument: isConceptDocument(document) });
     const ranges = [];
