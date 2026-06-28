@@ -2,6 +2,10 @@
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
+const TEST_UI_RUN_FLAGS = {
+  "hide-suggestion": true,
+  "machine-readable": true,
+};
 
 function getVscode(vscode) {
   return vscode || {};
@@ -125,6 +129,10 @@ function titlesForMarker(marker) {
     : ["Run Specification", "Debug Specification"];
 }
 
+function testUiRunFlags() {
+  return { ...TEST_UI_RUN_FLAGS };
+}
+
 class GaugeCodeLensProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -173,12 +181,12 @@ class GaugeCodeLensProvider {
       lenses.push(createCodeLens(this.vscode, range, {
         command: RUN_COMMAND,
         title: runTitle,
-        arguments: [target],
+        arguments: [target, testUiRunFlags()],
       }));
       lenses.push(createCodeLens(this.vscode, range, {
         command: DEBUG_COMMAND,
         title: debugTitle,
-        arguments: [target],
+        arguments: [target, testUiRunFlags()],
       }));
     }
     return lenses;

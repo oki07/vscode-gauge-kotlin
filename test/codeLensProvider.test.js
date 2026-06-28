@@ -35,30 +35,35 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
     title: lens.command.title,
     command: lens.command.command,
     argument: lens.command.arguments[0],
+    flags: lens.command.arguments[1],
   })), [
     {
       line: 0,
       title: "Run Specification",
       command: "gauge.execute",
       argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
     },
     {
       line: 0,
       title: "Debug Specification",
       command: "gauge.debug",
       argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
     },
     {
       line: 3,
       title: "Run Scenario",
       command: "gauge.execute",
       argument: "/workspace/specs/example.spec:4",
+      flags: { "hide-suggestion": true, "machine-readable": true },
     },
     {
       line: 3,
       title: "Debug Scenario",
       command: "gauge.debug",
       argument: "/workspace/specs/example.spec:4",
+      flags: { "hide-suggestion": true, "machine-readable": true },
     },
   ]);
 });
