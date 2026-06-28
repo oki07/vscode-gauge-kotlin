@@ -339,6 +339,15 @@ function mergeRunOptions(launchOptions, flags = {}) {
   return option;
 }
 
+function executionRunOptions(launchOptions, flags = {}) {
+  const option = mergeRunOptions(launchOptions, flags);
+  if (flags.debug) {
+    delete option.parallel;
+    delete option.n;
+  }
+  return option;
+}
+
 function getScenarioSpecPath(executionIdentifier) {
   if (!/:\d+$/.test(executionIdentifier)) {
     return executionIdentifier;
@@ -443,7 +452,7 @@ function createGaugeExecutionController(options = {}) {
     const projectKind = projectKindFromProject(project)
       || detectProjectKind(projectRoot, fileSystem, pathModule);
     const executionTool = project ? commandFromProject(project, getCli()) : undefined;
-    const option = mergeRunOptions(
+    const option = executionRunOptions(
       extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
       flags,
     );

@@ -1306,6 +1306,58 @@ test("debug node executes with JVM debug env and starts debugger on runner readi
   ]);
 });
 
+test("debug node ignores launch parallel options", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", parallel: true, n: 3 },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    debuggerFactory() {
+      return {
+        async addDebugEnv(env) {
+          return {
+            ...env,
+            DEBUGGING: true,
+            DEBUG_PORT: 5005,
+            GAUGE_DEBUG_OPTS: 5005,
+          };
+        },
+        registerStopDebugger() {},
+        stopDebugger() {},
+      };
+    },
+    env: { PATH: "/bin" },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(calls[0].args, [
+    "clean",
+    "gauge",
+    "-PadditionalFlags=--hide-suggestion --simple-console",
+    "-PspecsDir=specs/example.spec:9",
+  ]);
+});
+
 test("debug node cancels Gauge execution when the debug session terminates", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const cancelCalls = [];
