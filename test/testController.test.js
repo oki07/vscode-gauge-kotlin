@@ -284,6 +284,45 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
+test("GaugeTestController batches multiple included specification items into one execution request", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const checkout = controller.createTestItem(
+    "/workspace/specs/checkout.spec",
+    "Checkout",
+    { fsPath: "/workspace/specs/checkout.spec" },
+  );
+  const accounts = controller.createTestItem(
+    "/workspace/specs/accounts.spec",
+    "Accounts",
+    { fsPath: "/workspace/specs/accounts.spec" },
+  );
+
+  await gaugeTests.run({ include: [checkout, accounts] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.specification", undefined, [
+      "/workspace/specs/checkout.spec",
+      "/workspace/specs/accounts.spec",
+    ], {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
 test("GaugeTestController debug profile runs included Gauge test items in debug mode", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, controller, vscode } = createFakeVscode();

@@ -158,6 +158,14 @@ function executionTargetForItem(item) {
   return item && item.id;
 }
 
+function isScenarioTarget(target) {
+  return /:\d+$/.test(String(target || ""));
+}
+
+function canBatchSpecificationTargets(targets) {
+  return targets.length > 1 && targets.every((target) => !isScenarioTarget(target));
+}
+
 function testUiRunFlags() {
   return { ...TEST_UI_RUN_FLAGS };
 }
@@ -364,6 +372,13 @@ class GaugeTestController {
           await this.executionController.handleCommand(
             "gauge.execute.specification.all",
             undefined,
+            flags,
+          );
+        } else if (canBatchSpecificationTargets(targets)) {
+          await this.executionController.handleCommand(
+            "gauge.execute.specification",
+            undefined,
+            targets,
             flags,
           );
         } else {
