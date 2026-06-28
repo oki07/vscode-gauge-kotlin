@@ -10,6 +10,7 @@ const RUN_PROFILE_LABEL = "Run";
 const ROOT_PARENT_ID = "suite";
 const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPECS_REQUEST = "gauge/specs";
+const SPEC_WATCH_PATTERN = "**/*.{spec,md}";
 const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
@@ -206,6 +207,7 @@ class GaugeTestController {
     this.currentRun = undefined;
     this.items = new Map();
     this.pendingResults = new Map();
+    this.workspaceDiscoveredIdsByClient = new Map();
   }
 
   register() {
@@ -270,7 +272,24 @@ class GaugeTestController {
         this.removeDocumentItems(document);
       }));
     }
+    if (typeof workspace.createFileSystemWatcher === "function") {
+      const watcher = workspace.createFileSystemWatcher(SPEC_WATCH_PATTERN, false, true, false);
+      addDisposable(disposables, watcher);
+      if (watcher && typeof watcher.onDidCreate === "function") {
+        addDisposable(disposables, watcher.onDidCreate(() => this.refreshWorkspaceTests()));
+      }
+      if (watcher && typeof watcher.onDidDelete === "function") {
+        addDisposable(disposables, watcher.onDidDelete((uri) => {
+          this.removePathItems(uri && (uri.fsPath || uri.path));
+          return this.refreshWorkspaceTests();
+        }));
+      }
+    }
     return disposables;
+  }
+
+  refreshWorkspaceTests() {
+    return Promise.resolve(this.discoverWorkspaceTests()).catch(() => []);
   }
 
   discoverOpenDocuments() {
@@ -283,18 +302,26 @@ class GaugeTestController {
 
   removeDocumentItems(document, keepIds = new Set()) {
     const filename = documentPath(document);
+    this.removePathItems(filename, keepIds);
+  }
+
+  removePathItems(filename, keepIds = new Set()) {
     if (!filename) {
       return;
     }
     for (const [id] of [...this.items]) {
       if ((id === filename || id.startsWith(`${filename}:`)) && !keepIds.has(id)) {
-        collectionDelete(this.controller && this.controller.items, id);
-        for (const item of this.items.values()) {
-          collectionDelete(item && item.children, id);
-        }
-        this.items.delete(id);
+        this.removeItem(id);
       }
     }
+  }
+
+  removeItem(id) {
+    collectionDelete(this.controller && this.controller.items, id);
+    for (const item of this.items.values()) {
+      collectionDelete(item && item.children, id);
+    }
+    this.items.delete(id);
   }
 
   upsertItem(id, label, uri, range, parentId) {
@@ -376,11 +403,13 @@ class GaugeTestController {
       return [];
     }
     const discovered = [];
+    const discoveredIds = new Set();
     for (const spec of specs || []) {
       if (!spec || !spec.heading || !spec.executionIdentifier) {
         continue;
       }
       const specId = spec.executionIdentifier;
+      discoveredIds.add(specId);
       const specItem = this.upsertItem(
         specId,
         spec.heading,
@@ -409,6 +438,7 @@ class GaugeTestController {
         if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
           continue;
         }
+        discoveredIds.add(scenario.executionIdentifier);
         const scenarioFile = specFileFromExecutionIdentifier(
           scenario.executionIdentifier,
           scenario.lineNo,
@@ -425,7 +455,21 @@ class GaugeTestController {
         }
       }
     }
+    this.pruneWorkspaceDiscoveredItems(client, discoveredIds);
+    this.workspaceDiscoveredIdsByClient.set(client, discoveredIds);
     return discovered;
+  }
+
+  pruneWorkspaceDiscoveredItems(client, discoveredIds) {
+    const previousIds = this.workspaceDiscoveredIdsByClient.get(client);
+    if (!previousIds) {
+      return;
+    }
+    for (const id of previousIds) {
+      if (!discoveredIds.has(id)) {
+        this.removeItem(id);
+      }
+    }
   }
 
   setExecutionController(executionController) {

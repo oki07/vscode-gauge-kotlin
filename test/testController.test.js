@@ -37,6 +37,10 @@ function createDocument(text, filename = "/workspace/specs/example.spec") {
 
 function createFakeVscode(options = {}) {
   const calls = [];
+  const watcherListeners = {
+    create: undefined,
+    delete: undefined,
+  };
   const controller = {
     id: "gauge",
     items: createCollection(),
@@ -125,6 +129,23 @@ function createFakeVscode(options = {}) {
         onDidCloseTextDocument() {
           return { dispose() {} };
         },
+        createFileSystemWatcher(pattern, ignoreCreate, ignoreChange, ignoreDelete) {
+          watcherListeners.pattern = pattern;
+          watcherListeners.ignoreCreate = ignoreCreate;
+          watcherListeners.ignoreChange = ignoreChange;
+          watcherListeners.ignoreDelete = ignoreDelete;
+          return {
+            dispose() {},
+            onDidCreate(listener) {
+              watcherListeners.create = listener;
+              return { dispose() {} };
+            },
+            onDidDelete(listener) {
+              watcherListeners.delete = listener;
+              return { dispose() {} };
+            },
+          };
+        },
         onDidOpenTextDocument() {
           return { dispose() {} };
         },
@@ -133,6 +154,7 @@ function createFakeVscode(options = {}) {
         },
       },
     },
+    watcherListeners,
   };
 }
 
@@ -313,6 +335,71 @@ test("GaugeTestController resolves unopened workspace specs from Gauge LSP", asy
     textDocument: { uri: "/workspace/gauge/specs/checkout.spec" },
     position: { line: 1, character: 1 },
   });
+});
+
+test("GaugeTestController refreshes and prunes workspace tests on spec file changes", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode, watcherListeners } = createFakeVscode();
+  let specs = [
+    {
+      heading: "Old checkout",
+      executionIdentifier: "/workspace/gauge/specs/old.spec",
+    },
+  ];
+  const requests = [];
+  const clientsMap = new Map([
+    [
+      "/workspace/gauge",
+      {
+        client: {
+          sendRequest(method, params) {
+            requests.push({ method, params });
+            if (method === "gauge/specs") {
+              return Promise.resolve(specs);
+            }
+            if (method === "gauge/scenarios") {
+              return Promise.resolve([]);
+            }
+            return Promise.resolve([]);
+          },
+        },
+      },
+    ],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+
+  gaugeTests.register();
+  await gaugeTests.discoverWorkspaceTests();
+
+  assert.equal(controller.items.get("/workspace/gauge/specs/old.spec").label, "Old checkout");
+  assert.deepEqual({
+    pattern: watcherListeners.pattern,
+    ignoreCreate: watcherListeners.ignoreCreate,
+    ignoreChange: watcherListeners.ignoreChange,
+    ignoreDelete: watcherListeners.ignoreDelete,
+  }, {
+    pattern: "**/*.{spec,md}",
+    ignoreCreate: false,
+    ignoreChange: true,
+    ignoreDelete: false,
+  });
+
+  specs = [
+    {
+      heading: "New checkout",
+      executionIdentifier: "/workspace/gauge/specs/new.spec",
+    },
+  ];
+  await watcherListeners.create({ fsPath: "/workspace/gauge/specs/new.spec" });
+
+  assert.equal(controller.items.get("/workspace/gauge/specs/old.spec"), undefined);
+  assert.equal(controller.items.get("/workspace/gauge/specs/new.spec").label, "New checkout");
+  assert.deepEqual(requests.map((request) => request.method), [
+    "gauge/specs",
+    "gauge/scenarios",
+    "gauge/specs",
+    "gauge/scenarios",
+  ]);
 });
 
 test("GaugeTestController runs included Gauge test items instead of all specs", async () => {
