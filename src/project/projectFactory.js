@@ -9,6 +9,18 @@ const { MavenProject } = require("./mavenProject");
 const GAUGE_MANIFEST_FILE = "manifest.json";
 const MAVEN_BUILD_FILE = "pom.xml";
 const GRADLE_BUILD_FILES = ["build.gradle", "build.gradle.kts"];
+const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
+  ".git",
+  ".gradle",
+  ".hg",
+  ".svn",
+  ".vscode",
+  "build",
+  "dist",
+  "node_modules",
+  "out",
+  "target",
+]);
 
 function manifestLanguage(manifest) {
   return manifest && (manifest.Language || manifest.language || manifest.langauge);
@@ -53,6 +65,67 @@ function createProjectFactory(options = {}) {
     return Boolean(root) && exists(root, GAUGE_MANIFEST_FILE);
   }
 
+  function isDirectory(filename) {
+    if (!fileSystem || typeof fileSystem.statSync !== "function") {
+      return false;
+    }
+    try {
+      const stat = fileSystem.statSync(filename);
+      return Boolean(stat && typeof stat.isDirectory === "function" && stat.isDirectory());
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function directoryEntries(dirname) {
+    if (!fileSystem || typeof fileSystem.readdirSync !== "function") {
+      return [];
+    }
+    try {
+      return fileSystem.readdirSync(dirname)
+        .map((entry) => (typeof entry === "string" ? entry : entry.name))
+        .filter(Boolean)
+        .sort();
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function findGaugeProjectRoots(root) {
+    if (isGaugeProject(root)) {
+      return [root];
+    }
+    if (!isDirectory(root)) {
+      return [];
+    }
+
+    const roots = [];
+    const pending = [root];
+    const seen = new Set();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      for (const entry of directoryEntries(current)) {
+        if (NESTED_PROJECT_EXCLUDED_DIRECTORIES.has(entry)) {
+          continue;
+        }
+        const child = pathModule.join(current, entry);
+        if (!isDirectory(child)) {
+          continue;
+        }
+        if (isGaugeProject(child)) {
+          roots.push(child);
+        } else {
+          pending.push(child);
+        }
+      }
+    }
+    return roots.sort();
+  }
+
   function readManifest(root) {
     const content = fileSystem.readFileSync(pathModule.join(root, GAUGE_MANIFEST_FILE));
     return JSON.parse(content.toString());
@@ -91,6 +164,7 @@ function createProjectFactory(options = {}) {
 
   return {
     get,
+    findGaugeProjectRoots,
     getGaugeRootFromFilePath,
     getProjectByFilepath,
     isGaugeProject,

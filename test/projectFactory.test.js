@@ -4,15 +4,46 @@ const test = require("node:test");
 
 function createFakeFileSystem(entries) {
   const files = new Map(Object.entries(entries));
+  function childPrefix(dirname) {
+    return dirname.endsWith("/") ? dirname : `${dirname}/`;
+  }
+  function isDirectory(filename) {
+    const prefix = childPrefix(filename);
+    return [...files.keys()].some((entry) => entry.startsWith(prefix));
+  }
   return {
     existsSync(filename) {
       return files.has(filename);
+    },
+    readdirSync(dirname) {
+      const prefix = childPrefix(dirname);
+      const names = new Set();
+      for (const filename of files.keys()) {
+        if (!filename.startsWith(prefix)) {
+          continue;
+        }
+        const rest = filename.slice(prefix.length);
+        const [name] = rest.split("/");
+        if (name) {
+          names.add(name);
+        }
+      }
+      return [...names].sort();
     },
     readFileSync(filename) {
       if (!files.has(filename)) {
         throw new Error(`Missing ${filename}`);
       }
       return Buffer.from(files.get(filename));
+    },
+    statSync(filename) {
+      if (files.has(filename)) {
+        return { isDirectory: () => false };
+      }
+      if (isDirectory(filename)) {
+        return { isDirectory: () => true };
+      }
+      throw new Error(`Missing ${filename}`);
     },
   };
 }
@@ -28,6 +59,25 @@ test("ProjectFactory detects Gauge projects by manifest", () => {
 
   assert.equal(factory.isGaugeProject("/workspace/gauge"), true);
   assert.equal(factory.isGaugeProject("/workspace/other"), false);
+});
+
+test("ProjectFactory finds nested Gauge project roots", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const factory = createProjectFactory({
+    fileSystem: createFakeFileSystem({
+      "/workspace/service-a/manifest.json": "{}",
+      "/workspace/services/service-b/manifest.json": "{}",
+      "/workspace/node_modules/ignored/manifest.json": "{}",
+    }),
+    pathModule: path.posix,
+  });
+
+  assert.deepEqual(factory.findGaugeProjectRoots("/workspace"), [
+    "/workspace/service-a",
+    "/workspace/services/service-b",
+  ]);
+  assert.deepEqual(factory.findGaugeProjectRoots("/workspace/service-a"), ["/workspace/service-a"]);
+  assert.deepEqual(factory.findGaugeProjectRoots("/workspace/missing"), []);
 });
 
 test("ProjectFactory creates Kotlin Gradle projects", () => {

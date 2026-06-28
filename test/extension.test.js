@@ -899,7 +899,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     semanticTokenProviders,
     textDocumentListeners,
   } = createFakeVscode({
-    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
   });
   const cli = {
     isGaugeInstalled() {
@@ -1075,13 +1075,20 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
     projectFactory: {
       isGaugeProject(folder) {
-        checkedProjects.push(folder);
-        return true;
+        checkedProjects.push(["is", folder]);
+        return false;
+      },
+      findGaugeProjectRoots(folder) {
+        checkedProjects.push(["find", folder]);
+        return ["/workspace/gauge"];
       },
     },
   });
 
-  assert.deepEqual(checkedProjects, ["/workspace/gauge"]);
+  assert.deepEqual(checkedProjects, [
+    ["is", "/workspace"],
+    ["find", "/workspace"],
+  ]);
   assert.equal(created.cliOptions.vscode, fakeVscode);
   assert.deepEqual(versions, ["0.9.6"]);
   assert.deepEqual(welcomeCalls, [{ context, vscode: fakeVscode }]);

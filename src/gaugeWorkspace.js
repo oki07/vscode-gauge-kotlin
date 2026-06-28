@@ -395,6 +395,9 @@ class GaugeWorkspace {
   }
 
   discoverGaugeProjectRoots(workspaceRoot) {
+    if (typeof this.projectFactory.findGaugeProjectRoots === "function") {
+      return this.projectFactory.findGaugeProjectRoots(workspaceRoot);
+    }
     if (this.projectFactory.isGaugeProject(workspaceRoot)) {
       return [workspaceRoot];
     }

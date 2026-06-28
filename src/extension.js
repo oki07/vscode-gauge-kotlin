@@ -258,7 +258,16 @@ function hasActiveKotlinGaugeDocument(vscode, projectFactory) {
 }
 
 function hasGaugeProject(vscode, projectFactory) {
-  return workspaceFolders(vscode).some((folder) => projectFactory.isGaugeProject(folder.uri.fsPath));
+  return workspaceFolders(vscode).some((folder) => {
+    const folderPath = folder.uri.fsPath;
+    if (projectFactory.isGaugeProject(folderPath)) {
+      return true;
+    }
+    if (typeof projectFactory.findGaugeProjectRoots === "function") {
+      return projectFactory.findGaugeProjectRoots(folderPath).length > 0;
+    }
+    return false;
+  });
 }
 
 function shouldStartGaugeServices(vscode, projectFactory) {
