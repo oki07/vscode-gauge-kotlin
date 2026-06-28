@@ -54,14 +54,60 @@ function kotlinStringLiteral(value) {
   return JSON.stringify(value);
 }
 
-function stepStubCode(stepText) {
+function isKotlinDocument(document) {
+  const file = document && document.uri && document.uri.fsPath;
+  return document && (
+    document.languageId === "kotlin"
+    || (typeof file === "string" && file.toLowerCase().endsWith(".kt"))
+  );
+}
+
+function kotlinFunctionNames(text) {
+  const names = [];
+  const pattern = /\bfun\s+(?:`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*))\s*\(/g;
+  let match = pattern.exec(text);
+  while (match) {
+    names.push(match[1] || match[2]);
+    match = pattern.exec(text);
+  }
+  return names;
+}
+
+function workspaceKotlinFunctionNames(vscode) {
+  const documents = vscode && vscode.workspace && Array.isArray(vscode.workspace.textDocuments)
+    ? vscode.workspace.textDocuments
+    : [];
+  const names = [];
+  for (const document of documents) {
+    if (!isKotlinDocument(document) || typeof document.getText !== "function") {
+      continue;
+    }
+    names.push(...kotlinFunctionNames(document.getText()));
+  }
+  return names;
+}
+
+function stepImplementationName(existingNames) {
+  const names = new Set(existingNames || []);
+  if (!names.has("implementation")) {
+    return "implementation";
+  }
+  for (let index = 1; ; index += 1) {
+    const candidate = `implementation${index}`;
+    if (!names.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+function stepStubCode(stepText, methodName = "implementation") {
   const params = Array.from(
     { length: countStepParameters(stepText) },
     (_entry, index) => `arg${index}: Any`,
   ).join(", ");
   return [
     `@com.thoughtworks.gauge.Step(${kotlinStringLiteral(stepText)})`,
-    `fun implementation(${params}) {`,
+    `fun ${methodName}(${params}) {`,
     "}",
     "",
   ].join("\n");
@@ -97,7 +143,12 @@ class GaugeStepCodeActionProvider {
     action.command = {
       command: GENERATE_STEP_STUB,
       title: CREATE_STEP_IMPLEMENTATION_TITLE,
-      arguments: [stepStubCode(stepText)],
+      arguments: [
+        stepStubCode(
+          stepText,
+          stepImplementationName(workspaceKotlinFunctionNames(this.vscode)),
+        ),
+      ],
     };
     return [action];
   }
@@ -108,5 +159,7 @@ module.exports = {
   GENERATE_STEP_STUB,
   GaugeStepCodeActionProvider,
   UNDEFINED_STEP_MESSAGE,
+  kotlinFunctionNames,
+  stepImplementationName,
   stepStubCode,
 };

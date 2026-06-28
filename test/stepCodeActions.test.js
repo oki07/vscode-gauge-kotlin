@@ -107,3 +107,54 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
     ],
   });
 });
+
+test("GaugeStepCodeActionProvider avoids duplicate Kotlin step stub names", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [
+        {
+          languageId: "kotlin",
+          uri: { fsPath: "/workspace/gauge/src/test/kotlin/Steps.kt" },
+          getText() {
+            return [
+              "import com.thoughtworks.gauge.Step",
+              "",
+              "@Step(\"Pay with <amount>\")",
+              "fun implementation(arg0: Any) {",
+              "}",
+            ].join("\n");
+          },
+        },
+      ],
+    },
+  };
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Refund <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 17),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 1);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Refund <amount>\")\nfun implementation1(arg0: Any) {\n}\n",
+    ],
+  });
+});
