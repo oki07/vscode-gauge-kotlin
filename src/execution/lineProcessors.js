@@ -154,6 +154,41 @@ function addLocation(target, event) {
   return target;
 }
 
+function hookFailureEvents(event, beforeName, afterName, idPrefix, parentId) {
+  const result = (event && event.result) || {};
+  const hooks = [
+    { failure: result.beforeHookFailure, name: beforeName },
+    { failure: result.afterHookFailure, name: afterName },
+  ];
+  const events = [];
+  for (const hook of hooks) {
+    if (!hook.failure) {
+      continue;
+    }
+    const id = `${idPrefix || ""}${hook.name}`;
+    events.push(addLocation({
+      type: "testStarted",
+      id,
+      parentId,
+      name: hook.name,
+    }, event));
+    events.push({
+      type: "testFailed",
+      id,
+      parentId,
+      name: hook.name,
+      message: formatExecutionError(hook.failure, "Failed: "),
+    });
+    events.push({
+      type: "testFinished",
+      id,
+      parentId,
+      name: hook.name,
+    });
+  }
+  return events;
+}
+
 function normalizeStatus(status) {
   return String(status || "").toLowerCase();
 }
@@ -164,7 +199,7 @@ function machineReadableEvents(event) {
     case "suitestart":
       return [{ type: "lineBreak" }];
     case "suiteend":
-      return [];
+      return hookFailureEvents(event, "Before Suite", "After Suite", "", SUITE_ID);
     case "specstart":
       return [
         addLocation({
@@ -176,6 +211,13 @@ function machineReadableEvents(event) {
       ];
     case "specend":
       return [
+        ...hookFailureEvents(
+          event,
+          "Before Specification",
+          "After Specification",
+          event.id,
+          event.id,
+        ),
         {
           type: "suiteFinished",
           id: event.id,

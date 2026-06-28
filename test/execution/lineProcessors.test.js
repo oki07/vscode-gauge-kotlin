@@ -205,6 +205,144 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
   ]);
 });
 
+test("MachineReadableEventProcessor maps suite and spec hook failures to synthetic tests", () => {
+  const { MachineReadableEventProcessor } = require("../../src/execution/lineProcessors");
+  const events = [];
+  const processor = new MachineReadableEventProcessor((event) => events.push(event));
+
+  processor.process(JSON.stringify({
+    type: "suiteEnd",
+    result: {
+      beforeHookFailure: {
+        text: "Suite setup failed",
+        filename: "/workspace/env/default/hooks.kt",
+        lineNo: "9",
+        message: "database unavailable",
+        stackTrace: "suite stack",
+      },
+      afterHookFailure: {
+        text: "Suite teardown failed",
+        filename: "/workspace/env/default/hooks.kt",
+        lineNo: "",
+        message: "cleanup failed",
+        stackTrace: "suite cleanup stack",
+      },
+    },
+  }));
+  processor.process(JSON.stringify({
+    type: "specEnd",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 1,
+    result: {
+      time: 100,
+      beforeHookFailure: {
+        text: "Spec setup failed",
+        filename: "/workspace/specs/example.spec",
+        lineNo: "2",
+        message: "missing fixture",
+        stackTrace: "spec stack",
+      },
+      afterHookFailure: {
+        text: "Spec teardown failed",
+        filename: "/workspace/specs/example.spec",
+        lineNo: "19",
+        message: "cleanup failed",
+        stackTrace: "spec cleanup stack",
+      },
+    },
+  }));
+
+  assert.deepEqual(events, [
+    {
+      type: "testStarted",
+      id: "Before Suite",
+      parentId: "suite",
+      name: "Before Suite",
+    },
+    {
+      type: "testFailed",
+      id: "Before Suite",
+      parentId: "suite",
+      name: "Before Suite",
+      message: "Failed: Suite setup failed\nFilename: /workspace/env/default/hooks.kt:9\nMessage: database unavailable\nStack Trace:\nsuite stack",
+    },
+    {
+      type: "testFinished",
+      id: "Before Suite",
+      parentId: "suite",
+      name: "Before Suite",
+    },
+    {
+      type: "testStarted",
+      id: "After Suite",
+      parentId: "suite",
+      name: "After Suite",
+    },
+    {
+      type: "testFailed",
+      id: "After Suite",
+      parentId: "suite",
+      name: "After Suite",
+      message: "Failed: Suite teardown failed\nFilename: /workspace/env/default/hooks.kt\nMessage: cleanup failed\nStack Trace:\nsuite cleanup stack",
+    },
+    {
+      type: "testFinished",
+      id: "After Suite",
+      parentId: "suite",
+      name: "After Suite",
+    },
+    {
+      type: "testStarted",
+      id: "/workspace/specs/example.specBefore Specification",
+      parentId: "/workspace/specs/example.spec",
+      name: "Before Specification",
+      location: "gauge:///workspace/specs/example.spec:1",
+    },
+    {
+      type: "testFailed",
+      id: "/workspace/specs/example.specBefore Specification",
+      parentId: "/workspace/specs/example.spec",
+      name: "Before Specification",
+      message: "Failed: Spec setup failed\nFilename: /workspace/specs/example.spec:2\nMessage: missing fixture\nStack Trace:\nspec stack",
+    },
+    {
+      type: "testFinished",
+      id: "/workspace/specs/example.specBefore Specification",
+      parentId: "/workspace/specs/example.spec",
+      name: "Before Specification",
+    },
+    {
+      type: "testStarted",
+      id: "/workspace/specs/example.specAfter Specification",
+      parentId: "/workspace/specs/example.spec",
+      name: "After Specification",
+      location: "gauge:///workspace/specs/example.spec:1",
+    },
+    {
+      type: "testFailed",
+      id: "/workspace/specs/example.specAfter Specification",
+      parentId: "/workspace/specs/example.spec",
+      name: "After Specification",
+      message: "Failed: Spec teardown failed\nFilename: /workspace/specs/example.spec:19\nMessage: cleanup failed\nStack Trace:\nspec cleanup stack",
+    },
+    {
+      type: "testFinished",
+      id: "/workspace/specs/example.specAfter Specification",
+      parentId: "/workspace/specs/example.spec",
+      name: "After Specification",
+    },
+    {
+      type: "suiteFinished",
+      id: "/workspace/specs/example.spec",
+      parentId: "suite",
+      name: "Checkout",
+      duration: 100,
+    },
+  ]);
+});
+
 test("MachineReadableEventProcessor maps Gauge notifications and output events", () => {
   const { MachineReadableEventProcessor } = require("../../src/execution/lineProcessors");
   const events = [];
