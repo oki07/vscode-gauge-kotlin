@@ -730,6 +730,49 @@ test("execution commands delegate to the Gauge execution controller", () => {
   ]);
 });
 
+test("activation wires Gauge Test UI execution events into the execution controller", () => {
+  const extension = require("../src/extension");
+
+  const created = {};
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode();
+  const sink = () => {};
+
+  class FakeGaugeTestController {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      created.testController = this;
+    }
+
+    createExecutionEventSink() {
+      return sink;
+    }
+
+    register() {
+      return this.disposable;
+    }
+
+    setExecutionController(executionController) {
+      this.executionController = executionController;
+    }
+  }
+
+  const executionController = { handleCommand() {} };
+  extension.activate(context, fakeVscode, {
+    createExecutionController(options) {
+      created.executionOptions = options;
+      return executionController;
+    },
+    GaugeTestController: FakeGaugeTestController,
+  });
+
+  assert.equal(created.testController.options.vscode, fakeVscode);
+  assert.equal(created.executionOptions.executionEventSink, sink);
+  assert.equal(created.testController.executionController, executionController);
+  assert.equal(context.subscriptions.includes(created.testController.disposable), true);
+});
+
 test("activation starts Gauge workspace services for Gauge projects", () => {
   const extension = require("../src/extension");
 

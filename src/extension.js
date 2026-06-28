@@ -33,6 +33,7 @@ const {
 } = require("./semanticTokensProvider");
 const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
+const { GaugeTestController } = require("./testController");
 const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const {
   createConcept,
@@ -698,6 +699,11 @@ function activate(context, vscodeApi, options = {}) {
     ...options,
     projectFactory,
   };
+  const GaugeTestControllerCtor = options.GaugeTestController || GaugeTestController;
+  const testController = new GaugeTestControllerCtor({ vscode });
+  const executionEventSink = typeof testController.createExecutionEventSink === "function"
+    ? testController.createExecutionEventSink()
+    : undefined;
   const executionController = (options.createExecutionController || createGaugeExecutionController)({
     vscode,
     cli: options.cli,
@@ -709,6 +715,7 @@ function activate(context, vscodeApi, options = {}) {
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     projectFactory,
+    executionEventSink,
     runner: options.runner,
     scenariosProvider: options.scenariosProvider || createGaugeScenariosProvider(
       () => activeClientsMap,
@@ -716,6 +723,15 @@ function activate(context, vscodeApi, options = {}) {
     ),
     state,
   });
+  if (typeof testController.setExecutionController === "function") {
+    testController.setExecutionController(executionController);
+  }
+  const testControllerDisposable = typeof testController.register === "function"
+    ? testController.register()
+    : undefined;
+  if (testControllerDisposable) {
+    context.subscriptions.push(testControllerDisposable);
+  }
   const ProjectInitializerCtor = options.ProjectInitializer || ProjectInitializer;
   context.subscriptions.push(new ProjectInitializerCtor({
     cli: options.cli,
