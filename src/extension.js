@@ -1,6 +1,7 @@
 "use strict";
 
 const { CLI } = require("./cli");
+const { GaugeCodeLensProvider } = require("./codeLensProvider");
 const {
   GaugeArgumentCodeActionProvider,
   registerArgumentSelectionCommand,
@@ -338,6 +339,21 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
   }
 }
 
+function registerCodeLensProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerCodeLensProvider !== "function") {
+    return;
+  }
+  const CodeLensProviderCtor = options.GaugeCodeLensProvider || GaugeCodeLensProvider;
+  const provider = new CodeLensProviderCtor({ vscode });
+  const disposable = vscode.languages.registerCodeLensProvider(
+    { language: "gauge" },
+    provider,
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerFoldingRangeProvider(context, vscode, options) {
   if (!vscode.languages || typeof vscode.languages.registerFoldingRangeProvider !== "function") {
     return;
@@ -555,6 +571,7 @@ function startGaugeServices(context, vscode, options = {}) {
     ...options,
     projectFactory,
   });
+  registerCodeLensProvider(context, vscode, options);
   registerFoldingRangeProvider(context, vscode, options);
   registerStepDefinitionProvider(context, vscode, {
     ...options,

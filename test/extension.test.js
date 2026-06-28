@@ -24,6 +24,7 @@ function createFakeVscode(overrides = {}) {
   const debugProviders = [];
   const editorUpdates = [];
   const codeActionProviders = [];
+  const codeLensProviders = [];
   const completionProviders = [];
   const definitionProviders = [];
   const diagnosticCollections = [];
@@ -81,6 +82,15 @@ function createFakeVscode(overrides = {}) {
       registerCodeActionsProvider(selector, provider) {
         const disposable = { dispose() {} };
         codeActionProviders.push({
+          selector,
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
+      registerCodeLensProvider(selector, provider) {
+        const disposable = { dispose() {} };
+        codeLensProviders.push({
           selector,
           provider,
           disposable,
@@ -205,6 +215,7 @@ function createFakeVscode(overrides = {}) {
     configurationListeners,
     contexts,
     codeActionProviders,
+    codeLensProviders,
     completionProviders,
     definitionProviders,
     diagnosticCollections,
@@ -1099,6 +1110,78 @@ test("activation registers dynamic argument completions for Gauge documents", ()
   assert.equal(completionProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(typeof completionProviders[0].provider.options.projectFactory.isGaugeProject, "function");
   assert.equal(context.subscriptions.includes(completionProviders[0].disposable), true);
+});
+
+test("activation registers Gauge run code lenses for Gauge documents", () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const { codeLensProviders, fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  class FakeCodeLensProvider {
+    constructor(options) {
+      this.options = options;
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: class FakeConfigProvider {
+      dispose() {}
+    },
+    DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
+    ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
+      dispose() {}
+    },
+    GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    ReferenceProvider: class FakeReferenceProvider {
+      dispose() {}
+    },
+    GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
+    GaugeCodeLensProvider: FakeCodeLensProvider,
+    GaugeStepDiagnosticsProvider: class FakeStepDiagnosticsProvider {
+      register() {
+        return { dispose() {} };
+      }
+    },
+    semanticTokensLegend: { id: "legend" },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(codeLensProviders.length, 1);
+  assert.deepEqual(codeLensProviders[0].selector, { language: "gauge" });
+  assert.equal(codeLensProviders[0].provider.options.vscode, fakeVscode);
+  assert.equal(context.subscriptions.includes(codeLensProviders[0].disposable), true);
 });
 
 test("activation registers Kotlin step definitions for Gauge documents", () => {
