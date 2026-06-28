@@ -11,6 +11,10 @@ function javaLike(language) {
   return language === "java" || language === "kotlin";
 }
 
+function csharpLike(language) {
+  return language === "csharp" || language === "dotnet";
+}
+
 function getConfiguredDebugPort(vscode) {
   if (!vscode || !vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
     return DEFAULT_DEBUG_PORT;
@@ -85,6 +89,9 @@ function createGaugeDebugger(options = {}) {
     if (javaLike(language)) {
       debugEnv.GAUGE_DEBUG_OPTS = debugPort;
     }
+    if (csharpLike(language)) {
+      debugEnv.GAUGE_CSHARP_PROJECT_CONFIG = "Debug";
+    }
 
     return debugEnv;
   }
@@ -94,23 +101,71 @@ function createGaugeDebugger(options = {}) {
   }
 
   function getDebuggerConfiguration() {
-    if (javaLike(language)) {
-      return {
-        name: DEBUGGER_NAME,
-        type: "java",
-        request: REQUEST_TYPE,
-        hostName: "127.0.0.1",
-        port: debugPort,
-      };
+    switch (language) {
+      case "python":
+        return {
+          name: DEBUGGER_NAME,
+          type: "python",
+          request: REQUEST_TYPE,
+          port: debugPort,
+          localRoot: projectRoot,
+        };
+      case "javascript":
+        return {
+          name: DEBUGGER_NAME,
+          type: "node",
+          request: REQUEST_TYPE,
+          port: debugPort,
+          protocol: "inspector",
+        };
+      case "typescript":
+        return {
+          name: DEBUGGER_NAME,
+          type: "node",
+          runtimeArgs: ["--nolazy", "-r", "ts-node/register"],
+          request: REQUEST_TYPE,
+          sourceMaps: true,
+          port: debugPort,
+          protocol: "inspector",
+        };
+      case "ruby":
+        return {
+          name: DEBUGGER_NAME,
+          type: "Ruby",
+          request: REQUEST_TYPE,
+          cwd: projectRoot,
+          remoteWorkspaceRoot: projectRoot,
+          remoteHost: "127.0.0.1",
+          remotePort: debugPort,
+        };
+      case "csharp":
+      case "dotnet":
+        return {
+          name: DEBUGGER_NAME,
+          type: "coreclr",
+          request: REQUEST_TYPE,
+          processId,
+          justMyCode: true,
+          sourceFileMap: {},
+        };
+      default:
+        if (javaLike(language)) {
+          return {
+            name: DEBUGGER_NAME,
+            type: "java",
+            request: REQUEST_TYPE,
+            hostName: "127.0.0.1",
+            port: debugPort,
+          };
+        }
+        return {
+          name: DEBUGGER_NAME,
+          type: language,
+          request: REQUEST_TYPE,
+          processId,
+          port: debugPort,
+        };
     }
-
-    return {
-      name: DEBUGGER_NAME,
-      type: language,
-      request: REQUEST_TYPE,
-      processId,
-      port: debugPort,
-    };
   }
 
   async function startDebugger() {

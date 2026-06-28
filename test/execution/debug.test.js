@@ -210,6 +210,89 @@ test("GaugeDebugger resolves the configured debug port to an available port", as
   assert.equal(debuggerSession.getDebuggerConfiguration().port, 6010);
 });
 
+test("GaugeDebugger maps Gauge runner languages to VS Code debug adapters", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+
+  async function configurationFor(language, processId) {
+    const debuggerSession = createGaugeDebugger({
+      projectRoot: "/workspace/gauge",
+      language,
+      async debugPortProvider() {
+        return 5005;
+      },
+    });
+    await debuggerSession.addDebugEnv();
+    if (processId !== undefined) {
+      debuggerSession.addProcessId(processId);
+    }
+    return debuggerSession.getDebuggerConfiguration();
+  }
+
+  assert.deepEqual(await configurationFor("python"), {
+    name: "Gauge Debugger",
+    type: "python",
+    request: "attach",
+    port: 5005,
+    localRoot: "/workspace/gauge",
+  });
+  assert.deepEqual(await configurationFor("javascript"), {
+    name: "Gauge Debugger",
+    type: "node",
+    request: "attach",
+    port: 5005,
+    protocol: "inspector",
+  });
+  assert.deepEqual(await configurationFor("typescript"), {
+    name: "Gauge Debugger",
+    type: "node",
+    runtimeArgs: ["--nolazy", "-r", "ts-node/register"],
+    request: "attach",
+    sourceMaps: true,
+    port: 5005,
+    protocol: "inspector",
+  });
+  assert.deepEqual(await configurationFor("ruby"), {
+    name: "Gauge Debugger",
+    type: "Ruby",
+    request: "attach",
+    cwd: "/workspace/gauge",
+    remoteWorkspaceRoot: "/workspace/gauge",
+    remoteHost: "127.0.0.1",
+    remotePort: 5005,
+  });
+  assert.deepEqual(await configurationFor("csharp", 12345), {
+    name: "Gauge Debugger",
+    type: "coreclr",
+    request: "attach",
+    processId: 12345,
+    justMyCode: true,
+    sourceFileMap: {},
+  });
+});
+
+test("GaugeDebugger adds C# debug environment for dotnet projects", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const debuggerSession = createGaugeDebugger({
+    projectRoot: "/workspace/gauge",
+    language: "csharp",
+    baseEnv: { PATH: "/bin" },
+    async debugPortProvider() {
+      return 5005;
+    },
+  });
+
+  const env = await debuggerSession.addDebugEnv();
+
+  assert.deepEqual(env, {
+    PATH: "/bin",
+    DEBUGGING: true,
+    use_nested_specs: "false",
+    SHOULD_BUILD_PROJECT: "true",
+    GAUGE_CSHARP_PROJECT_CONFIG: "Debug",
+    DEBUG_PORT: 5005,
+  });
+});
+
 test("GaugeDebugger registers debug session termination callbacks", () => {
   const { createGaugeDebugger } = require("../../src/execution/debug");
   const callbacks = [];
