@@ -159,9 +159,6 @@ class GaugeArgumentCodeActionProvider {
     if (!argument) {
       return stepActions;
     }
-    if (isConceptHeadingLine(line, document) && argument.text.startsWith("\"")) {
-      return stepActions;
-    }
 
     const paramText = argument.text.substring(1, argument.text.length - 1);
     const isStatic = argument.text.startsWith("\"");

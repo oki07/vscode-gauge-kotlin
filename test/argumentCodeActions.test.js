@@ -228,17 +228,25 @@ test("GaugeArgumentCodeActionProvider ignores specification and scenario heading
   );
 });
 
-test("GaugeArgumentCodeActionProvider ignores quoted concept heading text", () => {
+test("GaugeArgumentCodeActionProvider converts static concept heading arguments to dynamic parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
-  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+  const vscode = createFakeVscode();
+  const provider = new GaugeArgumentCodeActionProvider({ vscode });
 
-  assert.deepEqual(
-    provider.provideCodeActions(
-      createDocument('# Shared "cart"', "/workspace/specs/concepts/shared.cpt"),
-      createRange(0, 10),
-    ),
-    [],
+  const actions = provider.provideCodeActions(
+    createDocument('# Shared "cart"', "/workspace/specs/concepts/shared.cpt"),
+    createRange(0, 10),
   );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Convert to Dynamic Parameter");
+  const replacement = actions[0].edit.replacements[0];
+  assert.deepEqual(replacement.uri, { fsPath: "/workspace/specs/concepts/shared.cpt" });
+  assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 9 });
+  assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 15 });
+  assert.equal(replacement.newText, "<cart>");
+  assert.deepEqual({ ...actions[0].command.arguments[1].start }, { line: 0, character: 10 });
+  assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 14 });
 });
 
 test("GaugeArgumentCodeActionProvider exposes create step implementation fixes", () => {
