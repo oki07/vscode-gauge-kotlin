@@ -36,6 +36,9 @@
       "include": "#arguments"
     },
     {
+      "include": "#markdown"
+    },
+    {
       "include": "#fallbackComment"
     }
   ],
@@ -252,6 +255,73 @@
           "include": "#arguments"
         }
       ]
+    },
+    "markdown": {
+      "patterns": [
+        {
+          "include": "#markdownBlockquote"
+        },
+        {
+          "include": "#markdownFencedCode"
+        },
+        {
+          "include": "#markdownList"
+        },
+        {
+          "include": "#markdownInline"
+        }
+      ]
+    },
+    "markdownBlockquote": {
+      "name": "markup.quote.markdown.gauge",
+      "match": "^(>\\s?)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.blockquote.markdown.gauge"
+        }
+      }
+    },
+    "markdownFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})(?:\\s*[A-Za-z0-9_-]+)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$"
+    },
+    "markdownInline": {
+      "patterns": [
+        {
+          "include": "#markdownLink"
+        },
+        {
+          "match": "`[^`\\n]+`",
+          "name": "markup.raw.inline.markdown.gauge"
+        },
+        {
+          "match": "(?:\\*\\*|__)[^\\n]+?(?:\\*\\*|__)",
+          "name": "markup.bold.markdown.gauge"
+        },
+        {
+          "match": "(?:\\*|_)[^\\s\\n][^\\n]*?(?:\\*|_)",
+          "name": "markup.italic.markdown.gauge"
+        }
+      ]
+    },
+    "markdownLink": {
+      "name": "meta.link.inline.markdown.gauge",
+      "match": "\\[[^\\]\\n]+\\]\\([^\\s)]+(?:\\s+\"[^\"]*\")?\\)"
+    },
+    "markdownList": {
+      "name": "markup.list.markdown.gauge",
+      "match": "^\\s*((?:[-+*]|\\d+\\.)(?:\\s+))",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list.begin.markdown.gauge"
+        }
+      }
     },
     "fallbackComment": {
       "name": "comment.line.gauge",

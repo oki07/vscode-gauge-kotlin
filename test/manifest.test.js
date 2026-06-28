@@ -478,6 +478,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
       "#step",
       "#table",
       "#arguments",
+      "#markdown",
       "#fallbackComment",
     ],
   );
@@ -494,6 +495,12 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
     "tableRow",
     "arguments",
     "tableArguments",
+    "markdown",
+    "markdownBlockquote",
+    "markdownFencedCode",
+    "markdownInline",
+    "markdownLink",
+    "markdownList",
     "fallbackComment",
   ]) {
     assert.ok(grammarJson.repository[key], `missing ${key}`);
@@ -534,6 +541,23 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
   assertPatternMatches(fallbackComment, "plain comment");
+});
+
+test("Gauge TextMate grammar preserves common Markdown constructs", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+  const markdownBlockquote = repositoryPattern(grammarJson, "markdownBlockquote");
+  const markdownFence = repositoryPattern(grammarJson, "markdownFencedCode");
+  const markdownList = repositoryPattern(grammarJson, "markdownList");
+  const markdownLink = repositoryPattern(grammarJson, "markdownLink");
+
+  assertPatternMatches(markdownFence, "```kotlin", "```kotlin");
+  assertPatternMatches(markdownFence, "~~~", "~~~");
+  assertPatternMatches(markdownList, "- markdown item", "- ");
+  assertPatternMatches(markdownList, "1. markdown item", "1. ");
+  assertPatternMatches(markdownBlockquote, "> quoted note", "> ");
+  assertPatternMatches(markdownLink, "See [Gauge](https://gauge.org)", "[Gauge](https://gauge.org)");
 });
 
 test("extension package ignores development-only files while keeping runtime sources", () => {
