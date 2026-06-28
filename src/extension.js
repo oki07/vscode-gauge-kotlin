@@ -43,7 +43,7 @@ const {
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
-const FORMAT_DOCUMENT_COMMAND = "editor.action.formatDocument";
+const FORMAT_COMMAND = "format";
 const KOTLIN_LANGUAGE = "kotlin";
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
@@ -112,6 +112,70 @@ function notify(vscode, message) {
   return undefined;
 }
 
+function showError(vscode, message) {
+  if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
+    return vscode.window.showErrorMessage(message);
+  }
+  return undefined;
+}
+
+function collectOutput(stream, chunks) {
+  if (stream && typeof stream.on === "function") {
+    stream.on("data", (chunk) => chunks.push(chunk.toString()));
+  }
+}
+
+function waitForProcess(command, args, options) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const stdout = [];
+    const stderr = [];
+
+    function settle(result) {
+      if (!settled) {
+        settled = true;
+        resolve({
+          stdout: stdout.join(""),
+          stderr: stderr.join(""),
+          ...result,
+        });
+      }
+    }
+
+    let child;
+    try {
+      child = command.spawn(args, options);
+    } catch (error) {
+      settle({ code: 1, error });
+      return;
+    }
+    if (!child) {
+      settle({ code: 1, error: new Error("Gauge format process did not start.") });
+      return;
+    }
+
+    collectOutput(child.stdout, stdout);
+    collectOutput(child.stderr, stderr);
+    if (typeof child.on === "function") {
+      child.on("error", (error) => settle({ code: 1, error }));
+      child.on("exit", (code) => settle({ code }));
+      child.on("close", (code) => settle({ code }));
+    } else {
+      settle({ code: 0 });
+    }
+  });
+}
+
+function failureReason(result) {
+  return (result.stderr || result.stdout || (result.error && result.error.message) || "")
+    .trim();
+}
+
+function formatFailureMessage(result) {
+  const reason = failureReason(result);
+  return reason ? `Error on formatting spec. ${reason}` : "Error on formatting spec.";
+}
+
 function activeProjectRoots() {
   if (!activeClientsMap || typeof activeClientsMap.keys !== "function") {
     return undefined;
@@ -120,7 +184,7 @@ function activeProjectRoots() {
   return roots.length > 0 ? roots : undefined;
 }
 
-async function formatActiveGaugeDocument(vscode) {
+async function formatActiveGaugeDocument(vscode, options = {}) {
   if (!hasActiveGaugeDocument(vscode)) {
     return notify(vscode, "No Gauge file is active.");
   }
@@ -128,8 +192,29 @@ async function formatActiveGaugeDocument(vscode) {
   if (typeof document.save === "function") {
     await document.save();
   }
-  if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
-    return vscode.commands.executeCommand(FORMAT_DOCUMENT_COMMAND);
+  const filePath = (document.uri && document.uri.fsPath) || document.fileName;
+  if (!filePath) {
+    return showError(vscode, "Gauge file path is not available.");
+  }
+
+  let projectRoot;
+  try {
+    projectRoot = options.projectFactory.getGaugeRootFromFilePath(filePath);
+  } catch (error) {
+    return showError(vscode, formatFailureMessage({ error }));
+  }
+
+  const cli = options.cli || createCli(vscode, options);
+  const command = cli && typeof cli.gaugeCommand === "function" && cli.gaugeCommand();
+  if (!command || typeof command.spawn !== "function") {
+    return showError(vscode, formatFailureMessage({
+      error: new Error("Gauge is not installed."),
+    }));
+  }
+
+  const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], { cwd: projectRoot });
+  if (result.code !== 0) {
+    return showError(vscode, formatFailureMessage(result));
   }
   return undefined;
 }
@@ -391,7 +476,7 @@ function createCommandHandler(command, vscode, executionController, options = {}
           tempDirProvider: options.tempDirProvider,
         });
       case "gauge.format":
-        return (options.formatDocument || formatActiveGaugeDocument)(vscode);
+        return (options.formatDocument || formatActiveGaugeDocument)(vscode, options);
       case "gauge.config.saveRecommended":
         return notify(vscode, "Gauge recommended settings are not available yet.");
       case "gauge.stopExecution":

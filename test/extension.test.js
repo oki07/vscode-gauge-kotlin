@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const test = require("node:test");
 
 const PROVIDER_COMMANDS = new Set([
@@ -340,29 +341,40 @@ test("preview command delegates to the Gauge preview creator", () => {
   assert.equal(receivedOptions.projectFactory, projectFactory);
 });
 
-test("format command saves before delegating to VS Code document formatting for Gauge files", async () => {
+test("format command saves and runs gauge format for the active Gauge file", async () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
   const calls = [];
-  const { contexts, fakeVscode, registeredCommands } = createFakeVscode({
+  const spawned = [];
+  const { fakeVscode, registeredCommands } = createFakeVscode({
     onExecuteCommand(command) {
       calls.push(command);
-    },
-    activeTextEditor: {
-      document: {
-        languageId: "gauge",
-        save() {
-          calls.push("document.save");
-          return Promise.resolve(true);
-        },
-      },
     },
   });
 
   extension.activate(context, fakeVscode, {
     createCli() {
-      return undefined;
+      return {
+        gaugeCommand() {
+          return {
+            spawn(args, options) {
+              spawned.push({ args, options });
+              const child = new EventEmitter();
+              child.stdout = new EventEmitter();
+              child.stderr = new EventEmitter();
+              process.nextTick(() => child.emit("exit", 0));
+              return child;
+            },
+          };
+        },
+      };
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filePath) {
+        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
     },
   });
 
@@ -371,10 +383,23 @@ test("format command saves before delegating to VS Code document formatting for 
   );
 
   assert.ok(command);
+  fakeVscode.window.activeTextEditor = {
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      save() {
+        calls.push("document.save");
+        return Promise.resolve(true);
+      },
+    },
+  };
   await command.handler();
-  assert.deepEqual(calls, ["document.save", "editor.action.formatDocument"]);
-  assert.deepEqual(contexts, [
-    { command: "editor.action.formatDocument", key: undefined, value: undefined },
+  assert.deepEqual(calls, ["document.save"]);
+  assert.deepEqual(spawned, [
+    {
+      args: ["format", "/workspace/gauge/specs/example.spec"],
+      options: { cwd: "/workspace/gauge" },
+    },
   ]);
 });
 
