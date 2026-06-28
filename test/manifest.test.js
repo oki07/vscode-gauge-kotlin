@@ -119,6 +119,37 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec", "Concept"]);
   assert.equal(language.configuration, "./language-configuration.json");
 
+  assert.deepEqual(manifest.contributes.iconThemes, [
+    {
+      id: "gauge-kotlin-icons",
+      label: "Gauge Kotlin Icons",
+      path: "./resources/gauge-icon-theme.json",
+    },
+  ]);
+  const iconThemePath = path.join(root, manifest.contributes.iconThemes[0].path);
+  const iconTheme = JSON.parse(fs.readFileSync(iconThemePath, "utf8"));
+  assert.deepEqual(iconTheme.fileExtensions, {
+    spec: "_gauge_spec",
+    cpt: "_gauge_concept",
+  });
+  assert.deepEqual(iconTheme.languageIds, {
+    gauge: "_gauge_spec",
+  });
+  assert.equal(
+    iconTheme.iconDefinitions._gauge_spec.iconPath,
+    "../images/gauge-icon.png",
+  );
+  assert.equal(
+    iconTheme.iconDefinitions._gauge_concept.iconPath,
+    "../images/gauge-icon.png",
+  );
+  for (const definition of Object.values(iconTheme.iconDefinitions)) {
+    assert.equal(
+      fs.existsSync(path.resolve(path.dirname(iconThemePath), definition.iconPath)),
+      true,
+    );
+  }
+
   const commandIds = manifest.contributes.commands.map((entry) => entry.command);
   assert.deepEqual(commandIds, [
     "gauge.createProject",

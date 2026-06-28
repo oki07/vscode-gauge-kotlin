@@ -82,6 +82,13 @@
         "path": "./syntaxes/gauge.tmLanguage.json"
       }
     ],
+    "iconThemes": [
+      {
+        "id": "gauge-kotlin-icons",
+        "label": "Gauge Kotlin Icons",
+        "path": "./resources/gauge-icon-theme.json"
+      }
+    ],
     "keybindings": [
       {
         "command": "gauge.format",

@@ -1,0 +1,17 @@
+{
+  "iconDefinitions": {
+    "_gauge_spec": {
+      "iconPath": "../images/gauge-icon.png"
+    },
+    "_gauge_concept": {
+      "iconPath": "../images/gauge-icon.png"
+    }
+  },
+  "fileExtensions": {
+    "spec": "_gauge_spec",
+    "cpt": "_gauge_concept"
+  },
+  "languageIds": {
+    "gauge": "_gauge_spec"
+  }
+}
