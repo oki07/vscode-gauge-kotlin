@@ -4676,14 +4676,23 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     "# Checkout",
     "* Pay with <amount>",
     "* Confirm order",
+    "* Reuse payment concept",
     "*",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const kotlinDocument = createDocument([
     "@Step(\"Confirm order\")",
     "fun confirm() {}",
   ].join("\n"));
+  const conceptDocument = createDocument([
+    "# Reuse payment concept",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
 
-  const diagnostics = provider.provideDiagnostics(specDocument, [specDocument, kotlinDocument]);
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    kotlinDocument,
+    conceptDocument,
+  ]);
 
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.message),

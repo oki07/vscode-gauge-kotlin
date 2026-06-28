@@ -2,7 +2,9 @@
 
 const {
   GaugeStepDiagnosticsProvider,
+  findConceptHeadings,
   findStepFunctions,
+  isConceptDocument,
   isKotlinDocument,
   positionAt,
 } = require("./stepDiagnostics");
@@ -257,6 +259,33 @@ class GaugeStepDefinitionProvider {
     return documents;
   }
 
+  async findWorkspaceConceptDocuments() {
+    const workspace = this.vscode.workspace || {};
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return [];
+    }
+
+    const documents = [];
+    let uris;
+    try {
+      uris = await workspace.findFiles("**/*.cpt");
+    } catch (error) {
+      return documents;
+    }
+    for (const uri of uris || []) {
+      try {
+        const document = await workspace.openTextDocument(uri);
+        documents.push(document);
+      } catch (error) {
+        // Ignore unreadable files so one stale workspace URI does not block navigation.
+      }
+    }
+    return documents;
+  }
+
   async kotlinDocumentGroups(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const projectDocuments = [];
@@ -299,6 +328,42 @@ class GaugeStepDefinitionProvider {
       addDocument(candidate);
     }
     return { externalDocuments, projectDocuments };
+  }
+
+  async conceptDocuments(sourceDocument) {
+    const workspace = this.vscode.workspace || {};
+    const documents = [];
+    const seenPaths = new Set();
+    const addDocument = (candidate) => {
+      if (
+        !candidate
+        || !isConceptDocument(candidate)
+        || typeof candidate.getText !== "function"
+        || !this.isGaugeProjectDocument(candidate)
+      ) {
+        return;
+      }
+      const file = documentPath(candidate);
+      if (file) {
+        if (seenPaths.has(file)) {
+          return;
+        }
+        seenPaths.add(file);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+
+    const openDocuments = workspace.textDocuments || [];
+    for (const candidate of openDocuments) {
+      addDocument(candidate);
+    }
+    for (const candidate of await this.findWorkspaceConceptDocuments()) {
+      addDocument(candidate);
+    }
+    addDocument(sourceDocument);
+    return documents;
   }
 
   collectWorkspaceConstants(document, kotlinDocuments, options = {}) {
@@ -344,6 +409,26 @@ class GaugeStepDefinitionProvider {
     return definitions;
   }
 
+  conceptDefinitionsForDocuments(wantedStep, documents) {
+    const wantedSteps = Array.isArray(wantedStep) ? wantedStep : [wantedStep];
+    const wantedStepSet = new Set(wantedSteps);
+    const definitions = [];
+    for (const candidate of documents) {
+      const text = candidate.getText();
+      for (const heading of findConceptHeadings(text)) {
+        if (!wantedStepSet.has(heading.normalized)) {
+          continue;
+        }
+        definitions.push(createLocation(
+          this.vscode,
+          candidate.uri,
+          createRange(this.vscode, heading.start, heading.end),
+        ));
+      }
+    }
+    return definitions;
+  }
+
   async provideDefinition(document, position) {
     const wantedSteps = stepTextCandidatesAt(document, position);
     if (wantedSteps.length === 0 || !this.isGaugeProjectDocument(document)) {
@@ -361,6 +446,13 @@ class GaugeStepDefinitionProvider {
     );
     if (projectDefinitions.length > 0) {
       return projectDefinitions;
+    }
+    const conceptDefinitions = this.conceptDefinitionsForDocuments(
+      wantedSteps,
+      await this.conceptDocuments(document),
+    );
+    if (conceptDefinitions.length > 0) {
+      return conceptDefinitions;
     }
     return this.definitionsForDocuments(
       wantedSteps,

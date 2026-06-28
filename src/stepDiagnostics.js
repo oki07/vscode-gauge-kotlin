@@ -3491,6 +3491,63 @@ function isInlineTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function conceptHashHeading(rawLine, lineNumber) {
+  const match = /^(#+)([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
+  if (!match) {
+    return undefined;
+  }
+  const textStart = match[1].length + match[2].length;
+  const text = rawLine.slice(textStart).trimEnd();
+  if (!text) {
+    return undefined;
+  }
+  return {
+    end: { line: lineNumber, character: textStart + text.length },
+    normalized: normalizeStepTemplate(text),
+    start: { line: lineNumber, character: textStart },
+    text,
+  };
+}
+
+function conceptLegacyHeading(lines, lineNumber) {
+  if (lineNumber >= lines.length - 1) {
+    return undefined;
+  }
+  const rawLine = lines[lineNumber].replace(/\r$/, "");
+  const underline = lines[lineNumber + 1].replace(/\r$/, "");
+  if (!rawLine || rawLine.search(/\S/) !== 0 || !/^=+\s*$/.test(underline)) {
+    return undefined;
+  }
+  const text = rawLine.trimEnd();
+  if (!text) {
+    return undefined;
+  }
+  return {
+    end: { line: lineNumber, character: text.length },
+    normalized: normalizeStepTemplate(text),
+    start: { line: lineNumber, character: 0 },
+    text,
+  };
+}
+
+function findConceptHeadings(text) {
+  const headings = [];
+  const lines = text.split("\n");
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    const hashHeading = conceptHashHeading(rawLine, line);
+    if (hashHeading) {
+      headings.push(hashHeading);
+      continue;
+    }
+    const legacyHeading = conceptLegacyHeading(lines, line);
+    if (legacyHeading) {
+      headings.push(legacyHeading);
+    }
+  }
+  return headings;
+}
+
 function findGaugeSteps(text) {
   const entries = [];
   const lines = text.split("\n");
@@ -5541,6 +5598,9 @@ function uriPath(uri) {
 }
 
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
+const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
+const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 
 // Identify Kotlin sources by file extension rather than relying on the editor
 // languageId. VS Code ships no built-in Kotlin language, so without a separate
@@ -5557,6 +5617,14 @@ function isKotlinDocument(candidate) {
   }
   const file = documentPath(candidate);
   return typeof file === "string" && KOTLIN_FILE_PATTERN.test(file);
+}
+
+function isConceptDocument(candidate) {
+  if (!candidate) {
+    return false;
+  }
+  const file = documentPath(candidate);
+  return typeof file === "string" && CONCEPT_FILE_PATTERN.test(file);
 }
 
 class GaugeStepDiagnosticsProvider {
@@ -5818,9 +5886,23 @@ class GaugeStepDiagnosticsProvider {
     ));
   }
 
+  conceptDocuments(workspaceDocuments) {
+    const workspace = this.vscode.workspace || {};
+    const candidates = Array.isArray(workspaceDocuments)
+      ? workspaceDocuments
+      : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    return candidates.filter((candidate) => (
+      candidate
+      && isConceptDocument(candidate)
+      && typeof candidate.getText === "function"
+      && this.isGaugeProjectDocument(candidate)
+    ));
+  }
+
   implementedStepTemplates(document, workspaceDocuments) {
     const kotlinDocuments = this.kotlinDocuments(document, workspaceDocuments);
-    if (kotlinDocuments.length === 0) {
+    const conceptDocuments = this.conceptDocuments(workspaceDocuments);
+    if (kotlinDocuments.length === 0 && conceptDocuments.length === 0) {
       return undefined;
     }
 
@@ -5837,6 +5919,11 @@ class GaugeStepDiagnosticsProvider {
         for (const alias of entry.aliases) {
           templates.add(normalizeStepTemplate(alias));
         }
+      }
+    }
+    for (const candidate of conceptDocuments) {
+      for (const heading of findConceptHeadings(candidate.getText())) {
+        templates.add(heading.normalized);
       }
     }
     return templates;
@@ -5890,7 +5977,7 @@ class GaugeStepDiagnosticsProvider {
     return (async () => {
       let uris;
       try {
-        uris = await workspace.findFiles("**/*.kt");
+        uris = await workspace.findFiles(KOTLIN_WORKSPACE_PATTERN);
       } catch (_error) {
         return documents;
       }
@@ -5911,6 +5998,33 @@ class GaugeStepDiagnosticsProvider {
         try {
           const document = await workspace.openTextDocument(uri);
           if (document && document.languageId === KOTLIN_LANGUAGE) {
+            this.addWorkspaceDocument(documents, seenPaths, document);
+          }
+        } catch (_error) {
+          // Keep diagnostics available when one workspace URI is stale or unreadable.
+        }
+      }
+      try {
+        uris = await workspace.findFiles(CONCEPT_WORKSPACE_PATTERN);
+      } catch (_error) {
+        return documents;
+      }
+      for (const uri of uris || []) {
+        const file = uriPath(uri);
+        if (file && seenPaths.has(file)) {
+          continue;
+        }
+        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+          try {
+            this.projectFactory.getGaugeRootFromFilePath(file);
+          } catch (_error) {
+            continue;
+          }
+        }
+
+        try {
+          const document = await workspace.openTextDocument(uri);
+          if (isConceptDocument(document)) {
             this.addWorkspaceDocument(documents, seenPaths, document);
           }
         } catch (_error) {
@@ -5982,7 +6096,9 @@ module.exports = {
   UNDEFINED_STEP_MESSAGE,
   countKotlinParameters,
   countStepParameters,
+  findConceptHeadings,
   findStepFunctions,
+  isConceptDocument,
   isKotlinDocument,
   positionAt,
 };
