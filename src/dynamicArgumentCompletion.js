@@ -417,11 +417,12 @@ function staticArguments(text, options = {}) {
   const values = [];
   const lines = text.split(/\r?\n/);
   const excludeTeardown = Boolean(options.excludeTeardown);
+  const includeConceptHeadings = Boolean(options.includeConceptHeadings);
   for (const line of lines) {
     if (excludeTeardown && isTeardownLine(line)) {
       break;
     }
-    if (!isStepLine(line)) {
+    if (!isStepLine(line) && !(includeConceptHeadings && isConceptHeading(line))) {
       continue;
     }
     let openIndex = nextUnescapedCharacterIndex(line, "\"");
@@ -448,8 +449,8 @@ function allowsDynamicArgumentCompletion(line, document, lineNumber) {
   return isStepLine(line) || isCompletionTableBlockLine(lines, lineNumber);
 }
 
-function allowsStaticArgumentCompletion(line) {
-  return isStepLine(line);
+function allowsStaticArgumentCompletion(line, document) {
+  return isStepLine(line) || (isConceptDocument(document) && isConceptHeading(line));
 }
 
 function completionItem(vscode, label, range, options = {}) {
@@ -571,7 +572,7 @@ class GaugeDynamicArgumentCompletionProvider {
     if (argumentRange && !allowsDynamicArgumentCompletion(line, document, position.line)) {
       return [];
     }
-    if (quotedArgumentRange && !allowsStaticArgumentCompletion(line)) {
+    if (quotedArgumentRange && !allowsStaticArgumentCompletion(line, document)) {
       return [];
     }
     if (argumentRange || quotedArgumentRange) {
@@ -581,7 +582,10 @@ class GaugeDynamicArgumentCompletionProvider {
             ? conceptDynamicArguments(document.getText())
             : specDataTableHeaders(document.getText())
         )
-        : staticArguments(document.getText(), { excludeTeardown: !isConceptDocument(document) });
+        : staticArguments(document.getText(), {
+          excludeTeardown: !isConceptDocument(document),
+          includeConceptHeadings: isConceptDocument(document),
+        });
       const targetRange = argumentRange || quotedArgumentRange;
       const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
       return labels.map((label) => completionItem(this.vscode, label, range));

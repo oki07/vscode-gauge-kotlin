@@ -218,20 +218,20 @@ class GaugeSemanticTokensProvider {
           continue;
         }
 
-        dynamicArgumentRegex.lastIndex = 0;
-        let match = dynamicArgumentRegex.exec(line);
+        argumentRegex.lastIndex = 0;
+        let match = argumentRegex.exec(line);
         while (match !== null) {
           const matchStart = match.index;
           if (isEscapedCharacter(line, matchStart)) {
-            match = dynamicArgumentRegex.exec(line);
+            match = argumentRegex.exec(line);
             continue;
           }
           if (matchStart > lastIndex) {
             builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf(headingToken), 0);
           }
           builder.push(index, matchStart, match[0].length, tokenTypes.indexOf("argument"), 0);
-          lastIndex = dynamicArgumentRegex.lastIndex;
-          match = dynamicArgumentRegex.exec(line);
+          lastIndex = argumentRegex.lastIndex;
+          match = argumentRegex.exec(line);
         }
         if (lastIndex < line.length) {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);

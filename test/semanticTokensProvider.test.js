@@ -195,7 +195,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
-test("GaugeSemanticTokensProvider keeps quoted concept heading text as heading", () => {
+test("GaugeSemanticTokensProvider tokenizes quoted concept heading arguments", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -215,7 +215,15 @@ test("GaugeSemanticTokensProvider keeps quoted concept heading text as heading",
 
   assert.deepEqual(tokens.map((entry) => entry.type), [
     "specification",
+    "argument",
+    "specification",
   ]);
+  const argument = tokens.find((entry) => entry.type === "argument");
+  assert.deepEqual({ line: argument.line, start: argument.start, length: argument.length }, {
+    line: 0,
+    start: 9,
+    length: 6,
+  });
 });
 
 test("GaugeSemanticTokensProvider treats concept double-hash headings as concept headings", () => {

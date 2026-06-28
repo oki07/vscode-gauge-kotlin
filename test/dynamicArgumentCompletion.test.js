@@ -633,6 +633,27 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept static arguments i
   assert.deepEqual(labels(items), ["cart", "c"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests concept heading static arguments inside quotes", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const heading = "# Shared checkout \"ca\"";
+  const document = createDocument([
+    "# Other checkout \"cart\"",
+    heading,
+    "* Confirm \"card\"",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, heading.indexOf("ca") + 2),
+  );
+
+  assert.deepEqual(labels(items), ["cart", "ca", "card"]);
+  assert.deepEqual({ ...items[0].range.start }, { line: 1, character: 19 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 1, character: 21 });
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores non-argument positions", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
