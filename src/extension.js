@@ -36,6 +36,7 @@ const {
   createGaugeSpecDirsProvider,
   createSpecification,
 } = require("./specification");
+const { GaugeRenameProvider } = require("./renameProvider");
 const {
   showInstallGaugeNotification,
   showWelcomeNotification,
@@ -383,6 +384,28 @@ function registerStepDefinitionProvider(context, vscode, options) {
   }
 }
 
+function registerRenameProvider(context, vscode, options) {
+  const RenameProviderCtor = options.GaugeRenameProvider || GaugeRenameProvider;
+  const provider = new RenameProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = typeof provider.register === "function"
+    ? provider.register()
+    : (
+      vscode.languages
+      && typeof vscode.languages.registerRenameProvider === "function"
+        ? vscode.languages.registerRenameProvider(
+          [{ language: "gauge" }, { language: KOTLIN_LANGUAGE }],
+          provider,
+        )
+        : undefined
+    );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerSemanticTokensProvider(context, vscode, options) {
   if (!vscode.languages || typeof vscode.languages.registerDocumentSemanticTokensProvider !== "function") {
     return;
@@ -530,6 +553,10 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerFoldingRangeProvider(context, vscode, options);
   registerStepDefinitionProvider(context, vscode, {
+    ...options,
+    projectFactory,
+  });
+  registerRenameProvider(context, vscode, {
     ...options,
     projectFactory,
   });

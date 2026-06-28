@@ -30,6 +30,7 @@ function createFakeVscode(overrides = {}) {
   const foldingRangeProviders = [];
   const languageConfigurations = [];
   const configurationListeners = [];
+  const renameProviders = [];
   const semanticTokenProviders = [];
   const semanticTokenColors = {
     argument: "#ae81ff",
@@ -107,6 +108,15 @@ function createFakeVscode(overrides = {}) {
       registerFoldingRangeProvider(selector, provider) {
         const disposable = { dispose() {} };
         foldingRangeProviders.push({
+          selector,
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
+      registerRenameProvider(selector, provider) {
+        const disposable = { dispose() {} };
+        renameProviders.push({
           selector,
           provider,
           disposable,
@@ -191,6 +201,7 @@ function createFakeVscode(overrides = {}) {
     foldingRangeProviders,
     languageConfigurations,
     registeredCommands,
+    renameProviders,
     semanticTokenProviders,
     textDocumentListeners,
   };
@@ -639,6 +650,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     fakeVscode,
     foldingRangeProviders,
     languageConfigurations,
+    renameProviders,
     registeredCommands,
     semanticTokenProviders,
     textDocumentListeners,
@@ -744,6 +756,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeRenameProvider {
+    constructor(options) {
+      this.options = options;
+      created.renameProvider = this;
+    }
+  }
+
   class FakeArgumentCodeActionProvider {
     constructor(options) {
       this.options = options;
@@ -788,6 +807,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     SpecNodeProvider: FakeSpecNodeProvider,
     GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
     GaugeFoldingRangeProvider: FakeFoldingRangeProvider,
+    GaugeRenameProvider: FakeRenameProvider,
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
     GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
     ProjectInitializer: FakeProjectInitializer,
@@ -839,6 +859,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(codeActionProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(renameProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(textDocumentListeners[0].disposable), true);
@@ -872,6 +893,15 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
   ]);
   assert.equal(created.foldingRangeProvider.options.vscode, fakeVscode);
+  assert.deepEqual(renameProviders, [
+    {
+      selector: [{ language: "gauge" }, { language: "kotlin" }],
+      provider: created.renameProvider,
+      disposable: renameProviders[0].disposable,
+    },
+  ]);
+  assert.equal(created.renameProvider.options.vscode, fakeVscode);
+  assert.equal(created.renameProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.deepEqual(codeActionProviders, [
     {
       selector: { language: "gauge" },
