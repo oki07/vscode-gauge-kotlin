@@ -98,7 +98,7 @@ test("GaugeFoldingRangeProvider ignores indented legacy underline headings", () 
   ]);
 });
 
-test("GaugeFoldingRangeProvider folds hash headings accepted by the Gauge lexer", () => {
+test("GaugeFoldingRangeProvider folds only hash headings accepted by the Gauge lexer", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();
   const document = createDocument([
@@ -115,8 +115,7 @@ test("GaugeFoldingRangeProvider folds hash headings accepted by the Gauge lexer"
 
   assert.deepEqual(provider.provideFoldingRanges(document), [
     { start: 0, end: 1 },
-    { start: 3, end: 4 },
-    { start: 6, end: 7 },
+    { start: 3, end: 7 },
   ]);
 });
 

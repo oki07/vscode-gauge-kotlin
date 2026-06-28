@@ -332,6 +332,26 @@ test("GaugeTestController discovers specification and scenario test items from o
   ]);
 });
 
+test("GaugeTestController ignores markdown subheadings in open Gauge documents", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "### Notes",
+    "* Plain markdown bullet",
+    "",
+  ].join("\n"));
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+
+  const spec = controller.items.get("/workspace/specs/example.spec");
+  assert.equal(spec.label, "Checkout");
+  assert.deepEqual(spec.children.values(), []);
+  assert.equal(controller.items.get("/workspace/specs/example.spec:3"), undefined);
+});
+
 test("GaugeTestController resolves unopened workspace specs from Gauge LSP", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();

@@ -195,6 +195,33 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
+test("GaugeSemanticTokensProvider ignores non-Gauge markdown subheadings", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "# Specification",
+        "### Notes",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
+    [0, "specification"],
+    [1, "gaugeComment"],
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes quoted concept heading arguments", () => {
   const {
     GaugeSemanticTokensProvider,

@@ -102,7 +102,7 @@
       "patterns": [
         {
           "name": "markup.heading.scenario.gauge",
-          "match": "^\\s*#{2,6}.*$"
+          "match": "^\\s*##(?!#).*$"
         },
         {
           "name": "punctuation.definition.heading.scenario.gauge",

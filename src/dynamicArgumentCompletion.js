@@ -6,6 +6,7 @@ const {
   findStepFunctions,
   isKotlinDocument,
 } = require("./stepDiagnostics");
+const { isScenarioHashHeading } = require("./gaugeHeadings");
 
 const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
 const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
@@ -131,7 +132,7 @@ function closingEscapedArgumentIndex(line, openIndex, closeCharacter, stopAtUnes
 }
 
 function isScenarioHeading(line) {
-  return line.trimStart().startsWith("##");
+  return isScenarioHashHeading(line);
 }
 
 function isStepLine(line) {

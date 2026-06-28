@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  isConceptHashHeading,
+  isGaugeHashHeading,
+} = require("./gaugeHeadings");
+
 function documentLines(document) {
   const lines = [];
   for (let line = 0; line < document.lineCount; line += 1) {
@@ -17,16 +22,8 @@ function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
 }
 
-function isSingleHashHeading(line) {
-  return /^\s*#(?!#).*$/.test(line);
-}
-
-function isDoubleHashHeading(line) {
-  return /^\s*##.*$/.test(line);
-}
-
 function isHashHeading(line, conceptDocument) {
-  return conceptDocument ? line.startsWith("#") : isSingleHashHeading(line) || isDoubleHashHeading(line);
+  return conceptDocument ? isConceptHashHeading(line) : isGaugeHashHeading(line);
 }
 
 function isLegacySpecUnderline(line) {

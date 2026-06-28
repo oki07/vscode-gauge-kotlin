@@ -68,6 +68,38 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
   ]);
 });
 
+test("GaugeCodeLensProvider ignores non-Gauge markdown subheadings", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Checkout",
+    "* Open cart",
+    "",
+    "### Notes",
+    "* Plain markdown bullet",
+    "",
+  ].join("\n"));
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    title: lens.command.title,
+    argument: lens.command.arguments[0],
+  })), [
+    {
+      line: 0,
+      title: "Run Specification",
+      argument: "/workspace/specs/example.spec",
+    },
+    {
+      line: 0,
+      title: "Debug Specification",
+      argument: "/workspace/specs/example.spec",
+    },
+  ]);
+});
+
 test("GaugeCodeLensProvider adds lenses for legacy underline headings", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();

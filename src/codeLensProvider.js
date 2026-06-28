@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  isScenarioHashHeading,
+  isSpecHashHeading,
+} = require("./gaugeHeadings");
+
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
 const TEST_UI_RUN_FLAGS = {
@@ -75,11 +80,10 @@ function hasHeadingText(line) {
 }
 
 function hashHeadingKind(line) {
-  const trimmed = line.trimStart();
-  if (!trimmed.startsWith("#")) {
-    return undefined;
+  if (isScenarioHashHeading(line)) {
+    return "scenario";
   }
-  return trimmed.startsWith("##") ? "scenario" : "specification";
+  return isSpecHashHeading(line) ? "specification" : undefined;
 }
 
 function legacyHeadingKind(line, nextLine) {

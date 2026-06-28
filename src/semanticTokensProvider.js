@@ -1,5 +1,11 @@
 "use strict";
 
+const {
+  isConceptHashHeading,
+  isGaugeHashHeading,
+  isScenarioHashHeading,
+} = require("./gaugeHeadings");
+
 const tokenTypes = [
   "specification",
   "scenario",
@@ -134,7 +140,7 @@ function hasFollowingLine(lines, lineNumber) {
 }
 
 function isHashHeadingLine(line, conceptDocument) {
-  return conceptDocument ? line.startsWith("#") : line.trimStart().startsWith("#");
+  return conceptDocument ? isConceptHashHeading(line) : isGaugeHashHeading(line);
 }
 
 function tableBlockStartLine(lines, lineNumber) {
@@ -210,7 +216,7 @@ class GaugeSemanticTokensProvider {
 
       if (isHashHeadingLine(line, conceptDocument)) {
         let lastIndex = line.search(/\S/);
-        const isScenarioHeading = !conceptDocument && trimmedLine.startsWith("##");
+        const isScenarioHeading = !conceptDocument && isScenarioHashHeading(line);
         const headingToken = isScenarioHeading ? "scenario" : "specification";
         if (isScenarioHeading || !conceptDocument) {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
