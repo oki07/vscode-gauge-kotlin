@@ -30,6 +30,21 @@ function createFakeVscode(textDocuments) {
   };
 }
 
+function createRegistrationVscode() {
+  let registration;
+  return {
+    get registration() {
+      return registration;
+    },
+    languages: {
+      registerRenameProvider(selector, provider) {
+        registration = { selector, provider };
+        return { dispose() {} };
+      },
+    },
+  };
+}
+
 function createDocument(text, languageId, fsPath) {
   const lines = text.split(/\r?\n/);
   return {
@@ -160,4 +175,19 @@ test("GaugeRenameProvider preserves inline table step identity when renaming", a
       },
     ],
   );
+});
+
+test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const vscode = createRegistrationVscode();
+  const provider = new GaugeRenameProvider({ vscode });
+
+  provider.register();
+
+  assert.deepEqual(vscode.registration.selector, [
+    { language: "gauge" },
+    { language: "kotlin" },
+    { scheme: "file", pattern: "**/*.kt" },
+  ]);
+  assert.equal(vscode.registration.provider, provider);
 });

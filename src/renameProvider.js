@@ -404,6 +404,7 @@ class GaugeRenameProvider {
       [
         { language: GAUGE_LANGUAGE },
         { language: "kotlin" },
+        { scheme: "file", pattern: "**/*.kt" },
       ],
       this,
     );
