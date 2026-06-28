@@ -4758,6 +4758,40 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps when no impleme
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 15 });
 });
 
+test("GaugeStepDiagnosticsProvider reports undefined markdown Gauge spec steps", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with card",
+  ].join("\n"), "markdown", "/workspace/gauge/specs/checkout.md");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+          return [];
+        }
+        throw new Error(`Unexpected pattern ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("No files should be opened");
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const workspaceDocuments = await provider.workspaceDocuments();
+  const diagnostics = provider.provideDiagnostics(specDocument, workspaceDocuments);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Undefined Step"],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 15 });
+});
+
 test("GaugeStepDiagnosticsProvider uses unopened plaintext Kotlin files for Gauge undefined steps", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([

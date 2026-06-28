@@ -27,10 +27,10 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(lines) {
+function createDocument(lines, languageId = "gauge", fsPath = "/workspace/gauge/specs/checkout.spec") {
   return {
-    languageId: "gauge",
-    uri: { fsPath: "/workspace/gauge/specs/checkout.spec" },
+    languageId,
+    uri: { fsPath },
     lineAt(line) {
       return { text: lines[line] };
     },
@@ -104,6 +104,38 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
       "@com.thoughtworks.gauge.Step(\"Pay with account <table>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+});
+
+test("GaugeStepCodeActionProvider creates fixes for markdown Gauge specs", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ], "markdown", "/workspace/gauge/specs/checkout.md");
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 1);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
     ],
   });
 });

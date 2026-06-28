@@ -4,6 +4,7 @@ const nodePath = require("node:path");
 
 const COLLECTION_NAME = "gauge-validate";
 const GAUGE_LANGUAGE = "gauge";
+const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 const VALIDATE_ARG = "validate";
 const VALIDATE_DIAGNOSTIC_CODE = "gauge.validate";
 const VALIDATE_DIAGNOSTIC_SOURCE = "gauge";
@@ -15,6 +16,16 @@ function getVscode(vscode) {
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function isGaugeSpecDocument(document) {
+  if (!document) {
+    return false;
+  }
+  if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  return SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function bufferToString(value) {
@@ -148,7 +159,7 @@ class GaugeValidateDiagnosticsProvider {
   shouldDiagnose(document) {
     return Boolean(
       document
-      && document.languageId === GAUGE_LANGUAGE
+      && isGaugeSpecDocument(document)
       && typeof document.getText === "function"
       && documentPath(document),
     );

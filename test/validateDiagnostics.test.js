@@ -28,9 +28,9 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec") {
+function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec", languageId = "gauge") {
   return {
-    languageId: "gauge",
+    languageId,
     uri: { fsPath },
     getText() {
       return text;
@@ -110,6 +110,55 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for the curren
   assert.equal(diagnostics[0].code, "gauge.validate");
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 11 });
+});
+
+test("GaugeValidateDiagnosticsProvider maps gauge validate output for markdown specs", () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const spawnCalls = [];
+  const command = {
+    spawnSync(args, options) {
+      spawnCalls.push({ args, options });
+      return {
+        stdout: Buffer.from("ParseError /workspace/gauge/specs/example.md:3: Step is malformed"),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  const cli = {
+    gaugeCommand() {
+      return command;
+    },
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+  };
+  const projectFactory = {
+    getProjectByFilepath(filename) {
+      assert.equal(filename, "/workspace/gauge/specs/example.md");
+      return project;
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli,
+    env: { PATH: "/bin" },
+    projectFactory,
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Example",
+    "",
+    "* malformed",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/example.md", "markdown");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.equal(spawnCalls.length, 1);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].message, "ParseError line number: 3, Step is malformed");
 });
 
 test("parseGaugeValidateErrors accepts optional colon separators", () => {

@@ -5,6 +5,7 @@ const { countStepParameters, UNDEFINED_STEP_MESSAGE } = require("./stepDiagnosti
 const CREATE_STEP_IMPLEMENTATION_TITLE = "Create step implementation";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const GAUGE_LANGUAGE = "gauge";
+const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -29,6 +30,21 @@ function documentLine(document, line) {
     return document.getText().split(/\r?\n/)[line] || "";
   }
   return "";
+}
+
+function documentPath(document) {
+  const uri = document && document.uri;
+  return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function isGaugeSpecDocument(document) {
+  if (!document) {
+    return false;
+  }
+  if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  return SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function isInlineTableLine(line) {
@@ -124,7 +140,7 @@ class GaugeStepCodeActionProvider {
   }
 
   provideCodeActions(document, range, context = {}) {
-    if (!document || document.languageId !== GAUGE_LANGUAGE || !range) {
+    if (!document || !isGaugeSpecDocument(document) || !range) {
       return [];
     }
     const diagnostics = undefinedStepDiagnostics(context);

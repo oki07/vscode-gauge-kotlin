@@ -5600,6 +5600,7 @@ function uriPath(uri) {
 const WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE = "__gaugeStepImplementationScanComplete";
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
+const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 
@@ -5644,6 +5645,17 @@ function isConceptDocument(candidate) {
   return typeof file === "string" && CONCEPT_FILE_PATTERN.test(file);
 }
 
+function isGaugeSpecDocument(candidate) {
+  if (!candidate) {
+    return false;
+  }
+  if (candidate.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  const file = documentPath(candidate);
+  return typeof file === "string" && SPEC_FILE_PATTERN.test(file);
+}
+
 class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -5669,7 +5681,7 @@ class GaugeStepDiagnosticsProvider {
   shouldDiagnose(document) {
     return Boolean(
       document
-      && (isKotlinDocument(document) || document.languageId === GAUGE_LANGUAGE)
+      && (isKotlinDocument(document) || isGaugeSpecDocument(document))
       && typeof document.getText === "function"
       && this.isGaugeProjectDocument(document),
     );
@@ -5843,7 +5855,7 @@ class GaugeStepDiagnosticsProvider {
 
     const text = document.getText();
     const diagnostics = [];
-    if (document.languageId === GAUGE_LANGUAGE) {
+    if (isGaugeSpecDocument(document)) {
       const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
       for (const entry of findGaugeSteps(text)) {
         const range = createRange(this.vscode, entry.start, entry.end);
