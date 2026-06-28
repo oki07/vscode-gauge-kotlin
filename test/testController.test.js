@@ -37,6 +37,9 @@ function createDocument(text, filename = "/workspace/specs/example.spec") {
 
 function createFakeVscode(options = {}) {
   const calls = [];
+  const documentListeners = {
+    close: undefined,
+  };
   const watcherListeners = {
     create: undefined,
     delete: undefined,
@@ -126,7 +129,8 @@ function createFakeVscode(options = {}) {
         onDidChangeTextDocument() {
           return { dispose() {} };
         },
-        onDidCloseTextDocument() {
+        onDidCloseTextDocument(listener) {
+          documentListeners.close = listener;
           return { dispose() {} };
         },
         createFileSystemWatcher(pattern, ignoreCreate, ignoreChange, ignoreDelete) {
@@ -154,6 +158,7 @@ function createFakeVscode(options = {}) {
         },
       },
     },
+    documentListeners,
     watcherListeners,
   };
 }
@@ -461,6 +466,52 @@ test("GaugeTestController refreshes and prunes workspace tests on spec file chan
     "gauge/scenarios",
     "gauge/specs",
     "gauge/scenarios",
+  ]);
+});
+
+test("GaugeTestController keeps workspace-discovered tests when documents close", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, documentListeners, vscode } = createFakeVscode();
+  const clientsMap = new Map([
+    [
+      "/workspace/gauge",
+      {
+        client: {
+          sendRequest(method) {
+            if (method === "gauge/specs") {
+              return Promise.resolve([
+                {
+                  heading: "Checkout",
+                  executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+                },
+              ]);
+            }
+            if (method === "gauge/scenarios") {
+              return Promise.resolve([
+                {
+                  heading: "Successful checkout",
+                  executionIdentifier: "/workspace/gauge/specs/checkout.spec:12",
+                  lineNo: 12,
+                },
+              ]);
+            }
+            return Promise.resolve([]);
+          },
+        },
+      },
+    ],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+
+  gaugeTests.register();
+  await gaugeTests.discoverWorkspaceTests();
+
+  documentListeners.close(createDocument("", "/workspace/gauge/specs/checkout.spec"));
+
+  const spec = controller.items.get("/workspace/gauge/specs/checkout.spec");
+  assert.equal(spec.label, "Checkout");
+  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+    ["/workspace/gauge/specs/checkout.spec:12", "Successful checkout"],
   ]);
 });
 

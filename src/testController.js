@@ -270,7 +270,7 @@ class GaugeTestController {
     }
     if (typeof workspace.onDidCloseTextDocument === "function") {
       addDisposable(disposables, workspace.onDidCloseTextDocument((document) => {
-        this.removeDocumentItems(document);
+        this.removeDocumentItems(document, this.workspaceDiscoveredIdsForPath(documentPath(document)));
       }));
     }
     if (typeof workspace.createFileSystemWatcher === "function") {
@@ -315,6 +315,21 @@ class GaugeTestController {
         this.removeItem(id);
       }
     }
+  }
+
+  workspaceDiscoveredIdsForPath(filename) {
+    const keepIds = new Set();
+    if (!filename) {
+      return keepIds;
+    }
+    for (const ids of this.workspaceDiscoveredIdsByClient.values()) {
+      for (const id of ids) {
+        if (id === filename || id.startsWith(`${filename}:`)) {
+          keepIds.add(id);
+        }
+      }
+    }
+    return keepIds;
   }
 
   removeItem(id) {
