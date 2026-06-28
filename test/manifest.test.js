@@ -497,10 +497,15 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
     "tableArguments",
     "markdown",
     "markdownBlockquote",
+    "markdownAutoLink",
     "markdownFencedCode",
+    "markdownHtmlBlock",
+    "markdownImage",
     "markdownInline",
     "markdownLink",
+    "markdownLinkDefinition",
     "markdownList",
+    "markdownSeparator",
     "fallbackComment",
   ]) {
     assert.ok(grammarJson.repository[key], `missing ${key}`);
@@ -548,9 +553,14 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
   const markdownBlockquote = repositoryPattern(grammarJson, "markdownBlockquote");
+  const markdownAutoLink = repositoryPattern(grammarJson, "markdownAutoLink");
   const markdownFence = repositoryPattern(grammarJson, "markdownFencedCode");
+  const markdownHtmlBlock = repositoryPattern(grammarJson, "markdownHtmlBlock");
+  const markdownImage = repositoryPattern(grammarJson, "markdownImage");
+  const markdownLinkDefinition = repositoryPattern(grammarJson, "markdownLinkDefinition");
   const markdownList = repositoryPattern(grammarJson, "markdownList");
   const markdownLink = repositoryPattern(grammarJson, "markdownLink");
+  const markdownSeparator = repositoryPattern(grammarJson, "markdownSeparator");
 
   assertPatternMatches(markdownFence, "```kotlin", "```kotlin");
   assertPatternMatches(markdownFence, "~~~", "~~~");
@@ -558,6 +568,12 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assertPatternMatches(markdownList, "1. markdown item", "1. ");
   assertPatternMatches(markdownBlockquote, "> quoted note", "> ");
   assertPatternMatches(markdownLink, "See [Gauge](https://gauge.org)", "[Gauge](https://gauge.org)");
+  assertPatternMatches(markdownLinkDefinition, "[docs]: https://docs.gauge.org", "[docs]: https://docs.gauge.org");
+  assertPatternMatches(markdownImage, "![Gauge](images/logo.png)", "![Gauge](images/logo.png)");
+  assertPatternMatches(markdownAutoLink, "<https://gauge.org>", "<https://gauge.org>");
+  assertPatternMatches(markdownAutoLink, "<help@example.com>", "<help@example.com>");
+  assertPatternMatches(markdownSeparator, "---", "---");
+  assertPatternMatches(markdownHtmlBlock, "<details>", "<details>");
 });
 
 test("extension package ignores development-only files while keeping runtime sources", () => {
