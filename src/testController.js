@@ -6,6 +6,7 @@ const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";
 const GAUGE_LANGUAGE = "gauge";
 const DEBUG_PROFILE_LABEL = "Debug";
+const FAILED_PROFILE_LABEL = "Run Failed";
 const RUN_PROFILE_LABEL = "Run";
 const ROOT_PARENT_ID = "suite";
 const SCENARIOS_REQUEST = "gauge/scenarios";
@@ -251,6 +252,12 @@ class GaugeTestController {
       DEBUG_PROFILE_LABEL,
       profileKind.Debug,
       (request, token) => this.debug(request, token),
+      false,
+    );
+    this.controller.createRunProfile(
+      FAILED_PROFILE_LABEL,
+      profileKind.Run,
+      (request, token) => this.runFailed(request, token),
       false,
     );
   }
@@ -601,6 +608,26 @@ class GaugeTestController {
 
   async debug(request = {}, token) {
     return this.runWithFlags(request, testUiDebugFlags(), token);
+  }
+
+  async runFailed(request = {}, token) {
+    const run = this.startTestRun(request);
+    const cancellation = this.registerCancellation(token);
+    try {
+      if (this.executionController && typeof this.executionController.handleCommand === "function") {
+        await this.executionController.handleCommand("gauge.execute.failed");
+      }
+    } finally {
+      if (cancellation && typeof cancellation.dispose === "function") {
+        cancellation.dispose();
+      }
+      if (run && typeof run.end === "function") {
+        run.end();
+      }
+      if (this.currentRun === run) {
+        this.currentRun = undefined;
+      }
+    }
   }
 
   ensureRun() {

@@ -235,6 +235,7 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["controller", "gauge", "Gauge"],
     ["profile", "Run", 1, calls[1][3], true],
     ["profile", "Debug", 2, calls[2][3], false],
+    ["profile", "Run Failed", 1, calls[3][3], false],
     ["run", { include: [] }],
     ["started", "/workspace/specs/example.spec"],
     ["started", "/workspace/specs/example.spec:12"],
@@ -708,6 +709,35 @@ test("GaugeTestController forces machine-readable output for all-spec Test UI ru
       "machine-readable": true,
     }],
   ]);
+});
+
+test("GaugeTestController registers a failed run profile for Test UI reruns", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const failedProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Run Failed");
+
+  assert.ok(failedProfile);
+  assert.equal(failedProfile[2], 1);
+  assert.equal(failedProfile[4], false);
+
+  await failedProfile[3]({});
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.failed"],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController debug profile debugs all specs when no tests are included", async () => {
