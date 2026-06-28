@@ -1,5 +1,6 @@
 "use strict";
 
+const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
 const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
@@ -23,6 +24,18 @@ const RESTART_MESSAGE = "Gauge Language Server configuration changed, please res
 const RESTART_ACTION = "Restart Now";
 const EXTERNAL_IMPLEMENTATION_SOURCE_ERROR =
   "implementation source not found: Step implementation referred from an external project or library";
+const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
+  ".git",
+  ".gradle",
+  ".hg",
+  ".svn",
+  ".vscode",
+  "build",
+  "dist",
+  "node_modules",
+  "out",
+  "target",
+]);
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -124,10 +137,16 @@ function clientMiddleware(options = {}) {
   };
 }
 
+function isInside(root, filename, pathModule) {
+  const relative = pathModule.relative(root, filename);
+  return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
+}
+
 class GaugeWorkspace {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
+    this.fileSystem = options.fileSystem || nodeFs;
     this.cli = options.cli;
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
@@ -183,7 +202,7 @@ class GaugeWorkspace {
   async startWorkspaceProjects() {
     const folders = this.vscode.workspace.workspaceFolders || [];
     for (const folder of folders) {
-      await this.startServerFor(folder.uri.fsPath);
+      await this.startServersForWorkspaceFolder(folder.uri.fsPath);
     }
     await this.startServerForActiveGaugeDocument();
     await this.setMultiProjectContext();
@@ -338,14 +357,89 @@ class GaugeWorkspace {
     const added = event && event.added ? event.added : [];
     const removed = event && event.removed ? event.removed : [];
     for (const folder of added) {
-      await this.startServerFor(folder.uri.fsPath);
+      await this.startServersForWorkspaceFolder(folder.uri.fsPath);
     }
     for (const folder of removed) {
-      await this.stopServerFor(folder.uri.fsPath);
+      await this.stopServersForWorkspaceFolder(folder.uri.fsPath);
     }
     await this.setMultiProjectContext();
     if (removed.length > 0) {
       await this.notifyProjectsChanged();
+    }
+  }
+
+  isDirectory(filename) {
+    if (!this.fileSystem || typeof this.fileSystem.statSync !== "function") {
+      return false;
+    }
+    try {
+      const stat = this.fileSystem.statSync(filename);
+      return Boolean(stat && typeof stat.isDirectory === "function" && stat.isDirectory());
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  directoryEntries(dirname) {
+    if (!this.fileSystem || typeof this.fileSystem.readdirSync !== "function") {
+      return [];
+    }
+    try {
+      return this.fileSystem.readdirSync(dirname)
+        .map((entry) => (typeof entry === "string" ? entry : entry.name))
+        .filter(Boolean)
+        .sort();
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  discoverGaugeProjectRoots(workspaceRoot) {
+    if (this.projectFactory.isGaugeProject(workspaceRoot)) {
+      return [workspaceRoot];
+    }
+    if (!this.isDirectory(workspaceRoot)) {
+      return [];
+    }
+
+    const roots = [];
+    const pending = [workspaceRoot];
+    const seen = new Set();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      for (const entry of this.directoryEntries(current)) {
+        if (NESTED_PROJECT_EXCLUDED_DIRECTORIES.has(entry)) {
+          continue;
+        }
+        const child = this.pathModule.join(current, entry);
+        if (!this.isDirectory(child)) {
+          continue;
+        }
+        if (this.projectFactory.isGaugeProject(child)) {
+          roots.push(child);
+        } else {
+          pending.push(child);
+        }
+      }
+    }
+    return roots.sort();
+  }
+
+  async startServersForWorkspaceFolder(workspaceRoot) {
+    for (const projectRoot of this.discoverGaugeProjectRoots(workspaceRoot)) {
+      await this.startServerFor(projectRoot);
+    }
+  }
+
+  async stopServersForWorkspaceFolder(workspaceRoot) {
+    for (const projectRoot of [...this.clientsMap.keys()]) {
+      if (isInside(workspaceRoot, projectRoot, this.pathModule)) {
+        await this.stopServerFor(projectRoot);
+      }
     }
   }
 

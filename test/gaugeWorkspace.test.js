@@ -4,15 +4,54 @@ const test = require("node:test");
 
 function createFakeFileSystem(entries) {
   const files = new Map(Object.entries(entries));
+  const directories = new Set();
+  const directoryEntries = new Map();
+  function addDirectory(dirname) {
+    if (!dirname || directories.has(dirname)) {
+      return;
+    }
+    directories.add(dirname);
+    const parent = path.posix.dirname(dirname);
+    if (parent && parent !== dirname) {
+      addDirectory(parent);
+      if (!directoryEntries.has(parent)) {
+        directoryEntries.set(parent, new Set());
+      }
+      directoryEntries.get(parent).add(path.posix.basename(dirname));
+    }
+  }
+  for (const filename of files.keys()) {
+    const dirname = path.posix.dirname(filename);
+    addDirectory(dirname);
+    if (!directoryEntries.has(dirname)) {
+      directoryEntries.set(dirname, new Set());
+    }
+    directoryEntries.get(dirname).add(path.posix.basename(filename));
+  }
   return {
     existsSync(filename) {
-      return files.has(filename);
+      return files.has(filename) || directories.has(filename);
     },
     readFileSync(filename) {
       if (!files.has(filename)) {
         throw new Error(`Missing ${filename}`);
       }
       return Buffer.from(files.get(filename));
+    },
+    readdirSync(dirname) {
+      if (!directories.has(dirname)) {
+        throw new Error(`Missing directory ${dirname}`);
+      }
+      return [...(directoryEntries.get(dirname) || [])].sort();
+    },
+    statSync(filename) {
+      if (directories.has(filename)) {
+        return { isDirectory: () => true };
+      }
+      if (files.has(filename)) {
+        return { isDirectory: () => false };
+      }
+      throw new Error(`Missing ${filename}`);
     },
   };
 }
@@ -236,6 +275,49 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   assert.equal(entry.client.features.length, 1);
   assert.equal(entry.client.features[0].messages.method, "workspace/saveFiles");
   assert.equal(workspace.getClientLanguageMap().get("/workspace/gauge"), "kotlin");
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
+  ]);
+});
+
+test("GaugeWorkspace starts LSP clients for nested Gauge projects under a workspace folder", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/service-a/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/service-a/build.gradle.kts": "",
+  });
+  const { contexts, vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/service-a/specs/example.spec");
+  assert.equal(entry.project.root(), "/workspace/service-a");
+  assert.equal(entry.client.started, true);
+  assert.deepEqual(entry.client.serverOptions.args, [
+    "daemon",
+    "--lsp",
+    "--dir",
+    "/workspace/service-a",
+  ]);
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:multipleProjects?", value: false },
   ]);
