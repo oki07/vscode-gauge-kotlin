@@ -98,6 +98,12 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.equal(manifest.name, "vscode-gauge-kotlin");
   assert.equal(manifest.displayName, "Gauge Kotlin");
   assert.equal(manifest.main, "./src/extension.js");
+  assert.equal(manifest.author, "oki07");
+  assert.equal(manifest.publisher, "oki07");
+  assert.deepEqual(manifest.repository, {
+    type: "git",
+    url: "https://github.com/oki07/vscode-gauge-kotlin.git",
+  });
   assert.equal(manifest.icon, "images/gauge-icon.png");
   assert.deepEqual(manifest.galleryBanner, {
     color: "#F5C20F",
@@ -701,6 +707,12 @@ test("extension package ignores development-only files while keeping runtime sou
   ]) {
     assert.ok(!ignored.includes(runtimePattern), `runtime pattern must stay packaged: ${runtimePattern}`);
   }
+});
+
+test("extension package script requires repository metadata", () => {
+  const packageScript = fs.readFileSync(path.join(root, "scripts", "package-vsix.js"), "utf8");
+
+  assert.equal(packageScript.includes("--allow-missing-repository"), false);
 });
 
 test("extension manifest preserves the official Gauge configuration schema", () => {

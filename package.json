@@ -4,7 +4,13 @@
   "description": "VS Code support for Gauge specifications backed by Kotlin step implementations.",
   "version": "0.0.1",
   "private": true,
+  "author": "oki07",
   "license": "MIT",
+  "publisher": "oki07",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oki07/vscode-gauge-kotlin.git"
+  },
   "icon": "images/gauge-icon.png",
   "galleryBanner": {
     "color": "#F5C20F",

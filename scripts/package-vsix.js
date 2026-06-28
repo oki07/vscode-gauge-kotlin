@@ -30,7 +30,6 @@ try {
     "--yes",
     "@vscode/vsce@3.9.1",
     "package",
-    "--allow-missing-repository",
     "--out",
     outputPath,
   ]);
