@@ -425,6 +425,7 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
         return undefined;
       },
       beforeExecute() {},
+      dispose() {},
     };
   }
 
@@ -465,6 +466,10 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
       executionStatus.tooltip = formatExecutionTooltip(status);
       executionStatus.show();
       return undefined;
+    },
+    dispose() {
+      stopExecution.dispose();
+      executionStatus.dispose();
     },
   };
 }
@@ -1077,6 +1082,9 @@ function createGaugeExecutionController(options = {}) {
     executeAllSpecifications,
     executeFailed,
     executeScenario,
+    dispose() {
+      executionStatusBar.dispose();
+    },
     getReportPath,
     handleCommand,
     openReport,

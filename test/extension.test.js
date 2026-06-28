@@ -304,7 +304,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 1
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 2
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -991,7 +991,7 @@ test("activation wires Gauge Test UI execution events into the execution control
     }
   }
 
-  const executionController = { handleCommand() {} };
+  const executionController = { dispose() {}, handleCommand() {} };
   extension.activate(context, fakeVscode, {
     clientsMap,
     createExecutionController(options) {
@@ -1009,6 +1009,7 @@ test("activation wires Gauge Test UI execution events into the execution control
   assert.equal(created.executionOptions.projectFactory, projectFactory);
   assert.equal(created.testController.executionController, executionController);
   assert.equal(context.subscriptions.includes(created.testController.disposable), true);
+  assert.equal(context.subscriptions.includes(executionController), true);
 });
 
 test("activation starts Gauge workspace services for Gauge projects", () => {

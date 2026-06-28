@@ -702,6 +702,9 @@ function activate(context, vscodeApi, options = {}) {
   if (typeof testController.setExecutionController === "function") {
     testController.setExecutionController(executionController);
   }
+  if (executionController && typeof executionController.dispose === "function") {
+    context.subscriptions.push(executionController);
+  }
   const testControllerDisposable = typeof testController.register === "function"
     ? testController.register()
     : undefined;

@@ -65,12 +65,15 @@ function createFakeVscode(overrides = {}) {
             alignment,
             command: undefined,
             color: undefined,
+            disposeCalls: 0,
             hideCalls: 0,
             priority,
             showCalls: 0,
             text: undefined,
             tooltip: undefined,
-            dispose() {},
+            dispose() {
+              this.disposeCalls += 1;
+            },
             hide() {
               this.hideCalls += 1;
             },
@@ -1355,6 +1358,25 @@ test("executor shows a stop status bar item while a run is active", async () => 
   await run;
 
   assert.equal(stopItem.hideCalls, 1);
+});
+
+test("executor disposes execution status bar items", () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { statusBarItems, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+  });
+
+  controller.dispose();
+
+  assert.deepEqual(statusBarItems.map((item) => item.disposeCalls), [1, 1]);
 });
 
 test("executor sets the executing context while a run is active", async () => {
