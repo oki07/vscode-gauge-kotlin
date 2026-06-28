@@ -502,6 +502,76 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
   ]);
 });
 
+test("ReferenceProvider provides local references from Gauge step cursor without LSP", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/example.spec",
+      toString() {
+        return "file:///workspace/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "## Scenario",
+        "* Say hello to \"alice\"",
+      ].join("\n");
+    },
+    lineAt(line) {
+      return { text: this.getText().split(/\r?\n/)[line] || "" };
+    },
+  };
+  const otherSpecDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/other.spec",
+      toString() {
+        return "file:///workspace/specs/other.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Other",
+        "",
+        "## Scenario",
+        "* Say hello to \"bob\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [specDocument, otherSpecDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(
+    specDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/specs/example.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 22 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/other.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 20 },
+      },
+    },
+  ]);
+});
+
 test("ReferenceProvider accepts plaintext .kt documents for local Kotlin Step references", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
@@ -574,6 +644,88 @@ test("ReferenceProvider accepts plaintext .kt documents for local Kotlin Step re
   assert.equal(requestCalls[1].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/example.spec");
+});
+
+test("ReferenceProvider includes concept headings in local Step references", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const kotlinDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Log in as <user>\")",
+        "fun login(user: String) {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/login.spec",
+      toString() {
+        return "file:///workspace/specs/login.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Login",
+        "",
+        "## Scenario",
+        "* Log in as \"alice\"",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/concepts/login.cpt",
+      toString() {
+        return "file:///workspace/concepts/login.cpt";
+      },
+    },
+    getText() {
+      return [
+        "# Log in as <user>",
+        "* Enter username",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [kotlinDocument, specDocument, conceptDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(
+    kotlinDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/specs/login.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 19 },
+      },
+    },
+    {
+      uri: "file:///workspace/concepts/login.cpt",
+      range: {
+        start: { line: 0, character: 2 },
+        end: { line: 0, character: 18 },
+      },
+    },
+  ]);
 });
 
 test("ReferenceProvider resolves package wildcard const Step aliases for local references", async () => {

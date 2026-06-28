@@ -10,10 +10,11 @@ const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 
 const {
   GaugeStepDiagnosticsProvider,
+  findConceptHeadings,
   findStepFunctions,
   isKotlinDocument,
 } = require("./stepDiagnostics");
-const { normalizeStepTemplate } = require("./stepDefinitionProvider");
+const { normalizeStepTemplate, stepTextAt } = require("./stepDefinitionProvider");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -157,6 +158,11 @@ function isInlineTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isConceptReferenceDocument(document) {
+  const file = documentPath(document);
+  return typeof file === "string" && file.toLowerCase().endsWith(".cpt");
+}
+
 function localGaugeStepReferences(document, targetTemplate) {
   const uri = documentUri(document);
   if (!uri || typeof document.getText !== "function") {
@@ -180,6 +186,20 @@ function localGaugeStepReferences(document, targetTemplate) {
         end: { line: lineIndex, character: lines[lineIndex].length },
       },
     });
+  }
+  if (isConceptReferenceDocument(document)) {
+    for (const heading of findConceptHeadings(document.getText())) {
+      if (heading.normalized !== targetTemplate) {
+        continue;
+      }
+      locations.push({
+        uri,
+        range: {
+          start: heading.start,
+          end: heading.end,
+        },
+      });
+    }
   }
   return locations;
 }
@@ -242,12 +262,17 @@ class ReferenceProvider {
     const languageClient = this.languageClientForUri(activeUri);
     const params = { textDocument: documentId, position };
 
+    if (!languageClient || typeof languageClient.sendRequest !== "function") {
+      return this.localStepValueAt(editor.document, position)
+        .then((stepValue) => this.showStepReferences(documentId.uri, position, stepValue));
+    }
+
     return languageClient
       .sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode))
       .then(async (stepValue) => {
         const localStepValue = stepValue
           ? undefined
-          : await this.kotlinStepValueAt(editor.document, position);
+          : await this.localStepValueAt(editor.document, position);
         return this.showStepReferences(
           documentId.uri,
           position,
@@ -313,14 +338,35 @@ class ReferenceProvider {
     if (isKotlinDocument(document)) {
       return this.kotlinStepValueAt(document, position);
     }
-    if (document.languageId !== GAUGE_LANGUAGE || !languageClient) {
+    if (document.languageId !== GAUGE_LANGUAGE) {
       return undefined;
+    }
+    if (!languageClient || typeof languageClient.sendRequest !== "function") {
+      return stepTextAt(document, position);
     }
     const params = {
       textDocument: textDocumentIdentifier(documentUri(document)),
       position,
     };
-    return languageClient.sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode));
+    const stepValue = await languageClient.sendRequest(
+      STEP_VALUE_AT_REQUEST,
+      params,
+      createCancellationToken(this.vscode),
+    );
+    return stepValue || stepTextAt(document, position);
+  }
+
+  async localStepValueAt(document, position) {
+    if (!document || !position) {
+      return undefined;
+    }
+    if (isKotlinDocument(document)) {
+      return this.kotlinStepValueAt(document, position);
+    }
+    if (document.languageId === GAUGE_LANGUAGE) {
+      return stepTextAt(document, position);
+    }
+    return undefined;
   }
 
   async provideReferences(document, position) {
@@ -516,8 +562,14 @@ class ReferenceProvider {
       return this.vscode.commands.executeCommand(
         SHOW_REFERENCES,
         this.vscode.Uri.parse(uri),
-        languageClient.protocol2CodeConverter.asPosition(position),
-        locations.map((location) => languageClient.protocol2CodeConverter.asLocation(location)),
+        (
+          languageClient
+          && languageClient.protocol2CodeConverter
+          && typeof languageClient.protocol2CodeConverter.asPosition === "function"
+            ? languageClient.protocol2CodeConverter.asPosition(position)
+            : position
+        ),
+        this.convertLocations(locations, languageClient),
       );
     }
     this.vscode.window.showInformationMessage("Action NA: Try this on an implementation.");
