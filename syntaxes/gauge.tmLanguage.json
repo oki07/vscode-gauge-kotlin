@@ -15,6 +15,9 @@
       "include": "#tags"
     },
     {
+      "include": "#tableKeyword"
+    },
+    {
       "include": "#specHeading"
     },
     {
@@ -31,6 +34,9 @@
     },
     {
       "include": "#arguments"
+    },
+    {
+      "include": "#fallbackComment"
     }
   ],
   "repository": {
@@ -40,7 +46,7 @@
     },
     "tags": {
       "name": "meta.tags.gauge",
-      "begin": "^(\\s*)(tags)(\\s*:)(\\s*)",
+      "begin": "(?i)^(\\s*)(tags)([ \\t\\f]?:)(\\s*)",
       "beginCaptures": {
         "2": {
           "name": "keyword.control.tags.gauge"
@@ -61,11 +67,30 @@
         }
       ]
     },
+    "tableKeyword": {
+      "name": "meta.table-file.gauge",
+      "begin": "(?i)^(\\s*)(table)([ \\t\\f]?:)(\\s*)",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.control.table.gauge"
+        },
+        "3": {
+          "name": "punctuation.separator.key-value.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "\\S.*",
+          "name": "string.unquoted.table-file.gauge"
+        }
+      ]
+    },
     "specHeading": {
       "patterns": [
         {
           "name": "markup.heading.spec.gauge",
-          "match": "^\\s*#{1}\\s+.*$"
+          "match": "^\\s*#(?!#).*$"
         },
         {
           "name": "punctuation.definition.heading.spec.gauge",
@@ -77,7 +102,7 @@
       "patterns": [
         {
           "name": "markup.heading.scenario.gauge",
-          "match": "^\\s*#{2,6}\\s+.*$"
+          "match": "^\\s*#{2,6}.*$"
         },
         {
           "name": "punctuation.definition.heading.scenario.gauge",
@@ -87,7 +112,7 @@
     },
     "conceptHeading": {
       "name": "markup.heading.concept.gauge",
-      "begin": "^(\\s*)(#)(\\s+)",
+      "begin": "^(\\s*)(#)(\\s*)",
       "beginCaptures": {
         "2": {
           "name": "punctuation.definition.heading.concept.gauge"
@@ -102,9 +127,9 @@
     },
     "step": {
       "name": "meta.step.gauge",
-      "begin": "^(\\s*)(\\*)(\\s+)",
+      "begin": "^(\\*)(\\s*)",
       "beginCaptures": {
-        "2": {
+        "1": {
           "name": "keyword.operator.step.gauge"
         }
       },
@@ -116,21 +141,55 @@
       ]
     },
     "table": {
-      "name": "meta.table.row.gauge",
-      "begin": "^(\\s*)(\\|)",
+      "patterns": [
+        {
+          "include": "#tableSeparator"
+        },
+        {
+          "include": "#tableRow"
+        }
+      ]
+    },
+    "tableSeparator": {
+      "name": "meta.table.separator.gauge",
+      "begin": "^(\\|)(?=(?:\\s*-+\\s*\\|)+\\s*$)",
       "beginCaptures": {
-        "2": {
+        "1": {
           "name": "punctuation.separator.table.gauge"
         }
       },
       "end": "$",
       "patterns": [
         {
-          "match": "\\|",
+          "match": "-+",
+          "name": "punctuation.definition.table-separator.gauge"
+        },
+        {
+          "match": "(?<!\\\\)\\|",
+          "name": "punctuation.separator.table.gauge"
+        }
+      ]
+    },
+    "tableRow": {
+      "name": "meta.table.row.gauge",
+      "begin": "^(\\|)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.separator.table.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "(?<!\\\\)\\|",
           "name": "punctuation.separator.table.gauge"
         },
         {
-          "include": "#arguments"
+          "match": "\\\\\\|",
+          "name": "string.unquoted.table-cell.gauge"
+        },
+        {
+          "include": "#tableArguments"
         },
         {
           "match": "[^|]+",
@@ -142,7 +201,7 @@
       "patterns": [
         {
           "name": "variable.parameter.dynamic.gauge",
-          "match": "(<)([^>\\n]+)(>)",
+          "match": "(<)((?:\\\\[<>]|[^>\\n])*)(>)",
           "captures": {
             "1": {
               "name": "punctuation.definition.variable.begin.gauge"
@@ -174,6 +233,29 @@
           ]
         }
       ]
+    },
+    "tableArguments": {
+      "patterns": [
+        {
+          "name": "variable.parameter.dynamic.gauge",
+          "match": "(<)((?:\\\\[<>|]|[^>|\\n])*)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.begin.gauge"
+            },
+            "3": {
+              "name": "punctuation.definition.variable.end.gauge"
+            }
+          }
+        },
+        {
+          "include": "#arguments"
+        }
+      ]
+    },
+    "fallbackComment": {
+      "name": "comment.line.gauge",
+      "match": "^\\s*\\S.*$"
     }
   }
 }

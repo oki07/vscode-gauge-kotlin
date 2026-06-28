@@ -32,6 +32,7 @@
     "onCommand:gauge.createProject",
     "onCommand:gauge.preview",
     "workspaceContains:manifest.json",
+    "workspaceContains:**/manifest.json",
     "onLanguage:gauge",
     "onLanguage:kotlin",
     "onDebugResolve:gauge"
@@ -68,7 +69,8 @@
         "aliases": [
           "Gauge",
           "Specification",
-          "Spec"
+          "Spec",
+          "Concept"
         ],
         "configuration": "./language-configuration.json"
       }

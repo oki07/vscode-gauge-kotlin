@@ -40,6 +40,40 @@ function debuggerByType(manifest, type) {
   return manifest.contributes.debuggers.find((entry) => entry.type === type);
 }
 
+function grammarRegex(source) {
+  let pattern = source;
+  let flags = "u";
+  if (pattern.startsWith("(?i)")) {
+    pattern = pattern.slice("(?i)".length);
+    flags += "i";
+  }
+  return new RegExp(pattern, flags);
+}
+
+function repositoryPattern(grammar, key, index = 0) {
+  const entry = grammar.repository[key];
+  assert.ok(entry, `missing ${key}`);
+  if (entry.patterns) {
+    assert.ok(entry.patterns[index], `missing ${key} pattern ${index}`);
+    return entry.patterns[index];
+  }
+  return entry;
+}
+
+function assertPatternMatches(pattern, text, expectedText = text) {
+  const source = pattern.match || pattern.begin;
+  assert.ok(source, "pattern must have match or begin");
+  const match = grammarRegex(source).exec(text);
+  assert.ok(match, `${source} should match ${text}`);
+  assert.equal(match[0], expectedText);
+}
+
+function assertPatternDoesNotMatch(pattern, text) {
+  const source = pattern.match || pattern.begin;
+  assert.ok(source, "pattern must have match or begin");
+  assert.equal(grammarRegex(source).test(text), false, `${source} should not match ${text}`);
+}
+
 test("extension manifest exposes the core Gauge VS Code surface for Kotlin projects", () => {
   const manifest = readPackageJson();
 
@@ -73,6 +107,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "onCommand:gauge.createProject",
     "onCommand:gauge.preview",
     "workspaceContains:manifest.json",
+    "workspaceContains:**/manifest.json",
     "onLanguage:gauge",
     "onLanguage:kotlin",
     "onDebugResolve:gauge",
@@ -81,7 +116,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   const language = manifest.contributes.languages.find((entry) => entry.id === "gauge");
   assert.ok(language);
   assert.deepEqual(language.extensions, [".spec", ".cpt", ".md"]);
-  assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec"]);
+  assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec", "Concept"]);
   assert.equal(language.configuration, "./language-configuration.json");
 
   const commandIds = manifest.contributes.commands.map((entry) => entry.command);
@@ -436,26 +471,68 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
     [
       "#comments",
       "#tags",
+      "#tableKeyword",
       "#specHeading",
       "#scenarioHeading",
       "#conceptHeading",
       "#step",
       "#table",
       "#arguments",
+      "#fallbackComment",
     ],
   );
   for (const key of [
     "comments",
     "tags",
+    "tableKeyword",
     "specHeading",
     "scenarioHeading",
     "conceptHeading",
     "step",
     "table",
+    "tableSeparator",
+    "tableRow",
     "arguments",
+    "tableArguments",
+    "fallbackComment",
   ]) {
     assert.ok(grammarJson.repository[key], `missing ${key}`);
   }
+});
+
+test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+
+  assertPatternMatches(grammarJson.repository.tags, "TAGS : smoke", "TAGS : ");
+  assertPatternMatches(grammarJson.repository.tableKeyword, "Table : users.csv", "Table : ");
+
+  assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title");
+  assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "##Scenario");
+
+  assertPatternMatches(grammarJson.repository.step, "* do something", "* ");
+  assertPatternDoesNotMatch(grammarJson.repository.step, "  * plain comment");
+  assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
+  assertPatternDoesNotMatch(grammarJson.repository.tableRow, "  | plain comment |");
+});
+
+test("Gauge TextMate grammar handles table and argument lexer edge cases", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+  const dynamicArgument = repositoryPattern(grammarJson, "arguments", 0);
+  const tableDynamicArgument = repositoryPattern(grammarJson, "tableArguments", 0);
+  const tableSeparatorPipe = repositoryPattern(grammarJson, "tableRow", 0);
+  const fallbackComment = grammarJson.repository.fallbackComment;
+
+  assertPatternMatches(dynamicArgument, "<name \\> suffix>", "<name \\> suffix>");
+  assertPatternMatches(dynamicArgument, "<>", "<>");
+  assertPatternMatches(tableDynamicArgument, "<user>", "<user>");
+  assertPatternDoesNotMatch(tableDynamicArgument, "<user | admin>");
+  assertPatternMatches(tableSeparatorPipe, "|", "|");
+  assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
+  assertPatternMatches(fallbackComment, "plain comment");
 });
 
 test("extension package ignores development-only files while keeping runtime sources", () => {
