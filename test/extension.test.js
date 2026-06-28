@@ -30,6 +30,7 @@ function createFakeVscode(overrides = {}) {
   const foldingRangeProviders = [];
   const languageConfigurations = [];
   const configurationListeners = [];
+  const referenceProviders = [];
   const renameProviders = [];
   const semanticTokenProviders = [];
   const semanticTokenColors = {
@@ -114,6 +115,15 @@ function createFakeVscode(overrides = {}) {
         });
         return disposable;
       },
+      registerReferenceProvider(selector, provider) {
+        const disposable = { dispose() {} };
+        referenceProviders.push({
+          selector,
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
       registerRenameProvider(selector, provider) {
         const disposable = { dispose() {} };
         renameProviders.push({
@@ -145,6 +155,9 @@ function createFakeVscode(overrides = {}) {
     },
     window: {
       activeTextEditor: overrides.activeTextEditor,
+      showErrorMessage() {
+        return undefined;
+      },
       showInformationMessage() {
         return undefined;
       },
@@ -200,6 +213,7 @@ function createFakeVscode(overrides = {}) {
     fakeVscode,
     foldingRangeProviders,
     languageConfigurations,
+    referenceProviders,
     registeredCommands,
     renameProviders,
     semanticTokenProviders,
@@ -232,6 +246,68 @@ test("activation registers core contributed Gauge commands", () => {
       + INTERNAL_EXECUTION_COMMANDS.length,
   );
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
+});
+
+test("activation registers Gauge reference providers", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const {
+    fakeVscode,
+    referenceProviders,
+  } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    semanticTokensLegend: {},
+    showWelcomeNotification() {},
+    GaugeWorkspace: class GaugeWorkspace {
+      constructor() {}
+      dispose() {}
+    },
+    ConfigProvider: class ConfigProvider {
+      constructor() {}
+      dispose() {}
+    },
+    SpecNodeProvider: class SpecNodeProvider {
+      constructor() {}
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+    },
+  });
+
+  assert.deepEqual(referenceProviders.map((entry) => entry.selector), [
+    [
+      { language: "gauge" },
+      { language: "kotlin" },
+      { scheme: "file", pattern: "**/*.kt" },
+    ],
+  ]);
 });
 
 test("activation defers CLI creation when Gauge services are not needed", () => {

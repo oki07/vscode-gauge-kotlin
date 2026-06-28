@@ -6,7 +6,7 @@ const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
 const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
 const GAUGE_LANGUAGE = "gauge";
-const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt"];
+const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 
 const {
   GaugeStepDiagnosticsProvider,
@@ -195,6 +195,10 @@ class ReferenceProvider {
     });
     this.disposables = [];
     this.registerCommands();
+    const provider = this.registerReferenceProvider();
+    if (provider) {
+      this.disposables.push(provider);
+    }
   }
 
   registerCommands() {
@@ -225,15 +229,9 @@ class ReferenceProvider {
   }
 
   showStepReferences(uri, position, stepValue) {
-    const languageClient = this.clients.get(this.vscode.Uri.parse(uri).fsPath).client;
-    return languageClient
-      .sendRequest(STEP_REFERENCES_REQUEST, stepValue, createCancellationToken(this.vscode))
-      .then(async (locations) => {
-        const resolvedLocations = hasLocations(locations)
-          ? locations
-          : await this.localStepReferences(stepValue);
-        return this.showReferences(resolvedLocations, uri, languageClient, position);
-      });
+    const languageClient = this.languageClientForUri(this.vscode.Uri.parse(uri));
+    return this.referenceLocationsForStep(languageClient, stepValue, { requestEmpty: true })
+      .then((locations) => this.showReferences(locations, uri, languageClient, position));
   }
 
   showStepReferencesAtCursor() {
@@ -241,7 +239,7 @@ class ReferenceProvider {
     const position = editor.selection.active;
     const activeUri = editor.document.uri;
     const documentId = textDocumentIdentifier(activeUri.toString());
-    const languageClient = this.clients.get(activeUri.fsPath).client;
+    const languageClient = this.languageClientForUri(activeUri);
     const params = { textDocument: documentId, position };
 
     return languageClient
@@ -256,6 +254,80 @@ class ReferenceProvider {
           stepValue || localStepValue || stepValue,
         );
       });
+  }
+
+  registerReferenceProvider() {
+    if (!this.vscode.languages || typeof this.vscode.languages.registerReferenceProvider !== "function") {
+      return undefined;
+    }
+    return this.vscode.languages.registerReferenceProvider(
+      [
+        { language: GAUGE_LANGUAGE },
+        { language: "kotlin" },
+        { scheme: "file", pattern: "**/*.kt" },
+      ],
+      this,
+    );
+  }
+
+  languageClientForUri(uri) {
+    const entry = this.clients && typeof this.clients.get === "function"
+      ? this.clients.get(uri && uri.fsPath)
+      : undefined;
+    return entry && entry.client;
+  }
+
+  async referenceLocationsForStep(languageClient, stepValue, options = {}) {
+    if (!stepValue && !options.requestEmpty) {
+      return undefined;
+    }
+    let locations;
+    if (languageClient && typeof languageClient.sendRequest === "function") {
+      locations = await languageClient.sendRequest(
+        STEP_REFERENCES_REQUEST,
+        stepValue,
+        createCancellationToken(this.vscode),
+      );
+    }
+    return hasLocations(locations) ? locations : this.localStepReferences(stepValue);
+  }
+
+  convertLocations(locations, languageClient) {
+    if (!hasLocations(locations)) {
+      return [];
+    }
+    if (
+      languageClient
+      && languageClient.protocol2CodeConverter
+      && typeof languageClient.protocol2CodeConverter.asLocation === "function"
+    ) {
+      return locations.map((location) => languageClient.protocol2CodeConverter.asLocation(location));
+    }
+    return locations;
+  }
+
+  async stepValueAt(document, position, languageClient) {
+    if (!document || !position) {
+      return undefined;
+    }
+    if (isKotlinDocument(document)) {
+      return this.kotlinStepValueAt(document, position);
+    }
+    if (document.languageId !== GAUGE_LANGUAGE || !languageClient) {
+      return undefined;
+    }
+    const params = {
+      textDocument: textDocumentIdentifier(documentUri(document)),
+      position,
+    };
+    return languageClient.sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode));
+  }
+
+  async provideReferences(document, position) {
+    const languageClient = this.languageClientForUri(document && document.uri);
+    const stepValue = await this.stepValueAt(document, position, languageClient);
+    const locations = await this.referenceLocationsForStep(languageClient, stepValue);
+    return this.convertLocations(locations, languageClient);
   }
 
   async findWorkspaceKotlinDocuments() {
