@@ -7,6 +7,9 @@ function createCollection() {
     add(item) {
       entries.set(item.id, item);
     },
+    delete(id) {
+      entries.delete(id);
+    },
     get(id) {
       return entries.get(id);
     },
@@ -16,7 +19,23 @@ function createCollection() {
   };
 }
 
-function createFakeVscode() {
+function createDocument(text, filename = "/workspace/specs/example.spec") {
+  const lines = text.split(/\r?\n/);
+  return {
+    fileName: filename,
+    languageId: "gauge",
+    lineCount: lines.length,
+    uri: { fsPath: filename },
+    getText() {
+      return text;
+    },
+    lineAt(line) {
+      return { text: lines[line] || "" };
+    },
+  };
+}
+
+function createFakeVscode(options = {}) {
   const calls = [];
   const controller = {
     id: "gauge",
@@ -83,6 +102,21 @@ function createFakeVscode() {
           return controller;
         },
       },
+      workspace: {
+        textDocuments: options.textDocuments || [],
+        onDidChangeTextDocument() {
+          return { dispose() {} };
+        },
+        onDidCloseTextDocument() {
+          return { dispose() {} };
+        },
+        onDidOpenTextDocument() {
+          return { dispose() {} };
+        },
+        onDidSaveTextDocument() {
+          return { dispose() {} };
+        },
+      },
     },
   };
 }
@@ -138,6 +172,67 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["passed", "/workspace/specs/example.spec", 100],
     ["dispose"],
   ]);
+});
+
+test("GaugeTestController discovers specification and scenario test items from open Gauge documents", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay by card",
+    "",
+    "## Declined checkout",
+    "* Pay by expired card",
+    "",
+  ].join("\n"));
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+
+  const spec = controller.items.get("/workspace/specs/example.spec");
+  assert.equal(spec.label, "Checkout");
+  assert.deepEqual(spec.uri, { fsPath: "/workspace/specs/example.spec" });
+  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+    ["/workspace/specs/example.spec:3", "Successful checkout"],
+    ["/workspace/specs/example.spec:6", "Declined checkout"],
+  ]);
+});
+
+test("GaugeTestController runs included Gauge test items instead of all specs", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, argument) {
+        executionCalls.push([command, argument]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const spec = controller.createTestItem(
+    "/workspace/specs/example.spec",
+    "Checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  const scenario = controller.createTestItem(
+    "/workspace/specs/example.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+
+  await gaugeTests.run({ include: [spec, scenario] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/example.spec"],
+    ["gauge.execute", "/workspace/specs/example.spec:3"],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController delays failed and skipped results until finish events provide duration", () => {
