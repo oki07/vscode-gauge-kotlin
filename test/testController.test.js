@@ -239,6 +239,68 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
   ]);
 });
 
+test("GaugeTestController does not pass a specification with a failed scenario", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({
+    type: "suiteStarted",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+  });
+  sink({
+    type: "testStarted",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Successful checkout",
+  });
+  sink({
+    type: "testFinished",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Successful checkout",
+    duration: 42,
+  });
+  sink({
+    type: "testStarted",
+    id: "/workspace/specs/example.spec:20",
+    parentId: "/workspace/specs/example.spec",
+    name: "Failed checkout",
+  });
+  sink({
+    type: "testFailed",
+    id: "/workspace/specs/example.spec:20",
+    parentId: "/workspace/specs/example.spec",
+    name: "Failed checkout",
+    message: "Expected success",
+  });
+  sink({
+    type: "testFinished",
+    id: "/workspace/specs/example.spec:20",
+    parentId: "/workspace/specs/example.spec",
+    name: "Failed checkout",
+    duration: 9,
+  });
+  sink({
+    type: "suiteFinished",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    duration: 100,
+  });
+
+  assert.deepEqual(calls.filter((entry) => entry[0] === "passed"), [
+    ["passed", "/workspace/specs/example.spec:12", 42],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "failed"), [
+    ["failed", "/workspace/specs/example.spec:20", "Expected success", 9],
+    ["failed", "/workspace/specs/example.spec", "Expected success", 100],
+  ]);
+});
+
 test("GaugeTestController discovers specification and scenario test items from open Gauge documents", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([

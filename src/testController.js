@@ -207,6 +207,7 @@ class GaugeTestController {
     this.currentRun = undefined;
     this.items = new Map();
     this.pendingResults = new Map();
+    this.childResults = new Map();
     this.workspaceDiscoveredIdsByClient = new Map();
   }
 
@@ -486,6 +487,7 @@ class GaugeTestController {
     }
     this.currentRun = this.controller.createTestRun(request);
     this.pendingResults.clear();
+    this.childResults.clear();
     return this.currentRun;
   }
 
@@ -583,22 +585,63 @@ class GaugeTestController {
     return applyLocation(this.vscode, item, event.location);
   }
 
+  recordChildResult(event, status, message) {
+    const parentId = event && event.parentId;
+    if (!parentId || parentId === ROOT_PARENT_ID) {
+      return;
+    }
+    const result = this.childResults.get(parentId) || {
+      failed: false,
+      message: undefined,
+      passed: false,
+      skipped: false,
+    };
+    if (status === "failed") {
+      result.failed = true;
+      if (message && !result.message) {
+        result.message = message;
+      }
+    } else if (status === "skipped") {
+      result.skipped = true;
+    } else {
+      result.passed = true;
+    }
+    this.childResults.set(parentId, result);
+  }
+
   finishItem(event) {
     const run = this.ensureRun();
     const item = this.ensureItem(event);
     if (!run || !item) {
       return;
     }
+    const childResult = event.type === "suiteFinished"
+      ? this.childResults.get(event.id)
+      : undefined;
+    if (childResult) {
+      this.childResults.delete(event.id);
+      if (childResult.failed && typeof run.failed === "function") {
+        run.failed(item, createMessage(this.vscode, childResult.message || ""), event.duration);
+        return;
+      }
+      if (childResult.skipped && !childResult.passed && typeof run.skipped === "function") {
+        run.skipped(item);
+        return;
+      }
+    }
     const pending = this.pendingResults.get(event.id);
     this.pendingResults.delete(event.id);
     if (pending && pending.status === "failed" && typeof run.failed === "function") {
+      this.recordChildResult(event, "failed", pending.message);
       run.failed(item, createMessage(this.vscode, pending.message), event.duration);
       return;
     }
     if (pending && pending.status === "skipped" && typeof run.skipped === "function") {
+      this.recordChildResult(event, "skipped");
       run.skipped(item);
       return;
     }
+    this.recordChildResult(event, "passed");
     if (typeof run.passed === "function") {
       run.passed(item, event.duration);
     }
