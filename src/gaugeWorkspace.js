@@ -142,6 +142,16 @@ function isInside(root, filename, pathModule) {
   return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
 }
 
+function errorMessage(error) {
+  if (!error) {
+    return "";
+  }
+  if (typeof error.message === "string" && error.message) {
+    return error.message;
+  }
+  return String(error);
+}
+
 class GaugeWorkspace {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -525,10 +535,27 @@ class GaugeWorkspace {
     );
     this.clientsMap.set(project.root(), { project, client: languageClient });
     this.registerDynamicFeatures(languageClient);
-    await languageClient.start();
+    try {
+      await languageClient.start();
+    } catch (error) {
+      this.clientsMap.delete(project.root());
+      this.clientLanguageMap.delete(project.root());
+      await this.showLanguageServerStartupError(project, error);
+      return undefined;
+    }
     this.registerServerMessageFilter(languageClient);
     await this.setLanguageId(languageClient, project.root());
     return languageClient;
+  }
+
+  async showLanguageServerStartupError(project, error) {
+    const window = this.vscode.window || {};
+    if (typeof window.showErrorMessage !== "function") {
+      return undefined;
+    }
+    const detail = errorMessage(error);
+    const suffix = detail ? ` ${detail}` : "";
+    return window.showErrorMessage(`Unable to start Gauge language server for ${project.root()}.${suffix}`);
   }
 
   registerServerMessageFilter(languageClient) {

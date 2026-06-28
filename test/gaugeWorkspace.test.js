@@ -532,6 +532,43 @@ test("GaugeWorkspace keeps clients started when runner language lookup fails", a
   assert.equal(workspace.getClientLanguageMap().has("/workspace/gauge"), false);
 });
 
+test("GaugeWorkspace removes clients and reports language server startup failures", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "js", Plugins: [{ name: "js" }] }),
+  });
+  const { errors, vscode } = createFakeVscode();
+
+  class RejectingStartLanguageClient extends FakeLanguageClient {
+    start() {
+      this.started = true;
+      return Promise.reject(new Error("daemon failed"));
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "js", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: RejectingStartLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+
+  await assert.doesNotReject(() => workspace.ready());
+
+  assert.equal(clients.get("/workspace/gauge"), undefined);
+  assert.deepEqual(errors, [
+    {
+      message: "Unable to start Gauge language server for /workspace/gauge. daemon failed",
+      reason: undefined,
+    },
+  ]);
+});
+
 test("GaugeWorkspace generates Java config for mixed-case Java plugins", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
