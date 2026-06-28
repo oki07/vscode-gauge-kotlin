@@ -3,6 +3,9 @@
 const DEBUGGER_NAME = "Gauge Debugger";
 const REQUEST_TYPE = "attach";
 const DEFAULT_DEBUG_PORT = 9229;
+const DEFAULT_DEBUG_START_DELAY_MS = 100;
+const DEFAULT_DEBUG_ATTACH_RETRY_DELAY_MS = 5000;
+const DEFAULT_DEBUG_ATTACH_TIMEOUT_MS = 25000;
 
 function javaLike(language) {
   return language === "java" || language === "kotlin";
@@ -36,6 +39,22 @@ async function resolveDebugPort(preferredPort, getPort) {
   return portResolver({ port: preferredPort });
 }
 
+function sleep(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function debugAttachAttempts(timeoutMs, retryDelayMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return 1;
+  }
+  if (!Number.isFinite(retryDelayMs) || retryDelayMs <= 0) {
+    return 1;
+  }
+  return Math.max(1, Math.ceil(timeoutMs / retryDelayMs));
+}
+
 function createGaugeDebugger(options = {}) {
   let vscode = options.vscode;
   const projectRoot = options.projectRoot;
@@ -43,6 +62,10 @@ function createGaugeDebugger(options = {}) {
   const baseEnv = options.baseEnv || process.env;
   const debugPortProvider = options.debugPortProvider;
   const getPort = options.getPort;
+  const debugStartDelayMs = options.debugStartDelayMs ?? DEFAULT_DEBUG_START_DELAY_MS;
+  const debugAttachRetryDelayMs = options.debugAttachRetryDelayMs ?? DEFAULT_DEBUG_ATTACH_RETRY_DELAY_MS;
+  const debugAttachTimeoutMs = options.debugAttachTimeoutMs ?? DEFAULT_DEBUG_ATTACH_TIMEOUT_MS;
+  const sleepProvider = options.sleep || sleep;
   let debugPort = options.debugPort;
   let processId;
 
@@ -96,7 +119,24 @@ function createGaugeDebugger(options = {}) {
     if (!folder) {
       throw new Error(`The debugger does not work for a stand alone file. Please open the folder ${projectRoot}.`);
     }
-    return vscode.debug.startDebugging(folder, getDebuggerConfiguration());
+    await sleepProvider(debugStartDelayMs);
+    const maxAttempts = debugAttachAttempts(debugAttachTimeoutMs, debugAttachRetryDelayMs);
+    let lastError;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (attempt > 0) {
+        await sleepProvider(debugAttachRetryDelayMs);
+      }
+      try {
+        const started = await vscode.debug.startDebugging(folder, getDebuggerConfiguration());
+        if (started) {
+          return started;
+        }
+        lastError = new Error("VS Code did not start the debugger.");
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
   }
 
   function registerStopDebugger(callback) {

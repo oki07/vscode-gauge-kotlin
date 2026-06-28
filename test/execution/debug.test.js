@@ -84,6 +84,62 @@ test("GaugeDebugger starts VS Code Java attach debugging", async () => {
   ]);
 });
 
+test("GaugeDebugger retries VS Code attach debugging while the runner starts", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const attempts = [];
+  const sleeps = [];
+  const vscode = {
+    workspace: {
+      getWorkspaceFolder(uri) {
+        return { uri, name: "workspace" };
+      },
+    },
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
+    debug: {
+      async startDebugging(folder, configuration) {
+        attempts.push({ folder, configuration });
+        if (attempts.length < 3) {
+          throw new Error("debug port is not ready");
+        }
+        return true;
+      },
+    },
+  };
+
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 100,
+    debugAttachRetryDelayMs: 5000,
+    debugAttachTimeoutMs: 11000,
+    async sleep(milliseconds) {
+      sleeps.push(milliseconds);
+    },
+    async debugPortProvider() {
+      return 5005;
+    },
+  });
+
+  await debuggerSession.addDebugEnv();
+  const result = await debuggerSession.startDebugger();
+
+  assert.equal(result, true);
+  assert.deepEqual(sleeps, [100, 5000, 5000]);
+  assert.equal(attempts.length, 3);
+  assert.deepEqual(attempts[2].configuration, {
+    name: "Gauge Debugger",
+    type: "java",
+    request: "attach",
+    hostName: "127.0.0.1",
+    port: 5005,
+  });
+});
+
 test("GaugeDebugger uses the configured Gauge debug port by default", async () => {
   const { createGaugeDebugger } = require("../../src/execution/debug");
   const vscode = {
