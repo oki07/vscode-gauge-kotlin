@@ -444,6 +444,48 @@ test("execute in parallel runs the Gauge code lens target", async () => {
   ]);
 });
 
+test("execute target accepts command flags for Test UI machine-readable runs", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      {
+        type: "gauge",
+        request: "test",
+        name: "Gauge",
+        "hide-suggestion": false,
+      },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute", "/workspace/specs/example.spec", {
+    "hide-suggestion": true,
+    "machine-readable": true,
+  });
+
+  assert.deepEqual(calls[0].args, [
+    "run",
+    "--hide-suggestion",
+    "--simple-console",
+    "--machine-readable",
+    "/workspace/specs/example.spec",
+  ]);
+});
+
 test("execute failed asks for a project and runs failed scenarios there", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

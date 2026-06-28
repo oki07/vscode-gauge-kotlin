@@ -207,8 +207,8 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   const gaugeTests = new GaugeTestController({
     vscode,
     executionController: {
-      handleCommand(command, argument) {
-        executionCalls.push([command, argument]);
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
         return Promise.resolve(undefined);
       },
     },
@@ -229,10 +229,42 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   await gaugeTests.run({ include: [spec, scenario] });
 
   assert.deepEqual(executionCalls, [
-    ["gauge.execute", "/workspace/specs/example.spec"],
-    ["gauge.execute", "/workspace/specs/example.spec:3"],
+    ["gauge.execute", "/workspace/specs/example.spec", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.execute", "/workspace/specs/example.spec:3", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
+test("GaugeTestController forces machine-readable output for all-spec Test UI runs", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+
+  await gaugeTests.run({});
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.specification.all", undefined, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
 });
 
 test("GaugeTestController delays failed and skipped results until finish events provide duration", () => {

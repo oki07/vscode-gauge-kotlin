@@ -21,7 +21,13 @@ const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
 const EXECUTING_CONTEXT = "gauge:executing";
-const COMMAND_FLAG_KEYS = ["failed", "repeat", "parallel"];
+const COMMAND_FLAG_KEYS = [
+  "failed",
+  "hide-suggestion",
+  "machine-readable",
+  "parallel",
+  "repeat",
+];
 
 const EXECUTION_COMMANDS = new Set([
   "gauge.execute",
@@ -537,15 +543,18 @@ function createGaugeExecutionController(options = {}) {
     };
   }
 
-  async function executeActiveSpecification() {
+  async function executeActiveSpecification(flags = {}) {
     const context = getActiveSpecificationContext("specification");
     if (context.error) {
       return vscode.window.showErrorMessage(context.error);
     }
-    return executeInProject(context.projectRoot, context.spec, { status: context.spec });
+    return executeInProject(context.projectRoot, context.spec, {
+      ...flags,
+      status: context.spec,
+    });
   }
 
-  async function executeAllSpecifications(projectRoot) {
+  async function executeAllSpecifications(projectRoot, flags = {}) {
     const selectedProjectRoot = projectRoot || (await selectProjectRoot(
       vscode,
       pathModule,
@@ -555,6 +564,7 @@ function createGaugeExecutionController(options = {}) {
       return undefined;
     }
     return executeInProject(selectedProjectRoot, null, {
+      ...flags,
       status: pathModule.join(selectedProjectRoot, "All specs"),
     });
   }
@@ -685,7 +695,7 @@ function createGaugeExecutionController(options = {}) {
     return (node && node.file) || spec;
   }
 
-  async function executeNode(node, debug) {
+  async function executeNode(node, debug, flags = {}) {
     const spec = getNodeSpec(node);
     if (!spec) {
       return undefined;
@@ -700,6 +710,7 @@ function createGaugeExecutionController(options = {}) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
     return executeInProject(projectRoot, spec, {
+      ...flags,
       debug,
       status: getNodeStatus(node, spec),
     });
@@ -724,38 +735,38 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
-  function handleCommand(command, argument) {
+  function handleCommand(command, argument, flags = {}) {
     switch (command) {
       case "gauge.execute":
-        return executeCodeLensTarget(argument);
+        return executeCodeLensTarget(argument, flags);
       case "gauge.debug":
-        return executeCodeLensTarget(argument, { debug: true });
+        return executeCodeLensTarget(argument, { ...flags, debug: true });
       case "gauge.execute.inParallel":
-        return executeCodeLensTarget(argument, { parallel: true });
+        return executeCodeLensTarget(argument, { ...flags, parallel: true });
       case "gauge.execute.specification":
         if (argument) {
-          return executeNode(argument, false);
+          return executeNode(argument, false, flags);
         }
-        return executeActiveSpecification();
+        return executeActiveSpecification(flags);
       case "gauge.execute.specification.all":
-        return executeAllSpecifications();
+        return executeAllSpecifications(undefined, flags);
       case "gauge.specexplorer.runAllActiveProjectSpecs":
-        return executeAllSpecifications(argument && argument.projectRoot);
+        return executeAllSpecifications(argument && argument.projectRoot, flags);
       case "gauge.execute.failed":
         return executeFailed();
       case "gauge.execute.repeat":
         return repeatExecution();
       case "gauge.execute.scenario":
         if (argument) {
-          return executeNode(argument, false);
+          return executeNode(argument, false, flags);
         }
         return executeScenario(true);
       case "gauge.execute.scenarios":
         return executeScenario(false);
       case "gauge.specexplorer.runNode":
-        return executeNode(argument, false);
+        return executeNode(argument, false, flags);
       case "gauge.specexplorer.debugNode":
-        return executeNode(argument, true);
+        return executeNode(argument, true, flags);
       case "gauge.report.html":
         return openReport();
       case "gauge.stopExecution":

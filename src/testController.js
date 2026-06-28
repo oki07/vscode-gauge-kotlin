@@ -7,6 +7,10 @@ const CONTROLLER_LABEL = "Gauge";
 const GAUGE_LANGUAGE = "gauge";
 const RUN_PROFILE_LABEL = "Run";
 const ROOT_PARENT_ID = "suite";
+const TEST_UI_RUN_FLAGS = {
+  "hide-suggestion": true,
+  "machine-readable": true,
+};
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -131,6 +135,10 @@ function markerRange(vscode, marker) {
 
 function executionTargetForItem(item) {
   return item && item.id;
+}
+
+function testUiRunFlags() {
+  return { ...TEST_UI_RUN_FLAGS };
 }
 
 class GaugeTestController {
@@ -298,10 +306,14 @@ class GaugeTestController {
           ? request.include.map(executionTargetForItem).filter(Boolean)
           : [];
         if (targets.length === 0) {
-          await this.executionController.handleCommand("gauge.execute.specification.all");
+          await this.executionController.handleCommand(
+            "gauge.execute.specification.all",
+            undefined,
+            testUiRunFlags(),
+          );
         } else {
           for (const target of targets) {
-            await this.executionController.handleCommand("gauge.execute", target);
+            await this.executionController.handleCommand("gauge.execute", target, testUiRunFlags());
           }
         }
       }
