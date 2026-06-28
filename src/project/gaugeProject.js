@@ -1,6 +1,14 @@
 "use strict";
 
+const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { GaugeConfig } = require("../config/gaugeConfig");
+const {
+  GAUGE_CUSTOM_CLASSPATH,
+  collectJarFiles,
+  existingDirectories,
+  pathDelimiter,
+} = require("./classpath");
 
 function readManifestLanguage(manifest) {
   return manifest && (manifest.Language || manifest.language || manifest.langauge);
@@ -16,7 +24,17 @@ class GaugeProject {
     this.isGauge = manifest != null;
     this.projectLanguage = readManifestLanguage(manifest);
     this.plugins = readManifestPlugins(manifest);
+    this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
+    this.classpathDelimiter = options.pathDelimiter || pathDelimiter(this.pathModule);
+    this.gaugeConfig = options.gaugeConfig || (
+      options.gaugeConfigFactory
+        ? options.gaugeConfigFactory()
+        : new GaugeConfig(process.platform, {
+          env: options.env || process.env,
+          pathModule: this.pathModule,
+        })
+    );
   }
 
   getExecutionCommand(cli) {
@@ -66,8 +84,58 @@ class GaugeProject {
     return this.root() === other.root();
   }
 
-  envs() {
-    return {};
+  standardClasspathEntries() {
+    const projectName = this.pathModule.basename(this.root());
+    return existingDirectories(this.fileSystem, this.pathModule, this.root(), [
+      "src/test/kotlin",
+      "src/test/java",
+      "out/test/" + projectName,
+      "out/production/" + projectName,
+      "gauge_bin",
+    ]);
+  }
+
+  projectLibClasspathEntries() {
+    return collectJarFiles(
+      this.fileSystem,
+      this.pathModule,
+      this.pathModule.join(this.root(), "libs"),
+    );
+  }
+
+  gaugePluginClasspathEntries(cli) {
+    const language = this.language();
+    if (!language || !cli || typeof cli.getGaugePluginVersion !== "function") {
+      return [];
+    }
+    const version = cli.getGaugePluginVersion(language);
+    if (!version || !this.gaugeConfig || typeof this.gaugeConfig.pluginsPath !== "function") {
+      return [];
+    }
+    return collectJarFiles(
+      this.fileSystem,
+      this.pathModule,
+      this.pathModule.join(this.gaugeConfig.pluginsPath(), language, version, "libs"),
+    );
+  }
+
+  classpath(cli) {
+    const entries = [
+      ...this.standardClasspathEntries(),
+      ...this.projectLibClasspathEntries(),
+      ...this.gaugePluginClasspathEntries(cli),
+    ];
+    return entries.join(this.classpathDelimiter);
+  }
+
+  envs(cli) {
+    const classpath = this.classpath(cli);
+    if (!classpath) {
+      return {};
+    }
+    return {
+      [GAUGE_CUSTOM_CLASSPATH]: classpath,
+    };
   }
 }
 

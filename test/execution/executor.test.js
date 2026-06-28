@@ -493,6 +493,75 @@ test("execute target accepts command flags for Test UI machine-readable runs", a
   ]);
 });
 
+test("execute target passes project classpath environment to normal Gauge runs", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const envCalls = [];
+  const { vscode } = createFakeVscode();
+  const cli = { id: "cli" };
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    cli,
+    env: { PATH: "/bin" },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    projectFactory: {
+      get(root) {
+        assert.equal(root, "/workspace");
+        return {
+          envs(receivedCli) {
+            envCalls.push(receivedCli);
+            return { gauge_custom_classpath: "/workspace/gauge/out/test/gauge" };
+          },
+          getExecutionCommand(receivedCli) {
+            assert.equal(receivedCli, cli);
+            return undefined;
+          },
+          root() {
+            return root;
+          },
+        };
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute", "/workspace/specs/example.spec");
+
+  assert.deepEqual(envCalls, [cli]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/specs/example.spec",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/specs/example.spec",
+      env: {
+        PATH: "/bin",
+        gauge_custom_classpath: "/workspace/gauge/out/test/gauge",
+      },
+    },
+  ]);
+});
+
 test("execute failed asks for a project and runs failed scenarios there", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

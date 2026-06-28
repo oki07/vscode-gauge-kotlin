@@ -13,6 +13,81 @@ test("GaugeProject detects files inside the project root", () => {
   assert.equal(project.hasFile("/workspace/other/specs/example.spec"), false);
 });
 
+test("GaugeProject returns a plain JVM project custom classpath environment", () => {
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const directories = new Set([
+    "/workspace/gauge/src/test/kotlin",
+    "/workspace/gauge/out/test/gauge",
+    "/workspace/gauge/out/production/gauge",
+    "/workspace/gauge/libs",
+    "/workspace/gauge/libs/nested",
+    "/gauge/plugins/kotlin/0.9.0/libs",
+  ]);
+  const files = new Set([
+    "/workspace/gauge/libs/project.jar",
+    "/workspace/gauge/libs/nested/helper.jar",
+    "/workspace/gauge/libs/readme.txt",
+    "/gauge/plugins/kotlin/0.9.0/libs/gauge-kotlin.jar",
+  ]);
+  const fileSystem = {
+    existsSync(filename) {
+      return directories.has(filename) || files.has(filename);
+    },
+    readdirSync(dirname) {
+      if (dirname === "/workspace/gauge/libs") {
+        return ["project.jar", "nested", "readme.txt"];
+      }
+      if (dirname === "/workspace/gauge/libs/nested") {
+        return ["helper.jar"];
+      }
+      if (dirname === "/gauge/plugins/kotlin/0.9.0/libs") {
+        return ["gauge-kotlin.jar"];
+      }
+      return [];
+    },
+    statSync(filename) {
+      return {
+        isDirectory() {
+          return directories.has(filename);
+        },
+      };
+    },
+  };
+  const project = new GaugeProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    fileSystem,
+    gaugeConfig: {
+      pluginsPath() {
+        return "/gauge/plugins";
+      },
+    },
+    pathModule: {
+      ...require("node:path").posix,
+      delimiter: ":",
+    },
+  });
+
+  const env = project.envs({
+    getGaugePluginVersion(language) {
+      assert.equal(language, "kotlin");
+      return "0.9.0";
+    },
+  });
+
+  assert.deepEqual(env, {
+    gauge_custom_classpath: [
+      "/workspace/gauge/src/test/kotlin",
+      "/workspace/gauge/out/test/gauge",
+      "/workspace/gauge/out/production/gauge",
+      "/workspace/gauge/libs/project.jar",
+      "/workspace/gauge/libs/nested/helper.jar",
+      "/gauge/plugins/kotlin/0.9.0/libs/gauge-kotlin.jar",
+    ].join(":"),
+  });
+});
+
 test("MavenProject returns Gauge custom classpath environment", () => {
   const { MavenProject } = require("../src/project/mavenProject");
   const calls = [];

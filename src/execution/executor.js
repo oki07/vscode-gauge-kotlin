@@ -205,6 +205,17 @@ function commandFromProject(project, cli) {
   return command;
 }
 
+function projectEnvironment(project, cli) {
+  if (!project || typeof project.envs !== "function") {
+    return {};
+  }
+  return project.envs(cli) || {};
+}
+
+function hasEnvironment(env) {
+  return Boolean(env && Object.keys(env).length > 0);
+}
+
 function getWorkspaceFolderForProject(vscode, projectRoot) {
   if (!vscode.workspace || typeof vscode.workspace.getWorkspaceFolder !== "function") {
     return undefined;
@@ -463,7 +474,9 @@ function createGaugeExecutionController(options = {}) {
     const project = getProjectForExecution(projectFactory, projectRoot);
     const projectKind = projectKindFromProject(project)
       || detectProjectKind(projectRoot, fileSystem, pathModule);
-    const executionTool = project ? commandFromProject(project, getCli()) : undefined;
+    const cli = getCli();
+    const executionTool = project ? commandFromProject(project, cli) : undefined;
+    const projectEnv = projectEnvironment(project, cli);
     const option = executionRunOptions(
       extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
       flags,
@@ -482,13 +495,19 @@ function createGaugeExecutionController(options = {}) {
     if (executionTool) {
       command.tool = executionTool;
     }
+    if (hasEnvironment(projectEnv)) {
+      command.env = {
+        ...executionEnv,
+        ...projectEnv,
+      };
+    }
 
     if (flags.debug) {
       activeDebugger = debuggerFactory({
         vscode,
         projectRoot,
         language: options.language || "kotlin",
-        baseEnv: executionEnv,
+        baseEnv: command.env || executionEnv,
         debugPortProvider: options.debugPortProvider,
       });
       if (typeof activeDebugger.registerStopDebugger === "function") {
@@ -496,7 +515,7 @@ function createGaugeExecutionController(options = {}) {
           stopExecution(false);
         });
       }
-      command.env = await activeDebugger.addDebugEnv(executionEnv);
+      command.env = await activeDebugger.addDebugEnv(command.env || executionEnv);
     }
 
     executing = true;

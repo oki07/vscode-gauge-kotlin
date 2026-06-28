@@ -26,8 +26,11 @@ function createProjectFactory(options = {}) {
   const fileSystem = options.fileSystem || nodeFs;
   const pathModule = options.pathModule || nodePath;
   const projectOptions = {
-    pathModule,
     execSync: options.execSync,
+    fileSystem,
+    gaugeConfig: options.gaugeConfig,
+    gaugeConfigFactory: options.gaugeConfigFactory,
+    pathModule,
     vscode: options.vscode,
   };
 

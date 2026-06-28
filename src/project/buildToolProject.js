@@ -1,9 +1,8 @@
 "use strict";
 
 const childProcess = require("node:child_process");
+const { GAUGE_CUSTOM_CLASSPATH } = require("./classpath");
 const { GaugeProject } = require("./gaugeProject");
-
-const GAUGE_CUSTOM_CLASSPATH = "gauge_custom_classpath";
 
 function errorOutput(error) {
   if (!error || error.output == null) {
