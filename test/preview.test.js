@@ -118,6 +118,65 @@ test("previewGaugeDocument creates Spectacle docs for the active Gauge document"
   ]);
 });
 
+test("previewGaugeDocument creates Spectacle docs for a Markdown Gauge spec", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode({
+    document: {
+      languageId: "markdown",
+      uri: { fsPath: "/workspace/gauge/specs/example.md" },
+      fileName: "/workspace/gauge/specs/example.md",
+    },
+  });
+  const spawns = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          return createChildProcess({ stdout: "created\n" });
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.md");
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spawns, [
+    {
+      args: ["docs", "spectacle", "/workspace/gauge/specs/example.md"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: {
+          PATH: "/bin",
+          spectacle_out_dir: "/tmp/gauge-preview/docs",
+        },
+      },
+    },
+  ]);
+  assert.deepEqual(opened, [
+    {
+      fsPath: "/tmp/gauge-preview/docs/html/specs/example.html",
+      scheme: "file",
+    },
+  ]);
+});
+
 test("previewGaugeDocument reports Spectacle generation failures", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errors, opened, vscode } = createFakeVscode();

@@ -9,6 +9,8 @@ const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
 const INSTALL_SPECTACLE_ACTION = "Install Spectacle";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_EXTENSION = ".md";
 const MISSING_SPECTACLE_MESSAGE = "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.";
 const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept to preview.";
 const SPECTACLE_PLUGIN_NAME = "spectacle";
@@ -27,10 +29,20 @@ function showError(vscode, message, ...actions) {
 function activeGaugeFile(vscode) {
   const editor = vscode.window && vscode.window.activeTextEditor;
   const document = editor && editor.document;
-  if (!document || document.languageId !== "gauge") {
+  const filePath = document && ((document.uri && document.uri.fsPath) || document.fileName);
+  if (!document || !filePath) {
     return undefined;
   }
-  return (document.uri && document.uri.fsPath) || document.fileName;
+  if (document.languageId === "gauge") {
+    return filePath;
+  }
+  if (
+    document.languageId === MARKDOWN_LANGUAGE
+    && filePath.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+  ) {
+    return filePath;
+  }
+  return undefined;
 }
 
 function getCli(vscode, options) {
