@@ -86,6 +86,51 @@ test("process runner spawns Gauge and routes stdout through output and line proc
   assert.ok(outputChannel.lines.includes("      Specification: /workspace/specs/example.spec:19"));
 });
 
+test("process runner hides machine-readable JSON events from output", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const processedLines = [];
+
+  const runner = createGaugeProcessRunner({
+    pathModule: path.posix,
+    outputChannel,
+    processOutputLine(lineText) {
+      processedLines.push(lineText);
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "--machine-readable", "specs/example.spec"],
+    cwd: "/workspace",
+  });
+
+  const specStart = "{\"type\":\"specStart\",\"id\":\"spec-1\",\"name\":\"Example\"}";
+  const output = "{\"type\":\"out\",\"message\":\"visible output\"}";
+  child.stdout.emit(
+    "data",
+    `${specStart}\n${output}\nSuccessfully generated html-report to => /workspace/reports/index.html\n`,
+  );
+  child.emit("exit", 0);
+
+  assert.equal(await run, true);
+  assert.deepEqual(processedLines, [
+    `${specStart}\n`,
+    `${output}\n`,
+    "Successfully generated html-report to => /workspace/reports/index.html\n",
+  ]);
+  assert.equal(outputChannel.lines.includes(specStart), false);
+  assert.equal(outputChannel.lines.includes(output), false);
+  assert.ok(outputChannel.lines.includes("visible output"));
+  assert.ok(
+    outputChannel.lines.includes("Successfully generated html-report to => /workspace/reports/index.html"),
+  );
+});
+
 test("process runner uses Command object spawning when available", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

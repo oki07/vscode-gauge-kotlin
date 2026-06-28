@@ -3,6 +3,7 @@
 const childProcess = require("node:child_process");
 const nodePath = require("node:path");
 const { envWithGaugeHome } = require("../config/gaugeConfig");
+const { parseMachineReadableEvent } = require("./lineProcessors");
 const { OutputChannel } = require("./outputChannel");
 
 const SUCCESS_MESSAGE = "Success: Tests passed.";
@@ -28,6 +29,32 @@ function createLineEmitter(callback) {
       callback(`${line}\n`);
     }
   };
+}
+
+function isMachineReadableCommand(command) {
+  return Array.isArray(command && command.args)
+    && command.args.some((arg) => String(arg).includes("--machine-readable"));
+}
+
+function textWithLine(value) {
+  if (!value) {
+    return "";
+  }
+  return value.endsWith("\n") ? value : `${value}\n`;
+}
+
+function appendMachineReadableOutput(channel, lineText) {
+  const event = parseMachineReadableEvent(lineText);
+  if (!event) {
+    channel.appendOutBuf(lineText);
+    return;
+  }
+  if (String(event.type || "").toLowerCase() === "out") {
+    const message = textWithLine(event.message || "");
+    if (message) {
+      channel.appendOutBuf(message);
+    }
+  }
 }
 
 function loadProcessTree() {
@@ -105,8 +132,13 @@ function createGaugeProcessRunner(options = {}) {
         : command.args;
       const initial = ["Running tool:", command.command, displayArgs.join(" ")].join(" ");
       const channel = new OutputChannel(outputChannel, initial, command.cwd, { pathModule });
+      const machineReadable = isMachineReadableCommand(command);
       const emitStdoutLine = createLineEmitter((lineText) => {
-        channel.appendOutBuf(lineText);
+        if (machineReadable) {
+          appendMachineReadableOutput(channel, lineText);
+        } else {
+          channel.appendOutBuf(lineText);
+        }
         processOutputLine(lineText);
       });
 
