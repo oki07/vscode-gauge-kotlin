@@ -16,6 +16,7 @@ test("buildSpecificationDocument matches the Gauge help template", () => {
     document.text,
     [
       "# SPECIFICATION HEADING",
+      "Created by Ada on 2026-06-26",
       "",
       "This is an executable specification file. This file follows markdown syntax.",
       "Every heading in this file denotes a scenario. Every bulleted point denotes a step.",
@@ -29,8 +30,8 @@ test("buildSpecificationDocument matches the Gauge help template", () => {
     ].join("\n"),
   );
   assert.deepEqual(document.selection, {
-    start: { line: 9, character: 2 },
-    end: { line: 9, character: 6 },
+    start: { line: 10, character: 2 },
+    end: { line: 10, character: 6 },
   });
 });
 
@@ -48,6 +49,7 @@ test("buildSpecificationDocument can omit help comments", () => {
     document.text,
     [
       "# SPECIFICATION HEADING",
+      "Created by Ada on 2026-06-26",
       "",
       "## SCENARIO HEADING",
       "",
@@ -56,8 +58,8 @@ test("buildSpecificationDocument can omit help comments", () => {
     ].join("\n"),
   );
   assert.deepEqual(document.selection, {
-    start: { line: 4, character: 2 },
-    end: { line: 4, character: 6 },
+    start: { line: 5, character: 2 },
+    end: { line: 5, character: 6 },
   });
 });
 
@@ -170,6 +172,7 @@ test("createSpecification writes a spec file under the workspace specs directory
   assert.deepEqual(writes.get("/project/specs/Login.spec"), {
     content: [
       "# SPECIFICATION HEADING",
+      "Created by Ada on 2026-06-26",
       "",
       "## SCENARIO HEADING",
       "",
@@ -181,7 +184,7 @@ test("createSpecification writes a spec file under the workspace specs directory
   assert.deepEqual(shownDocument, {
     document: openedDocument,
     options: {
-      selection: new Range(new Position(4, 2), new Position(4, 6)),
+      selection: new Range(new Position(5, 2), new Position(5, 6)),
     },
   });
 });
@@ -297,6 +300,7 @@ test("createSpecification asks for project and spec directory when multiple choi
   assert.deepEqual(writes.get("/workspace/admin/features/specs/Checkout.spec"), {
     content: [
       "# SPECIFICATION HEADING",
+      "Created by Ada on 2026-06-26",
       "",
       "## SCENARIO HEADING",
       "",
@@ -308,7 +312,7 @@ test("createSpecification asks for project and spec directory when multiple choi
   assert.deepEqual(shownDocument, {
     document: { filename: "/workspace/admin/features/specs/Checkout.spec" },
     options: {
-      selection: new Range(new Position(4, 2), new Position(4, 6)),
+      selection: new Range(new Position(5, 2), new Position(5, 6)),
     },
   });
 });
