@@ -62,9 +62,19 @@ function waitForProcess(command, args, options) {
   });
 }
 
-function failureReason(result) {
-  return (result.stderr || result.stdout || (result.error && result.error.message) || "")
+function withoutDeprecatedOutput(output) {
+  return String(output || "")
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("[DEPRECATED]"))
+    .join("\n")
     .trim();
+}
+
+function failureReason(result) {
+  return withoutDeprecatedOutput(result.stderr)
+    || withoutDeprecatedOutput(result.stdout)
+    || (result.error && result.error.message)
+    || "";
 }
 
 function formatFailureMessage(result) {

@@ -44,6 +44,10 @@ function createFakeVscode(options = {}) {
     },
     window: {
       showErrorMessage(message) {
+        if (options.errors) {
+          options.errors.push(message);
+          return undefined;
+        }
         throw new Error(message);
       },
     },
@@ -185,6 +189,43 @@ test("GaugeFormatProvider passes configured Gauge home and project environment",
       },
     },
   ]);
+});
+
+test("GaugeFormatProvider removes deprecated Gauge lines from format failures", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const errors = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn() {
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          process.nextTick(() => {
+            child.stderr.emit("data", "[DEPRECATED] old behavior\nreal error\n");
+            child.emit("exit", 1);
+          });
+          return child;
+        },
+      };
+    },
+  };
+  const provider = new GaugeFormatProvider({
+    cli,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode({ errors }),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument("# Example\n"));
+
+  assert.deepEqual(edits, []);
+  assert.deepEqual(errors, ["Error on formatting spec. real error"]);
 });
 
 test("GaugeFormatProvider ignores non-Gauge documents", async () => {
