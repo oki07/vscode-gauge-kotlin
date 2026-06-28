@@ -27,6 +27,7 @@ function createFakeVscode(overrides = {}) {
       },
       workspace: {
         workspaceFolders,
+        saveAll: overrides.saveAll,
         getConfiguration(section) {
           if (section === "gauge") {
             return {
@@ -124,6 +125,38 @@ test("execute specification uses Gradle Gauge args for Kotlin Gradle projects", 
       cwd: "/workspace",
       status: "/workspace/specs/example.spec",
     },
+  ]);
+});
+
+test("execute specification saves workspace documents before starting Gauge", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const events = [];
+  const { vscode } = createFakeVscode({
+    saveAll(includeUntitled) {
+      events.push(["saveAll", includeUntitled]);
+      return Promise.resolve(true);
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    async runner(command) {
+      events.push(["runner", command.command]);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification");
+
+  assert.deepEqual(events, [
+    ["saveAll", false],
+    ["runner", "gradle"],
   ]);
 });
 

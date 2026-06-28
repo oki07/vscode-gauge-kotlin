@@ -216,6 +216,18 @@ function hasEnvironment(env) {
   return Boolean(env && Object.keys(env).length > 0);
 }
 
+function saveWorkspaceDocuments(vscode) {
+  if (!vscode.workspace || typeof vscode.workspace.saveAll !== "function") {
+    return undefined;
+  }
+  try {
+    return Promise.resolve(vscode.workspace.saveAll(false)).catch(() => undefined);
+  } catch (_error) {
+    // Match editor runner behavior as a best-effort save before execution.
+  }
+  return undefined;
+}
+
 function getWorkspaceFolderForProject(vscode, projectRoot) {
   if (!vscode.workspace || typeof vscode.workspace.getWorkspaceFolder !== "function") {
     return undefined;
@@ -471,61 +483,66 @@ function createGaugeExecutionController(options = {}) {
       return undefined;
     }
 
-    const project = getProjectForExecution(projectFactory, projectRoot);
-    const projectKind = projectKindFromProject(project)
-      || detectProjectKind(projectRoot, fileSystem, pathModule);
-    const cli = getCli();
-    const executionTool = project ? commandFromProject(project, cli) : undefined;
-    const projectEnv = projectEnvironment(project, cli);
-    const option = executionRunOptions(
-      extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
-      flags,
-    );
-    if (spec && /:\d+$/.test(spec)) {
-      option.tags = null;
-      option.scenario = null;
-      option["retry-only"] = null;
-    }
-    const command = {
-      command: executionTool ? executionTool.command : commandForProjectKind(projectKind, options),
-      args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
-      cwd: projectRoot,
-      status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
-    };
-    if (executionTool) {
-      command.tool = executionTool;
-    }
-    if (hasEnvironment(projectEnv)) {
-      command.env = {
-        ...executionEnv,
-        ...projectEnv,
-      };
-    }
-
-    if (flags.debug) {
-      activeDebugger = debuggerFactory({
-        vscode,
-        projectRoot,
-        language: options.language || "kotlin",
-        baseEnv: command.env || executionEnv,
-        debugPortProvider: options.debugPortProvider,
-      });
-      if (typeof activeDebugger.registerStopDebugger === "function") {
-        activeDebugger.registerStopDebugger(() => {
-          stopExecution(false);
-        });
-      }
-      command.env = await activeDebugger.addDebugEnv(command.env || executionEnv);
-    }
-
     executing = true;
-    setExecutingContext(vscode, true);
-    executionStatusBar.beforeExecute(
-      command,
-      formatRunningStatus(projectRoot, command.status, pathModule),
-    );
     let result;
     try {
+      setExecutingContext(vscode, true);
+      const savePromise = saveWorkspaceDocuments(vscode);
+      if (savePromise) {
+        await savePromise;
+      }
+
+      const project = getProjectForExecution(projectFactory, projectRoot);
+      const projectKind = projectKindFromProject(project)
+        || detectProjectKind(projectRoot, fileSystem, pathModule);
+      const cli = getCli();
+      const executionTool = project ? commandFromProject(project, cli) : undefined;
+      const projectEnv = projectEnvironment(project, cli);
+      const option = executionRunOptions(
+        extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
+        flags,
+      );
+      if (spec && /:\d+$/.test(spec)) {
+        option.tags = null;
+        option.scenario = null;
+        option["retry-only"] = null;
+      }
+      const command = {
+        command: executionTool ? executionTool.command : commandForProjectKind(projectKind, options),
+        args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
+        cwd: projectRoot,
+        status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
+      };
+      if (executionTool) {
+        command.tool = executionTool;
+      }
+      if (hasEnvironment(projectEnv)) {
+        command.env = {
+          ...executionEnv,
+          ...projectEnv,
+        };
+      }
+
+      if (flags.debug) {
+        activeDebugger = debuggerFactory({
+          vscode,
+          projectRoot,
+          language: options.language || "kotlin",
+          baseEnv: command.env || executionEnv,
+          debugPortProvider: options.debugPortProvider,
+        });
+        if (typeof activeDebugger.registerStopDebugger === "function") {
+          activeDebugger.registerStopDebugger(() => {
+            stopExecution(false);
+          });
+        }
+        command.env = await activeDebugger.addDebugEnv(command.env || executionEnv);
+      }
+
+      executionStatusBar.beforeExecute(
+        command,
+        formatRunningStatus(projectRoot, command.status, pathModule),
+      );
       activeRun = runner(command);
       result = await activeRun;
       return result;
