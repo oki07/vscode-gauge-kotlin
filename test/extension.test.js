@@ -305,7 +305,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 2
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 3
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -395,7 +395,7 @@ test("activation defers CLI creation when Gauge services are not needed", () => 
   let createCliCalls = 0;
   let projectInitializerOptions;
   const context = { subscriptions: [] };
-  const { fakeVscode } = createFakeVscode();
+  const { debugProviders, fakeVscode } = createFakeVscode();
 
   class FakeProjectInitializer {
     constructor(options) {
@@ -425,6 +425,12 @@ test("activation defers CLI creation when Gauge services are not needed", () => 
 
   assert.equal(createCliCalls, 0);
   assert.equal(typeof projectInitializerOptions.createCli, "function");
+  assert.equal(debugProviders[0].type, "gauge");
+  assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
+  assert.throws(
+    () => debugProviders[0].provider.resolveDebugConfiguration(),
+    /Starting with the Gauge debug configuration is not supported/,
+  );
 
   projectInitializerOptions.createCli({ vscode: fakeVscode });
   assert.equal(createCliCalls, 1);

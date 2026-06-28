@@ -661,7 +661,6 @@ function startGaugeServices(context, vscode, options = {}) {
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerGaugeEnterHandler(context, vscode, options);
-  registerDebugConfigurationProvider(context, vscode);
   registerArgumentCodeActionProvider(context, vscode, options);
   registerDynamicArgumentCompletionProvider(context, vscode, {
     ...options,
@@ -812,6 +811,7 @@ function activate(context, vscodeApi, options = {}) {
     setTimeout: options.setTimeout,
     vscode,
   }));
+  registerDebugConfigurationProvider(context, vscode);
 
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
