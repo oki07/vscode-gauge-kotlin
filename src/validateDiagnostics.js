@@ -5,6 +5,7 @@ const nodePath = require("node:path");
 const COLLECTION_NAME = "gauge-validate";
 const GAUGE_LANGUAGE = "gauge";
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
+const WORKSPACE_GAUGE_FILE_GLOB = "**/*.{spec,md,cpt}";
 const VALIDATE_ARG = "validate";
 const VALIDATE_DIAGNOSTIC_CODE = "gauge.validate";
 const VALIDATE_DIAGNOSTIC_SOURCE = "gauge";
@@ -16,6 +17,10 @@ function getVscode(vscode) {
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function uriPath(uri) {
+  return (uri && (uri.fsPath || uri.path)) || "";
 }
 
 function isGaugeSpecDocument(document) {
@@ -270,10 +275,53 @@ class GaugeValidateDiagnosticsProvider {
     collection.set(document.uri, this.provideDiagnostics(document, cache));
   }
 
-  refreshDocuments(collection) {
+  async workspaceGaugeDocuments() {
     const workspace = this.vscode.workspace || {};
-    const cache = new Map();
+    const documents = [];
+    const seen = new Set();
+    const addDocument = (document) => {
+      const filename = documentPath(document);
+      if (!filename || seen.has(filename)) {
+        return;
+      }
+      seen.add(filename);
+      documents.push(document);
+    };
+
     for (const document of workspace.textDocuments || []) {
+      addDocument(document);
+    }
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return documents;
+    }
+
+    let uris = [];
+    try {
+      uris = await workspace.findFiles(WORKSPACE_GAUGE_FILE_GLOB);
+    } catch (_error) {
+      return documents;
+    }
+    for (const uri of uris || []) {
+      const filename = uriPath(uri);
+      if (!filename || seen.has(filename)) {
+        continue;
+      }
+      try {
+        addDocument(await workspace.openTextDocument(uri));
+      } catch (_error) {
+        // Ignore files that disappear or cannot be read during refresh.
+      }
+    }
+    return documents;
+  }
+
+  async refreshDocuments(collection) {
+    const cache = new Map();
+    const documents = await this.workspaceGaugeDocuments();
+    for (const document of documents) {
       this.updateDocument(collection, document, cache);
     }
   }

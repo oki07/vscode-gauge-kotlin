@@ -161,6 +161,86 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for markdown s
   assert.equal(diagnostics[0].message, "ParseError line number: 3, Step is malformed");
 });
 
+test("GaugeValidateDiagnosticsProvider refreshes unopened workspace specs", async () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const sets = [];
+  const spawnCalls = [];
+  const command = {
+    spawnSync(args, options) {
+      spawnCalls.push({ args, options });
+      return {
+        stdout: Buffer.from("ParseError specs/unopened.spec:3: Step is malformed"),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  const cli = {
+    gaugeCommand() {
+      return command;
+    },
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    envs() {
+      return {};
+    },
+  };
+  const uri = { fsPath: "/workspace/gauge/specs/unopened.spec" };
+  const fakeVscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [],
+      findFiles(pattern) {
+        assert.equal(pattern, "**/*.{spec,md,cpt}");
+        return Promise.resolve([uri]);
+      },
+      openTextDocument(openedUri) {
+        assert.equal(openedUri, uri);
+        return Promise.resolve(createDocument([
+          "# Example",
+          "",
+          "* malformed",
+        ].join("\n"), uri.fsPath));
+      },
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli,
+    env: { PATH: "/bin" },
+    projectFactory: {
+      getProjectByFilepath(filename) {
+        assert.equal(filename, uri.fsPath);
+        return project;
+      },
+    },
+    vscode: fakeVscode,
+  });
+
+  await provider.refreshDocuments({
+    set(targetUri, diagnostics) {
+      sets.push({ diagnostics, uri: targetUri });
+    },
+  });
+
+  assert.deepEqual(spawnCalls, [
+    {
+      args: ["validate"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: { PATH: "/bin" },
+      },
+    },
+  ]);
+  assert.equal(sets.length, 1);
+  assert.deepEqual(sets[0].uri, uri);
+  assert.equal(sets[0].diagnostics[0].message, "ParseError line number: 3, Step is malformed");
+  assert.deepEqual({ ...sets[0].diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...sets[0].diagnostics[0].range.end }, { line: 2, character: 11 });
+});
+
 test("parseGaugeValidateErrors accepts optional colon separators", () => {
   const { parseGaugeValidateErrors } = require("../src/validateDiagnostics");
 
