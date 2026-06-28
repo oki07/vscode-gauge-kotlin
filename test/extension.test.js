@@ -178,7 +178,10 @@ function createFakeVscode(overrides = {}) {
     },
     window: {
       activeTextEditor: overrides.activeTextEditor,
-      showErrorMessage() {
+      showErrorMessage(message, ...actions) {
+        if (typeof overrides.onErrorMessage === "function") {
+          return overrides.onErrorMessage(message, ...actions);
+        }
         return undefined;
       },
       showInformationMessage() {
@@ -530,6 +533,65 @@ test("format command saves and runs gauge format for the active Gauge file", asy
       options: { cwd: "/workspace/gauge" },
     },
   ]);
+});
+
+test("format command removes deprecated Gauge lines from failures", async () => {
+  const extension = require("../src/extension");
+
+  const errors = [];
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode({
+    onErrorMessage(message) {
+      errors.push(message);
+      return undefined;
+    },
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        gaugeCommand() {
+          return {
+            spawn() {
+              const child = new EventEmitter();
+              child.stdout = new EventEmitter();
+              child.stderr = new EventEmitter();
+              process.nextTick(() => {
+                child.stderr.emit("data", "[DEPRECATED] old behavior\nformat failed\n");
+                child.emit("exit", 1);
+              });
+              return child;
+            },
+          };
+        },
+      };
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filePath) {
+        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.format",
+  );
+
+  assert.ok(command);
+  fakeVscode.window.activeTextEditor = {
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      save() {
+        return Promise.resolve(true);
+      },
+    },
+  };
+
+  await command.handler();
+
+  assert.deepEqual(errors, ["Error on formatting spec. format failed"]);
 });
 
 test("create specification command provides Gauge LSP spec directories", async () => {
