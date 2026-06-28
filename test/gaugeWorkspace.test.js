@@ -280,6 +280,58 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   ]);
 });
 
+test("GaugeWorkspace exposes the project client before runner installation completes", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [],
+  });
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [],
+  }, new Command("mvn"), new Command("gradle"));
+  const workspace = new GaugeWorkspace({
+    cli,
+    clientsMap: clients,
+    fileSystem,
+    env: { PATH: "/bin" },
+    execSync() {
+      return Buffer.from("");
+    },
+    LanguageClient: FakeLanguageClient,
+    RevealOutputChannelOn: { Never: 4 },
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  let releaseInstall;
+  workspace.installRunnerFor = () => new Promise((resolve) => {
+    releaseInstall = resolve;
+  });
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await Promise.resolve();
+
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+  assert.ok(entry);
+  assert.equal(entry.project.root(), "/workspace/gauge");
+  assert.equal(entry.client.started, false);
+
+  releaseInstall();
+  const client = await start;
+  assert.equal(client.started, true);
+});
+
 test("GaugeWorkspace starts LSP clients for nested Gauge projects under a workspace folder", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

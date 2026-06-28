@@ -525,7 +525,6 @@ class GaugeWorkspace {
       return this.clientsMap.get(project.root()).client;
     }
 
-    await this.installRunnerFor(project);
     this.generateJavaConfig(project);
     const languageClient = new this.LanguageClient(
       "gauge",
@@ -534,8 +533,9 @@ class GaugeWorkspace {
       this.clientOptionsFor(project, folder),
     );
     this.clientsMap.set(project.root(), { project, client: languageClient });
-    this.registerDynamicFeatures(languageClient);
     try {
+      await this.installRunnerFor(project);
+      this.registerDynamicFeatures(languageClient);
       await languageClient.start();
     } catch (error) {
       this.clientsMap.delete(project.root());
