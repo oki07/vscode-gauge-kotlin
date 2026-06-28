@@ -35,6 +35,7 @@ const {
 const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const { GaugeTestController } = require("./testController");
+const { TerminalProvider } = require("./terminalProvider");
 const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const {
   createConcept,
@@ -761,6 +762,11 @@ function activate(context, vscodeApi, options = {}) {
     env: options.env,
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
+    vscode,
+  }));
+  const TerminalProviderCtor = options.TerminalProvider || TerminalProvider;
+  context.subscriptions.push(new TerminalProviderCtor(context, {
+    setTimeout: options.setTimeout,
     vscode,
   }));
 

@@ -17,6 +17,9 @@ const INTERNAL_EXECUTION_COMMANDS = [
   "gauge.debug",
   "gauge.execute.inParallel",
 ];
+const INTERNAL_PROVIDER_COMMANDS = [
+  "gauge.executeIn.terminal",
+];
 
 function createFakeVscode(overrides = {}) {
   const registeredCommands = [];
@@ -256,6 +259,7 @@ test("activation registers core contributed Gauge commands", () => {
     registeredCommands.map((entry) => entry.command),
     [
       "gauge.createProject",
+      ...INTERNAL_PROVIDER_COMMANDS,
       ...INTERNAL_EXECUTION_COMMANDS,
       ...manifest.contributes.commands
         .map((entry) => entry.command)
@@ -265,9 +269,25 @@ test("activation registers core contributed Gauge commands", () => {
   assert.equal(
     context.subscriptions.length,
     manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 1
-      + INTERNAL_EXECUTION_COMMANDS.length,
+      + INTERNAL_EXECUTION_COMMANDS.length
+      + INTERNAL_PROVIDER_COMMANDS.length,
   );
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
+});
+
+test("activation registers the Gauge terminal command provider", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+
+  extension.activate(context, fakeVscode);
+
+  const terminalCommand = registeredCommands.find(
+    (entry) => entry.command === "gauge.executeIn.terminal",
+  );
+
+  assert.ok(terminalCommand);
+  assert.equal(typeof terminalCommand.handler, "function");
 });
 
 test("activation registers Gauge reference providers", () => {
