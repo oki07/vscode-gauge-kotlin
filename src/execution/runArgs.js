@@ -111,6 +111,16 @@ function joinedSpecTargets(spec) {
   return specTargets(spec).join(SPEC_FILE_DELIMITER);
 }
 
+function joinedEnvironmentNames(env) {
+  if (Array.isArray(env) && env.every((entry) => typeof entry === "string")) {
+    return env.join(",");
+  }
+  if (typeof env === "string" || typeof env === "number") {
+    return `${env}`;
+  }
+  return "";
+}
+
 function buildGaugeArgs(spec, option = {}) {
   const args = ["run"];
   const launchArgs = additionalArgs(option.args);
@@ -173,8 +183,9 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
   if (tags) {
     args.push(prefixed(`tags=${tags}`));
   }
-  if (env) {
-    args.push(prefixed(`env=${env.join(",")}`));
+  const envNames = joinedEnvironmentNames(env);
+  if (envNames) {
+    args.push(prefixed(`env=${envNames}`));
   }
 
   const flags = Object.entries(rest)
