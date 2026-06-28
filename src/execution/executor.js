@@ -697,7 +697,7 @@ function createGaugeExecutionController(options = {}) {
       }
       return result;
     } finally {
-      await executionStatusBar.afterExecute(projectRoot, result === false);
+      await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
       await setExecutingContext(vscode, false);
       executing = false;
       activeRun = undefined;

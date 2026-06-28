@@ -1,0 +1,56 @@
+# Failed run status summary
+
+## Scope
+
+Keep failed Gauge executions separate from user-aborted executions so the final execution summary remains visible after normal test failures.
+
+Reference source:
+
+- `references/gauge-vscode/src/execution/gaugeExecutor.ts`
+
+Target source:
+
+- `src/execution/executor.js`
+- `test/execution/executor.test.js`
+
+## RED
+
+Command:
+
+```sh
+node --test --test-name-pattern "last execution status after failed runs" test/execution/executor.test.js
+```
+
+Result: failed as expected, 0/1 tests passed.
+
+Observed failure:
+
+- `executionStatusProvider` was not called after a runner result of `false`.
+
+## GREEN
+
+Command:
+
+```sh
+node --test --test-name-pattern "last execution status after failed runs" test/execution/executor.test.js
+```
+
+Result: passed, 1/1 tests.
+
+Related command:
+
+```sh
+node --test test/execution/executor.test.js
+```
+
+Result: passed, 39/39 tests.
+
+## Broader checks
+
+Command:
+
+```sh
+npm run check
+```
+
+Result: passed. Unit tests passed 603/603, LSP tests passed 22/22, VS Code tests passed 26/26, and package creation succeeded.

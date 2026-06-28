@@ -1373,6 +1373,46 @@ test("executor shows the last execution status in the status bar", async () => {
   assert.equal(executionStatus.showCalls, 1);
 });
 
+test("executor shows the last execution status after failed runs", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const statusRequests = [];
+  const { statusBarItems, vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionStatusProvider(projectRoot) {
+      statusRequests.push(projectRoot);
+      return Promise.resolve({
+        sceExecuted: 1,
+        sceFailed: 1,
+        scePassed: 0,
+        sceSkipped: 0,
+        specsExecuted: 1,
+        specsFailed: 1,
+        specsPassed: 0,
+        specsSkipped: 0,
+      });
+    },
+    runner() {
+      return Promise.resolve(false);
+    },
+  });
+
+  assert.equal(await controller.handleCommand("gauge.execute.specification.all"), false);
+
+  const executionStatus = statusBarItems[1];
+  assert.deepEqual(statusRequests, ["/workspace"]);
+  assert.equal(executionStatus.color, "#E73E48");
+  assert.equal(executionStatus.text, "$(check) 0  $(x) 1  $(issue-opened) 0");
+  assert.equal(executionStatus.showCalls, 1);
+});
+
 test("execute scenario at cursor runs the provider scenario and ignores launch filters", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
