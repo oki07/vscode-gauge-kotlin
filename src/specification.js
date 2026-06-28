@@ -30,30 +30,27 @@ function createGaugeSpecDirsProvider(getClientsMap, options = {}) {
 function buildSpecificationDocument(options = {}) {
   const eol = options.eol || nodeOs.EOL;
   const withHelp = options.withHelp !== false;
-  const user = options.user || defaultUser();
-  const date = options.date || defaultDate();
-  const heading = "Specification Heading";
   const lines = [
-    heading,
-    "=====================",
-    `Created by ${user} on ${date}`,
+    "# SPECIFICATION HEADING",
   ];
 
   if (withHelp) {
     lines.push(
       "",
-      "This is an executable specification file which follows markdown syntax.",
+      "This is an executable specification file. This file follows markdown syntax.",
       "Every heading in this file denotes a scenario. Every bulleted point denotes a step.",
+      "",
+      "> To turn off these comments, set the configuration`gauge.create.specification.withHelp` to false.",
     );
   }
 
-  lines.push("", "Scenario Heading", "----------------");
+  lines.push("", "## SCENARIO HEADING", "", "* step");
 
   return {
-    text: lines.join(eol),
+    text: `${lines.join(eol)}${eol}`,
     selection: {
-      start: { line: 0, character: 0 },
-      end: { line: 0, character: heading.length },
+      start: { line: lines.length - 1, character: 2 },
+      end: { line: lines.length - 1, character: 6 },
     },
   };
 }

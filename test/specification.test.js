@@ -15,20 +15,22 @@ test("buildSpecificationDocument matches the Gauge help template", () => {
   assert.equal(
     document.text,
     [
-      "Specification Heading",
-      "=====================",
-      "Created by Ada on 2026-06-26",
+      "# SPECIFICATION HEADING",
       "",
-      "This is an executable specification file which follows markdown syntax.",
+      "This is an executable specification file. This file follows markdown syntax.",
       "Every heading in this file denotes a scenario. Every bulleted point denotes a step.",
       "",
-      "Scenario Heading",
-      "----------------",
+      "> To turn off these comments, set the configuration`gauge.create.specification.withHelp` to false.",
+      "",
+      "## SCENARIO HEADING",
+      "",
+      "* step",
+      "",
     ].join("\n"),
   );
   assert.deepEqual(document.selection, {
-    start: { line: 0, character: 0 },
-    end: { line: 0, character: 21 },
+    start: { line: 9, character: 2 },
+    end: { line: 9, character: 6 },
   });
 });
 
@@ -45,17 +47,17 @@ test("buildSpecificationDocument can omit help comments", () => {
   assert.equal(
     document.text,
     [
-      "Specification Heading",
-      "=====================",
-      "Created by Ada on 2026-06-26",
+      "# SPECIFICATION HEADING",
       "",
-      "Scenario Heading",
-      "----------------",
+      "## SCENARIO HEADING",
+      "",
+      "* step",
+      "",
     ].join("\n"),
   );
   assert.deepEqual(document.selection, {
-    start: { line: 0, character: 0 },
-    end: { line: 0, character: 21 },
+    start: { line: 4, character: 2 },
+    end: { line: 4, character: 6 },
   });
 });
 
@@ -167,19 +169,19 @@ test("createSpecification writes a spec file under the workspace specs directory
   ]);
   assert.deepEqual(writes.get("/project/specs/Login.spec"), {
     content: [
-      "Specification Heading",
-      "=====================",
-      "Created by Ada on 2026-06-26",
+      "# SPECIFICATION HEADING",
       "",
-      "Scenario Heading",
-      "----------------",
+      "## SCENARIO HEADING",
+      "",
+      "* step",
+      "",
     ].join("\n"),
     encoding: "utf8",
   });
   assert.deepEqual(shownDocument, {
     document: openedDocument,
     options: {
-      selection: new Range(new Position(0, 0), new Position(0, 21)),
+      selection: new Range(new Position(4, 2), new Position(4, 6)),
     },
   });
 });
@@ -294,19 +296,19 @@ test("createSpecification asks for project and spec directory when multiple choi
   ]);
   assert.deepEqual(writes.get("/workspace/admin/features/specs/Checkout.spec"), {
     content: [
-      "Specification Heading",
-      "=====================",
-      "Created by Ada on 2026-06-26",
+      "# SPECIFICATION HEADING",
       "",
-      "Scenario Heading",
-      "----------------",
+      "## SCENARIO HEADING",
+      "",
+      "* step",
+      "",
     ].join("\n"),
     encoding: "utf8",
   });
   assert.deepEqual(shownDocument, {
     document: { filename: "/workspace/admin/features/specs/Checkout.spec" },
     options: {
-      selection: new Range(new Position(0, 0), new Position(0, 21)),
+      selection: new Range(new Position(4, 2), new Position(4, 6)),
     },
   });
 });

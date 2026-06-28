@@ -382,30 +382,16 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "table:6",
   ]);
   assert.deepEqual(snippets.Specification.body, [
-    "${1:Specification Heading}",
-    "=====================",
-    "Created by ${2:USER} on $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE",
-    "",
-    "This is an executable specification file which follows markdown syntax.",
-    "Every heading in this file denotes a scenario. Every bulleted point denotes a step.",
-    "",
-    "Scenario Heading",
-    "----------------",
+    "# ${1:SPECIFICATION_HEADING}",
     "$0",
   ]);
   assert.deepEqual(snippets.Scenario.body, [
-    "${1:Scenario Heading}",
-    "----------------",
+    "## ${1:Scenario Heading}",
     "* $0",
   ]);
   assert.deepEqual(snippets.Concept.body, [
-    "Created by ${1:USER} on $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE",
-    "",
-    "This is a concept file with following syntax for each concept.",
-    "# ${2:Concept Heading}",
-    "* step1",
-    "* step2",
-    "$0",
+    "# ${1:Concept Heading}",
+    "* $0",
   ]);
   assert.deepEqual(snippets["Table with two columns"].body, [
     "|${1:HEADER}|${2:HEADER}|",
