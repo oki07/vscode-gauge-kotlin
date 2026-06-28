@@ -1,10 +1,10 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-function createDocument(text, fsPath = "/workspace/specs/example.spec") {
+function createDocument(text, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
   const lines = text.split("\n");
   return {
-    languageId: "gauge",
+    languageId,
     uri: { fsPath },
     fileName: fsPath,
     lineAt(line) {
@@ -66,6 +66,77 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
       flags: { "hide-suggestion": true, "machine-readable": true },
     },
   ]);
+});
+
+test("GaugeCodeLensProvider adds lenses for Markdown Gauge specifications", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/specs/example.md");
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace");
+        return true;
+      },
+    },
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Open cart",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"), "/workspace/specs/example.md", "markdown");
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    title: lens.command.title,
+    argument: lens.command.arguments[0],
+  })), [
+    {
+      line: 0,
+      title: "Run Specification",
+      argument: "/workspace/specs/example.md",
+    },
+    {
+      line: 0,
+      title: "Debug Specification",
+      argument: "/workspace/specs/example.md",
+    },
+    {
+      line: 3,
+      title: "Run Scenario",
+      argument: "/workspace/specs/example.md:4",
+    },
+    {
+      line: 3,
+      title: "Debug Scenario",
+      argument: "/workspace/specs/example.md:4",
+    },
+  ]);
+});
+
+test("GaugeCodeLensProvider ignores Markdown files outside Gauge projects", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/readme.md");
+        throw new Error("not a Gauge project");
+      },
+    },
+  });
+  const document = createDocument([
+    "# Notes",
+    "",
+    "## Draft",
+  ].join("\n"), "/workspace/readme.md", "markdown");
+
+  assert.deepEqual(provider.provideCodeLenses(document), []);
 });
 
 test("GaugeCodeLensProvider ignores non-Gauge markdown subheadings", () => {

@@ -311,7 +311,10 @@ function registerCodeLensProvider(context, vscode, options) {
     projectFactory: options.projectFactory,
   });
   const disposable = vscode.languages.registerCodeLensProvider(
-    { language: "gauge" },
+    [
+      { language: "gauge" },
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+    ],
     provider,
   );
   if (disposable) {

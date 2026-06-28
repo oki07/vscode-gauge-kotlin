@@ -7,6 +7,9 @@ const {
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
+const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_EXTENSION = ".md";
 const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
@@ -23,6 +26,14 @@ function documentPath(document) {
 
 function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
+function isMarkdownSpecDocument(document, file) {
+  return Boolean(
+    document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && file.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+  );
 }
 
 function documentLine(document, line) {
@@ -166,11 +177,16 @@ class GaugeCodeLensProvider {
   }
 
   provideCodeLenses(document) {
-    if (!document || document.languageId !== "gauge" || isConceptDocument(document)) {
+    if (!document || isConceptDocument(document)) {
       return [];
     }
     const file = documentPath(document);
     if (!file) {
+      return [];
+    }
+    const supportedDocument = document.languageId === GAUGE_LANGUAGE
+      || isMarkdownSpecDocument(document, file);
+    if (!supportedDocument) {
       return [];
     }
     if (!this.isGaugeProjectDocument(document)) {
