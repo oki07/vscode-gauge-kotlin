@@ -947,6 +947,46 @@ test("executor treats debugger attach cancellation as a non-user abort", async (
   assert.deepEqual(cancelCalls, [false]);
 });
 
+test("executor routes Gauge machine-readable output to the execution event sink", () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const events = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionEventSink(event) {
+      events.push(event);
+    },
+    runner() {
+      return Promise.resolve(true);
+    },
+  });
+
+  controller.processOutputLine(`${JSON.stringify({
+    type: "specStart",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 1,
+  })}\n`);
+
+  assert.deepEqual(events, [
+    {
+      type: "suiteStarted",
+      id: "/workspace/specs/example.spec",
+      parentId: "suite",
+      name: "Checkout",
+      location: "gauge:///workspace/specs/example.spec:1",
+    },
+  ]);
+});
+
 test("executor shows the last execution status in the status bar", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const statusRequests = [];

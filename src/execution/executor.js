@@ -6,6 +6,7 @@ const { createGaugeDebugger } = require("./debug");
 const {
   DebuggerAttachedEventProcessor,
   DebuggerNotAttachedEventProcessor,
+  MachineReadableEventProcessor,
   ReportEventProcessor,
 } = require("./lineProcessors");
 const { createGaugeProcessRunner } = require("./processRunner");
@@ -659,6 +660,7 @@ function createGaugeExecutionController(options = {}) {
   }
 
   lineProcessors = [
+    new MachineReadableEventProcessor(options.executionEventSink),
     new ReportEventProcessor({ setReportPath }),
     new DebuggerAttachedEventProcessor({ cancel: stopExecution }, vscode),
     new DebuggerNotAttachedEventProcessor({ cancel: stopExecution }, vscode),
