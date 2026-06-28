@@ -121,7 +121,7 @@ function stringLiteralRanges(text, start, end) {
   return ranges;
 }
 
-function aliasAtOffset(entry, text, offset) {
+function aliasValuesAtOffset(entry, text, offset) {
   if (
     entry.annotationStart !== undefined
     && entry.annotationEnd !== undefined
@@ -132,14 +132,64 @@ function aliasAtOffset(entry, text, offset) {
     const rangeIndex = ranges.findIndex((range) => offset >= range.start && offset <= range.end);
     if (rangeIndex !== -1) {
       if (entry.aliases.length === 1) {
-        return entry.aliases[0];
+        return [entry.aliases[0]];
       }
       if (ranges.length === entry.aliases.length && entry.aliases[rangeIndex] !== undefined) {
-        return entry.aliases[rangeIndex];
+        return [entry.aliases[rangeIndex]];
       }
     }
   }
-  return entry.aliases[0];
+  return entry.aliases;
+}
+
+function uniqueValues(values) {
+  const result = [];
+  const seen = new Set();
+  for (const value of values || []) {
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
+}
+
+function valuesForStep(stepValue) {
+  return Array.isArray(stepValue) ? uniqueValues(stepValue) : uniqueValues([stepValue]);
+}
+
+function locationKey(location) {
+  const uri = location && location.uri;
+  const uriText = typeof uri === "string"
+    ? uri
+    : uri && typeof uri.toString === "function"
+      ? uri.toString()
+      : uri && uri.fsPath;
+  const range = (location && location.range) || {};
+  const start = range.start || {};
+  const end = range.end || {};
+  return [
+    uriText || "",
+    start.line,
+    start.character,
+    end.line,
+    end.character,
+  ].join(":");
+}
+
+function uniqueLocations(locations) {
+  const result = [];
+  const seen = new Set();
+  for (const location of locations || []) {
+    const key = locationKey(location);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(location);
+  }
+  return result;
 }
 
 function hasLocations(locations) {
@@ -250,7 +300,7 @@ class ReferenceProvider {
 
   showStepReferences(uri, position, stepValue) {
     const languageClient = this.languageClientForUri(this.vscode.Uri.parse(uri));
-    return this.referenceLocationsForStep(languageClient, stepValue, { requestEmpty: true })
+    return this.referenceLocationsForStepValues(languageClient, stepValue, { requestEmpty: true })
       .then((locations) => this.showReferences(locations, uri, languageClient, position));
   }
 
@@ -263,20 +313,20 @@ class ReferenceProvider {
     const params = { textDocument: documentId, position };
 
     if (!languageClient || typeof languageClient.sendRequest !== "function") {
-      return this.localStepValueAt(editor.document, position)
-        .then((stepValue) => this.showStepReferences(documentId.uri, position, stepValue));
+      return this.localStepValuesAt(editor.document, position)
+        .then((stepValues) => this.showStepReferences(documentId.uri, position, stepValues));
     }
 
     return languageClient
       .sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode))
       .then(async (stepValue) => {
-        const localStepValue = stepValue
+        const localStepValues = stepValue
           ? undefined
-          : await this.localStepValueAt(editor.document, position);
+          : await this.localStepValuesAt(editor.document, position);
         return this.showStepReferences(
           documentId.uri,
           position,
-          stepValue || localStepValue || stepValue,
+          stepValue || (localStepValues && localStepValues.length > 0 ? localStepValues : stepValue),
         );
       });
   }
@@ -317,6 +367,27 @@ class ReferenceProvider {
     return hasLocations(locations) ? locations : this.localStepReferences(stepValue);
   }
 
+  async referenceLocationsForStepValues(languageClient, stepValue, options = {}) {
+    const stepValues = valuesForStep(stepValue);
+    if (stepValues.length === 0) {
+      if (Array.isArray(stepValue)) {
+        return options.requestEmpty
+          ? this.referenceLocationsForStep(languageClient, undefined, options)
+          : undefined;
+      }
+      return this.referenceLocationsForStep(languageClient, stepValue, options);
+    }
+
+    const locations = [];
+    for (const value of stepValues) {
+      const valueLocations = await this.referenceLocationsForStep(languageClient, value, options);
+      if (hasLocations(valueLocations)) {
+        locations.push(...valueLocations);
+      }
+    }
+    return locations.length > 0 ? uniqueLocations(locations) : undefined;
+  }
+
   convertLocations(locations, languageClient) {
     if (!hasLocations(locations)) {
       return [];
@@ -332,17 +403,22 @@ class ReferenceProvider {
   }
 
   async stepValueAt(document, position, languageClient) {
+    const stepValues = await this.stepValuesAt(document, position, languageClient);
+    return stepValues[0];
+  }
+
+  async stepValuesAt(document, position, languageClient) {
     if (!document || !position) {
-      return undefined;
+      return [];
     }
     if (isKotlinDocument(document)) {
-      return this.kotlinStepValueAt(document, position);
+      return this.kotlinStepValuesAt(document, position);
     }
     if (document.languageId !== GAUGE_LANGUAGE) {
-      return undefined;
+      return [];
     }
     if (!languageClient || typeof languageClient.sendRequest !== "function") {
-      return stepTextAt(document, position);
+      return valuesForStep(stepTextAt(document, position));
     }
     const params = {
       textDocument: textDocumentIdentifier(documentUri(document)),
@@ -353,26 +429,31 @@ class ReferenceProvider {
       params,
       createCancellationToken(this.vscode),
     );
-    return stepValue || stepTextAt(document, position);
+    return valuesForStep(stepValue || stepTextAt(document, position));
   }
 
   async localStepValueAt(document, position) {
+    const stepValues = await this.localStepValuesAt(document, position);
+    return stepValues[0];
+  }
+
+  async localStepValuesAt(document, position) {
     if (!document || !position) {
-      return undefined;
+      return [];
     }
     if (isKotlinDocument(document)) {
-      return this.kotlinStepValueAt(document, position);
+      return this.kotlinStepValuesAt(document, position);
     }
     if (document.languageId === GAUGE_LANGUAGE) {
-      return stepTextAt(document, position);
+      return valuesForStep(stepTextAt(document, position));
     }
-    return undefined;
+    return [];
   }
 
   async provideReferences(document, position) {
     const languageClient = this.languageClientForUri(document && document.uri);
-    const stepValue = await this.stepValueAt(document, position, languageClient);
-    const locations = await this.referenceLocationsForStep(languageClient, stepValue);
+    const stepValues = await this.stepValuesAt(document, position, languageClient);
+    const locations = await this.referenceLocationsForStepValues(languageClient, stepValues);
     return this.convertLocations(locations, languageClient);
   }
 
@@ -486,13 +567,18 @@ class ReferenceProvider {
   }
 
   async kotlinStepValueAt(document, position) {
+    const stepValues = await this.kotlinStepValuesAt(document, position);
+    return stepValues[0];
+  }
+
+  async kotlinStepValuesAt(document, position) {
     if (
       !document
       || !isKotlinDocument(document)
       || typeof document.getText !== "function"
       || !position
     ) {
-      return undefined;
+      return [];
     }
 
     const text = document.getText();
@@ -505,10 +591,10 @@ class ReferenceProvider {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset >= start && offset <= end) {
-        return aliasAtOffset(entry, text, offset);
+        return uniqueValues(aliasValuesAtOffset(entry, text, offset));
       }
     }
-    return undefined;
+    return [];
   }
 
   async gaugeDocuments() {

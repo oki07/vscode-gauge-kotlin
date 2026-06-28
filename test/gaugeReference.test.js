@@ -502,6 +502,92 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
   ]);
 });
 
+test("ReferenceProvider provides local references for every Kotlin Step alias at declarations", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\", \"Greet <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const firstSpecDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/hello.spec",
+      toString() {
+        return "file:///workspace/specs/hello.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Hello",
+        "",
+        "## Scenario",
+        "* Say hello to \"alice\"",
+      ].join("\n");
+    },
+  };
+  const secondSpecDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/greet.spec",
+      toString() {
+        return "file:///workspace/specs/greet.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Greet",
+        "",
+        "## Scenario",
+        "* Greet \"bob\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 3, character: 5 },
+    workspace: {
+      textDocuments: [activeDocument, firstSpecDocument, secondSpecDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(
+    activeDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/specs/hello.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 22 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/greet.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 13 },
+      },
+    },
+  ]);
+});
+
 test("ReferenceProvider provides local references from Gauge step cursor without LSP", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
