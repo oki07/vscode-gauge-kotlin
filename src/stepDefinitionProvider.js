@@ -6,13 +6,6 @@ const {
   isKotlinDocument,
   positionAt,
 } = require("./stepDiagnostics");
-const { createDefinitionTrace, NULL_TRACE } = require("./definitionTrace");
-
-function describeDocument(candidate) {
-  const file = candidate && candidate.uri && candidate.uri.fsPath;
-  const languageId = candidate && candidate.languageId;
-  return `${file || "<no-path>"} (languageId=${languageId})`;
-}
 
 const GAUGE_LANGUAGE = "gauge";
 
@@ -209,10 +202,6 @@ function documentPath(document) {
   return document && document.uri && document.uri.fsPath;
 }
 
-function uriPath(uri) {
-  return uri && uri.fsPath;
-}
-
 function targetRange(vscode, text, entry) {
   const startOffset = entry.declarationStart !== undefined
     ? entry.declarationStart
@@ -241,13 +230,12 @@ class GaugeStepDefinitionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
-  async findWorkspaceKotlinDocuments(trace = NULL_TRACE) {
+  async findWorkspaceKotlinDocuments() {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
       || typeof workspace.openTextDocument !== "function"
     ) {
-      trace.log(`findWorkspaceKotlinDocuments: workspace.findFiles=${typeof workspace.findFiles} openTextDocument=${typeof workspace.openTextDocument}`);
       return [];
     }
 
@@ -256,84 +244,60 @@ class GaugeStepDefinitionProvider {
     try {
       uris = await workspace.findFiles("**/*.kt");
     } catch (error) {
-      trace.log(`findFiles("**/*.kt") threw: ${error && error.message ? error.message : error}`);
       return documents;
     }
-    trace.log(`findFiles("**/*.kt") returned ${(uris || []).length} uri(s)`);
     for (const uri of uris || []) {
       try {
         const document = await workspace.openTextDocument(uri);
         documents.push(document);
       } catch (error) {
         // Ignore unreadable files so one stale workspace URI does not block navigation.
-        trace.log(`openTextDocument failed for ${uri && uri.fsPath}: ${error && error.message ? error.message : error}`);
       }
     }
     return documents;
   }
 
-  async kotlinDocumentGroups(sourceDocument, trace = NULL_TRACE) {
+  async kotlinDocumentGroups(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const projectDocuments = [];
     const externalDocuments = [];
     const seenPaths = new Set();
-    let rejected = 0;
-    const reject = (reason, candidate) => {
-      rejected += 1;
-      if (trace.enabled && reason !== "duplicate") {
-        trace.log(`  reject [${reason}] ${describeDocument(candidate)}`);
-      }
-    };
     const addDocument = (candidate) => {
       if (!candidate) {
-        reject("null", candidate);
         return;
       }
       if (sameDocument(candidate, sourceDocument)) {
-        reject("source-document", candidate);
         return;
       }
       if (!isKotlinDocument(candidate)) {
-        reject("not-kotlin", candidate);
         return;
       }
       if (typeof candidate.getText !== "function") {
-        reject("no-getText", candidate);
         return;
       }
       const file = documentPath(candidate);
       if (file) {
         if (seenPaths.has(file)) {
-          reject("duplicate", candidate);
           return;
         }
         seenPaths.add(file);
       } else if (projectDocuments.includes(candidate) || externalDocuments.includes(candidate)) {
-        reject("duplicate", candidate);
         return;
       }
       if (this.isGaugeProjectDocument(candidate)) {
         projectDocuments.push(candidate);
-        if (trace.enabled) {
-          trace.log(`  accept [project]  ${describeDocument(candidate)}`);
-        }
       } else {
         externalDocuments.push(candidate);
-        if (trace.enabled) {
-          trace.log(`  accept [external] ${describeDocument(candidate)}`);
-        }
       }
     };
 
     const openDocuments = workspace.textDocuments || [];
-    trace.log(`open textDocuments: ${openDocuments.length}`);
     for (const candidate of openDocuments) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceKotlinDocuments(trace)) {
+    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
       addDocument(candidate);
     }
-    trace.log(`kotlin groups: project=${projectDocuments.length} external=${externalDocuments.length} rejected=${rejected}`);
     return { externalDocuments, projectDocuments };
   }
 
@@ -350,7 +314,7 @@ class GaugeStepDefinitionProvider {
     return diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
   }
 
-  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}, trace = NULL_TRACE) {
+  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}) {
     const wantedSteps = Array.isArray(wantedStep) ? wantedStep : [wantedStep];
     const wantedStepSet = new Set(wantedSteps);
     const definitions = [];
@@ -362,98 +326,48 @@ class GaugeStepDefinitionProvider {
       } catch (error) {
         // Never let workspace-constant collection abort navigation: plain
         // @Step("literal") matching still works without resolved constants.
-        if (trace.enabled) {
-          trace.log(`  collectWorkspaceConstants threw for ${documentPath(candidate)}: ${error && error.message ? error.message : error}`);
-        }
         externalConstants = undefined;
       }
       const stepFunctions = findStepFunctions(text, externalConstants);
-      let matched = 0;
-      const aliasesSeen = [];
       for (const entry of stepFunctions) {
         const normalizedAliases = entry.aliases.map((alias) => normalizeStepTemplate(alias));
-        if (trace.enabled) {
-          aliasesSeen.push(...normalizedAliases);
-        }
         if (!normalizedAliases.some((alias) => wantedStepSet.has(alias))) {
           continue;
         }
-        matched += 1;
         definitions.push(createLocation(
           this.vscode,
           candidate.uri,
           targetRange(this.vscode, text, entry),
         ));
       }
-      if (trace.enabled) {
-        trace.log(`  ${documentPath(candidate)}: @Step functions=${stepFunctions.length} matched=${matched}`);
-        if (matched === 0 && aliasesSeen.length > 0) {
-          trace.log(`     available aliases (${aliasesSeen.length}): ${JSON.stringify(aliasesSeen.slice(0, 40))}`);
-          const collapse = (value) => value.replace(/\s+/g, " ").trim();
-          const wantedCollapsed = new Set(wantedSteps.map((step) => collapse(step)));
-          const whitespaceOnly = aliasesSeen.filter((alias) => !wantedStepSet.has(alias) && wantedCollapsed.has(collapse(alias)));
-          if (whitespaceOnly.length > 0) {
-            trace.log(`     NEAR-MISS (whitespace only): ${JSON.stringify(whitespaceOnly)} vs wanted ${JSON.stringify(wantedSteps)}`);
-          }
-        }
-      }
     }
     return definitions;
   }
 
   async provideDefinition(document, position) {
-    const trace = createDefinitionTrace(this.vscode);
-    try {
-      const wantedSteps = stepTextCandidatesAt(document, position);
-      const gaugeProject = this.isGaugeProjectDocument(document);
-      if (trace.enabled) {
-        trace.log("provideDefinition called");
-        trace.log(`  file=${document && document.uri && document.uri.fsPath}`);
-        trace.log(`  languageId=${document && document.languageId} position=${position && position.line}:${position && position.character}`);
-        trace.log(`  line=${JSON.stringify(documentLine(document, position && position.line))}`);
-        trace.log(`  wantedStep=${JSON.stringify(wantedSteps[0])}`);
-        if (wantedSteps.length > 1) {
-          trace.log(`  wantedStepCandidates=${JSON.stringify(wantedSteps)}`);
-        }
-        trace.log(`  isGaugeProjectDocument=${gaugeProject}`);
-      }
-      if (wantedSteps.length === 0 || !gaugeProject) {
-        trace.log("  -> returning [] (no step text or not a Gauge project)");
-        return [];
-      }
-
-      const {
-        externalDocuments,
-        projectDocuments,
-      } = await this.kotlinDocumentGroups(document, trace);
-      trace.log("project group matches:");
-      const projectDefinitions = this.definitionsForDocuments(
-        wantedSteps,
-        projectDocuments,
-        projectDocuments,
-        {},
-        trace,
-      );
-      if (projectDefinitions.length > 0) {
-        trace.log(`  -> ${projectDefinitions.length} definition(s) from project group`);
-        return projectDefinitions;
-      }
-      trace.log("external group matches:");
-      const externalDefinitions = this.definitionsForDocuments(
-        wantedSteps,
-        externalDocuments,
-        [...projectDocuments, ...externalDocuments],
-        { includeExternalWorkspace: true },
-        trace,
-      );
-      trace.log(`  -> ${externalDefinitions.length} definition(s) from external group`);
-      return externalDefinitions;
-    } catch (error) {
-      trace.log(`  !! threw: ${error && error.stack ? error.stack : error}`);
-      throw error;
-    } finally {
-      trace.flush();
+    const wantedSteps = stepTextCandidatesAt(document, position);
+    if (wantedSteps.length === 0 || !this.isGaugeProjectDocument(document)) {
+      return [];
     }
+
+    const {
+      externalDocuments,
+      projectDocuments,
+    } = await this.kotlinDocumentGroups(document);
+    const projectDefinitions = this.definitionsForDocuments(
+      wantedSteps,
+      projectDocuments,
+      projectDocuments,
+    );
+    if (projectDefinitions.length > 0) {
+      return projectDefinitions;
+    }
+    return this.definitionsForDocuments(
+      wantedSteps,
+      externalDocuments,
+      [...projectDocuments, ...externalDocuments],
+      { includeExternalWorkspace: true },
+    );
   }
 
   register() {
@@ -464,9 +378,6 @@ class GaugeStepDefinitionProvider {
       { language: GAUGE_LANGUAGE },
       this,
     );
-    const trace = createDefinitionTrace(this.vscode);
-    trace.log(`definition provider registered for language "${GAUGE_LANGUAGE}"`);
-    trace.flush({ reveal: false });
     return disposable;
   }
 }

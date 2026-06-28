@@ -385,7 +385,7 @@ test("GaugeStepDefinitionProvider resolves concept steps when Kotlin files open 
   );
 });
 
-test("GaugeStepDefinitionProvider writes a measured trace to the output channel", async () => {
+test("GaugeStepDefinitionProvider does not write definition trace output", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([
     "# Shared login",
@@ -401,17 +401,16 @@ test("GaugeStepDefinitionProvider writes a measured trace to the output channel"
     "  fun login(user: String) {}",
     "}",
   ].join("\n"), "plaintext", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
-  const appended = [];
+  const outputChannelNames = [];
   const vscode = createFakeVscode([conceptDocument], {
     findFiles: async () => [kotlinDocument.uri],
     openTextDocument: async () => kotlinDocument,
   });
   vscode.window = {
-    createOutputChannel() {
+    createOutputChannel(name) {
+      outputChannelNames.push(name);
       return {
-        appendLine(message) {
-          appended.push(message);
-        },
+        appendLine() {},
         show() {},
         clear() {},
       };
@@ -425,12 +424,7 @@ test("GaugeStepDefinitionProvider writes a measured trace to the output channel"
   const definitions = await provider.provideDefinition(conceptDocument, { line: 1, character: 5 });
 
   assert.equal(definitions.length, 1);
-  assert.ok(appended.some((line) => line.includes("provideDefinition called")));
-  assert.ok(appended.some((line) => line.includes("languageId=gauge")));
-  assert.ok(appended.some((line) => line.includes("wantedStep=\"Log in as {}\"")));
-  assert.ok(appended.some((line) => line.includes("findFiles(\"**/*.kt\") returned 1")));
-  assert.ok(appended.some((line) => line.includes("@Step functions=1 matched=1")));
-  assert.ok(appended.some((line) => line.includes("1 definition(s) from project group")));
+  assert.deepEqual(outputChannelNames, []);
 });
 
 test("GaugeStepDefinitionProvider resolves steps when workspace exposes a throwing proposed-API getter", async () => {
