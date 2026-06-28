@@ -2,12 +2,15 @@
 
 class GaugeClients extends Map {
   get(fsPath) {
+    let nearest;
     for (const projectClient of this.values()) {
       if (projectClient.project.hasFile(fsPath)) {
-        return projectClient;
+        if (!nearest || projectClient.project.root().length > nearest.project.root().length) {
+          nearest = projectClient;
+        }
       }
     }
-    return undefined;
+    return nearest;
   }
 }
 
