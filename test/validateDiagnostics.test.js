@@ -161,6 +161,46 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for markdown s
   assert.equal(diagnostics[0].message, "ParseError line number: 3, Step is malformed");
 });
 
+test("GaugeValidateDiagnosticsProvider trims validation ranges to line content", () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const command = {
+    spawnSync() {
+      return {
+        stdout: Buffer.from("ParseError /workspace/gauge/specs/example.spec:3: Step is malformed"),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return command;
+      },
+    },
+    projectFactory: {
+      getProjectByFilepath() {
+        return {
+          root() {
+            return "/workspace/gauge";
+          },
+        };
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Example",
+    "",
+    "  * malformed  ",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 2 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 13 });
+});
+
 test("GaugeValidateDiagnosticsProvider refreshes unopened workspace specs", async () => {
   const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
 

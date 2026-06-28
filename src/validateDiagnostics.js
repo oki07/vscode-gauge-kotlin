@@ -145,10 +145,22 @@ function documentLineText(document, line) {
 function diagnosticRange(vscode, document, lineNumber) {
   const line = Math.max(0, lineNumber - 1);
   const text = documentLineText(document, line);
+  const startCharacter = text.search(/\S/);
+  if (startCharacter === -1) {
+    return createRange(
+      vscode,
+      { line, character: 0 },
+      { line, character: text.length },
+    );
+  }
+  let endCharacter = text.length;
+  while (endCharacter > startCharacter && /\s/.test(text[endCharacter - 1])) {
+    endCharacter -= 1;
+  }
   return createRange(
     vscode,
-    { line, character: 0 },
-    { line, character: text.length },
+    { line, character: startCharacter },
+    { line, character: endCharacter },
   );
 }
 
