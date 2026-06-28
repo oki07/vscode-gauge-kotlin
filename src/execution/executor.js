@@ -50,6 +50,14 @@ const EXECUTION_COMMANDS = new Set([
   "gauge.execute.scenarios",
   "gauge.report.html",
 ]);
+const EXECUTION_TEST_EVENT_TYPES = new Set([
+  "suiteStarted",
+  "suiteFinished",
+  "testFailed",
+  "testFinished",
+  "testIgnored",
+  "testStarted",
+]);
 
 function createToken(vscode) {
   if (typeof vscode.CancellationTokenSource === "function") {
@@ -454,6 +462,44 @@ function executionRunOptions(launchOptions, flags = {}) {
   return option;
 }
 
+function isExecutionTestEvent(event) {
+  return Boolean(event && EXECUTION_TEST_EVENT_TYPES.has(event.type));
+}
+
+function unexpectedEndEvents(passed) {
+  const name = passed ? "Ignored" : "Failed";
+  const resultEvent = passed
+    ? {
+      type: "testIgnored",
+      id: name,
+      parentId: "suite",
+      name,
+      message: " ",
+    }
+    : {
+      type: "testFailed",
+      id: name,
+      parentId: "suite",
+      name,
+      message: " ",
+    };
+  return [
+    {
+      type: "testStarted",
+      id: name,
+      parentId: "suite",
+      name,
+    },
+    resultEvent,
+    {
+      type: "testFinished",
+      id: name,
+      parentId: "suite",
+      name,
+    },
+  ];
+}
+
 function getScenarioSpecPath(executionIdentifier) {
   if (!/:\d+$/.test(executionIdentifier)) {
     return executionIdentifier;
@@ -511,6 +557,8 @@ function createGaugeExecutionController(options = {}) {
   let executing = false;
   let activeRun;
   let activeDebugger;
+  let activeRunUserAborted = false;
+  let sawExecutionTestEvent = false;
   let cachedCli;
 
   function setReportPath(nextReportPath) {
@@ -534,6 +582,21 @@ function createGaugeExecutionController(options = {}) {
   }
 
   let lineProcessors;
+
+  function emitExecutionEvent(event) {
+    if (isExecutionTestEvent(event)) {
+      sawExecutionTestEvent = true;
+    }
+    if (typeof options.executionEventSink === "function") {
+      options.executionEventSink(event);
+    }
+  }
+
+  function emitUnexpectedEndEvents(passed) {
+    for (const event of unexpectedEndEvents(passed)) {
+      emitExecutionEvent(event);
+    }
+  }
 
   function processOutputLine(lineText) {
     for (const processor of lineProcessors) {
@@ -559,6 +622,8 @@ function createGaugeExecutionController(options = {}) {
     }
 
     executing = true;
+    activeRunUserAborted = false;
+    sawExecutionTestEvent = false;
     let result;
     try {
       setExecutingContext(vscode, true);
@@ -627,6 +692,9 @@ function createGaugeExecutionController(options = {}) {
       );
       activeRun = runner(command);
       result = await activeRun;
+      if (option["machine-readable"] && !sawExecutionTestEvent && !activeRunUserAborted) {
+        emitUnexpectedEndEvents(result === true);
+      }
       return result;
     } finally {
       await executionStatusBar.afterExecute(projectRoot, result === false);
@@ -634,6 +702,7 @@ function createGaugeExecutionController(options = {}) {
       executing = false;
       activeRun = undefined;
       activeDebugger = undefined;
+      activeRunUserAborted = false;
     }
   }
 
@@ -814,6 +883,7 @@ function createGaugeExecutionController(options = {}) {
   async function stopExecution(aborted = true) {
     if (activeRun && typeof activeRun.cancel === "function") {
       try {
+        activeRunUserAborted = Boolean(aborted);
         if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
           activeDebugger.stopDebugger();
         }
@@ -828,7 +898,7 @@ function createGaugeExecutionController(options = {}) {
   }
 
   lineProcessors = [
-    new MachineReadableEventProcessor(options.executionEventSink),
+    new MachineReadableEventProcessor(emitExecutionEvent),
     new ReportEventProcessor({ setReportPath }),
     new DebuggerAttachedEventProcessor({ cancel: stopExecution }, vscode),
     new DebuggerNotAttachedEventProcessor({ cancel: stopExecution }, vscode),

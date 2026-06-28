@@ -1279,6 +1279,54 @@ test("executor routes Gauge machine-readable output to the execution event sink"
   ]);
 });
 
+test("machine-readable Test UI run emits synthetic failed event when Gauge exits before test events", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const events = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionEventSink(event) {
+      events.push(event);
+    },
+    async runner() {
+      return false;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all", undefined, {
+    "machine-readable": true,
+  });
+
+  assert.deepEqual(events, [
+    {
+      type: "testStarted",
+      id: "Failed",
+      parentId: "suite",
+      name: "Failed",
+    },
+    {
+      type: "testFailed",
+      id: "Failed",
+      parentId: "suite",
+      name: "Failed",
+      message: " ",
+    },
+    {
+      type: "testFinished",
+      id: "Failed",
+      parentId: "suite",
+      name: "Failed",
+    },
+  ]);
+});
+
 test("executor shows the last execution status in the status bar", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const statusRequests = [];
