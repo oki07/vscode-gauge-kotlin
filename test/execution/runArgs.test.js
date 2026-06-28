@@ -57,6 +57,23 @@ test("buildRunArgs.forGauge appends launch args before the spec target", () => {
   );
 });
 
+test("buildRunArgs.forGauge appends multiple spec targets", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge(["a.spec", "features"], { tags: "smoke" }),
+    [
+      "run",
+      "--hide-suggestion",
+      "--simple-console",
+      "--tags",
+      "smoke",
+      "a.spec",
+      "features",
+    ],
+  );
+});
+
 test("buildRunArgs.forGauge omits simple-console when parallel flag is set", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -135,6 +152,15 @@ test("buildRunArgs.forGradle forwards launch args through additionalFlags", () =
   );
 });
 
+test("buildRunArgs.forGradle joins multiple spec targets with the Gauge delimiter", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle(["specs/a.spec", "specs/features"], { tags: "smoke" }).join(" "),
+    "clean gauge -Ptags=smoke -PadditionalFlags=--hide-suggestion --simple-console -PspecsDir=specs/a.spec||specs/features",
+  );
+});
+
 test("buildRunArgs.forGradle allows default flags to be unset", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -201,6 +227,15 @@ test("buildRunArgs.forMaven forwards launch args through flags", () => {
       args: ["--custom", "value"],
     }).join(" "),
     "-q clean compile test-compile gauge:execute -Dflags=--hide-suggestion,--simple-console,--custom,value -DspecsDir=my.spec",
+  );
+});
+
+test("buildRunArgs.forMaven joins multiple spec targets with the Gauge delimiter", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven(["specs/a.spec", "specs/features"], { tags: "smoke" }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dtags=smoke -Dflags=--hide-suggestion,--simple-console -DspecsDir=specs/a.spec||specs/features",
   );
 });
 

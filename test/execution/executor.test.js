@@ -378,6 +378,80 @@ test("execute specification uses the project execution Command object", async ()
   ]);
 });
 
+test("execute specification runs Explorer selected spec files and directories", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const directories = new Set([
+    "/workspace/specs/features",
+  ]);
+  const files = new Set([
+    "/workspace/specs/a.spec",
+    "/workspace/specs/features/b.spec",
+  ]);
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", tags: "smoke" },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || directories.has(filename)
+          || files.has(filename);
+      },
+      readdirSync(filename) {
+        if (filename === "/workspace/specs/features") {
+          return ["b.spec"];
+        }
+        return [];
+      },
+      statSync(filename) {
+        return {
+          isDirectory() {
+            return directories.has(filename);
+          },
+        };
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand(
+    "gauge.execute.specification",
+    { fsPath: "/workspace/specs/a.spec" },
+    [
+      { fsPath: "/workspace/specs/a.spec" },
+      { fsPath: "/workspace/specs/features" },
+      { fsPath: "/workspace/notes.txt" },
+    ],
+  );
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "--tags",
+        "smoke",
+        "/workspace/specs/a.spec",
+        "/workspace/specs/features",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/Specifications",
+    },
+  ]);
+});
+
 test("execute specification uses Maven args when Maven and Gradle files coexist", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

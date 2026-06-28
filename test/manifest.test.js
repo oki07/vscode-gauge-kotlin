@@ -138,6 +138,11 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       when: "gauge:activated && explorerResourceIsFolder",
       group: "gauge@2",
     },
+    {
+      command: "gauge.execute.specification",
+      when: "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec || resourceExtname == .md)",
+      group: "gauge@3",
+    },
   ]);
 
   const configuration = manifest.contributes.configuration.properties;

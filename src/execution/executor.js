@@ -194,6 +194,67 @@ function getProjectForExecution(projectFactory, projectRoot) {
   }
 }
 
+function resourcePath(resource) {
+  if (typeof resource === "string") {
+    return resource;
+  }
+  if (!resource || typeof resource !== "object") {
+    return undefined;
+  }
+  if (resource.executionIdentifier || resource.file) {
+    return undefined;
+  }
+  return resource.fsPath || resource.path;
+}
+
+function isSpecPath(filename, pathModule) {
+  return Boolean(filename && SPEC_EXTENSIONS.has(pathModule.extname(filename)));
+}
+
+function isDirectory(filename, fileSystem) {
+  if (!filename || !fileSystem || typeof fileSystem.statSync !== "function") {
+    return false;
+  }
+  try {
+    const stat = fileSystem.statSync(filename);
+    return Boolean(stat && typeof stat.isDirectory === "function" && stat.isDirectory());
+  } catch (_error) {
+    return false;
+  }
+}
+
+function directoryContainsSpec(filename, fileSystem, pathModule) {
+  if (!fileSystem || typeof fileSystem.readdirSync !== "function") {
+    return false;
+  }
+  try {
+    return fileSystem.readdirSync(filename).some((entry) => {
+      const entryName = typeof entry === "string" ? entry : entry.name;
+      return isSpecPath(entryName, pathModule);
+    });
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isRunnableDirectory(filename, fileSystem, pathModule) {
+  return isDirectory(filename, fileSystem)
+    && directoryContainsSpec(filename, fileSystem, pathModule);
+}
+
+function uniqueTargets(targets) {
+  const seen = new Set();
+  const result = [];
+  for (const target of targets) {
+    if (!target || seen.has(target)) {
+      continue;
+    }
+    seen.add(target);
+    result.push(target);
+  }
+  return result;
+}
+
 function commandFromProject(project, cli) {
   if (
     !project
@@ -362,7 +423,9 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
 }
 
 function buildArgs(projectKind, projectRoot, spec, option, pathModule) {
-  const relativeSpec = spec ? pathModule.relative(projectRoot, spec) : null;
+  const relativeSpec = Array.isArray(spec)
+    ? spec.map((target) => pathModule.relative(projectRoot, target))
+    : (spec ? pathModule.relative(projectRoot, spec) : null);
   if (projectKind === "gradle") {
     return buildRunArgs.forGradle(relativeSpec, option);
   }
@@ -519,7 +582,7 @@ function createGaugeExecutionController(options = {}) {
       if (launchExecutionOption.args) {
         option.args = launchExecutionOption.args;
       }
-      if (spec && /:\d+$/.test(spec)) {
+      if (typeof spec === "string" && /:\d+$/.test(spec)) {
         option.tags = null;
         option.scenario = null;
         option["retry-only"] = null;
@@ -611,6 +674,41 @@ function createGaugeExecutionController(options = {}) {
     return executeInProject(context.projectRoot, context.spec, {
       ...flags,
       status: context.spec,
+    });
+  }
+
+  function specificationTargetsFromSelection(argument, selectedResources) {
+    const resources = Array.isArray(selectedResources) && selectedResources.length > 0
+      ? selectedResources
+      : [argument];
+    const targets = resources
+      .map(resourcePath)
+      .filter((target) => (
+        isSpecPath(target, pathModule)
+        || isRunnableDirectory(target, fileSystem, pathModule)
+      ));
+    return uniqueTargets(targets);
+  }
+
+  async function executeSpecificationTargets(argument, selectedResources, flags = {}) {
+    const targets = specificationTargetsFromSelection(argument, selectedResources);
+    if (targets.length === 0) {
+      return undefined;
+    }
+    const projectRoot = getProjectRootForSpec(vscode, targets[0], pathModule, projectFactory);
+    if (!projectRoot) {
+      return vscode.window.showErrorMessage("No workspace folder is open.");
+    }
+    if (
+      targets.length === 1
+      && isDirectory(targets[0], fileSystem)
+      && pathModule.normalize(targets[0]) === pathModule.normalize(projectRoot)
+    ) {
+      return executeAllSpecifications(projectRoot, flags);
+    }
+    return executeInProject(projectRoot, targets, {
+      ...flags,
+      status: pathModule.join(projectRoot, "Specifications"),
     });
   }
 
@@ -795,7 +893,10 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
-  function handleCommand(command, argument, flags = {}) {
+  function handleCommand(command, argument, flagsOrSelectedResources = {}, maybeFlags = {}) {
+    const hasSelectedResources = Array.isArray(flagsOrSelectedResources);
+    const selectedResources = hasSelectedResources ? flagsOrSelectedResources : undefined;
+    const flags = hasSelectedResources ? maybeFlags : flagsOrSelectedResources;
     switch (command) {
       case "gauge.execute":
         return executeCodeLensTarget(argument, flags);
@@ -804,6 +905,9 @@ function createGaugeExecutionController(options = {}) {
       case "gauge.execute.inParallel":
         return executeCodeLensTarget(argument, { ...flags, parallel: true });
       case "gauge.execute.specification":
+        if (selectedResources || resourcePath(argument)) {
+          return executeSpecificationTargets(argument, selectedResources, flags);
+        }
         if (argument) {
           return executeNode(argument, false, flags);
         }

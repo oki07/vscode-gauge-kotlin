@@ -19,6 +19,7 @@ const processExecutionAttributes = new Set([
   "cwd",
   "processEnv",
 ]);
+const SPEC_FILE_DELIMITER = "||";
 
 function withoutCommonLaunchAttributes(input) {
   return Object.entries(input)
@@ -99,6 +100,17 @@ function flagTokens(key, value) {
   return [];
 }
 
+function specTargets(spec) {
+  if (Array.isArray(spec)) {
+    return spec.filter((entry) => typeof entry === "string" && entry);
+  }
+  return spec ? [spec] : [];
+}
+
+function joinedSpecTargets(spec) {
+  return specTargets(spec).join(SPEC_FILE_DELIMITER);
+}
+
 function buildGaugeArgs(spec, option = {}) {
   const args = ["run"];
   const launchArgs = additionalArgs(option.args);
@@ -123,9 +135,7 @@ function buildGaugeArgs(spec, option = {}) {
 
   args.push(...launchArgs);
 
-  if (spec) {
-    args.push(spec);
-  }
+  args.push(...specTargets(spec));
 
   return args;
 }
@@ -174,8 +184,9 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
     args.push(prefixed(additionalFlags(...flags)));
   }
 
-  if (spec) {
-    args.push(prefixed(`specsDir=${spec}`));
+  const targets = joinedSpecTargets(spec);
+  if (targets) {
+    args.push(prefixed(`specsDir=${targets}`));
   }
   return args;
 }
