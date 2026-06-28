@@ -869,6 +869,18 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeValidateDiagnosticsProvider {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      created.validateDiagnosticsProvider = this;
+    }
+
+    register() {
+      return this.disposable;
+    }
+  }
+
   class FakeGaugeState {
     constructor(receivedContext) {
       this.context = receivedContext;
@@ -897,6 +909,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeRenameProvider: FakeRenameProvider,
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
     GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
+    GaugeValidateDiagnosticsProvider: FakeValidateDiagnosticsProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
     semanticTokensLegend: { id: "legend" },
@@ -948,6 +961,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(renameProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
+  assert.equal(context.subscriptions.includes(created.validateDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(textDocumentListeners[0].disposable), true);
   assert.equal(debugProviders[0].type, "gauge");
@@ -1003,6 +1017,9 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.argumentCodeActionProvider.options.vscode, fakeVscode);
   assert.equal(created.stepDiagnosticsProvider.options.vscode, fakeVscode);
   assert.equal(created.stepDiagnosticsProvider.options.projectFactory, created.workspace.options.projectFactory);
+  assert.equal(created.validateDiagnosticsProvider.options.vscode, fakeVscode);
+  assert.equal(created.validateDiagnosticsProvider.options.cli, cli);
+  assert.equal(created.validateDiagnosticsProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(context.subscriptions.includes(configurationListeners[0].disposable), true);
   assert.deepEqual(editorUpdates[0], {
     key: "semanticTokenColorCustomizations",

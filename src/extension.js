@@ -32,6 +32,7 @@ const {
 } = require("./semanticTokensProvider");
 const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
+const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const {
   createConcept,
   createGaugeSpecDirsProvider,
@@ -381,6 +382,21 @@ function registerStepDiagnosticsProvider(context, vscode, options) {
   }
 }
 
+function registerValidateDiagnosticsProvider(context, vscode, options) {
+  const ValidateDiagnosticsProviderCtor = options.GaugeValidateDiagnosticsProvider
+    || GaugeValidateDiagnosticsProvider;
+  const provider = new ValidateDiagnosticsProviderCtor({
+    cli: options.cli,
+    env: options.env,
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = typeof provider.register === "function" ? provider.register() : undefined;
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerStepDefinitionProvider(context, vscode, options) {
   const StepDefinitionProviderCtor = options.GaugeStepDefinitionProvider || GaugeStepDefinitionProvider;
   const provider = new StepDefinitionProviderCtor({
@@ -583,6 +599,11 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
+    projectFactory,
+  });
+  registerValidateDiagnosticsProvider(context, vscode, {
+    ...options,
+    cli,
     projectFactory,
   });
   registerSemanticTokensProvider(context, vscode, options);
