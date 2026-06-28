@@ -98,6 +98,34 @@ test("GaugeSemanticTokensProvider tokenizes keyword lines with space before colo
   ]);
 });
 
+test("GaugeSemanticTokensProvider tokenizes teardown separators", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "___",
+        "___  ",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.equal(tokenTypes.includes("teardownIdentifier"), true);
+  assert.deepEqual(tokens.map((entry) => entry.type), [
+    "teardownIdentifier",
+    "teardownIdentifier",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider treats concept keyword-like lines as comments", () => {
   const {
     GaugeSemanticTokensProvider,

@@ -16,6 +16,7 @@ const tokenTypes = [
   "tagValue",
   "disabledStep",
   "gaugeComment",
+  "teardownIdentifier",
 ];
 const tokenModifiers = [];
 
@@ -118,6 +119,10 @@ function isTableBlockStartLine(line) {
 
 function isStepLine(line) {
   return line.startsWith("*");
+}
+
+function isTeardownIdentifierLine(line) {
+  return /^_{3,}[ \t\f]*$/.test(line);
 }
 
 function isConceptLegacyUnderlineHeadingText(line) {
@@ -235,6 +240,9 @@ class GaugeSemanticTokensProvider {
       } else if (!conceptDocument && pushKeywordLine(builder, index, line, "table", "tableKeyword", "tableFileValue")) {
         index += 1;
       } else if (!conceptDocument && pushKeywordLine(builder, index, line, "tags", "tagKeyword", "tagValue")) {
+        index += 1;
+      } else if (!conceptDocument && isTeardownIdentifierLine(line)) {
+        pushToken(builder, index, 0, line.length, "teardownIdentifier");
         index += 1;
       } else if (isStepLine(line)) {
         const markerStart = line.indexOf("*");
