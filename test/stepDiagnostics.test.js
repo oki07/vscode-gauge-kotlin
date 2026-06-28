@@ -78,6 +78,31 @@ test("GaugeStepDiagnosticsProvider reports plaintext Kotlin Step parameter count
   );
 });
 
+test("GaugeStepDiagnosticsProvider reports Java Step parameter count mismatches", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class Steps {",
+    "  @Step(\"Say <what> to <who>\")",
+    "  public void say(String what) {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/steps/Steps.java");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Say <what> to <who>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider counts escaped dynamic Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -4735,7 +4760,7 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps when no impleme
     workspace: {
       textDocuments: [specDocument],
       async findFiles(pattern) {
-        if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+        if (pattern === "**/*.kt" || pattern === "**/*.java" || pattern === "**/*.cpt") {
           return [];
         }
         throw new Error(`Unexpected pattern ${pattern}`);
@@ -4769,7 +4794,7 @@ test("GaugeStepDiagnosticsProvider reports undefined markdown Gauge spec steps",
     workspace: {
       textDocuments: [specDocument],
       async findFiles(pattern) {
-        if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+        if (pattern === "**/*.kt" || pattern === "**/*.java" || pattern === "**/*.cpt") {
           return [];
         }
         throw new Error(`Unexpected pattern ${pattern}`);
@@ -4814,6 +4839,9 @@ test("GaugeStepDiagnosticsProvider uses unopened plaintext Kotlin files for Gaug
         if (pattern === "**/*.kt") {
           return [plaintextKotlinDocument.uri];
         }
+        if (pattern === "**/*.java") {
+          return [];
+        }
         if (pattern === "**/*.cpt") {
           return [];
         }
@@ -4822,6 +4850,53 @@ test("GaugeStepDiagnosticsProvider uses unopened plaintext Kotlin files for Gaug
       async openTextDocument(uri) {
         assert.equal(uri, plaintextKotlinDocument.uri);
         return plaintextKotlinDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const workspaceDocuments = await provider.workspaceDocuments();
+  const diagnostics = provider.provideDiagnostics(specDocument, workspaceDocuments);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider uses unopened Java Step files for Gauge undefined steps", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const javaDocument = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class PaymentSteps {",
+    "  @Step(\"Pay with <method>\")",
+    "  public void pay(String method) {",
+    "  }",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/java/steps/PaymentSteps.java");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+          return [];
+        }
+        if (pattern === "**/*.java") {
+          return [javaDocument.uri];
+        }
+        throw new Error(`Unexpected pattern ${pattern}`);
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, javaDocument.uri);
+        return javaDocument;
       },
     },
   };
@@ -4917,6 +4992,9 @@ test("GaugeStepDiagnosticsProvider resolves unopened workspace Kotlin constants 
       textDocuments: [stepDocument],
       async findFiles(pattern) {
         if (pattern === "**/*.cpt") {
+          return [];
+        }
+        if (pattern === "**/*.java") {
           return [];
         }
         assert.equal(pattern, "**/*.kt");

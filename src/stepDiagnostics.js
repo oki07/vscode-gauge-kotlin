@@ -2,6 +2,7 @@
 
 const COLLECTION_NAME = "gauge-kotlin";
 const GAUGE_LANGUAGE = "gauge";
+const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
@@ -5585,6 +5586,275 @@ function findStepFunctions(text, externalConstants) {
   return entries;
 }
 
+const JAVA_IDENTIFIER_PATTERN = "[A-Za-z_$][A-Za-z0-9_$]*";
+const JAVA_IDENTIFIER_REGEXP = new RegExp(`^${JAVA_IDENTIFIER_PATTERN}`);
+const JAVA_CONTROL_METHOD_NAMES = new Set([
+  "catch",
+  "for",
+  "if",
+  "new",
+  "switch",
+  "synchronized",
+  "while",
+]);
+const JAVA_STEP_IMPORTS = {
+  named: "named",
+  wildcard: "wildcard",
+};
+
+function readJavaIdentifierPath(text, startIndex) {
+  const segments = [];
+  let index = startIndex;
+  while (index < text.length) {
+    const match = JAVA_IDENTIFIER_REGEXP.exec(text.slice(index));
+    if (!match) {
+      break;
+    }
+    segments.push(match[0]);
+    index += match[0].length;
+    const dotIndex = skipWhitespaceAndComments(text, index);
+    if (text[dotIndex] !== ".") {
+      break;
+    }
+    index = skipWhitespaceAndComments(text, dotIndex + 1);
+  }
+  if (segments.length === 0) {
+    return undefined;
+  }
+  return {
+    end: index,
+    path: segments.join("."),
+  };
+}
+
+function skipJavaAnnotation(text, startIndex) {
+  if (text[startIndex] !== "@") {
+    return startIndex;
+  }
+  const annotationName = readJavaIdentifierPath(text, startIndex + 1);
+  if (!annotationName) {
+    return startIndex;
+  }
+  let index = skipWhitespaceAndComments(text, annotationName.end);
+  if (text[index] === "(") {
+    const closeParen = findMatchingParen(text, index);
+    if (closeParen === -1) {
+      return text.length;
+    }
+    index = closeParen + 1;
+  }
+  return index;
+}
+
+function collectJavaStepImports(text, ignoredRanges = []) {
+  const imports = new Set();
+  const importPattern = /^\s*import\s+([^;]+);/gm;
+  let match = importPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = importPattern.exec(text);
+      continue;
+    }
+    const imported = match[1].trim().replace(/\s+/g, " ");
+    if (imported.startsWith("static ")) {
+      match = importPattern.exec(text);
+      continue;
+    }
+    if (imported === GAUGE_STEP_ANNOTATION) {
+      imports.add(JAVA_STEP_IMPORTS.named);
+    } else if (imported === `${GAUGE_STEP_PACKAGE}.*`) {
+      imports.add(JAVA_STEP_IMPORTS.wildcard);
+    }
+    match = importPattern.exec(text);
+  }
+  return imports;
+}
+
+function isJavaStepAnnotationAllowed(annotationName, stepImports) {
+  if (annotationName === GAUGE_STEP_ANNOTATION) {
+    return true;
+  }
+  return annotationName === "Step"
+    && (
+      stepImports.has(JAVA_STEP_IMPORTS.named)
+      || stepImports.has(JAVA_STEP_IMPORTS.wildcard)
+    );
+}
+
+function readJavaStringLiteral(text, startIndex) {
+  if (text[startIndex] !== "\"") {
+    return undefined;
+  }
+  let value = "";
+  for (let index = startIndex + 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "\\") {
+      if (index + 1 >= text.length) {
+        return undefined;
+      }
+      const escaped = text[index + 1];
+      if (escaped === "n") {
+        value += "\n";
+      } else if (escaped === "r") {
+        value += "\r";
+      } else if (escaped === "t") {
+        value += "\t";
+      } else if (escaped === "b") {
+        value += "\b";
+      } else if (escaped === "f") {
+        value += "\f";
+      } else {
+        value += escaped;
+      }
+      index += 1;
+      continue;
+    }
+    if (char === "\"") {
+      return {
+        end: index + 1,
+        value,
+      };
+    }
+    value += char;
+  }
+  return undefined;
+}
+
+function extractJavaStepAliases(annotationArgs) {
+  const aliases = [];
+  for (let index = 0; index < annotationArgs.length; index += 1) {
+    if (annotationArgs[index] !== "\"") {
+      continue;
+    }
+    const literal = readJavaStringLiteral(annotationArgs, index);
+    if (!literal) {
+      continue;
+    }
+    aliases.push(literal.value);
+    index = literal.end - 1;
+  }
+  return aliases;
+}
+
+function previousJavaIdentifier(text, endIndex) {
+  let index = endIndex - 1;
+  while (index >= 0 && /\s/.test(text[index])) {
+    index -= 1;
+  }
+  const end = index + 1;
+  while (index >= 0 && /[A-Za-z0-9_$]/.test(text[index])) {
+    index -= 1;
+  }
+  const start = index + 1;
+  if (start === end) {
+    return undefined;
+  }
+  return {
+    end,
+    start,
+    value: text.slice(start, end),
+  };
+}
+
+function findNextJavaMethod(text, startIndex, ignoredRanges = []) {
+  let searchStart = startIndex;
+  while (searchStart < text.length) {
+    searchStart = skipWhitespaceAndComments(text, searchStart);
+    if (text[searchStart] !== "@") {
+      break;
+    }
+    const next = skipJavaAnnotation(text, searchStart);
+    if (next === searchStart) {
+      return undefined;
+    }
+    searchStart = next;
+  }
+
+  for (let index = searchStart; index < text.length; index += 1) {
+    if (isInIgnoredRange(index, ignoredRanges)) {
+      continue;
+    }
+    const char = text[index];
+    if (char === ";" || char === "{") {
+      return undefined;
+    }
+    if (char !== "(") {
+      continue;
+    }
+    const name = previousJavaIdentifier(text, index);
+    if (!name || JAVA_CONTROL_METHOD_NAMES.has(name.value)) {
+      continue;
+    }
+    const closeParen = findMatchingParen(text, index);
+    if (closeParen === -1) {
+      return undefined;
+    }
+    let declarationEnd = skipWhitespaceAndComments(text, closeParen + 1);
+    if (text.startsWith("throws", declarationEnd) && !/[A-Za-z0-9_$]/.test(text[declarationEnd + "throws".length] || "")) {
+      declarationEnd += "throws".length;
+      while (
+        declarationEnd < text.length
+        && text[declarationEnd] !== "{"
+        && text[declarationEnd] !== ";"
+        && text[declarationEnd] !== "\n"
+        && text[declarationEnd] !== "\r"
+      ) {
+        declarationEnd += 1;
+      }
+      declarationEnd = skipWhitespaceAndComments(text, declarationEnd);
+    }
+    return {
+      declarationEnd,
+      declarationStart: name.start,
+      parameterEnd: closeParen,
+      parameterStart: index + 1,
+      parameterText: text.slice(index + 1, closeParen),
+    };
+  }
+  return undefined;
+}
+
+function findJavaStepFunctions(text) {
+  const entries = [];
+  const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const stepImports = collectJavaStepImports(text, ignoredRanges);
+  const annotationPattern = /@/g;
+  let match = annotationPattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = annotationPattern.exec(text);
+      continue;
+    }
+    const annotationName = readJavaIdentifierPath(text, match.index + 1);
+    if (!annotationName || !isJavaStepAnnotationAllowed(annotationName.path, stepImports)) {
+      match = annotationPattern.exec(text);
+      continue;
+    }
+    const openParen = skipWhitespaceAndComments(text, annotationName.end);
+    if (text[openParen] !== "(") {
+      match = annotationPattern.exec(text);
+      continue;
+    }
+    const closeParen = findMatchingParen(text, openParen);
+    if (closeParen === -1) {
+      return entries;
+    }
+    const aliases = extractJavaStepAliases(text.slice(openParen + 1, closeParen));
+    const method = findNextJavaMethod(text, closeParen + 1, ignoredRanges);
+    if (aliases.length > 0 && method) {
+      entries.push({
+        aliases,
+        annotationEnd: closeParen + 1,
+        annotationStart: match.index,
+        ...method,
+      });
+    }
+    annotationPattern.lastIndex = closeParen + 1;
+    match = annotationPattern.exec(text);
+  }
+  return entries;
+}
+
 function mismatchMessage(actual, expected, alias) {
   return `${PARAMETER_MISMATCH_PREFIX}(found [${actual}] expected [${expected}]) with step annotation : "${alias}". `;
 }
@@ -5598,9 +5868,11 @@ function uriPath(uri) {
 }
 
 const WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE = "__gaugeStepImplementationScanComplete";
+const JAVA_FILE_PATTERN = /\.java$/i;
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
+const JAVA_WORKSPACE_PATTERN = "**/*.java";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 
@@ -5635,6 +5907,31 @@ function isKotlinDocument(candidate) {
   }
   const file = documentPath(candidate);
   return typeof file === "string" && KOTLIN_FILE_PATTERN.test(file);
+}
+
+function isJavaDocument(candidate) {
+  if (!candidate) {
+    return false;
+  }
+  if (candidate.languageId === JAVA_LANGUAGE) {
+    return true;
+  }
+  const file = documentPath(candidate);
+  return typeof file === "string" && JAVA_FILE_PATTERN.test(file);
+}
+
+function isStepImplementationDocument(candidate) {
+  return isKotlinDocument(candidate) || isJavaDocument(candidate);
+}
+
+function findStepFunctionsForDocument(document, externalConstants) {
+  if (!document || typeof document.getText !== "function") {
+    return [];
+  }
+  const text = document.getText();
+  return isJavaDocument(document)
+    ? findJavaStepFunctions(text)
+    : findStepFunctions(text, externalConstants);
 }
 
 function isConceptDocument(candidate) {
@@ -5681,7 +5978,7 @@ class GaugeStepDiagnosticsProvider {
   shouldDiagnose(document) {
     return Boolean(
       document
-      && (isKotlinDocument(document) || isGaugeSpecDocument(document))
+      && (isStepImplementationDocument(document) || isGaugeSpecDocument(document))
       && typeof document.getText === "function"
       && this.isGaugeProjectDocument(document),
     );
@@ -5881,8 +6178,10 @@ class GaugeStepDiagnosticsProvider {
       return diagnostics;
     }
 
-    const externalConstants = this.collectWorkspaceConstants(document, workspaceDocuments);
-    for (const entry of findStepFunctions(text, externalConstants)) {
+    const externalConstants = isKotlinDocument(document)
+      ? this.collectWorkspaceConstants(document, workspaceDocuments)
+      : undefined;
+    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart);
       const end = positionAt(text, entry.parameterEnd);
@@ -5915,6 +6214,20 @@ class GaugeStepDiagnosticsProvider {
     ));
   }
 
+  stepImplementationDocuments(document, workspaceDocuments) {
+    const workspace = this.vscode.workspace || {};
+    const candidates = Array.isArray(workspaceDocuments)
+      ? workspaceDocuments
+      : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    return candidates.filter((candidate) => (
+      candidate
+      && candidate !== document
+      && isStepImplementationDocument(candidate)
+      && typeof candidate.getText === "function"
+      && this.isGaugeProjectDocument(candidate)
+    ));
+  }
+
   conceptDocuments(workspaceDocuments) {
     const workspace = this.vscode.workspace || {};
     const candidates = Array.isArray(workspaceDocuments)
@@ -5929,9 +6242,10 @@ class GaugeStepDiagnosticsProvider {
   }
 
   implementedStepTemplates(document, workspaceDocuments) {
-    const kotlinDocuments = this.kotlinDocuments(document, workspaceDocuments);
+    const implementationDocuments = this.stepImplementationDocuments(document, workspaceDocuments);
+    const kotlinDocuments = implementationDocuments.filter((candidate) => isKotlinDocument(candidate));
     const conceptDocuments = this.conceptDocuments(workspaceDocuments);
-    if (kotlinDocuments.length === 0 && conceptDocuments.length === 0) {
+    if (implementationDocuments.length === 0 && conceptDocuments.length === 0) {
       if (isWorkspaceStepImplementationScanComplete(workspaceDocuments)) {
         return new Set();
       }
@@ -5939,15 +6253,16 @@ class GaugeStepDiagnosticsProvider {
     }
 
     const templates = new Set();
-    for (const candidate of kotlinDocuments) {
-      const text = candidate.getText();
+    for (const candidate of implementationDocuments) {
       let externalConstants;
-      try {
-        externalConstants = this.collectWorkspaceConstants(candidate, kotlinDocuments);
-      } catch (_error) {
-        externalConstants = undefined;
+      if (isKotlinDocument(candidate)) {
+        try {
+          externalConstants = this.collectWorkspaceConstants(candidate, kotlinDocuments);
+        } catch (_error) {
+          externalConstants = undefined;
+        }
       }
-      for (const entry of findStepFunctions(text, externalConstants)) {
+      for (const entry of findStepFunctionsForDocument(candidate, externalConstants)) {
         for (const alias of entry.aliases) {
           templates.add(normalizeStepTemplate(alias));
         }
@@ -6007,60 +6322,48 @@ class GaugeStepDiagnosticsProvider {
     }
 
     return (async () => {
-      let uris;
-      try {
-        uris = await workspace.findFiles(KOTLIN_WORKSPACE_PATTERN);
-      } catch (_error) {
-        return documents;
-      }
-
-      for (const uri of uris || []) {
-        const file = uriPath(uri);
-        if (file && seenPaths.has(file)) {
+      const documentPatterns = [
+        {
+          matches: isKotlinDocument,
+          pattern: KOTLIN_WORKSPACE_PATTERN,
+        },
+        {
+          matches: isJavaDocument,
+          pattern: JAVA_WORKSPACE_PATTERN,
+        },
+        {
+          matches: isConceptDocument,
+          pattern: CONCEPT_WORKSPACE_PATTERN,
+        },
+      ];
+      for (const { matches, pattern } of documentPatterns) {
+        let uris;
+        try {
+          uris = await workspace.findFiles(pattern);
+        } catch (_error) {
           continue;
         }
-        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-          try {
-            this.projectFactory.getGaugeRootFromFilePath(file);
-          } catch (_error) {
+        for (const uri of uris || []) {
+          const file = uriPath(uri);
+          if (file && seenPaths.has(file)) {
             continue;
           }
-        }
-
-        try {
-          const document = await workspace.openTextDocument(uri);
-          if (isKotlinDocument(document)) {
-            this.addWorkspaceDocument(documents, seenPaths, document);
+          if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+            try {
+              this.projectFactory.getGaugeRootFromFilePath(file);
+            } catch (_error) {
+              continue;
+            }
           }
-        } catch (_error) {
-          // Keep diagnostics available when one workspace URI is stale or unreadable.
-        }
-      }
-      try {
-        uris = await workspace.findFiles(CONCEPT_WORKSPACE_PATTERN);
-      } catch (_error) {
-        return documents;
-      }
-      for (const uri of uris || []) {
-        const file = uriPath(uri);
-        if (file && seenPaths.has(file)) {
-          continue;
-        }
-        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+
           try {
-            this.projectFactory.getGaugeRootFromFilePath(file);
+            const document = await workspace.openTextDocument(uri);
+            if (matches(document)) {
+              this.addWorkspaceDocument(documents, seenPaths, document);
+            }
           } catch (_error) {
-            continue;
+            // Keep diagnostics available when one workspace URI is stale or unreadable.
           }
-        }
-
-        try {
-          const document = await workspace.openTextDocument(uri);
-          if (isConceptDocument(document)) {
-            this.addWorkspaceDocument(documents, seenPaths, document);
-          }
-        } catch (_error) {
-          // Keep diagnostics available when one workspace URI is stale or unreadable.
         }
       }
       return markWorkspaceStepImplementationScanComplete(documents);
@@ -6129,8 +6432,12 @@ module.exports = {
   countKotlinParameters,
   countStepParameters,
   findConceptHeadings,
+  findJavaStepFunctions,
   findStepFunctions,
+  findStepFunctionsForDocument,
   isConceptDocument,
+  isJavaDocument,
   isKotlinDocument,
+  isStepImplementationDocument,
   positionAt,
 };
