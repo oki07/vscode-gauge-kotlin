@@ -463,6 +463,14 @@ function appendMissingParameters(name, parameters) {
   return result.replace(/\s+/g, " ");
 }
 
+function appendUniqueParameters(target, parameters) {
+  for (const parameter of parameters) {
+    if (!target.includes(parameter)) {
+      target.push(parameter);
+    }
+  }
+}
+
 function buildParameterizedExtraction(extraction, conceptName, eol) {
   const tables = tableParameterMap(extraction.steps);
   const sourceTables = [];
@@ -470,18 +478,20 @@ function buildParameterizedExtraction(extraction, conceptName, eol) {
   const conceptLines = [];
   const parameterizedNames = new Set();
   const staticParameters = staticArgumentParameters(conceptName);
+  const stepDynamicParameters = [];
   const tableDynamicParameters = [];
 
   for (const step of extraction.steps || []) {
+    const conceptStep = applyStaticArgumentParameters(step.text, staticParameters);
+    appendUniqueParameters(stepDynamicParameters, dynamicParametersInLines([step.text]));
     if (!step.tableLines || step.tableLines.length === 0) {
-      conceptLines.push(applyStaticArgumentParameters(step.text, staticParameters));
+      conceptLines.push(conceptStep);
       continue;
     }
 
     const key = tableKey(step.tableLines);
     const tableName = tables.get(key);
     if (tableName && conceptHasTableParameter(conceptName, tableName)) {
-      const conceptStep = applyStaticArgumentParameters(step.text, staticParameters);
       conceptLines.push(`${conceptStep} <${tableName}>`);
       parameterizedNames.add(tableName);
       if (!sourceTableKeys.has(key)) {
@@ -493,19 +503,20 @@ function buildParameterizedExtraction(extraction, conceptName, eol) {
         applyStaticArgumentParameters(step.text, staticParameters),
         ...formatGaugeTableLines(step.tableLines),
       );
-      tableDynamicParameters.push(...dynamicParametersInLines(step.tableLines));
+      appendUniqueParameters(tableDynamicParameters, dynamicParametersInLines(step.tableLines));
     }
   }
 
+  const missingParameters = [...stepDynamicParameters, ...tableDynamicParameters];
   const usageName = removeTableParameters(conceptName, parameterizedNames);
   return {
     conceptName: appendMissingParameters(
       parameterizedConceptName(conceptName),
-      tableDynamicParameters,
+      missingParameters,
     ),
     conceptLines: conceptLines.length > 0 ? conceptLines : extraction.lines,
     sourceText: [
-      `* ${appendMissingParameters(usageName, tableDynamicParameters)}`,
+      `* ${appendMissingParameters(usageName, missingParameters)}`,
       ...sourceTables,
     ].join(eol),
   };
