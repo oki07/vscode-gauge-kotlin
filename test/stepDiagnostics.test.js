@@ -59,6 +59,25 @@ test("GaugeStepDiagnosticsProvider reports Kotlin Step parameter count mismatche
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 20 });
 });
 
+test("GaugeStepDiagnosticsProvider reports plaintext Kotlin Step parameter count mismatches", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "@Step(\"Say <what> to <who>\")",
+    "fun say(what: String) {",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Say <what> to <who>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider counts escaped dynamic Step parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -4705,6 +4724,50 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
 });
 
+test("GaugeStepDiagnosticsProvider uses unopened plaintext Kotlin files for Gauge undefined steps", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const openedKotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/ConfirmSteps.kt");
+  const plaintextKotlinDocument = createDocument([
+    "@Step(\"Pay with <method>\")",
+    "fun pay(method: String) {}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/kotlin/PaymentSteps.kt");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument, openedKotlinDocument],
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt") {
+          return [plaintextKotlinDocument.uri];
+        }
+        if (pattern === "**/*.cpt") {
+          return [];
+        }
+        throw new Error(`Unexpected pattern ${pattern}`);
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, plaintextKotlinDocument.uri);
+        return plaintextKotlinDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+
+  const workspaceDocuments = await provider.workspaceDocuments();
+  const diagnostics = provider.provideDiagnostics(specDocument, workspaceDocuments);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const opened = [];
@@ -4785,6 +4848,9 @@ test("GaugeStepDiagnosticsProvider resolves unopened workspace Kotlin constants 
     workspace: {
       textDocuments: [stepDocument],
       async findFiles(pattern) {
+        if (pattern === "**/*.cpt") {
+          return [];
+        }
         assert.equal(pattern, "**/*.kt");
         return [constantsDocument.uri];
       },

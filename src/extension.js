@@ -396,7 +396,11 @@ function registerRenameProvider(context, vscode, options) {
       vscode.languages
       && typeof vscode.languages.registerRenameProvider === "function"
         ? vscode.languages.registerRenameProvider(
-          [{ language: "gauge" }, { language: KOTLIN_LANGUAGE }],
+          [
+            { language: "gauge" },
+            { language: KOTLIN_LANGUAGE },
+            { scheme: "file", pattern: "**/*.kt" },
+          ],
           provider,
         )
         : undefined

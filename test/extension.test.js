@@ -895,7 +895,11 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.foldingRangeProvider.options.vscode, fakeVscode);
   assert.deepEqual(renameProviders, [
     {
-      selector: [{ language: "gauge" }, { language: "kotlin" }],
+      selector: [
+        { language: "gauge" },
+        { language: "kotlin" },
+        { scheme: "file", pattern: "**/*.kt" },
+      ],
       provider: created.renameProvider,
       disposable: renameProviders[0].disposable,
     },

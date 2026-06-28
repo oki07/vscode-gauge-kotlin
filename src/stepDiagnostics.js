@@ -5652,7 +5652,7 @@ class GaugeStepDiagnosticsProvider {
   shouldDiagnose(document) {
     return Boolean(
       document
-      && (document.languageId === KOTLIN_LANGUAGE || document.languageId === GAUGE_LANGUAGE)
+      && (isKotlinDocument(document) || document.languageId === GAUGE_LANGUAGE)
       && typeof document.getText === "function"
       && this.isGaugeProjectDocument(document),
     );
@@ -5997,7 +5997,7 @@ class GaugeStepDiagnosticsProvider {
 
         try {
           const document = await workspace.openTextDocument(uri);
-          if (document && document.languageId === KOTLIN_LANGUAGE) {
+          if (isKotlinDocument(document)) {
             this.addWorkspaceDocument(documents, seenPaths, document);
           }
         } catch (_error) {

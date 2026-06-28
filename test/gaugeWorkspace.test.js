@@ -229,6 +229,7 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
   ]);
   assert.equal(entry.client.clientOptions.revealOutputChannelOn, 4);
   assert.equal(entry.client.clientOptions.workspaceFolder.uri.fsPath, "/workspace/gauge");

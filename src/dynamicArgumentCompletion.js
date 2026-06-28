@@ -3,6 +3,7 @@
 const {
   GaugeStepDiagnosticsProvider,
   findStepFunctions,
+  isKotlinDocument,
 } = require("./stepDiagnostics");
 
 function getVscode(vscode) {
@@ -428,7 +429,7 @@ class GaugeDynamicArgumentCompletionProvider {
     for (const candidate of workspaceDocuments || []) {
       if (
         !candidate
-        || candidate.languageId !== "kotlin"
+        || !isKotlinDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.isGaugeProjectDocument(candidate)
       ) {

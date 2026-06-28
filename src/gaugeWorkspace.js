@@ -388,6 +388,7 @@ class GaugeWorkspace {
     ];
     if (project.language() === KOTLIN_RUNNER) {
       documentSelector.push({ scheme: "file", language: KOTLIN_RUNNER, pattern: `${project.root()}/**/*` });
+      documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.kt` });
     }
     return {
       documentSelector,
