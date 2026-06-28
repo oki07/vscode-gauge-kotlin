@@ -17,6 +17,7 @@ const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
+const COMMAND_FLAG_KEYS = ["failed", "repeat", "parallel"];
 
 const EXECUTION_COMMANDS = new Set([
   "gauge.execute",
@@ -308,6 +309,16 @@ function buildArgs(projectKind, projectRoot, spec, option, pathModule) {
   return buildRunArgs.forGauge(spec, option);
 }
 
+function mergeRunOptions(launchOptions, flags = {}) {
+  const option = { ...launchOptions };
+  for (const key of COMMAND_FLAG_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(flags, key)) {
+      option[key] = Boolean(flags[key]);
+    }
+  }
+  return option;
+}
+
 function getScenarioSpecPath(executionIdentifier) {
   if (!/:\d+$/.test(executionIdentifier)) {
     return executionIdentifier;
@@ -411,12 +422,10 @@ function createGaugeExecutionController(options = {}) {
     const projectKind = detectProjectKind(projectRoot, fileSystem, pathModule);
     const project = getProjectForExecution(projectFactory, projectRoot);
     const executionTool = project ? commandFromProject(project, getCli()) : undefined;
-    const option = {
-      ...extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
-      failed: Boolean(flags.failed),
-      repeat: Boolean(flags.repeat),
-      parallel: Boolean(flags.parallel),
-    };
+    const option = mergeRunOptions(
+      extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
+      flags,
+    );
     if (spec && /:\d+$/.test(spec)) {
       option.tags = null;
       option.scenario = null;

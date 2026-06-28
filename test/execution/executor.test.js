@@ -112,6 +112,97 @@ test("execute specification uses Gradle Gauge args for Kotlin Gradle projects", 
   ]);
 });
 
+test("execute specification preserves launch parallel options", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", parallel: true, n: 3 },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification");
+
+  assert.deepEqual(calls[0].args, [
+    "clean",
+    "gauge",
+    "-PinParallel=true",
+    "-Pnodes=3",
+    "-PadditionalFlags=--hide-suggestion --simple-console",
+    "-PspecsDir=specs/example.spec",
+  ]);
+});
+
+test("execute specification preserves launch failed options", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", failed: true },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification");
+
+  assert.deepEqual(calls[0].args, ["run", "--failed"]);
+});
+
+test("execute specification preserves launch repeat options", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      { type: "gauge", request: "test", name: "Gauge", repeat: true },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification");
+
+  assert.deepEqual(calls[0].args, ["run", "--repeat"]);
+});
+
 test("execute specification uses the project execution Command object", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
