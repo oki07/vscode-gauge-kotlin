@@ -1067,6 +1067,66 @@ test("execute all specs reads launch options from the selected workspace folder"
   ]);
 });
 
+test("execute all failed and repeat fall back to the active Gauge project without workspace folders", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        fileName: "/standalone/specs/example.spec",
+        uri: { fsPath: "/standalone/specs/example.spec" },
+      },
+    },
+    workspaceFolders: [],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/standalone/specs/example.spec");
+        return "/standalone";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all");
+  await controller.handleCommand("gauge.execute.failed");
+  await controller.handleCommand("gauge.execute.repeat");
+
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--hide-suggestion", "--simple-console"],
+      cwd: "/standalone",
+      status: "/standalone/All specs",
+    },
+    {
+      command: "gauge",
+      args: ["run", "--failed"],
+      cwd: "/standalone",
+      status: "/standalone/failed scenarios",
+    },
+    {
+      command: "gauge",
+      args: ["run", "--repeat"],
+      cwd: "/standalone",
+      status: "/standalone/previous run",
+    },
+  ]);
+});
+
 test("repeat execution asks for nested Gauge projects discovered under a workspace folder", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

@@ -162,8 +162,29 @@ function selectableProjectRoots(vscode, projectFactory) {
   return gaugeRoots.length > 0 ? gaugeRoots : roots;
 }
 
+function activeProjectRoot(vscode, projectFactory) {
+  if (!projectFactory || typeof projectFactory.getGaugeRootFromFilePath !== "function") {
+    return undefined;
+  }
+  const editor = vscode.window && vscode.window.activeTextEditor;
+  const document = editor && editor.document;
+  const file = document && (document.fileName || (document.uri && document.uri.fsPath));
+  if (!file) {
+    return undefined;
+  }
+  try {
+    return projectFactory.getGaugeRootFromFilePath(file);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
 async function selectProjectRoot(vscode, pathModule, projectFactory) {
-  const roots = selectableProjectRoots(vscode, projectFactory);
+  let roots = selectableProjectRoots(vscode, projectFactory);
+  if (roots.length === 0) {
+    const activeRoot = activeProjectRoot(vscode, projectFactory);
+    roots = activeRoot ? [activeRoot] : roots;
+  }
   if (roots.length === 0) {
     return undefined;
   }
