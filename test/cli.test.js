@@ -204,6 +204,66 @@ test("CLI uses the configured Gauge executable path before PATH lookup", () => {
   ]);
 });
 
+test("CLI passes configured GAUGE_HOME to the Gauge version probe", () => {
+  const { CLI, Command } = require("../src/cli");
+  const versionProbeCalls = [];
+  const configuredGaugeCommand = {
+    spawnSync(args, options) {
+      versionProbeCalls.push({ args, options });
+      return {
+        stdout: Buffer.from(JSON.stringify({
+          version: "1.2.3",
+          plugins: [{ name: "kotlin", version: "0.9.0" }],
+        })),
+      };
+    },
+  };
+
+  class TestCLI extends CLI {
+    static getCommand(command) {
+      if (command === "gauge") {
+        return configuredGaugeCommand;
+      }
+      if (command === "mvn") {
+        return new Command("mvn");
+      }
+      return undefined;
+    }
+  }
+
+  const cli = TestCLI.instance({
+    env: { PATH: "/usr/bin" },
+    vscode: {
+      workspace: {
+        getConfiguration(section) {
+          assert.equal(section, "gauge");
+          return {
+            get(key) {
+              return key === "home" ? "/tools/gauge-home" : "";
+            },
+          };
+        },
+      },
+      window: {
+        showErrorMessage() {},
+      },
+    },
+  });
+
+  assert.equal(cli.isGaugeInstalled(), true);
+  assert.deepEqual(versionProbeCalls, [
+    {
+      args: ["--version", "--machine-readable"],
+      options: {
+        env: {
+          PATH: "/usr/bin",
+          GAUGE_HOME: "/tools/gauge-home",
+        },
+      },
+    },
+  ]);
+});
+
 test("CLI creates platform command candidates", () => {
   const { CLI } = require("../src/cli");
   const candidates = CLI.getCommandCandidates("gauge");

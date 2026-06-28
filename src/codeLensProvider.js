@@ -128,6 +128,29 @@ function titlesForMarker(marker) {
 class GaugeCodeLensProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.projectFactory = options.projectFactory;
+  }
+
+  isGaugeProjectDocument(document) {
+    if (!this.projectFactory) {
+      return true;
+    }
+    const file = documentPath(document);
+    if (!file || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return true;
+    }
+    try {
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      if (!root) {
+        return false;
+      }
+      if (typeof this.projectFactory.isGaugeProject === "function") {
+        return this.projectFactory.isGaugeProject(root) !== false;
+      }
+      return true;
+    } catch (_error) {
+      return false;
+    }
   }
 
   provideCodeLenses(document) {
@@ -136,6 +159,9 @@ class GaugeCodeLensProvider {
     }
     const file = documentPath(document);
     if (!file) {
+      return [];
+    }
+    if (!this.isGaugeProjectDocument(document)) {
       return [];
     }
 

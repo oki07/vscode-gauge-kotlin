@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const test = require("node:test");
 
 test("GaugeProject detects files inside the project root", () => {
@@ -177,6 +178,52 @@ test("GradleProject returns Gauge custom classpath environment", () => {
       options: { cwd: "/workspace/gauge" },
     },
   ]);
+});
+
+test("GradleProject uses the wrapper command when the project has a Gradle wrapper", () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/gauge/gradlew";
+      },
+    },
+    pathModule: path.posix,
+  });
+
+  const command = project.getExecutionCommand({
+    gradleCommand() {
+      return { command: "./gradlew" };
+    },
+  });
+
+  assert.equal(command.command, "./gradlew");
+});
+
+test("GradleProject falls back to the system Gradle command without a wrapper", () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    pathModule: path.posix,
+  });
+
+  const command = project.getExecutionCommand({
+    gradleCommand() {
+      return { command: "./gradlew" };
+    },
+  });
+
+  assert.equal(command.command, "gradle");
 });
 
 test("build project envs report classpath calculation errors", () => {

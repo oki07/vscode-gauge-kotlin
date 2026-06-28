@@ -354,7 +354,10 @@ function registerCodeLensProvider(context, vscode, options) {
     return;
   }
   const CodeLensProviderCtor = options.GaugeCodeLensProvider || GaugeCodeLensProvider;
-  const provider = new CodeLensProviderCtor({ vscode });
+  const provider = new CodeLensProviderCtor({
+    vscode,
+    projectFactory: options.projectFactory,
+  });
   const disposable = vscode.languages.registerCodeLensProvider(
     { language: "gauge" },
     provider,
@@ -522,6 +525,13 @@ function registerSemanticTokenColorUpdates(context, vscode) {
   }
 }
 
+function folderPathFromUri(value) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  return value.fsPath || value.path;
+}
+
 function createCommandHandler(command, vscode, executionController, options = {}) {
   return function handleGaugeCommand(...args) {
     if (EXECUTION_COMMANDS.has(command)) {
@@ -540,6 +550,7 @@ function createCommandHandler(command, vscode, executionController, options = {}
             () => activeClientsMap,
             { vscode },
           ),
+          specDir: folderPathFromUri(args[0]),
         });
       case "gauge.create.concept":
         return (options.createConcept || createConcept)({
@@ -552,6 +563,7 @@ function createCommandHandler(command, vscode, executionController, options = {}
             () => activeClientsMap,
             { vscode },
           ),
+          specDir: folderPathFromUri(args[0]),
         });
       case "gauge.preview":
         return (options.createPreview || previewGaugeDocument)({
@@ -617,7 +629,10 @@ function startGaugeServices(context, vscode, options = {}) {
     ...options,
     projectFactory,
   });
-  registerCodeLensProvider(context, vscode, options);
+  registerCodeLensProvider(context, vscode, {
+    ...options,
+    projectFactory,
+  });
   registerFoldingRangeProvider(context, vscode, options);
   registerFormatProvider(context, vscode, {
     ...options,

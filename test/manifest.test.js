@@ -115,6 +115,30 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.extract.concept"));
   assert.ok(commandPaletteIds.includes("gauge.format"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
+  assert.deepEqual(manifest.contributes.keybindings, [
+    {
+      command: "gauge.format",
+      key: "ctrl+alt+shift+l",
+      when: "editorTextFocus && editorLangId == gauge",
+    },
+    {
+      command: "gauge.extract.concept",
+      key: "ctrl+alt+c",
+      when: "editorTextFocus && editorLangId == gauge",
+    },
+  ]);
+  assert.deepEqual(manifest.contributes.menus["explorer/context"], [
+    {
+      command: "gauge.create.specification",
+      when: "gauge:activated && explorerResourceIsFolder",
+      group: "gauge@1",
+    },
+    {
+      command: "gauge.create.concept",
+      when: "gauge:activated && explorerResourceIsFolder",
+      group: "gauge@2",
+    },
+  ]);
 
   const configuration = manifest.contributes.configuration.properties;
   assert.deepEqual(configuration["gauge.executablePath"], {
@@ -332,16 +356,30 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "table:6",
   ]);
   assert.deepEqual(snippets.Specification.body, [
-    "# ${1:SPECIFICATION_HEADING}",
+    "${1:Specification Heading}",
+    "=====================",
+    "Created by ${2:USER} on $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE",
+    "",
+    "This is an executable specification file which follows markdown syntax.",
+    "Every heading in this file denotes a scenario. Every bulleted point denotes a step.",
+    "",
+    "Scenario Heading",
+    "----------------",
     "$0",
   ]);
   assert.deepEqual(snippets.Scenario.body, [
-    "## ${1:Scenario Heading}",
+    "${1:Scenario Heading}",
+    "----------------",
     "* $0",
   ]);
   assert.deepEqual(snippets.Concept.body, [
-    "# ${1:Concept Heading}",
-    "* $0",
+    "Created by ${1:USER} on $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE",
+    "",
+    "This is a concept file with following syntax for each concept.",
+    "# ${2:Concept Heading}",
+    "* step1",
+    "* step2",
+    "$0",
   ]);
   assert.deepEqual(snippets["Table with two columns"].body, [
     "|${1:HEADER}|${2:HEADER}|",

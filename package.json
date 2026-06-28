@@ -80,6 +80,18 @@
         "path": "./syntaxes/markdown.tmLanguage"
       }
     ],
+    "keybindings": [
+      {
+        "command": "gauge.format",
+        "key": "ctrl+alt+shift+l",
+        "when": "editorTextFocus && editorLangId == gauge"
+      },
+      {
+        "command": "gauge.extract.concept",
+        "key": "ctrl+alt+c",
+        "when": "editorTextFocus && editorLangId == gauge"
+      }
+    ],
     "commands": [
       {
         "command": "gauge.createProject",
@@ -194,6 +206,18 @@
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "gauge.create.specification",
+          "when": "gauge:activated && explorerResourceIsFolder",
+          "group": "gauge@1"
+        },
+        {
+          "command": "gauge.create.concept",
+          "when": "gauge:activated && explorerResourceIsFolder",
+          "group": "gauge@2"
+        }
+      ],
       "commandPalette": [
         {
           "command": "gauge.create.specification",

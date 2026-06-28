@@ -323,29 +323,68 @@ function specDataTableHeaders(text) {
   return [];
 }
 
+function isTableSeparatorLine(line) {
+  if (!isTableLine(line)) {
+    return false;
+  }
+  const cells = tableCells(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
+}
+
+function dynamicArgumentsInLine(line, options = {}) {
+  const values = [];
+  let openIndex = line.indexOf("<");
+  while (openIndex !== -1) {
+    if (isEscapedCharacter(line, openIndex)) {
+      openIndex = line.indexOf("<", openIndex + 1);
+      continue;
+    }
+    const closeIndex = closingAngleIndex(
+      line,
+      openIndex,
+      Boolean(options.stopAtUnescapedPipe),
+    );
+    if (closeIndex === -1) {
+      break;
+    }
+    if (line[closeIndex] !== ">") {
+      openIndex = line.indexOf("<", closeIndex + 1);
+      continue;
+    }
+    const value = line.slice(openIndex + 1, closeIndex).trim();
+    if (value) {
+      values.push(value);
+    }
+    openIndex = line.indexOf("<", closeIndex + 1);
+  }
+  return values;
+}
+
+function isConceptDynamicArgumentSourceLine(lines, lineNumber) {
+  const line = lines[lineNumber] || "";
+  if (isConceptHeading(line) || isStepLine(line)) {
+    return true;
+  }
+  if (!isCompletionTableBlockLine(lines, lineNumber)) {
+    return false;
+  }
+  if (isFirstTableLine(lines, lineNumber, { allowIndented: true })) {
+    return false;
+  }
+  return !isTableSeparatorLine(line);
+}
+
 function conceptDynamicArguments(text) {
   const values = [];
   const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!isConceptHeading(line) && !isStepLine(line)) {
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    const line = lines[lineNumber];
+    if (!isConceptDynamicArgumentSourceLine(lines, lineNumber)) {
       continue;
     }
-    let openIndex = line.indexOf("<");
-    while (openIndex !== -1) {
-      if (isEscapedCharacter(line, openIndex)) {
-        openIndex = line.indexOf("<", openIndex + 1);
-        continue;
-      }
-      const closeIndex = closingAngleIndex(line, openIndex);
-      if (closeIndex === -1) {
-        break;
-      }
-      const value = line.slice(openIndex + 1, closeIndex).trim();
-      if (value) {
-        values.push(value);
-      }
-      openIndex = line.indexOf("<", closeIndex + 1);
-    }
+    values.push(...dynamicArgumentsInLine(line, {
+      stopAtUnescapedPipe: isTableLine(line),
+    }));
   }
   return unique(values);
 }

@@ -30,27 +30,30 @@ function createGaugeSpecDirsProvider(getClientsMap, options = {}) {
 function buildSpecificationDocument(options = {}) {
   const eol = options.eol || nodeOs.EOL;
   const withHelp = options.withHelp !== false;
-  let text = `# SPECIFICATION HEADING${eol}`;
+  const user = options.user || defaultUser();
+  const date = options.date || defaultDate();
+  const heading = "Specification Heading";
+  const lines = [
+    heading,
+    "=====================",
+    `Created by ${user} on ${date}`,
+  ];
 
   if (withHelp) {
-    text += [
+    lines.push(
       "",
-      "This is an executable specification file. This file follows markdown syntax.",
+      "This is an executable specification file which follows markdown syntax.",
       "Every heading in this file denotes a scenario. Every bulleted point denotes a step.",
-      "",
-      "> To turn off these comments, set the configuration`gauge.create.specification.withHelp` to false.",
-    ].join(eol);
-    text += eol;
+    );
   }
 
-  text += ["", "## SCENARIO HEADING", "", "* step", ""].join(eol);
+  lines.push("", "Scenario Heading", "----------------");
 
-  const line = text.split(eol).length - 2;
   return {
-    text,
+    text: lines.join(eol),
     selection: {
-      start: { line, character: 2 },
-      end: { line, character: 6 },
+      start: { line: 0, character: 0 },
+      end: { line: 0, character: heading.length },
     },
   };
 }
@@ -199,6 +202,8 @@ async function createSpecification(options = {}) {
     const document = buildSpecificationDocument({
       withHelp: getWithHelpSetting(vscode),
       eol,
+      user: options.user,
+      date: options.date,
     });
 
     await promises.mkdir(specDir, { recursive: true });

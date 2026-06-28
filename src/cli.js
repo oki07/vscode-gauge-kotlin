@@ -74,7 +74,11 @@ class CLI {
       return new CLI(undefined, {}, mavenCommand, gradleCommand);
     }
 
-    const versionResult = gaugeCommand.spawnSync([GAUGE_VERSION_ARG, MACHINE_READABLE_ARG]);
+    const versionEnv = envWithGaugeHome(options.env || process.env, { settings, vscode });
+    const versionResult = gaugeCommand.spawnSync(
+      [GAUGE_VERSION_ARG, MACHINE_READABLE_ARG],
+      { env: versionEnv },
+    );
     const versionOutput = versionResult.stdout.toString();
     try {
       return new CLI(

@@ -263,7 +263,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests dynamic arguments inside i
 
   assert.deepEqual(labels(specItems), ["user", "role"]);
   assert.deepEqual(specHeaderItems, []);
-  assert.deepEqual(labels(conceptItems), ["item", "user"]);
+  assert.deepEqual(labels(conceptItems), ["item", "user", "i"]);
   assert.deepEqual(conceptHeaderItems, []);
 });
 
@@ -508,7 +508,7 @@ test("GaugeDynamicArgumentCompletionProvider ignores indented concept hash headi
   assert.deepEqual(headingItems, []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores concept table dynamic arguments", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests concept table dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -523,7 +523,7 @@ test("GaugeDynamicArgumentCompletionProvider ignores concept table dynamic argum
 
   const items = provider.provideCompletionItems(document, new vscode.Position(5, 12));
 
-  assert.deepEqual(labels(items), ["item", "user", "u"]);
+  assert.deepEqual(labels(items), ["item", "user", "tableUser", "u"]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments inside quotes", () => {

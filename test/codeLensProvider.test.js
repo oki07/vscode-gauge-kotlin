@@ -118,3 +118,22 @@ test("GaugeCodeLensProvider ignores concept documents", () => {
 
   assert.deepEqual(provider.provideCodeLenses(document), []);
 });
+
+test("GaugeCodeLensProvider ignores documents outside Gauge projects", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.spec");
+        throw new Error("not a Gauge project");
+      },
+    },
+  });
+  const document = createDocument([
+    "# Notes",
+    "",
+    "## Draft",
+  ].join("\n"), "/workspace/notes/example.spec");
+
+  assert.deepEqual(provider.provideCodeLenses(document), []);
+});
