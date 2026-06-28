@@ -621,6 +621,45 @@ test("GaugeWorkspace removes clients and reports language server startup failure
   ]);
 });
 
+test("GaugeWorkspace reports language server runtime failures", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { errors, vscode } = createFakeVscode();
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    execSync() {
+      return Buffer.from("");
+    },
+    LanguageClient: FakeLanguageClient,
+    ErrorAction: { Continue: "continue" },
+    CloseAction: { DoNotRestart: "do-not-restart" },
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+  const handler = entry.client.clientOptions.errorHandler;
+  assert.equal(typeof handler.error, "function");
+  assert.equal(typeof handler.closed, "function");
+
+  assert.deepEqual(handler.error(new Error("connection reset")), { action: "continue" });
+  assert.deepEqual(handler.closed(), { action: "do-not-restart" });
+  assert.deepEqual(errors.map((entry) => entry.message), [
+    "Gauge language server for /workspace/gauge failed. connection reset",
+    "Gauge language server for /workspace/gauge stopped unexpectedly.",
+  ]);
+});
+
 test("GaugeWorkspace generates Java config for mixed-case Java plugins", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
