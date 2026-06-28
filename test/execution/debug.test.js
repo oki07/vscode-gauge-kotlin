@@ -293,6 +293,69 @@ test("GaugeDebugger adds C# debug environment for dotnet projects", async () => 
   });
 });
 
+test("GaugeDebugger copies C# launch debug options", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const vscode = {
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
+    workspace: {
+      workspaceFolders: [
+        { uri: { fsPath: "/workspace/gauge" } },
+      ],
+      getConfiguration(section, scope) {
+        if (section === "gauge") {
+          return {
+            get(key) {
+              assert.equal(key, "execution.debugPort");
+              return 5005;
+            },
+          };
+        }
+        assert.equal(section, "launch");
+        assert.deepEqual(scope, { fsPath: "/workspace/gauge" });
+        return {
+          get(key) {
+            assert.equal(key, "configurations");
+            return [
+              {
+                justMyCode: false,
+                sourceFileMap: {
+                  "/remote": "/workspace/gauge",
+                },
+              },
+            ];
+          },
+        };
+      },
+    },
+  };
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace/gauge",
+    language: "csharp",
+    async debugPortProvider() {
+      return 5005;
+    },
+  });
+
+  await debuggerSession.addDebugEnv();
+  debuggerSession.addProcessId(12345);
+
+  assert.deepEqual(debuggerSession.getDebuggerConfiguration(), {
+    name: "Gauge Debugger",
+    type: "coreclr",
+    request: "attach",
+    processId: 12345,
+    justMyCode: false,
+    sourceFileMap: {
+      "/remote": "/workspace/gauge",
+    },
+  });
+});
+
 test("GaugeDebugger registers debug session termination callbacks", () => {
   const { createGaugeDebugger } = require("../../src/execution/debug");
   const callbacks = [];

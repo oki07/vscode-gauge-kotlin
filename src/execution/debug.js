@@ -59,6 +59,41 @@ function debugAttachAttempts(timeoutMs, retryDelayMs) {
   return Math.max(1, Math.ceil(timeoutMs / retryDelayMs));
 }
 
+function workspaceFolderUri(vscode, projectRoot) {
+  const folders = vscode && vscode.workspace && vscode.workspace.workspaceFolders;
+  if (!Array.isArray(folders)) {
+    return undefined;
+  }
+  const folder = folders.find((entry) => entry && entry.uri && entry.uri.fsPath === projectRoot);
+  return folder && folder.uri;
+}
+
+function csharpLaunchOptions(vscode, projectRoot) {
+  if (!vscode || !vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
+    return {};
+  }
+  try {
+    const configuration = vscode.workspace.getConfiguration("launch", workspaceFolderUri(vscode, projectRoot));
+    const launchConfigurations = configuration
+      && typeof configuration.get === "function"
+      && configuration.get("configurations");
+    const firstConfiguration = Array.isArray(launchConfigurations) ? launchConfigurations[0] : undefined;
+    if (!firstConfiguration || typeof firstConfiguration !== "object") {
+      return {};
+    }
+    const options = {};
+    if (Object.prototype.hasOwnProperty.call(firstConfiguration, "justMyCode")) {
+      options.justMyCode = firstConfiguration.justMyCode;
+    }
+    if (firstConfiguration.sourceFileMap && typeof firstConfiguration.sourceFileMap === "object") {
+      options.sourceFileMap = firstConfiguration.sourceFileMap;
+    }
+    return options;
+  } catch (_error) {
+    return {};
+  }
+}
+
 function createGaugeDebugger(options = {}) {
   let vscode = options.vscode;
   const projectRoot = options.projectRoot;
@@ -147,6 +182,7 @@ function createGaugeDebugger(options = {}) {
           processId,
           justMyCode: true,
           sourceFileMap: {},
+          ...csharpLaunchOptions(vscode, projectRoot),
         };
       default:
         if (javaLike(language)) {
