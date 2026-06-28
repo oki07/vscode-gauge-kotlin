@@ -13,6 +13,7 @@ const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const KOTLIN_FILE_PATTERN = "**/*.kt";
+const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -234,6 +235,10 @@ function replacementForLiteral(value, literal) {
   return literal.raw ? value : escapeKotlinStringContent(value);
 }
 
+function stepEntryHasTemplate(entry, template) {
+  return (entry.aliases || []).some((alias) => normalizeStepTemplate(alias) === template);
+}
+
 class GaugeRenameProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -361,8 +366,30 @@ class GaugeRenameProvider {
   }
 
   async prepareRename(document, position) {
-    const { step } = await this.stepAt(document, position);
+    const { documents, step } = await this.stepAt(document, position);
+    this.validateRenameTarget(documents, step);
     return step ? { range: step.range, placeholder: step.text } : undefined;
+  }
+
+  validateRenameTarget(documents, step) {
+    if (!step) {
+      return;
+    }
+    const kotlinDocuments = this.kotlinDocuments(documents);
+    for (const document of kotlinDocuments) {
+      const text = document.getText();
+      let externalConstants;
+      try {
+        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+      } catch (_error) {
+        externalConstants = undefined;
+      }
+      for (const entry of findStepFunctions(text, externalConstants)) {
+        if (entry.aliases.length > 1 && stepEntryHasTemplate(entry, step.template)) {
+          throw new Error(ALIASED_STEP_RENAME_ERROR);
+        }
+      }
+    }
   }
 
   addGaugeRenames(edit, document, template, newName) {
@@ -415,6 +442,7 @@ class GaugeRenameProvider {
     if (!step) {
       return undefined;
     }
+    this.validateRenameTarget(documents, step);
 
     const edit = createWorkspaceEdit(this.vscode);
     const kotlinDocuments = this.kotlinDocuments(documents);

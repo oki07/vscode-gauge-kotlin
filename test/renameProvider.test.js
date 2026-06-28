@@ -226,6 +226,35 @@ test("GaugeRenameProvider renames concept headings when renaming concept usages"
   );
 });
 
+test("GaugeRenameProvider rejects renames for aliased Kotlin Step implementations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\", \"Pay by <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  await assert.rejects(
+    () => provider.prepareRename(specDocument, new vscode.Position(1, 4)),
+    /Refactoring for steps having aliases are not supported/,
+  );
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /Refactoring for steps having aliases are not supported/,
+  );
+});
+
 test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const vscode = createRegistrationVscode();
