@@ -11,6 +11,8 @@ const {
 const { createGaugeProcessRunner } = require("./processRunner");
 const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
 const { CLI } = require("../cli");
+const { GradleProject } = require("../project/gradleProject");
+const { MavenProject } = require("../project/mavenProject");
 const { createProjectFactory } = require("../project/projectFactory");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
@@ -147,6 +149,16 @@ function detectProjectKind(projectRoot, fileSystem, pathModule) {
     return "maven";
   }
   return "gauge";
+}
+
+function projectKindFromProject(project) {
+  if (project instanceof MavenProject) {
+    return "maven";
+  }
+  if (project instanceof GradleProject) {
+    return "gradle";
+  }
+  return undefined;
 }
 
 function commandForProjectKind(projectKind, options) {
@@ -427,8 +439,9 @@ function createGaugeExecutionController(options = {}) {
       return undefined;
     }
 
-    const projectKind = detectProjectKind(projectRoot, fileSystem, pathModule);
     const project = getProjectForExecution(projectFactory, projectRoot);
+    const projectKind = projectKindFromProject(project)
+      || detectProjectKind(projectRoot, fileSystem, pathModule);
     const executionTool = project ? commandFromProject(project, getCli()) : undefined;
     const option = mergeRunOptions(
       extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
