@@ -26,6 +26,7 @@ function createFakeVscode(overrides = {}) {
   const contexts = [];
   const debugProviders = [];
   const editorUpdates = [];
+  const appliedEdits = [];
   const codeActionProviders = [];
   const codeLensProviders = [];
   const completionProviders = [];
@@ -57,11 +58,38 @@ function createFakeVscode(overrides = {}) {
     ...overrides.semanticTokenColors,
   };
   const textDocumentListeners = [];
+  class Position {
+    constructor(line, character) {
+      this.line = line;
+      this.character = character;
+    }
+  }
+
+  class Range {
+    constructor(start, end) {
+      this.start = start;
+      this.end = end;
+    }
+  }
+
+  class WorkspaceEdit {
+    constructor() {
+      this.replacements = [];
+    }
+
+    replace(uri, range, newText) {
+      this.replacements.push({ uri, range, newText });
+    }
+  }
+
   const fakeVscode = {
     ConfigurationTarget: {
       Global: "global",
       Workspace: "workspace",
     },
+    Position,
+    Range,
+    WorkspaceEdit,
     commands: {
       executeCommand(command, key, value) {
         if (typeof overrides.onExecuteCommand === "function") {
@@ -224,10 +252,15 @@ function createFakeVscode(overrides = {}) {
         textDocumentListeners.push({ listener, disposable });
         return disposable;
       },
+      applyEdit(edit) {
+        appliedEdits.push(edit);
+        return Promise.resolve(true);
+      },
       workspaceFolders: overrides.workspaceFolders,
     },
   };
   return {
+    appliedEdits,
     configurationListeners,
     contexts,
     codeActionProviders,
@@ -478,8 +511,9 @@ test("format command saves and runs gauge format for the active Gauge file", asy
 
   const context = { subscriptions: [] };
   const calls = [];
+  const formattedText = "# Checkout\n* Login\n";
   const spawned = [];
-  const { fakeVscode, registeredCommands } = createFakeVscode({
+  const { appliedEdits, fakeVscode, registeredCommands } = createFakeVscode({
     onExecuteCommand(command) {
       calls.push(command);
     },
@@ -508,6 +542,12 @@ test("format command saves and runs gauge format for the active Gauge file", asy
         return "/workspace/gauge";
       },
     },
+    fileSystem: {
+      readFileSync(filePath) {
+        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        return Buffer.from(formattedText);
+      },
+    },
   });
 
   const command = registeredCommands.find(
@@ -518,7 +558,14 @@ test("format command saves and runs gauge format for the active Gauge file", asy
   fakeVscode.window.activeTextEditor = {
     document: {
       languageId: "gauge",
+      lineCount: 2,
       uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      getText() {
+        return "# Checkout\n*  Login\n";
+      },
+      lineAt(line) {
+        return { text: ["# Checkout", "*  Login"][line] };
+      },
       save() {
         calls.push("document.save");
         return Promise.resolve(true);
@@ -533,6 +580,20 @@ test("format command saves and runs gauge format for the active Gauge file", asy
       options: { cwd: "/workspace/gauge" },
     },
   ]);
+  assert.equal(appliedEdits.length, 1);
+  assert.equal(appliedEdits[0].replacements.length, 1);
+  assert.deepEqual(appliedEdits[0].replacements[0].uri, {
+    fsPath: "/workspace/gauge/specs/example.spec",
+  });
+  assert.deepEqual({ ...appliedEdits[0].replacements[0].range.start }, {
+    line: 0,
+    character: 0,
+  });
+  assert.deepEqual({ ...appliedEdits[0].replacements[0].range.end }, {
+    line: 1,
+    character: 8,
+  });
+  assert.equal(appliedEdits[0].replacements[0].newText, formattedText);
 });
 
 test("format command removes deprecated Gauge lines from failures", async () => {
@@ -582,7 +643,15 @@ test("format command removes deprecated Gauge lines from failures", async () => 
   fakeVscode.window.activeTextEditor = {
     document: {
       languageId: "gauge",
+      lineCount: 1,
       uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      getText() {
+        return "# Checkout\n";
+      },
+      lineAt(line) {
+        assert.equal(line, 0);
+        return { text: "# Checkout" };
+      },
       save() {
         return Promise.resolve(true);
       },

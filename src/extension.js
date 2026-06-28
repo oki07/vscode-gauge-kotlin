@@ -2,7 +2,6 @@
 
 const { CLI } = require("./cli");
 const { GaugeCodeLensProvider } = require("./codeLensProvider");
-const { envWithGaugeHome } = require("./config/gaugeConfig");
 const {
   GaugeArgumentCodeActionProvider,
   registerArgumentSelectionCommand,
@@ -50,7 +49,6 @@ const {
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
-const FORMAT_COMMAND = "format";
 const KOTLIN_LANGUAGE = "kotlin";
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
@@ -126,73 +124,6 @@ function showError(vscode, message) {
   return undefined;
 }
 
-function collectOutput(stream, chunks) {
-  if (stream && typeof stream.on === "function") {
-    stream.on("data", (chunk) => chunks.push(chunk.toString()));
-  }
-}
-
-function waitForProcess(command, args, options) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const stdout = [];
-    const stderr = [];
-
-    function settle(result) {
-      if (!settled) {
-        settled = true;
-        resolve({
-          stdout: stdout.join(""),
-          stderr: stderr.join(""),
-          ...result,
-        });
-      }
-    }
-
-    let child;
-    try {
-      child = command.spawn(args, options);
-    } catch (error) {
-      settle({ code: 1, error });
-      return;
-    }
-    if (!child) {
-      settle({ code: 1, error: new Error("Gauge format process did not start.") });
-      return;
-    }
-
-    collectOutput(child.stdout, stdout);
-    collectOutput(child.stderr, stderr);
-    if (typeof child.on === "function") {
-      child.on("error", (error) => settle({ code: 1, error }));
-      child.on("exit", (code) => settle({ code }));
-      child.on("close", (code) => settle({ code }));
-    } else {
-      settle({ code: 0 });
-    }
-  });
-}
-
-function withoutDeprecatedOutput(output) {
-  return String(output || "")
-    .split(/\r?\n/)
-    .filter((line) => !line.startsWith("[DEPRECATED]"))
-    .join("\n")
-    .trim();
-}
-
-function failureReason(result) {
-  return withoutDeprecatedOutput(result.stderr)
-    || withoutDeprecatedOutput(result.stdout)
-    || (result.error && result.error.message)
-    || "";
-}
-
-function formatFailureMessage(result) {
-  const reason = failureReason(result);
-  return reason ? `Error on formatting spec. ${reason}` : "Error on formatting spec.";
-}
-
 function activeProjectRoots() {
   if (!activeClientsMap || typeof activeClientsMap.keys !== "function") {
     return undefined;
@@ -201,45 +132,43 @@ function activeProjectRoots() {
   return roots.length > 0 ? roots : undefined;
 }
 
+async function applyDocumentEdits(vscode, document, edits) {
+  if (!Array.isArray(edits) || edits.length === 0) {
+    return undefined;
+  }
+  if (
+    !vscode.workspace
+    || typeof vscode.workspace.applyEdit !== "function"
+    || typeof vscode.WorkspaceEdit !== "function"
+  ) {
+    return undefined;
+  }
+  const workspaceEdit = new vscode.WorkspaceEdit();
+  for (const edit of edits) {
+    workspaceEdit.replace(document.uri, edit.range, edit.newText);
+  }
+  const applied = await vscode.workspace.applyEdit(workspaceEdit);
+  if (applied === false) {
+    return showError(vscode, "Unable to apply formatted Gauge document.");
+  }
+  return undefined;
+}
+
 async function formatActiveGaugeDocument(vscode, options = {}) {
   if (!hasActiveGaugeDocument(vscode)) {
     return notify(vscode, "No Gauge file is active.");
   }
   const document = vscode.window.activeTextEditor.document;
-  if (typeof document.save === "function") {
-    await document.save();
-  }
-  const filePath = (document.uri && document.uri.fsPath) || document.fileName;
-  if (!filePath) {
-    return showError(vscode, "Gauge file path is not available.");
-  }
-
-  let projectRoot;
-  try {
-    projectRoot = options.projectFactory.getGaugeRootFromFilePath(filePath);
-  } catch (error) {
-    return showError(vscode, formatFailureMessage({ error }));
-  }
-
-  const cli = options.cli || createCli(vscode, options);
-  const command = cli && typeof cli.gaugeCommand === "function" && cli.gaugeCommand();
-  if (!command || typeof command.spawn !== "function") {
-    return showError(vscode, formatFailureMessage({
-      error: new Error("Gauge is not installed."),
-    }));
-  }
-
-  const processOptions = { cwd: projectRoot };
-  const configuredEnv = envWithGaugeHome(options.env || process.env, { vscode });
-  if (options.env || configuredEnv !== process.env) {
-    processOptions.env = configuredEnv;
-  }
-
-  const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], processOptions);
-  if (result.code !== 0) {
-    return showError(vscode, formatFailureMessage(result));
-  }
-  return undefined;
+  const provider = new GaugeFormatProvider({
+    cli: options.cli,
+    createCli: options.createCli,
+    env: options.env,
+    fileSystem: options.fileSystem,
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const edits = await provider.provideDocumentFormattingEdits(document);
+  return applyDocumentEdits(vscode, document, edits);
 }
 
 function workspaceFolders(vscode) {
