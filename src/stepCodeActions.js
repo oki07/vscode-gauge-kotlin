@@ -19,12 +19,20 @@ function createCodeAction(vscode, title) {
 
 function documentLine(document, line) {
   if (typeof document.lineAt === "function") {
-    return document.lineAt(line).text;
+    try {
+      return document.lineAt(line).text;
+    } catch (_error) {
+      return "";
+    }
   }
   if (typeof document.getText === "function") {
     return document.getText().split(/\r?\n/)[line] || "";
   }
   return "";
+}
+
+function isInlineTableLine(line) {
+  return String(line || "").trimStart().startsWith("|");
 }
 
 function gaugeStepTextAt(document, lineNumber) {
@@ -34,7 +42,12 @@ function gaugeStepTextAt(document, lineNumber) {
     return undefined;
   }
   const text = line.slice(marker + 1).trim();
-  return text || undefined;
+  if (!text) {
+    return undefined;
+  }
+  return isInlineTableLine(documentLine(document, lineNumber + 1))
+    ? `${text} <table>`
+    : text;
 }
 
 function kotlinStringLiteral(value) {
