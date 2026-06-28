@@ -292,7 +292,7 @@ test("ProjectInitializer rejects an existing Gauge project directory without rem
   assert.deepEqual(commands, []);
 });
 
-test("ProjectInitializer initializes an existing non-Gauge directory", async () => {
+test("ProjectInitializer rejects an existing non-Gauge directory without removing it", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
     commands,
@@ -347,21 +347,11 @@ test("ProjectInitializer initializes an existing non-Gauge directory", async () 
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(errors, []);
+  assert.deepEqual(errors, ["A folder named shop already exists in /workspace"]);
   assert.deepEqual(mkdirs, []);
   assert.deepEqual(removes, []);
-  assert.deepEqual(spawns, [
-    {
-      args: ["init", "kotlin"],
-      options: { cwd: "/workspace/shop", env: { PATH: "/bin" } },
-    },
-  ]);
-  assert.deepEqual(commands, [
-    {
-      command: "vscode.openFolder",
-      args: [{ fsPath: "/workspace/shop" }, true],
-    },
-  ]);
+  assert.deepEqual(spawns, []);
+  assert.deepEqual(commands, []);
 });
 
 test("ProjectInitializer rejects unsupported Gauge versions before reading templates", async () => {

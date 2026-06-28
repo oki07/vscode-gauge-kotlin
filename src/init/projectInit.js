@@ -163,7 +163,12 @@ class ProjectInitializer {
           false,
         );
       }
-      return this.createProjectInDir(cli, template, projectFolderUri);
+      return this.handleError(
+        null,
+        `A folder named ${name} already exists in ${folders[0].fsPath}`,
+        projectFolderUri.fsPath,
+        false,
+      );
     }
     this.fileSystem.mkdirSync(projectFolderUri.fsPath);
     return this.createProjectInDir(cli, template, projectFolderUri);
