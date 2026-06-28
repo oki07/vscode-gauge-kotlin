@@ -969,6 +969,7 @@ test("activation wires Gauge Test UI execution events into the execution control
   const { fakeVscode } = createFakeVscode();
   const sink = () => {};
   const clientsMap = new Map();
+  const projectFactory = {};
 
   class FakeGaugeTestController {
     constructor(options) {
@@ -998,11 +999,14 @@ test("activation wires Gauge Test UI execution events into the execution control
       return executionController;
     },
     GaugeTestController: FakeGaugeTestController,
+    projectFactory,
   });
 
   assert.equal(created.testController.options.vscode, fakeVscode);
   assert.equal(created.testController.options.clientsMap, clientsMap);
+  assert.equal(created.testController.options.projectFactory, projectFactory);
   assert.equal(created.executionOptions.executionEventSink, sink);
+  assert.equal(created.executionOptions.projectFactory, projectFactory);
   assert.equal(created.testController.executionController, executionController);
   assert.equal(context.subscriptions.includes(created.testController.disposable), true);
 });

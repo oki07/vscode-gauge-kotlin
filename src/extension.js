@@ -676,7 +676,7 @@ function activate(context, vscodeApi, options = {}) {
     projectFactory,
   };
   const GaugeTestControllerCtor = options.GaugeTestController || GaugeTestController;
-  const testController = new GaugeTestControllerCtor({ clientsMap, vscode });
+  const testController = new GaugeTestControllerCtor({ clientsMap, projectFactory, vscode });
   const executionEventSink = typeof testController.createExecutionEventSink === "function"
     ? testController.createExecutionEventSink()
     : undefined;

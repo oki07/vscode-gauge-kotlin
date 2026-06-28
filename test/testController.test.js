@@ -332,6 +332,31 @@ test("GaugeTestController discovers specification and scenario test items from o
   ]);
 });
 
+test("GaugeTestController ignores open Gauge documents outside Gauge projects", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Notes",
+    "",
+    "## Draft",
+    "* Not a Gauge project",
+    "",
+  ].join("\n"), "/workspace/notes/example.spec");
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.spec");
+        throw new Error("not a Gauge project");
+      },
+    },
+    vscode,
+  });
+
+  gaugeTests.register();
+
+  assert.deepEqual(controller.items.values(), []);
+});
+
 test("GaugeTestController ignores markdown subheadings in open Gauge documents", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([

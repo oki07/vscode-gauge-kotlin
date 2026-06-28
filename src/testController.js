@@ -203,6 +203,7 @@ class GaugeTestController {
     this.vscode = getVscode(options.vscode);
     this.clientsMap = options.clientsMap;
     this.executionController = options.executionController;
+    this.projectFactory = options.projectFactory;
     this.controller = undefined;
     this.currentRun = undefined;
     this.items = new Map();
@@ -364,8 +365,34 @@ class GaugeTestController {
     return item;
   }
 
+  isGaugeProjectDocument(document) {
+    if (!this.projectFactory) {
+      return true;
+    }
+    const file = documentPath(document);
+    if (!file || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return true;
+    }
+    try {
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      if (!root) {
+        return false;
+      }
+      if (typeof this.projectFactory.isGaugeProject === "function") {
+        return this.projectFactory.isGaugeProject(root) !== false;
+      }
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   discoverDocument(document) {
     if (!this.controller || !isGaugeSpecificationDocument(document)) {
+      return [];
+    }
+    if (!this.isGaugeProjectDocument(document)) {
+      this.removeDocumentItems(document, this.workspaceDiscoveredIdsForPath(documentPath(document)));
       return [];
     }
     const filename = documentPath(document);
