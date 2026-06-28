@@ -777,6 +777,7 @@ test("GaugeDynamicArgumentCompletionProvider keeps filled static args in Kotlin 
 
   assert.deepEqual(labels(items), ["Log in as <user>"]);
   assert.equal(items[0].insertText.value, "Log in as \"${0:Alice}\"");
+  assert.equal(items[0].filterText, "Log in as \"Alice\"");
 });
 
 test("GaugeDynamicArgumentCompletionProvider ignores indented step lines for Kotlin Step aliases", async () => {

@@ -299,6 +299,30 @@ function stepSnippetText(stepText, prefix = "") {
   return result + stepText.slice(offset);
 }
 
+function stepFilterText(stepText, prefix = "") {
+  const ranges = stepParameterRanges(stepText);
+  if (ranges.length === 0) {
+    return stepText;
+  }
+
+  const filledArgs = filledStaticArguments(prefix);
+  if (filledArgs.length === 0) {
+    return stepText;
+  }
+
+  let result = "";
+  let offset = 0;
+  for (let index = 0; index < ranges.length; index += 1) {
+    const range = ranges[index];
+    result += stepText.slice(offset, range.start);
+    result += filledArgs[index] !== undefined
+      ? `"${filledArgs[index]}"`
+      : stepText.slice(range.start, range.end + 1);
+    offset = range.end + 1;
+  }
+  return result + stepText.slice(offset);
+}
+
 function snippetString(vscode, value) {
   if (typeof vscode.SnippetString === "function") {
     return new vscode.SnippetString(value);
@@ -526,7 +550,7 @@ class GaugeDynamicArgumentCompletionProvider {
       range,
       {
         detail: entry.detail,
-        filterText: entry.label,
+        filterText: stepFilterText(entry.label, prefix),
         insertText: snippetString(this.vscode, stepSnippetText(entry.label, prefix)),
         kind,
       },
