@@ -279,8 +279,8 @@ test("SpecNodeProvider registers explorer commands", async () => {
   const workspace = createFakeWorkspace(client);
   const provider = new SpecNodeProvider(workspace, {
     executionController: {
-      handleCommand(command, argument) {
-        executionCalls.push({ command, argument });
+      handleCommand(command, argument, flags) {
+        executionCalls.push({ command, argument, flags });
         return Promise.resolve("handled");
       },
     },
@@ -309,14 +309,26 @@ test("SpecNodeProvider registers explorer commands", async () => {
     {
       command: "gauge.specexplorer.runAllActiveProjectSpecs",
       argument: { projectRoot: "/workspace/gauge" },
+      flags: {
+        "hide-suggestion": true,
+        "machine-readable": true,
+      },
     },
     {
       command: "gauge.specexplorer.runNode",
       argument: spec,
+      flags: {
+        "hide-suggestion": true,
+        "machine-readable": true,
+      },
     },
     {
       command: "gauge.specexplorer.debugNode",
       argument: spec,
+      flags: {
+        "hide-suggestion": true,
+        "machine-readable": true,
+      },
     },
   ]);
   assert.deepEqual(workspace.changes, ["showProjectOptions"]);
