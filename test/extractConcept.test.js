@@ -1040,6 +1040,47 @@ test("ExtractConceptCommandProvider keeps rooted new concept paths inside the pr
   ]);
 });
 
+test("ExtractConceptCommandProvider rejects new concept files without cpt extension", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {},
+    document,
+    inputResponses: ["Shared login", "specs/shared.txt"],
+    quickPickSelection: {
+      label: "New File",
+      description: "Create a new concept file",
+      value: "New File",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests, []), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(appliedEdits, []);
+  assert.deepEqual(errors, ["Concept file path must end with .cpt."]);
+});
+
 test("ExtractConceptCommandProvider rejects selections that include non-step text", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const document = createDocument([

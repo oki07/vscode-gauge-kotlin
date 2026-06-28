@@ -558,7 +558,11 @@ function normalizeConceptFilePath(file, projectRoot, pathModule) {
   if (!trimmed) {
     return undefined;
   }
-  const withExtension = pathModule.extname(trimmed) ? trimmed : `${trimmed}.cpt`;
+  const extension = pathModule.extname(trimmed);
+  if (extension && extension.toLowerCase() !== ".cpt") {
+    return undefined;
+  }
+  const withExtension = extension ? trimmed : `${trimmed}.cpt`;
   const parsed = pathModule.parse(withExtension);
   const projectRelative = parsed.root ? withExtension.slice(parsed.root.length) : withExtension;
   return pathModule.join(projectRoot, projectRelative);
@@ -666,6 +670,9 @@ class ExtractConceptCommandProvider {
     });
     const conceptPath = normalizeConceptFilePath(input, projectRoot, this.pathModule);
     if (!conceptPath) {
+      if (input && input.trim()) {
+        await this.showError("Concept file path must end with .cpt.");
+      }
       return undefined;
     }
     return {
