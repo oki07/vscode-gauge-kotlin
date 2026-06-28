@@ -155,6 +155,43 @@ test("previewGaugeDocument reports Spectacle generation failures", async () => {
   ]);
 });
 
+test("previewGaugeDocument removes deprecated Gauge lines from Spectacle failures", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode();
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn() {
+          return createChildProcess({
+            code: 1,
+            stderr: "[DEPRECATED] old behavior\nspectacle failed\n",
+          });
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(errors, [
+    "Unable to create html file for example.spec. spectacle failed",
+  ]);
+});
+
 test("previewGaugeDocument prompts to install Spectacle when the plugin is missing", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errorPrompts, errors, opened, vscode } = createFakeVscode({
