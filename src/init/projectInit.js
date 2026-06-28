@@ -49,10 +49,6 @@ function templateScore(template, preferredBuildTool) {
   return 1;
 }
 
-function isKotlinTemplate(template) {
-  return templateText(template).includes("kotlin");
-}
-
 function isGaugeProjectDir(fileSystem, pathModule, dirname) {
   return isGaugeProjectRoot(fileSystem, pathModule, dirname);
 }
@@ -262,8 +258,7 @@ class ProjectInitializer {
         description: template.Description,
         value: template.value,
       }));
-      const kotlinTemplates = templates.filter(isKotlinTemplate);
-      return this.sortTemplatesByPreference(kotlinTemplates.length > 0 ? kotlinTemplates : templates);
+      return this.sortTemplatesByPreference(templates);
     } catch (_error) {
       await this.vscode.window.showErrorMessage(
         "Failed to get list of templates.",

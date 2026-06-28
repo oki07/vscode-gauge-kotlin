@@ -598,7 +598,7 @@ test("ProjectInitializer does not open the project directory after Gauge init sp
   assert.deepEqual(commands, []);
 });
 
-test("ProjectInitializer prefers the configured Kotlin project template", async () => {
+test("ProjectInitializer prefers the configured Kotlin project template without hiding other templates", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
     quickPicks,
@@ -651,6 +651,7 @@ test("ProjectInitializer prefers the configured Kotlin project template", async 
   assert.deepEqual(quickPicks[0].map((template) => template.label), [
     "kotlin_gradle",
     "kotlin_maven",
+    "java",
   ]);
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });
