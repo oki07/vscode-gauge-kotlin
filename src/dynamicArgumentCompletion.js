@@ -2,6 +2,7 @@
 
 const {
   GaugeStepDiagnosticsProvider,
+  findConceptHeadings,
   findStepFunctions,
   isKotlinDocument,
 } = require("./stepDiagnostics");
@@ -424,15 +425,25 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.diagnosticsProvider.workspaceDocuments();
   }
 
-  stepAliases(workspaceDocuments) {
-    const aliases = [];
+  stepCompletionEntries(workspaceDocuments) {
+    const entries = [];
+    const seen = new Set();
+    const addEntry = (label, detail) => {
+      if (!label || seen.has(label)) {
+        return;
+      }
+      seen.add(label);
+      entries.push({ detail, label });
+    };
     for (const candidate of workspaceDocuments || []) {
       if (
         !candidate
-        || !isKotlinDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.isGaugeProjectDocument(candidate)
       ) {
+        continue;
+      }
+      if (!isKotlinDocument(candidate)) {
         continue;
       }
       const text = candidate.getText();
@@ -441,10 +452,25 @@ class GaugeDynamicArgumentCompletionProvider {
         workspaceDocuments,
       );
       for (const entry of findStepFunctions(text, externalConstants)) {
-        aliases.push(...entry.aliases);
+        for (const alias of entry.aliases) {
+          addEntry(alias, "step");
+        }
       }
     }
-    return unique(aliases);
+    for (const candidate of workspaceDocuments || []) {
+      if (
+        !candidate
+        || !isConceptDocument(candidate)
+        || typeof candidate.getText !== "function"
+        || !this.isGaugeProjectDocument(candidate)
+      ) {
+        continue;
+      }
+      for (const heading of findConceptHeadings(candidate.getText())) {
+        addEntry(heading.text, "concept");
+      }
+    }
+    return entries;
   }
 
   stepCompletionItems(document, position, targetRange, workspaceDocuments) {
@@ -455,14 +481,14 @@ class GaugeDynamicArgumentCompletionProvider {
     const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
-    return this.stepAliases(workspaceDocuments).map((label) => completionItem(
+    return this.stepCompletionEntries(workspaceDocuments).map((entry) => completionItem(
       this.vscode,
-      label,
+      entry.label,
       range,
       {
-        detail: "step",
-        filterText: label,
-        insertText: snippetString(this.vscode, stepSnippetText(label, prefix)),
+        detail: entry.detail,
+        filterText: entry.label,
+        insertText: snippetString(this.vscode, stepSnippetText(entry.label, prefix)),
         kind,
       },
     ));

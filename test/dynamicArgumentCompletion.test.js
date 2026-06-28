@@ -719,6 +719,35 @@ test("GaugeDynamicArgumentCompletionProvider suggests plaintext Kotlin Step alia
   assert.equal(items[0].insertText.value, "Pay with \"${0:method}\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests concept headings on step lines", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Reuse",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment <method>",
+    "* Pay with <method>",
+  ].join("\n"), "/workspace/gauge/specs/concepts/payment.cpt", "gauge");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, conceptDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 7));
+
+  assert.deepEqual(labels(items), ["Reuse payment <method>"]);
+  assert.equal(items[0].detail, "concept");
+  assert.equal(items[0].insertText.value, "Reuse payment \"${0:method}\"");
+});
+
 test("GaugeDynamicArgumentCompletionProvider keeps filled static args in Kotlin Step alias snippets", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
