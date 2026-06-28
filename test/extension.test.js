@@ -28,6 +28,7 @@ function createFakeVscode(overrides = {}) {
   const completionProviders = [];
   const definitionProviders = [];
   const diagnosticCollections = [];
+  const formattingProviders = [];
   const foldingRangeProviders = [];
   const languageConfigurations = [];
   const configurationListeners = [];
@@ -119,6 +120,15 @@ function createFakeVscode(overrides = {}) {
       registerFoldingRangeProvider(selector, provider) {
         const disposable = { dispose() {} };
         foldingRangeProviders.push({
+          selector,
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
+      registerDocumentFormattingEditProvider(selector, provider) {
+        const disposable = { dispose() {} };
+        formattingProviders.push({
           selector,
           provider,
           disposable,
@@ -222,6 +232,7 @@ function createFakeVscode(overrides = {}) {
     debugProviders,
     editorUpdates,
     fakeVscode,
+    formattingProviders,
     foldingRangeProviders,
     languageConfigurations,
     referenceProviders,
@@ -1199,6 +1210,82 @@ test("activation registers Gauge run code lenses for Gauge documents", () => {
   assert.deepEqual(codeLensProviders[0].selector, { language: "gauge" });
   assert.equal(codeLensProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(codeLensProviders[0].disposable), true);
+});
+
+test("activation registers Gauge document formatting for Gauge documents", () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const { fakeVscode, formattingProviders } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    isGaugeVersionGreaterOrEqual() {
+      return true;
+    },
+  };
+
+  class FakeFormatProvider {
+    constructor(options) {
+      this.options = options;
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return cli;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: class FakeConfigProvider {
+      dispose() {}
+    },
+    DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
+    ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
+      dispose() {}
+    },
+    GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    ReferenceProvider: class FakeReferenceProvider {
+      dispose() {}
+    },
+    GaugeFormatProvider: FakeFormatProvider,
+    GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
+    GaugeStepDiagnosticsProvider: class FakeStepDiagnosticsProvider {
+      register() {
+        return { dispose() {} };
+      }
+    },
+    semanticTokensLegend: { id: "legend" },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(formattingProviders.length, 1);
+  assert.deepEqual(formattingProviders[0].selector, { language: "gauge" });
+  assert.equal(formattingProviders[0].provider.options.vscode, fakeVscode);
+  assert.equal(formattingProviders[0].provider.options.cli, cli);
+  assert.equal(typeof formattingProviders[0].provider.options.projectFactory.isGaugeProject, "function");
+  assert.equal(context.subscriptions.includes(formattingProviders[0].disposable), true);
 });
 
 test("activation registers Kotlin step definitions for Gauge documents", () => {

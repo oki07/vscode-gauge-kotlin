@@ -17,6 +17,7 @@ const { ExtractConceptCommandProvider } = require("./extractConcept");
 const { GaugeDynamicArgumentCompletionProvider } = require("./dynamicArgumentCompletion");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
+const { GaugeFormatProvider } = require("./formatProvider");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
 const { GaugeClients } = require("./gaugeClients");
 const { GaugeEnterHandler } = require("./gaugeEnterHandler");
@@ -370,6 +371,27 @@ function registerFoldingRangeProvider(context, vscode, options) {
   }
 }
 
+function registerFormatProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerDocumentFormattingEditProvider !== "function") {
+    return;
+  }
+  const FormatProviderCtor = options.GaugeFormatProvider || GaugeFormatProvider;
+  const provider = new FormatProviderCtor({
+    cli: options.cli,
+    createCli: options.createCli,
+    fileSystem: options.fileSystem,
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = vscode.languages.registerDocumentFormattingEditProvider(
+    { language: "gauge" },
+    provider,
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerStepDiagnosticsProvider(context, vscode, options) {
   const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider || GaugeStepDiagnosticsProvider;
   const provider = new StepDiagnosticsProviderCtor({
@@ -589,6 +611,11 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerCodeLensProvider(context, vscode, options);
   registerFoldingRangeProvider(context, vscode, options);
+  registerFormatProvider(context, vscode, {
+    ...options,
+    cli,
+    projectFactory,
+  });
   registerStepDefinitionProvider(context, vscode, {
     ...options,
     projectFactory,
