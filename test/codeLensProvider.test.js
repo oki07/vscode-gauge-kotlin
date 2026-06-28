@@ -5,13 +5,41 @@ function createDocument(text, fsPath = "/workspace/specs/example.spec", language
   const lines = text.split("\n");
   return {
     languageId,
-    uri: { fsPath },
+    uri: {
+      fsPath,
+      toString() {
+        return `file://${fsPath}`;
+      },
+    },
     fileName: fsPath,
     lineAt(line) {
       return { text: lines[line] };
     },
+    getText() {
+      return text;
+    },
     get lineCount() {
       return lines.length;
+    },
+  };
+}
+
+function createFakeVscode(options = {}) {
+  return {
+    workspace: {
+      getConfiguration(section) {
+        if (section !== "gauge.codeLenses") {
+          return { get() { return undefined; } };
+        }
+        return {
+          has(key) {
+            return Object.prototype.hasOwnProperty.call(options.codeLenses || {}, key);
+          },
+          get(key) {
+            return (options.codeLenses || {})[key];
+          },
+        };
+      },
     },
   };
 }
@@ -244,4 +272,63 @@ test("GaugeCodeLensProvider ignores documents outside Gauge projects", () => {
   ].join("\n"), "/workspace/notes/example.spec");
 
   assert.deepEqual(provider.provideCodeLenses(document), []);
+});
+
+test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/tests/LoginSteps.kt");
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace");
+        return true;
+      },
+    },
+  });
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 3,
+      character: 0,
+      title: "Find Step References",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/tests/LoginSteps.kt",
+        { line: 3, character: 0 },
+        "Log in as <user>",
+      ],
+    },
+  ]);
+});
+
+test("GaugeCodeLensProvider suppresses Kotlin reference lenses when disabled", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({ codeLenses: { reference: false } }),
+  });
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
+
+  assert.deepEqual(await provider.provideCodeLenses(document), []);
 });

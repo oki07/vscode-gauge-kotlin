@@ -4,12 +4,22 @@ const {
   isScenarioHashHeading,
   isSpecHashHeading,
 } = require("./gaugeHeadings");
+const {
+  GaugeStepDiagnosticsProvider,
+  findStepFunctions,
+  isKotlinDocument,
+  positionAt,
+} = require("./stepDiagnostics");
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
+const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_EXTENSION = ".md";
+const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
+const REFERENCE_CONFIG = "reference";
+const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
@@ -22,6 +32,27 @@ function getVscode(vscode) {
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function uriPath(uri) {
+  return (uri && (uri.fsPath || uri.path)) || "";
+}
+
+function documentUri(document) {
+  if (document && document.uri && typeof document.uri.toString === "function") {
+    return document.uri.toString();
+  }
+  const file = documentPath(document);
+  return file ? `file://${file}` : undefined;
+}
+
+function sameDocument(left, right) {
+  if (left === right) {
+    return true;
+  }
+  const leftPath = documentPath(left);
+  const rightPath = documentPath(right);
+  return Boolean(leftPath && rightPath && leftPath === rightPath);
 }
 
 function isConceptDocument(document) {
@@ -67,6 +98,14 @@ function createPosition(vscode, line, character) {
 function createRange(vscode, line, start, end) {
   const startPosition = createPosition(vscode, line, start);
   const endPosition = createPosition(vscode, line, end);
+  return typeof vscode.Range === "function"
+    ? new vscode.Range(startPosition, endPosition)
+    : { start: startPosition, end: endPosition };
+}
+
+function createRangeFromPositions(vscode, start, end) {
+  const startPosition = createPosition(vscode, start.line, start.character);
+  const endPosition = createPosition(vscode, end.line, end.character);
   return typeof vscode.Range === "function"
     ? new vscode.Range(startPosition, endPosition)
     : { start: startPosition, end: endPosition };
@@ -148,10 +187,18 @@ function testUiRunFlags() {
   return { ...TEST_UI_RUN_FLAGS };
 }
 
+function stepValueArgument(aliases) {
+  return aliases.length === 1 ? aliases[0] : [...aliases];
+}
+
 class GaugeCodeLensProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      projectFactory: this.projectFactory,
+      vscode: this.vscode,
+    });
   }
 
   isGaugeProjectDocument(document) {
@@ -176,6 +223,123 @@ class GaugeCodeLensProvider {
     }
   }
 
+  referenceCodeLensesEnabled() {
+    const workspace = this.vscode.workspace || {};
+    if (typeof workspace.getConfiguration !== "function") {
+      return true;
+    }
+    const config = workspace.getConfiguration(GAUGE_CODELENS_CONFIG);
+    if (!config || typeof config.get !== "function") {
+      return true;
+    }
+    if (typeof config.has === "function" && config.has(REFERENCE_CONFIG)) {
+      return config.get(REFERENCE_CONFIG) !== false;
+    }
+    return config.get(REFERENCE_CONFIG) !== false;
+  }
+
+  async findWorkspaceKotlinDocuments() {
+    const workspace = this.vscode.workspace || {};
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return [];
+    }
+
+    let uris;
+    try {
+      uris = await workspace.findFiles(KOTLIN_WORKSPACE_PATTERN);
+    } catch (_error) {
+      return [];
+    }
+
+    const documents = [];
+    for (const uri of uris || []) {
+      const file = uriPath(uri);
+      if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+        try {
+          this.projectFactory.getGaugeRootFromFilePath(file);
+        } catch (_error) {
+          continue;
+        }
+      }
+
+      try {
+        documents.push(await workspace.openTextDocument(uri));
+      } catch (_error) {
+        // Ignore stale workspace files so CodeLens still works for the active document.
+      }
+    }
+    return documents;
+  }
+
+  async kotlinDocuments(sourceDocument) {
+    const workspace = this.vscode.workspace || {};
+    const documents = [];
+    const seenPaths = new Set();
+    const addDocument = (candidate) => {
+      if (
+        !candidate
+        || sameDocument(candidate, sourceDocument)
+        || !isKotlinDocument(candidate)
+        || typeof candidate.getText !== "function"
+        || !this.isGaugeProjectDocument(candidate)
+      ) {
+        return;
+      }
+      const file = documentPath(candidate);
+      if (file) {
+        if (seenPaths.has(file)) {
+          return;
+        }
+        seenPaths.add(file);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+
+    for (const candidate of workspace.textDocuments || []) {
+      addDocument(candidate);
+    }
+    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+      addDocument(candidate);
+    }
+    return documents;
+  }
+
+  async provideKotlinReferenceCodeLenses(document) {
+    if (
+      !this.referenceCodeLensesEnabled()
+      || !this.isGaugeProjectDocument(document)
+      || typeof document.getText !== "function"
+    ) {
+      return [];
+    }
+
+    const uri = documentUri(document);
+    if (!uri) {
+      return [];
+    }
+
+    const text = document.getText();
+    const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
+      document,
+      await this.kotlinDocuments(document),
+    );
+    return findStepFunctions(text, externalConstants).map((entry) => {
+      const start = positionAt(text, entry.declarationStart);
+      const end = positionAt(text, entry.declarationEnd);
+      const range = createRangeFromPositions(this.vscode, start, end);
+      return createCodeLens(this.vscode, range, {
+        command: SHOW_REFERENCES_FOR_STEP,
+        title: "Find Step References",
+        arguments: [uri, start, stepValueArgument(entry.aliases)],
+      });
+    });
+  }
+
   provideCodeLenses(document) {
     if (!document || isConceptDocument(document)) {
       return [];
@@ -183,6 +347,9 @@ class GaugeCodeLensProvider {
     const file = documentPath(document);
     if (!file) {
       return [];
+    }
+    if (isKotlinDocument(document)) {
+      return this.provideKotlinReferenceCodeLenses(document);
     }
     const supportedDocument = document.languageId === GAUGE_LANGUAGE
       || isMarkdownSpecDocument(document, file);

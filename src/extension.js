@@ -51,6 +51,7 @@ const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
 const KOTLIN_LANGUAGE = "kotlin";
 const MARKDOWN_GAUGE_SPEC_SELECTOR = { language: "markdown", scheme: "file", pattern: "**/*.md" };
+const KOTLIN_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.kt" };
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
@@ -314,6 +315,8 @@ function registerCodeLensProvider(context, vscode, options) {
     [
       { language: "gauge" },
       MARKDOWN_GAUGE_SPEC_SELECTOR,
+      { language: KOTLIN_LANGUAGE },
+      KOTLIN_IMPLEMENTATION_SELECTOR,
     ],
     provider,
   );
