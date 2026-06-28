@@ -24,17 +24,7 @@ function isGaugeProjectRoot(fileSystem, pathModule, root) {
   if (!root || !fileSystem || typeof fileSystem.existsSync !== "function") {
     return false;
   }
-  if (!fileSystem.existsSync(manifestPath(pathModule, root))) {
-    return false;
-  }
-  if (typeof fileSystem.readFileSync !== "function") {
-    return false;
-  }
-  try {
-    return hasGaugeLanguage(readProjectManifest(fileSystem, pathModule, root));
-  } catch (_error) {
-    return false;
-  }
+  return fileSystem.existsSync(manifestPath(pathModule, root));
 }
 
 module.exports = {

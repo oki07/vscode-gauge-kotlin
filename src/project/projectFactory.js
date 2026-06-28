@@ -137,10 +137,8 @@ function createProjectFactory(options = {}) {
     }
 
     const manifest = readManifest(root);
-    if (!manifestLanguage(manifest)) {
-      throw invalidProjectError(root);
-    }
-    if (isJvmLanguage(manifestLanguage(manifest))) {
+    const language = manifestLanguage(manifest);
+    if (isJvmLanguage(language)) {
       const builder = jvmProjectBuilders.find((entry) => entry.predicate(root));
       if (builder) {
         return builder.build(root, manifest);

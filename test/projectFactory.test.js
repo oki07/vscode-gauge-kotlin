@@ -61,9 +61,9 @@ test("ProjectFactory detects Gauge projects by manifest", () => {
   });
 
   assert.equal(factory.isGaugeProject("/workspace/gauge"), true);
-  assert.equal(factory.isGaugeProject("/workspace/empty"), false);
-  assert.equal(factory.isGaugeProject("/workspace/lowercase"), false);
-  assert.equal(factory.isGaugeProject("/workspace/typo"), false);
+  assert.equal(factory.isGaugeProject("/workspace/empty"), true);
+  assert.equal(factory.isGaugeProject("/workspace/lowercase"), true);
+  assert.equal(factory.isGaugeProject("/workspace/typo"), true);
   assert.equal(factory.isGaugeProject("/workspace/other"), false);
 });
 
@@ -81,6 +81,7 @@ test("ProjectFactory finds nested Gauge project roots", () => {
 
   assert.deepEqual(factory.findGaugeProjectRoots("/workspace"), [
     "/workspace/service-a",
+    "/workspace/services/not-gauge",
     "/workspace/services/service-b",
   ]);
   assert.deepEqual(factory.findGaugeProjectRoots("/workspace/service-a"), ["/workspace/service-a"]);
@@ -159,18 +160,20 @@ test("ProjectFactory rejects paths outside Gauge projects", () => {
   );
 });
 
-test("ProjectFactory rejects paths inside manifests without Gauge language", () => {
+test("ProjectFactory creates generic Gauge projects without manifest language", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
+  const { GaugeProject } = require("../src/project/gaugeProject");
   const factory = createProjectFactory({
     fileSystem: createFakeFileSystem({
-      "/workspace/not-gauge/manifest.json": "{}",
-      "/workspace/not-gauge/specs/example.spec": "",
+      "/workspace/gauge/manifest.json": "{}",
+      "/workspace/gauge/specs/example.spec": "",
     }),
     pathModule: path.posix,
   });
 
-  assert.throws(
-    () => factory.getProjectByFilepath("/workspace/not-gauge/specs/example.spec"),
-    /does not belong to a valid gauge project/,
-  );
+  const project = factory.getProjectByFilepath("/workspace/gauge/specs/example.spec");
+
+  assert.equal(project instanceof GaugeProject, true);
+  assert.equal(project.root(), "/workspace/gauge");
+  assert.equal(project.language(), undefined);
 });

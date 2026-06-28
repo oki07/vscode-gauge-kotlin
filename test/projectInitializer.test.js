@@ -296,7 +296,7 @@ test("ProjectInitializer rejects an existing Gauge project directory without rem
   assert.deepEqual(commands, []);
 });
 
-test("ProjectInitializer treats existing manifests without Gauge language as non-Gauge directories", async () => {
+test("ProjectInitializer treats existing manifests without Gauge language as Gauge directories", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
     commands,
@@ -353,7 +353,9 @@ test("ProjectInitializer treats existing manifests without Gauge language as non
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(errors, ["A folder named shop already exists in /workspace"]);
+  assert.deepEqual(errors, [
+    "Given location is already a Gauge Project. Please try to initialize a Gauge project in a different location.",
+  ]);
   assert.deepEqual(mkdirs, []);
   assert.deepEqual(removes, []);
   assert.deepEqual(spawns, []);
