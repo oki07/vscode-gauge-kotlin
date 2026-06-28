@@ -102,6 +102,7 @@ class SpecNodeProvider {
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
     this.executionController = options.executionController;
+    this.setTimeout = options.setTimeout || setTimeout;
     this.disposables = [];
     this.activeFolder = undefined;
     this.languageClient = undefined;
@@ -214,7 +215,14 @@ class SpecNodeProvider {
         this.languageClient = entry.client;
         this.activeFolder = projectPath;
         this.refresh();
-        return setCommandContext(this.vscode, ACTIVATED_CONTEXT, true);
+        const timeout = this.setTimeout(
+          () => setCommandContext(this.vscode, ACTIVATED_CONTEXT, true),
+          1000,
+        );
+        if (timeout && typeof timeout.unref === "function") {
+          timeout.unref();
+        }
+        return undefined;
       })
       .catch((reason) => this.vscode.window.showErrorMessage(
         "Failed to create test explorer.",

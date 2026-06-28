@@ -221,15 +221,28 @@ test("SpecNodeProvider populates specifications and scenarios from Gauge LSP", a
   const client = createFakeClient();
   const { contexts, treeProviders, vscode } = createFakeVscode();
   const workspace = createFakeWorkspace(client);
+  const timers = [];
 
   const provider = new SpecNodeProvider(workspace, {
     pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
     vscode,
   });
   await provider.ready();
 
   assert.equal(client.started, 1);
   assert.deepEqual(treeProviders.map((entry) => entry.viewId), ["gauge:specExplorer"]);
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:activated", value: false },
+  ]);
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 1000);
+
+  await timers[0].callback();
+
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:activated", value: false },
     { command: "setContext", key: "gauge:activated", value: true },
