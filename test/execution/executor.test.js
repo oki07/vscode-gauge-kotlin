@@ -452,6 +452,70 @@ test("execute specification runs Explorer selected spec files and directories", 
   ]);
 });
 
+test("execute specification runs all specs when Explorer selected resource is the project root", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const directories = new Set([
+    "/workspace",
+    "/workspace/specs",
+  ]);
+  const files = new Set([
+    "/workspace/manifest.json",
+    "/workspace/specs/example.spec",
+  ]);
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return directories.has(filename) || files.has(filename);
+      },
+      readdirSync(filename) {
+        if (filename === "/workspace") {
+          return ["manifest.json", "specs"];
+        }
+        if (filename === "/workspace/specs") {
+          return ["example.spec"];
+        }
+        return [];
+      },
+      statSync(filename) {
+        return {
+          isDirectory() {
+            return directories.has(filename);
+          },
+        };
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand(
+    "gauge.execute.specification",
+    { fsPath: "/workspace" },
+    [{ fsPath: "/workspace" }],
+  );
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/All specs",
+    },
+  ]);
+});
+
 test("execute specification uses Maven args when Maven and Gradle files coexist", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

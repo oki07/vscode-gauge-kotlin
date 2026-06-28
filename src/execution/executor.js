@@ -759,7 +759,29 @@ function createGaugeExecutionController(options = {}) {
     return uniqueTargets(targets);
   }
 
+  function projectRootFromSingleDirectorySelection(argument, selectedResources) {
+    const resources = Array.isArray(selectedResources) && selectedResources.length > 0
+      ? selectedResources
+      : [argument];
+    const targets = uniqueTargets(resources.map(resourcePath));
+    if (targets.length !== 1 || !isDirectory(targets[0], fileSystem)) {
+      return undefined;
+    }
+    const projectRoot = getProjectRootForSpec(vscode, targets[0], pathModule, projectFactory);
+    if (
+      projectRoot
+      && pathModule.normalize(targets[0]) === pathModule.normalize(projectRoot)
+    ) {
+      return projectRoot;
+    }
+    return undefined;
+  }
+
   async function executeSpecificationTargets(argument, selectedResources, flags = {}) {
+    const selectedProjectRoot = projectRootFromSingleDirectorySelection(argument, selectedResources);
+    if (selectedProjectRoot) {
+      return executeAllSpecifications(selectedProjectRoot, flags);
+    }
     const targets = specificationTargetsFromSelection(argument, selectedResources);
     if (targets.length === 0) {
       return undefined;
