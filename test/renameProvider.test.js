@@ -177,6 +177,55 @@ test("GaugeRenameProvider preserves inline table step identity when renaming", a
   );
 });
 
+test("GaugeRenameProvider renames concept headings when renaming concept usages", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Reuse payment <card>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment <method>",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
+  const vscode = createFakeVscode([specDocument, conceptDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Shared payment <account>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 22 },
+        },
+        newText: "Shared payment <account>",
+      },
+      {
+        file: "/workspace/gauge/specs/concepts/payment.cpt",
+        range: {
+          start: { line: 0, character: 2 },
+          end: { line: 0, character: 24 },
+        },
+        newText: "Shared payment <account>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const vscode = createRegistrationVscode();

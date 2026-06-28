@@ -1,8 +1,10 @@
 "use strict";
 
 const {
+  findConceptHeadings,
   GaugeStepDiagnosticsProvider,
   findStepFunctions,
+  isConceptDocument,
   isKotlinDocument,
   positionAt,
 } = require("./stepDiagnostics");
@@ -142,6 +144,24 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
     template: normalizeStepTemplate(hasInlineTable ? `${text} <table>` : text),
     text,
   };
+}
+
+function conceptHeadingOnLine(vscode, document, lineNumber) {
+  if (!isConceptDocument(document)) {
+    return undefined;
+  }
+  for (const heading of findConceptHeadings(document.getText())) {
+    if (heading.start.line !== lineNumber) {
+      continue;
+    }
+    return {
+      hasInlineTable: false,
+      range: createRange(vscode, heading.start, heading.end),
+      template: heading.normalized,
+      text: heading.text,
+    };
+  }
+  return undefined;
 }
 
 function isGaugeDocument(document) {
@@ -294,7 +314,8 @@ class GaugeRenameProvider {
     if (!isGaugeDocument(document) || !position) {
       return undefined;
     }
-    return gaugeStepOnLine(this.vscode, document, position.line);
+    return gaugeStepOnLine(this.vscode, document, position.line)
+      || conceptHeadingOnLine(this.vscode, document, position.line);
   }
 
   stepAtKotlinPosition(document, position, kotlinDocuments) {
@@ -350,6 +371,17 @@ class GaugeRenameProvider {
       const step = gaugeStepOnLine(this.vscode, document, line, lines);
       if (step && step.template === template) {
         edit.replace(document.uri, step.range, gaugeReplacementName(newName, step.hasInlineTable));
+      }
+    }
+    if (isConceptDocument(document)) {
+      for (const heading of findConceptHeadings(document.getText())) {
+        if (heading.normalized === template) {
+          edit.replace(
+            document.uri,
+            createRange(this.vscode, heading.start, heading.end),
+            gaugeReplacementName(newName, false),
+          );
+        }
       }
     }
   }
