@@ -11,6 +11,9 @@ const TEMPLATE_LIST_ARGS = ["template", "--list", "--machine-readable"];
 const INSTALL_INSTRUCTION_URI = "https://docs.gauge.org/getting_started/installing-gauge.html";
 const KOTLIN_TEMPLATE_CONFIGURATION = "gauge.kotlin";
 const TEMPLATE_CONFIGURATION_KEY = "template";
+const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
+const EXISTING_GAUGE_PROJECT_MESSAGE =
+  "Given location is already a Gauge Project. Please try to initialize a Gauge project in a different location.";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -43,6 +46,18 @@ function templateScore(template, preferredBuildTool) {
     return 2;
   }
   return 1;
+}
+
+function isKotlinTemplate(template) {
+  return templateText(template).includes("kotlin");
+}
+
+function isGaugeProjectDir(fileSystem, pathModule, dirname) {
+  return Boolean(
+    fileSystem
+    && typeof fileSystem.existsSync === "function"
+    && fileSystem.existsSync(pathModule.join(dirname, "manifest.json")),
+  );
 }
 
 class ProgressHandler {
@@ -102,11 +117,23 @@ class ProjectInitializer {
     return this.cli;
   }
 
+  isGaugeVersionSupported(cli) {
+    if (!cli || typeof cli.isGaugeVersionGreaterOrEqual !== "function") {
+      return true;
+    }
+    return cli.isGaugeVersionGreaterOrEqual(MINIMUM_SUPPORTED_GAUGE_VERSION);
+  }
+
   async createProject() {
     const cli = this.getCli();
     if (!cli || !cli.isGaugeInstalled()) {
       return this.vscode.window.showErrorMessage(
         `Please install gauge to create a new Gauge project.For more info please refer the [install intructions](${INSTALL_INSTRUCTION_URI}).`,
+      );
+    }
+    if (!this.isGaugeVersionSupported(cli)) {
+      return this.vscode.window.showErrorMessage(
+        `This version of Gauge Kotlin only works with Gauge version >= ${MINIMUM_SUPPORTED_GAUGE_VERSION}`,
       );
     }
 
@@ -128,12 +155,15 @@ class ProjectInitializer {
 
     const projectFolderUri = this.vscode.Uri.file(this.pathModule.join(folders[0].fsPath, name));
     if (this.fileSystem.existsSync(projectFolderUri.fsPath)) {
-      return this.handleError(
-        null,
-        `A folder named ${name} already exists in ${folders[0].fsPath}`,
-        projectFolderUri.fsPath,
-        false,
-      );
+      if (isGaugeProjectDir(this.fileSystem, this.pathModule, projectFolderUri.fsPath)) {
+        return this.handleError(
+          null,
+          EXISTING_GAUGE_PROJECT_MESSAGE,
+          projectFolderUri.fsPath,
+          false,
+        );
+      }
+      return this.createProjectInDir(cli, template, projectFolderUri);
     }
     this.fileSystem.mkdirSync(projectFolderUri.fsPath);
     return this.createProjectInDir(cli, template, projectFolderUri);
@@ -230,7 +260,7 @@ class ProjectInitializer {
         description: template.Description,
         value: template.value,
       }));
-      return this.sortTemplatesByPreference(templates);
+      return this.sortTemplatesByPreference(templates.filter(isKotlinTemplate));
     } catch (_error) {
       await this.vscode.window.showErrorMessage(
         "Failed to get list of templates.",

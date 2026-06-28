@@ -215,7 +215,7 @@ test("ProjectInitializer reports official install guidance when Gauge is unavail
   assert.deepEqual(inputs, []);
 });
 
-test("ProjectInitializer reports an existing project directory without removing it", async () => {
+test("ProjectInitializer rejects an existing Gauge project directory without removing it", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
     commands,
@@ -254,8 +254,8 @@ test("ProjectInitializer reports an existing project directory without removing 
     cli,
     fileSystem: {
       existsSync(filename) {
-        assert.equal(filename, "/workspace/shop");
-        return true;
+        return filename === "/workspace/shop"
+          || filename === "/workspace/shop/manifest.json";
       },
       mkdirSync(filename) {
         mkdirs.push(filename);
@@ -284,12 +284,139 @@ test("ProjectInitializer reports an existing project directory without removing 
     placeHolder: "gauge-tests",
   });
   assert.deepEqual(errors, [
-    "A folder named shop already exists in /workspace",
+    "Given location is already a Gauge Project. Please try to initialize a Gauge project in a different location.",
   ]);
   assert.deepEqual(mkdirs, []);
   assert.deepEqual(removes, []);
   assert.deepEqual(spawns, []);
   assert.deepEqual(commands, []);
+});
+
+test("ProjectInitializer initializes an existing non-Gauge directory", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    commands,
+    errors,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const mkdirs = [];
+  const removes = [];
+  const spawns = [];
+  const child = createChildProcess();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          setImmediate(() => child.emit("close", 0));
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/shop";
+      },
+      mkdirSync(filename) {
+        mkdirs.push(filename);
+      },
+      removeSync(filename) {
+        removes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(mkdirs, []);
+  assert.deepEqual(removes, []);
+  assert.deepEqual(spawns, [
+    {
+      args: ["init", "kotlin"],
+      options: { cwd: "/workspace/shop", env: { PATH: "/bin" } },
+    },
+  ]);
+  assert.deepEqual(commands, [
+    {
+      command: "vscode.openFolder",
+      args: [{ fsPath: "/workspace/shop" }, true],
+    },
+  ]);
+});
+
+test("ProjectInitializer rejects unsupported Gauge versions before reading templates", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    errors,
+    inputs,
+    openDialogs,
+    quickPicks,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    isGaugeVersionGreaterOrEqual(version) {
+      assert.equal(version, "0.9.6");
+      return false;
+    },
+    gaugeCommand() {
+      return {
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+      removeSync() {},
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(errors, [
+    "This version of Gauge Kotlin only works with Gauge version >= 0.9.6",
+  ]);
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(openDialogs, []);
+  assert.deepEqual(inputs, []);
 });
 
 test("ProjectInitializer removes the project directory when Gauge init fails", async () => {
@@ -463,6 +590,10 @@ test("ProjectInitializer prefers the configured Kotlin project template", async 
   await command.handler();
 
   assert.equal(quickPicks[0][0].label, "kotlin_gradle");
+  assert.deepEqual(quickPicks[0].map((template) => template.label), [
+    "kotlin_gradle",
+    "kotlin_maven",
+  ]);
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });
 
