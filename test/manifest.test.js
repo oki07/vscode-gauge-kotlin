@@ -326,8 +326,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
 
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   assert.ok(grammar);
-  assert.equal(grammar.scopeName, "text.html.markdown");
-  assert.equal(grammar.path, "./syntaxes/markdown.tmLanguage");
+  assert.equal(grammar.scopeName, "text.gauge");
+  assert.equal(grammar.path, "./syntaxes/gauge.tmLanguage.json");
 
   assert.deepEqual(manifest.contributes.snippets, [
     {
@@ -419,6 +419,45 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
     "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
   ]);
+});
+
+test("extension manifest contributes a Gauge TextMate grammar", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+
+  assert.deepEqual(grammar, {
+    language: "gauge",
+    scopeName: "text.gauge",
+    path: "./syntaxes/gauge.tmLanguage.json",
+  });
+
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+  assert.equal(grammarJson.scopeName, "text.gauge");
+  assert.deepEqual(
+    grammarJson.patterns.map((entry) => entry.include),
+    [
+      "#comments",
+      "#tags",
+      "#specHeading",
+      "#scenarioHeading",
+      "#conceptHeading",
+      "#step",
+      "#table",
+      "#arguments",
+    ],
+  );
+  for (const key of [
+    "comments",
+    "tags",
+    "specHeading",
+    "scenarioHeading",
+    "conceptHeading",
+    "step",
+    "table",
+    "arguments",
+  ]) {
+    assert.ok(grammarJson.repository[key], `missing ${key}`);
+  }
 });
 
 test("extension package ignores development-only files while keeping runtime sources", () => {

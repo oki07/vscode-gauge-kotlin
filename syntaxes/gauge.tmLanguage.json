@@ -1,0 +1,179 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Gauge",
+  "scopeName": "text.gauge",
+  "fileTypes": [
+    "spec",
+    "cpt",
+    "md"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#tags"
+    },
+    {
+      "include": "#specHeading"
+    },
+    {
+      "include": "#scenarioHeading"
+    },
+    {
+      "include": "#conceptHeading"
+    },
+    {
+      "include": "#step"
+    },
+    {
+      "include": "#table"
+    },
+    {
+      "include": "#arguments"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.double-slash.gauge",
+      "match": "^\\s*//.*$"
+    },
+    "tags": {
+      "name": "meta.tags.gauge",
+      "begin": "^(\\s*)(tags)(\\s*:)(\\s*)",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.control.tags.gauge"
+        },
+        "3": {
+          "name": "punctuation.separator.key-value.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "[^,\\s][^,]*",
+          "name": "entity.other.attribute-name.tag.gauge"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.sequence.gauge"
+        }
+      ]
+    },
+    "specHeading": {
+      "patterns": [
+        {
+          "name": "markup.heading.spec.gauge",
+          "match": "^\\s*#{1}\\s+.*$"
+        },
+        {
+          "name": "punctuation.definition.heading.spec.gauge",
+          "match": "^\\s*={3,}\\s*$"
+        }
+      ]
+    },
+    "scenarioHeading": {
+      "patterns": [
+        {
+          "name": "markup.heading.scenario.gauge",
+          "match": "^\\s*#{2,6}\\s+.*$"
+        },
+        {
+          "name": "punctuation.definition.heading.scenario.gauge",
+          "match": "^\\s*-{3,}\\s*$"
+        }
+      ]
+    },
+    "conceptHeading": {
+      "name": "markup.heading.concept.gauge",
+      "begin": "^(\\s*)(#)(\\s+)",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.heading.concept.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#arguments"
+        }
+      ]
+    },
+    "step": {
+      "name": "meta.step.gauge",
+      "begin": "^(\\s*)(\\*)(\\s+)",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.operator.step.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#arguments"
+        }
+      ]
+    },
+    "table": {
+      "name": "meta.table.row.gauge",
+      "begin": "^(\\s*)(\\|)",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.separator.table.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "\\|",
+          "name": "punctuation.separator.table.gauge"
+        },
+        {
+          "include": "#arguments"
+        },
+        {
+          "match": "[^|]+",
+          "name": "string.unquoted.table-cell.gauge"
+        }
+      ]
+    },
+    "arguments": {
+      "patterns": [
+        {
+          "name": "variable.parameter.dynamic.gauge",
+          "match": "(<)([^>\\n]+)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.begin.gauge"
+            },
+            "3": {
+              "name": "punctuation.definition.variable.end.gauge"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.argument.gauge",
+          "begin": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.gauge"
+            }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.gauge"
+            }
+          },
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.gauge"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

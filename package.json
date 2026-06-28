@@ -76,8 +76,8 @@
     "grammars": [
       {
         "language": "gauge",
-        "scopeName": "text.html.markdown",
-        "path": "./syntaxes/markdown.tmLanguage"
+        "scopeName": "text.gauge",
+        "path": "./syntaxes/gauge.tmLanguage.json"
       }
     ],
     "keybindings": [
