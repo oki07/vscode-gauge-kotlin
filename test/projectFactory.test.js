@@ -52,12 +52,18 @@ test("ProjectFactory detects Gauge projects by manifest", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
   const factory = createProjectFactory({
     fileSystem: createFakeFileSystem({
-      "/workspace/gauge/manifest.json": "{}",
+      "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin" }),
+      "/workspace/empty/manifest.json": "{}",
+      "/workspace/lowercase/manifest.json": JSON.stringify({ language: "kotlin" }),
+      "/workspace/typo/manifest.json": JSON.stringify({ langauge: "kotlin" }),
     }),
     pathModule: path.posix,
   });
 
   assert.equal(factory.isGaugeProject("/workspace/gauge"), true);
+  assert.equal(factory.isGaugeProject("/workspace/empty"), false);
+  assert.equal(factory.isGaugeProject("/workspace/lowercase"), false);
+  assert.equal(factory.isGaugeProject("/workspace/typo"), false);
   assert.equal(factory.isGaugeProject("/workspace/other"), false);
 });
 
@@ -65,9 +71,10 @@ test("ProjectFactory finds nested Gauge project roots", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
   const factory = createProjectFactory({
     fileSystem: createFakeFileSystem({
-      "/workspace/service-a/manifest.json": "{}",
-      "/workspace/services/service-b/manifest.json": "{}",
-      "/workspace/node_modules/ignored/manifest.json": "{}",
+      "/workspace/service-a/manifest.json": JSON.stringify({ Language: "kotlin" }),
+      "/workspace/services/service-b/manifest.json": JSON.stringify({ Language: "java" }),
+      "/workspace/services/not-gauge/manifest.json": "{}",
+      "/workspace/node_modules/ignored/manifest.json": JSON.stringify({ Language: "kotlin" }),
     }),
     pathModule: path.posix,
   });
@@ -148,6 +155,22 @@ test("ProjectFactory rejects paths outside Gauge projects", () => {
 
   assert.throws(
     () => factory.getProjectByFilepath("/workspace/other/specs/example.spec"),
+    /does not belong to a valid gauge project/,
+  );
+});
+
+test("ProjectFactory rejects paths inside manifests without Gauge language", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const factory = createProjectFactory({
+    fileSystem: createFakeFileSystem({
+      "/workspace/not-gauge/manifest.json": "{}",
+      "/workspace/not-gauge/specs/example.spec": "",
+    }),
+    pathModule: path.posix,
+  });
+
+  assert.throws(
+    () => factory.getProjectByFilepath("/workspace/not-gauge/specs/example.spec"),
     /does not belong to a valid gauge project/,
   );
 });

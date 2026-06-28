@@ -9,10 +9,7 @@ const {
   existingDirectories,
   pathDelimiter,
 } = require("./classpath");
-
-function readManifestLanguage(manifest) {
-  return manifest && (manifest.Language || manifest.language || manifest.langauge);
-}
+const { manifestLanguage } = require("./manifest");
 
 function readManifestPlugins(manifest) {
   return (manifest && (manifest.Plugins || manifest.plugins)) || [];
@@ -22,7 +19,7 @@ class GaugeProject {
   constructor(projectRoot, manifest, options = {}) {
     this.projectRoot = projectRoot;
     this.isGauge = manifest != null;
-    this.projectLanguage = readManifestLanguage(manifest);
+    this.projectLanguage = manifestLanguage(manifest);
     this.plugins = readManifestPlugins(manifest);
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;

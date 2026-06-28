@@ -257,6 +257,10 @@ test("ProjectInitializer rejects an existing Gauge project directory without rem
         return filename === "/workspace/shop"
           || filename === "/workspace/shop/manifest.json";
       },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/shop/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
       mkdirSync(filename) {
         mkdirs.push(filename);
       },
@@ -286,6 +290,70 @@ test("ProjectInitializer rejects an existing Gauge project directory without rem
   assert.deepEqual(errors, [
     "Given location is already a Gauge Project. Please try to initialize a Gauge project in a different location.",
   ]);
+  assert.deepEqual(mkdirs, []);
+  assert.deepEqual(removes, []);
+  assert.deepEqual(spawns, []);
+  assert.deepEqual(commands, []);
+});
+
+test("ProjectInitializer treats existing manifests without Gauge language as non-Gauge directories", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    commands,
+    errors,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const mkdirs = [];
+  const removes = [];
+  const spawns = [];
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn(args) {
+          spawns.push(args);
+          return createChildProcess();
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/shop"
+          || filename === "/workspace/shop/manifest.json";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/shop/manifest.json");
+        return Buffer.from("{}");
+      },
+      mkdirSync(filename) {
+        mkdirs.push(filename);
+      },
+      removeSync(filename) {
+        removes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(errors, ["A folder named shop already exists in /workspace"]);
   assert.deepEqual(mkdirs, []);
   assert.deepEqual(removes, []);
   assert.deepEqual(spawns, []);

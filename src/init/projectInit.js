@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { envWithGaugeHome } = require("../config/gaugeConfig");
+const { isGaugeProjectRoot } = require("../project/manifest");
 
 const CREATE_PROJECT_COMMAND = "gauge.createProject";
 const GAUGE_INIT_ARG = "init";
@@ -53,11 +54,7 @@ function isKotlinTemplate(template) {
 }
 
 function isGaugeProjectDir(fileSystem, pathModule, dirname) {
-  return Boolean(
-    fileSystem
-    && typeof fileSystem.existsSync === "function"
-    && fileSystem.existsSync(pathModule.join(dirname, "manifest.json")),
-  );
+  return isGaugeProjectRoot(fileSystem, pathModule, dirname);
 }
 
 class ProgressHandler {

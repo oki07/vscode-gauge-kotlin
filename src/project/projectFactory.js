@@ -5,8 +5,13 @@ const nodePath = require("node:path");
 const { GaugeProject } = require("./gaugeProject");
 const { GradleProject } = require("./gradleProject");
 const { MavenProject } = require("./mavenProject");
+const {
+  GAUGE_MANIFEST_FILE,
+  isGaugeProjectRoot,
+  manifestLanguage,
+  readProjectManifest,
+} = require("./manifest");
 
-const GAUGE_MANIFEST_FILE = "manifest.json";
 const MAVEN_BUILD_FILE = "pom.xml";
 const GRADLE_BUILD_FILES = ["build.gradle", "build.gradle.kts"];
 const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
@@ -21,10 +26,6 @@ const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
   "out",
   "target",
 ]);
-
-function manifestLanguage(manifest) {
-  return manifest && (manifest.Language || manifest.language || manifest.langauge);
-}
 
 function isJvmLanguage(language) {
   return language === "java" || language === "kotlin";
@@ -62,7 +63,7 @@ function createProjectFactory(options = {}) {
   ];
 
   function isGaugeProject(root) {
-    return Boolean(root) && exists(root, GAUGE_MANIFEST_FILE);
+    return isGaugeProjectRoot(fileSystem, pathModule, root);
   }
 
   function isDirectory(filename) {
@@ -127,8 +128,7 @@ function createProjectFactory(options = {}) {
   }
 
   function readManifest(root) {
-    const content = fileSystem.readFileSync(pathModule.join(root, GAUGE_MANIFEST_FILE));
-    return JSON.parse(content.toString());
+    return readProjectManifest(fileSystem, pathModule, root);
   }
 
   function get(root) {
@@ -137,6 +137,9 @@ function createProjectFactory(options = {}) {
     }
 
     const manifest = readManifest(root);
+    if (!manifestLanguage(manifest)) {
+      throw invalidProjectError(root);
+    }
     if (isJvmLanguage(manifestLanguage(manifest))) {
       const builder = jvmProjectBuilders.find((entry) => entry.predicate(root));
       if (builder) {

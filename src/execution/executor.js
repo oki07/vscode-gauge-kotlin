@@ -580,6 +580,7 @@ function createGaugeExecutionController(options = {}) {
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
   const projectFactory = options.projectFactory || createProjectFactory({
+    execSync: options.execSync,
     fileSystem,
     pathModule,
     vscode,

@@ -606,6 +606,13 @@ test("execute specification resolves the project root from the active Gauge file
         return filename === "/outside/gauge/manifest.json"
           || filename === "/outside/gauge/build.gradle.kts";
       },
+      readFileSync(filename) {
+        assert.equal(filename, "/outside/gauge/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin", Plugins: [] }));
+      },
+    },
+    execSync() {
+      return Buffer.from("");
     },
     async runner(command) {
       calls.push(command);
@@ -617,20 +624,17 @@ test("execute specification resolves the project root from the active Gauge file
 
   assert.equal(result, true);
   assert.deepEqual(errors, []);
-  assert.deepEqual(calls, [
-    {
-      command: "gradle",
-      args: [
-        "clean",
-        "gauge",
-        "-Ptags=smoke",
-        "-PadditionalFlags=--hide-suggestion --simple-console",
-        "-PspecsDir=specs/example.spec",
-      ],
-      cwd: "/outside/gauge",
-      status: "/outside/gauge/specs/example.spec",
-    },
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, "gradle");
+  assert.deepEqual(calls[0].args, [
+    "clean",
+    "gauge",
+    "-Ptags=smoke",
+    "-PadditionalFlags=--hide-suggestion --simple-console",
+    "-PspecsDir=specs/example.spec",
   ]);
+  assert.equal(calls[0].cwd, "/outside/gauge");
+  assert.equal(calls[0].status, "/outside/gauge/specs/example.spec");
 });
 
 test("execute in parallel runs the Gauge code lens target", async () => {
