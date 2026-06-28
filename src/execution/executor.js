@@ -118,18 +118,47 @@ function getProjectRootForSpec(vscode, spec, pathModule, projectFactory) {
   return roots.find((root) => isInside(root, spec, pathModule)) || roots[0];
 }
 
-function selectableProjectRoots(vscode, projectFactory) {
-  const roots = getWorkspaceRoots(vscode);
-  if (!projectFactory || typeof projectFactory.isGaugeProject !== "function") {
-    return roots;
-  }
-  const gaugeRoots = roots.filter((root) => {
-    try {
-      return projectFactory.isGaugeProject(root);
-    } catch (_error) {
+function uniqueProjectRoots(roots) {
+  const seen = new Set();
+  return roots.filter((root) => {
+    if (!root || seen.has(root)) {
       return false;
     }
+    seen.add(root);
+    return true;
   });
+}
+
+function discoverProjectRoots(workspaceRoot, projectFactory) {
+  if (!projectFactory) {
+    return [];
+  }
+  if (typeof projectFactory.findGaugeProjectRoots === "function") {
+    try {
+      const roots = projectFactory.findGaugeProjectRoots(workspaceRoot);
+      return Array.isArray(roots) ? roots.filter(Boolean) : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+  if (typeof projectFactory.isGaugeProject === "function") {
+    try {
+      return projectFactory.isGaugeProject(workspaceRoot) ? [workspaceRoot] : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function selectableProjectRoots(vscode, projectFactory) {
+  const roots = getWorkspaceRoots(vscode);
+  if (!projectFactory) {
+    return roots;
+  }
+  const gaugeRoots = uniqueProjectRoots(
+    roots.flatMap((root) => discoverProjectRoots(root, projectFactory)),
+  );
   return gaugeRoots.length > 0 ? gaugeRoots : roots;
 }
 

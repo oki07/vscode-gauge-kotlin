@@ -839,6 +839,57 @@ test("execute failed asks for a project and runs failed scenarios there", async 
   ]);
 });
 
+test("execute failed asks for nested Gauge projects discovered under a workspace folder", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+    quickPickSelection: { label: "admin", description: "/workspace/admin" },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    projectFactory: {
+      findGaugeProjectRoots(root) {
+        assert.equal(root, "/workspace");
+        return ["/workspace/shop", "/workspace/admin"];
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.failed");
+
+  assert.deepEqual(quickPicks, [
+    {
+      items: [
+        { label: "shop", description: "/workspace/shop" },
+        { label: "admin", description: "/workspace/admin" },
+      ],
+      options: { canPickMany: false, placeHolder: "Choose a project" },
+    },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--failed"],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/failed scenarios",
+    },
+  ]);
+});
+
 test("execute failed skips project prompt when only one workspace folder is a Gauge project", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
@@ -876,6 +927,57 @@ test("execute failed skips project prompt when only one workspace folder is a Ga
       args: ["run", "--failed"],
       cwd: "/workspace/gauge",
       status: "/workspace/gauge/failed scenarios",
+    },
+  ]);
+});
+
+test("execute all specs asks for nested Gauge projects discovered under a workspace folder", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+    quickPickSelection: { label: "admin", description: "/workspace/admin" },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    projectFactory: {
+      findGaugeProjectRoots(root) {
+        assert.equal(root, "/workspace");
+        return ["/workspace/shop", "/workspace/admin"];
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all");
+
+  assert.deepEqual(quickPicks, [
+    {
+      items: [
+        { label: "shop", description: "/workspace/shop" },
+        { label: "admin", description: "/workspace/admin" },
+      ],
+      options: { canPickMany: false, placeHolder: "Choose a project" },
+    },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--hide-suggestion", "--simple-console"],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/All specs",
     },
   ]);
 });
@@ -954,6 +1056,57 @@ test("execute all specs reads launch options from the selected workspace folder"
       args: ["run", "--hide-suggestion", "--simple-console", "--tags", "admin"],
       cwd: "/workspace/admin",
       status: "/workspace/admin/All specs",
+    },
+  ]);
+});
+
+test("repeat execution asks for nested Gauge projects discovered under a workspace folder", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+    quickPickSelection: { label: "admin", description: "/workspace/admin" },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    projectFactory: {
+      findGaugeProjectRoots(root) {
+        assert.equal(root, "/workspace");
+        return ["/workspace/shop", "/workspace/admin"];
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.repeat");
+
+  assert.deepEqual(quickPicks, [
+    {
+      items: [
+        { label: "shop", description: "/workspace/shop" },
+        { label: "admin", description: "/workspace/admin" },
+      ],
+      options: { canPickMany: false, placeHolder: "Choose a project" },
+    },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--repeat"],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/previous run",
     },
   ]);
 });
