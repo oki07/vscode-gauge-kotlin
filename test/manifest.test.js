@@ -168,6 +168,19 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(
     debuggerContribution.configurationAttributes.test.properties,
     {
+      args: {
+        description: "[Gauge] Additional Gauge command-line arguments.",
+        type: "array",
+        items: {
+          type: "string",
+        },
+        default: [],
+      },
+      cwd: {
+        description: "[Gauge] Process working directory. Relative paths are resolved from the Gauge project root.",
+        type: "string",
+        default: "",
+      },
       env: {
         description: "[Gauge] Specifies the environment to use (default \"default\")",
         type: "array",
@@ -287,6 +300,14 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
         description: "[Gauge] Prints output in JSON format",
         type: "boolean",
         default: false,
+      },
+      processEnv: {
+        description: "[Gauge] Environment variables for the Gauge process.",
+        type: "object",
+        additionalProperties: {
+          type: "string",
+        },
+        default: {},
       },
     },
   );

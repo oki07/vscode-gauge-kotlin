@@ -11,7 +11,11 @@ const {
   ReportEventProcessor,
 } = require("./lineProcessors");
 const { createGaugeProcessRunner } = require("./processRunner");
-const { buildRunArgs, extractGaugeRunOption } = require("./runArgs");
+const {
+  buildRunArgs,
+  extractGaugeExecutionOption,
+  extractGaugeRunOption,
+} = require("./runArgs");
 const { CLI } = require("../cli");
 const { GradleProject } = require("../project/gradleProject");
 const { MavenProject } = require("../project/mavenProject");
@@ -214,6 +218,14 @@ function projectEnvironment(project, cli) {
 
 function hasEnvironment(env) {
   return Boolean(env && Object.keys(env).length > 0);
+}
+
+function executionCwd(projectRoot, configuredCwd, pathModule) {
+  if (typeof configuredCwd !== "string" || !configuredCwd.trim()) {
+    return projectRoot;
+  }
+  const cwd = configuredCwd.trim();
+  return pathModule.isAbsolute(cwd) ? cwd : pathModule.join(projectRoot, cwd);
 }
 
 function saveWorkspaceDocuments(vscode) {
@@ -498,10 +510,15 @@ function createGaugeExecutionController(options = {}) {
       const cli = getCli();
       const executionTool = project ? commandFromProject(project, cli) : undefined;
       const projectEnv = projectEnvironment(project, cli);
+      const launchConfigurations = getLaunchConfigurations(vscode, projectRoot);
+      const launchExecutionOption = extractGaugeExecutionOption(launchConfigurations);
       const option = executionRunOptions(
-        extractGaugeRunOption(getLaunchConfigurations(vscode, projectRoot)),
+        extractGaugeRunOption(launchConfigurations),
         flags,
       );
+      if (launchExecutionOption.args) {
+        option.args = launchExecutionOption.args;
+      }
       if (spec && /:\d+$/.test(spec)) {
         option.tags = null;
         option.scenario = null;
@@ -510,16 +527,18 @@ function createGaugeExecutionController(options = {}) {
       const command = {
         command: executionTool ? executionTool.command : commandForProjectKind(projectKind, options),
         args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
-        cwd: projectRoot,
+        cwd: executionCwd(projectRoot, launchExecutionOption.cwd, pathModule),
         status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
       };
       if (executionTool) {
         command.tool = executionTool;
       }
-      if (hasEnvironment(projectEnv)) {
+      const processEnv = launchExecutionOption.processEnv || {};
+      if (hasEnvironment(projectEnv) || hasEnvironment(processEnv)) {
         command.env = {
           ...executionEnv,
           ...projectEnv,
+          ...processEnv,
         };
       }
 

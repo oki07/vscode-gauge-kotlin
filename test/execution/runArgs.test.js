@@ -36,6 +36,27 @@ test("buildRunArgs.forGauge formats standard run options", () => {
   );
 });
 
+test("buildRunArgs.forGauge appends launch args before the spec target", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec:123", {
+      args: ["--custom", "value"],
+      tags: "smoke",
+    }),
+    [
+      "run",
+      "--hide-suggestion",
+      "--simple-console",
+      "--tags",
+      "smoke",
+      "--custom",
+      "value",
+      "my.spec:123",
+    ],
+  );
+});
+
 test("buildRunArgs.forGauge omits simple-console when parallel flag is set", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -103,6 +124,17 @@ test("buildRunArgs.forGradle forwards valued Gauge flags through additionalFlags
   );
 });
 
+test("buildRunArgs.forGradle forwards launch args through additionalFlags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec", {
+      args: ["--custom", "value"],
+    }).join(" "),
+    "clean gauge -PadditionalFlags=--hide-suggestion --simple-console --custom value -PspecsDir=my.spec",
+  );
+});
+
 test("buildRunArgs.forGradle allows default flags to be unset", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -161,6 +193,17 @@ test("buildRunArgs.forMaven forwards valued Gauge flags through flags", () => {
   );
 });
 
+test("buildRunArgs.forMaven forwards launch args through flags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec", {
+      args: ["--custom", "value"],
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--hide-suggestion,--simple-console,--custom,value -DspecsDir=my.spec",
+  );
+});
+
 test("buildRunArgs.forMaven allows default flags to be unset", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -190,6 +233,47 @@ test("extractGaugeRunOption picks first gauge test entry and removes launch attr
   assert.deepEqual(extractGaugeRunOption(configs), {
     tags: "hit",
     unknown: "attributes are also available",
+  });
+});
+
+test("extractGaugeRunOption excludes process execution attributes", () => {
+  const { extractGaugeRunOption } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(extractGaugeRunOption([
+    {
+      type: "gauge",
+      request: "test",
+      name: "Gauge",
+      cwd: "tools/runner",
+      processEnv: { FEATURE: "enabled" },
+      args: ["--custom", "value"],
+      tags: "smoke",
+    },
+  ]), {
+    tags: "smoke",
+  });
+});
+
+test("extractGaugeExecutionOption returns launch process execution attributes", () => {
+  const { extractGaugeExecutionOption } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(extractGaugeExecutionOption([
+    {
+      type: "gauge",
+      request: "test",
+      name: "Gauge",
+      cwd: "tools/runner",
+      processEnv: {
+        FEATURE: "enabled",
+        IGNORED: 1,
+      },
+      args: ["--custom", "value"],
+      tags: "smoke",
+    },
+  ]), {
+    args: ["--custom", "value"],
+    cwd: "tools/runner",
+    processEnv: { FEATURE: "enabled" },
   });
 });
 

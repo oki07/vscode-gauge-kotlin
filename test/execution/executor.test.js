@@ -251,6 +251,66 @@ test("execute specification preserves launch repeat options", async () => {
   assert.deepEqual(calls[0].args, ["run", "--repeat"]);
 });
 
+test("execute specification applies launch process options", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    launchConfigurations: [
+      {
+        type: "gauge",
+        request: "test",
+        name: "Gauge",
+        args: ["--custom", "value"],
+        cwd: "tools/runner",
+        processEnv: {
+          FEATURE: "enabled",
+        },
+        tags: "smoke",
+      },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    env: { PATH: "/bin" },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.specification");
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "--tags",
+        "smoke",
+        "--custom",
+        "value",
+        "/workspace/specs/example.spec",
+      ],
+      cwd: "/workspace/tools/runner",
+      env: {
+        PATH: "/bin",
+        FEATURE: "enabled",
+      },
+      status: "/workspace/specs/example.spec",
+    },
+  ]);
+});
+
 test("execute specification uses the project execution Command object", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

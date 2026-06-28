@@ -14,25 +14,72 @@ const commonLaunchAttributes = new Set([
   "linux",
   "osx",
 ]);
+const processExecutionAttributes = new Set([
+  "args",
+  "cwd",
+  "processEnv",
+]);
 
 function withoutCommonLaunchAttributes(input) {
   return Object.entries(input)
-    .filter(([key]) => !commonLaunchAttributes.has(key))
+    .filter(([key]) => !commonLaunchAttributes.has(key) && !processExecutionAttributes.has(key))
     .reduce((output, [key, value]) => {
       output[key] = value;
       return output;
     }, {});
 }
 
-function extractGaugeRunOption(configs) {
+function gaugeRunConfiguration(configs) {
   if (!configs) {
     return {};
   }
-
-  const extracted = configs.find((config) => (
+  return configs.find((config) => (
     config.type === "gauge" && config.request === "test"
   )) || {};
-  return withoutCommonLaunchAttributes(extracted);
+}
+
+function extractGaugeRunOption(configs) {
+  return withoutCommonLaunchAttributes(gaugeRunConfiguration(configs));
+}
+
+function additionalArgs(value) {
+  if (Array.isArray(value)) {
+    return value.filter((entry) => typeof entry === "string");
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed.split(/\s+/) : [];
+  }
+  return [];
+}
+
+function processEnv(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value)
+    .filter(([, entryValue]) => typeof entryValue === "string")
+    .reduce((output, [key, entryValue]) => {
+      output[key] = entryValue;
+      return output;
+    }, {});
+}
+
+function extractGaugeExecutionOption(configs) {
+  const config = gaugeRunConfiguration(configs);
+  const option = {};
+  const args = additionalArgs(config.args);
+  const env = processEnv(config.processEnv);
+  if (args.length > 0) {
+    option.args = args;
+  }
+  if (typeof config.cwd === "string" && config.cwd.trim()) {
+    option.cwd = config.cwd.trim();
+  }
+  if (Object.keys(env).length > 0) {
+    option.processEnv = env;
+  }
+  return option;
 }
 
 function flag(key) {
@@ -54,6 +101,7 @@ function flagTokens(key, value) {
 
 function buildGaugeArgs(spec, option = {}) {
   const args = ["run"];
+  const launchArgs = additionalArgs(option.args);
 
   if (option.failed) {
     return args.concat(flag("failed"));
@@ -67,10 +115,13 @@ function buildGaugeArgs(spec, option = {}) {
     "simple-console": !option.parallel,
     ...option,
   };
+  delete merged.args;
 
   for (const [key, value] of Object.entries(merged)) {
     args.push(...flagTokens(key, value));
   }
+
+  args.push(...launchArgs);
 
   if (spec) {
     args.push(spec);
@@ -81,6 +132,7 @@ function buildGaugeArgs(spec, option = {}) {
 
 function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
   const {
+    args: launchArgs,
     failed,
     repeat,
     tags,
@@ -117,6 +169,7 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
 
   const flags = Object.entries(rest)
     .flatMap(([key, value]) => flagTokens(key, value));
+  flags.push(...additionalArgs(launchArgs));
   if (flags.length > 0) {
     args.push(prefixed(additionalFlags(...flags)));
   }
@@ -152,5 +205,6 @@ const buildRunArgs = {
 
 module.exports = {
   buildRunArgs,
+  extractGaugeExecutionOption,
   extractGaugeRunOption,
 };
