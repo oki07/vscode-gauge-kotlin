@@ -44,6 +44,7 @@ const {
 const { GaugeRenameProvider } = require("./renameProvider");
 const {
   showInstallGaugeNotification,
+  showUnsupportedGaugeVersionNotification,
   showWelcomeNotification,
 } = require("./welcomeNotifications");
 
@@ -644,8 +645,14 @@ function startGaugeServices(context, vscode, options = {}) {
   if (!cli) {
     return undefined;
   }
-  if (!cli.isGaugeInstalled() || !cli.isGaugeVersionGreaterOrEqual(MINIMUM_SUPPORTED_GAUGE_VERSION)) {
+  if (!cli.isGaugeInstalled()) {
     return (options.showInstallGaugeNotification || showInstallGaugeNotification)(vscode);
+  }
+  if (!cli.isGaugeVersionGreaterOrEqual(MINIMUM_SUPPORTED_GAUGE_VERSION)) {
+    return (
+      options.showUnsupportedGaugeVersionNotification
+      || showUnsupportedGaugeVersionNotification
+    )(vscode, MINIMUM_SUPPORTED_GAUGE_VERSION);
   }
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;

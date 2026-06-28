@@ -1813,3 +1813,58 @@ test("activation shows install guidance when Gauge is unavailable", () => {
 
   assert.deepEqual(installCalls, [fakeVscode]);
 });
+
+test("activation shows unsupported Gauge version guidance when Gauge is too old", () => {
+  const extension = require("../src/extension");
+
+  const installCalls = [];
+  const unsupportedVersionCalls = [];
+  let workspaceCreated = false;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    isGaugeVersionGreaterOrEqual(version) {
+      assert.equal(version, "0.9.6");
+      return false;
+    },
+  };
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return cli;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      constructor() {
+        workspaceCreated = true;
+      }
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showInstallGaugeNotification(vscode) {
+      installCalls.push(vscode);
+    },
+    showUnsupportedGaugeVersionNotification(vscode, minimumVersion) {
+      unsupportedVersionCalls.push({ vscode, minimumVersion });
+    },
+  });
+
+  assert.deepEqual(installCalls, []);
+  assert.deepEqual(unsupportedVersionCalls, [
+    { vscode: fakeVscode, minimumVersion: "0.9.6" },
+  ]);
+  assert.equal(workspaceCreated, false);
+});

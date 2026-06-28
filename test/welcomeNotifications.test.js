@@ -145,3 +145,15 @@ test("showInstallGaugeNotification reports the Gauge install instructions", asyn
   assert.match(errors[0], /Gauge executable not found/);
   assert.match(errors[0], /installing-gauge/);
 });
+
+test("showUnsupportedGaugeVersionNotification reports the minimum Gauge version", async () => {
+  const {
+    showUnsupportedGaugeVersionNotification,
+  } = require("../src/welcomeNotifications");
+  const { errors, vscode } = createFakeVscode();
+
+  await showUnsupportedGaugeVersionNotification(vscode, "0.9.6");
+
+  assert.match(errors[0], /Unsupported Gauge Version/);
+  assert.match(errors[0], /Gauge version >= 0\.9\.6/);
+});

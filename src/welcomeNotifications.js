@@ -50,7 +50,15 @@ function showInstallGaugeNotification(vscodeApi) {
   );
 }
 
+function showUnsupportedGaugeVersionNotification(vscodeApi, minimumVersion) {
+  const vscode = getVscode(vscodeApi);
+  return vscode.window.showErrorMessage(
+    `Unsupported Gauge Version\nThis version of Gauge Kotlin only works with Gauge version >= ${minimumVersion}`,
+  );
+}
+
 module.exports = {
   showInstallGaugeNotification,
+  showUnsupportedGaugeVersionNotification,
   showWelcomeNotification,
 };
