@@ -641,6 +641,103 @@ test("GaugeTestController batches multiple included specification items into one
   ]);
 });
 
+test("GaugeTestController expands included specifications when scenarios are excluded", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const spec = controller.createTestItem(
+    "/workspace/specs/example.spec",
+    "Checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  const successful = controller.createTestItem(
+    "/workspace/specs/example.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  const declined = controller.createTestItem(
+    "/workspace/specs/example.spec:8",
+    "Declined checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  spec.children.add(successful);
+  spec.children.add(declined);
+
+  await gaugeTests.run({ include: [spec], exclude: [declined] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/example.spec:3", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
+test("GaugeTestController runs known tests except excluded items", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const checkout = controller.createTestItem(
+    "/workspace/specs/checkout.spec",
+    "Checkout",
+    { fsPath: "/workspace/specs/checkout.spec" },
+  );
+  const successful = controller.createTestItem(
+    "/workspace/specs/checkout.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/checkout.spec" },
+  );
+  const declined = controller.createTestItem(
+    "/workspace/specs/checkout.spec:8",
+    "Declined checkout",
+    { fsPath: "/workspace/specs/checkout.spec" },
+  );
+  const accounts = controller.createTestItem(
+    "/workspace/specs/accounts.spec",
+    "Accounts",
+    { fsPath: "/workspace/specs/accounts.spec" },
+  );
+  checkout.children.add(successful);
+  checkout.children.add(declined);
+  controller.items.add(checkout);
+  controller.items.add(accounts);
+
+  await gaugeTests.run({ exclude: [declined] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/checkout.spec:3", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.execute", "/workspace/specs/accounts.spec", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
 test("GaugeTestController debug profile runs included Gauge test items in debug mode", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, controller, vscode } = createFakeVscode();

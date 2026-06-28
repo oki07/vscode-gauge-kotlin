@@ -173,6 +173,77 @@ function executionTargetForItem(item) {
   return item && item.id;
 }
 
+function collectionValues(collection) {
+  return collection && typeof collection.values === "function" ? collection.values() : [];
+}
+
+function excludedItemIds(request) {
+  const excludedItems = Array.isArray(request && request.exclude) ? request.exclude : [];
+  return new Set(excludedItems.map(executionTargetForItem).filter(Boolean));
+}
+
+function isExcludedItemId(itemId, excludedIds) {
+  for (const excludedId of excludedIds) {
+    if (itemId === excludedId || itemId.startsWith(`${excludedId}:`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasExcludedDescendant(item, excludedIds) {
+  const itemId = executionTargetForItem(item);
+  if (!itemId) {
+    return false;
+  }
+  for (const excludedId of excludedIds) {
+    if (excludedId.startsWith(`${itemId}:`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function expandExecutionItems(item, excludedIds) {
+  const itemId = executionTargetForItem(item);
+  if (!itemId || isExcludedItemId(itemId, excludedIds)) {
+    return [];
+  }
+  const children = collectionValues(item.children);
+  if (children.length > 0 && hasExcludedDescendant(item, excludedIds)) {
+    return children.flatMap((child) => expandExecutionItems(child, excludedIds));
+  }
+  return [item];
+}
+
+function uniqueTargets(targets) {
+  const seen = new Set();
+  return targets.filter((target) => {
+    if (seen.has(target)) {
+      return false;
+    }
+    seen.add(target);
+    return true;
+  });
+}
+
+function executionTargetsForRequest(controller, request = {}) {
+  const includedItems = Array.isArray(request.include) ? request.include : [];
+  const excludedIds = excludedItemIds(request);
+  if (includedItems.length === 0 && excludedIds.size === 0) {
+    return undefined;
+  }
+  const candidateItems = includedItems.length > 0
+    ? includedItems
+    : collectionValues(controller && controller.items);
+  return uniqueTargets(
+    candidateItems
+      .flatMap((item) => expandExecutionItems(item, excludedIds))
+      .map(executionTargetForItem)
+      .filter(Boolean),
+  );
+}
+
 function isScenarioTarget(target) {
   return /:\d+$/.test(String(target || ""));
 }
@@ -567,10 +638,8 @@ class GaugeTestController {
     const cancellation = this.registerCancellation(token);
     try {
       if (this.executionController && typeof this.executionController.handleCommand === "function") {
-        const targets = Array.isArray(request.include)
-          ? request.include.map(executionTargetForItem).filter(Boolean)
-          : [];
-        if (targets.length === 0) {
+        const targets = executionTargetsForRequest(this.controller, request);
+        if (targets === undefined) {
           await this.executionController.handleCommand(
             "gauge.execute.specification.all",
             undefined,
