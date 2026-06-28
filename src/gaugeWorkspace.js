@@ -2,7 +2,7 @@
 
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
-const { GaugeConfig } = require("./config/gaugeConfig");
+const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
 const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
 const { GaugeClients } = require("./gaugeClients");
 const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
@@ -131,7 +131,10 @@ class GaugeWorkspace {
     this.cli = options.cli;
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
-    this.env = options.env || process.env;
+    this.env = envWithGaugeHome(options.env || process.env, {
+      vscode: this.vscode,
+      gaugeHome: options.gaugeHome,
+    });
     this.state = stateOrMemory(options.state);
     this.GaugeWorkspaceFeature = options.GaugeWorkspaceFeature || GaugeWorkspaceFeature;
     this.JavaProjectConfig = options.JavaProjectConfig || GaugeJavaProjectConfig;

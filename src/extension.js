@@ -2,6 +2,7 @@
 
 const { CLI } = require("./cli");
 const { GaugeCodeLensProvider } = require("./codeLensProvider");
+const { envWithGaugeHome } = require("./config/gaugeConfig");
 const {
   GaugeArgumentCodeActionProvider,
   registerArgumentSelectionCommand,
@@ -217,7 +218,13 @@ async function formatActiveGaugeDocument(vscode, options = {}) {
     }));
   }
 
-  const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], { cwd: projectRoot });
+  const processOptions = { cwd: projectRoot };
+  const configuredEnv = envWithGaugeHome(options.env || process.env, { vscode });
+  if (options.env || configuredEnv !== process.env) {
+    processOptions.env = configuredEnv;
+  }
+
+  const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], processOptions);
   if (result.code !== 0) {
     return showError(vscode, formatFailureMessage(result));
   }

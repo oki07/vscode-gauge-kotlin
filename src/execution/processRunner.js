@@ -2,6 +2,7 @@
 
 const childProcess = require("node:child_process");
 const nodePath = require("node:path");
+const { envWithGaugeHome } = require("../config/gaugeConfig");
 const { OutputChannel } = require("./outputChannel");
 
 const SUCCESS_MESSAGE = "Success: Tests passed.";
@@ -86,7 +87,8 @@ function createGaugeProcessRunner(options = {}) {
   const spawn = options.spawn || childProcess.spawn;
   const pathModule = options.pathModule || nodePath;
   const processOutputLine = options.processOutputLine || (() => {});
-  const baseEnv = options.env || process.env;
+  const gaugeEnvOptions = { vscode, gaugeHome: options.gaugeHome };
+  const baseEnv = envWithGaugeHome(options.env || process.env, gaugeEnvOptions);
   const outputChannel = options.outputChannel || createDefaultOutputChannel(vscode);
   const platform = options.platform || process.platform;
   const processTree = options.processTree || loadProcessTree();
@@ -111,7 +113,7 @@ function createGaugeProcessRunner(options = {}) {
       const spawnOptions = {
         cwd: command.cwd,
         detached: platform !== "win32",
-        env: command.env || baseEnv,
+        env: command.env ? envWithGaugeHome(command.env, gaugeEnvOptions) : baseEnv,
       };
       child = command.tool && typeof command.tool.spawn === "function"
         ? command.tool.spawn(command.args, spawnOptions)

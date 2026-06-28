@@ -144,6 +144,66 @@ test("CLI parses Gauge machine-readable version output with deprecated warnings"
   assert.deepEqual(errors, []);
 });
 
+test("CLI uses the configured Gauge executable path before PATH lookup", () => {
+  const { CLI, Command } = require("../src/cli");
+  const lookupCalls = [];
+  const configuredGaugeCommand = {
+    command: "/tools/gauge/bin/gauge",
+    spawnSync(args) {
+      assert.deepEqual(args, ["--version", "--machine-readable"]);
+      return {
+        stdout: Buffer.from(JSON.stringify({
+          version: "1.2.3",
+          plugins: [{ name: "kotlin", version: "0.9.0" }],
+        })),
+      };
+    },
+  };
+
+  class TestCLI extends CLI {
+    static getConfiguredCommand(command, testArgs) {
+      lookupCalls.push({ command, testArgs });
+      return configuredGaugeCommand;
+    }
+
+    static getCommand(command) {
+      lookupCalls.push({ command });
+      if (command === "mvn") {
+        return new Command("mvn");
+      }
+      return undefined;
+    }
+  }
+
+  const cli = TestCLI.instance({
+    vscode: {
+      workspace: {
+        getConfiguration(section) {
+          assert.equal(section, "gauge");
+          return {
+            get(key) {
+              return key === "executablePath" ? "/tools/gauge/bin/gauge" : "";
+            },
+          };
+        },
+      },
+      window: {
+        showErrorMessage() {},
+      },
+    },
+  });
+
+  assert.equal(cli.isGaugeInstalled(), true);
+  assert.equal(cli.gaugeCommand(), configuredGaugeCommand);
+  assert.deepEqual(lookupCalls, [
+    {
+      command: "/tools/gauge/bin/gauge",
+      testArgs: ["--version"],
+    },
+    { command: "mvn" },
+  ]);
+});
+
 test("CLI creates platform command candidates", () => {
   const { CLI } = require("../src/cli");
   const candidates = CLI.getCommandCandidates("gauge");

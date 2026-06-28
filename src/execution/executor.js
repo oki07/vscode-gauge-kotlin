@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { createGaugeDebugger } = require("./debug");
+const { envWithGaugeHome } = require("../config/gaugeConfig");
 const {
   DebuggerAttachedEventProcessor,
   DebuggerNotAttachedEventProcessor,
@@ -405,6 +406,10 @@ function createGaugeExecutionController(options = {}) {
   const opener = options.opener || defaultOpener(vscode);
   const reportState = options.state || memoryReportState(options.reportPath);
   const executionStatusBar = createExecutionStatusBar(vscode, options.executionStatusProvider);
+  const executionEnv = envWithGaugeHome(options.env || process.env, {
+    vscode,
+    gaugeHome: options.gaugeHome,
+  });
   let executing = false;
   let activeRun;
   let activeDebugger;
@@ -444,7 +449,7 @@ function createGaugeExecutionController(options = {}) {
     outputChannel: options.outputChannel,
     processOutputLine,
     spawn: options.spawn,
-    env: options.env,
+    env: executionEnv,
   });
 
   async function executeInProject(projectRoot, spec, flags = {}) {
@@ -483,7 +488,7 @@ function createGaugeExecutionController(options = {}) {
         vscode,
         projectRoot,
         language: options.language || "kotlin",
-        baseEnv: options.env || process.env,
+        baseEnv: executionEnv,
         debugPortProvider: options.debugPortProvider,
       });
       if (typeof activeDebugger.registerStopDebugger === "function") {
@@ -491,7 +496,7 @@ function createGaugeExecutionController(options = {}) {
           stopExecution(false);
         });
       }
-      command.env = await activeDebugger.addDebugEnv(options.env || process.env);
+      command.env = await activeDebugger.addDebugEnv(executionEnv);
     }
 
     executing = true;

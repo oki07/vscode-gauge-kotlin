@@ -28,6 +28,13 @@ function createFakeVscode(overrides = {}) {
       workspace: {
         workspaceFolders,
         getConfiguration(section) {
+          if (section === "gauge") {
+            return {
+              get() {
+                return undefined;
+              },
+            };
+          }
           assert.equal(section, "launch");
           return {
             get(key) {
@@ -595,6 +602,13 @@ test("execute all specs reads launch options from the selected workspace folder"
         return uri.fsPath === "/workspace/admin" ? workspaceFolder : undefined;
       },
       getConfiguration(section, scope) {
+        if (section === "gauge") {
+          return {
+            get() {
+              return undefined;
+            },
+          };
+        }
         configurationRequests.push({ section, scope });
         return {
           get(key) {
@@ -1437,6 +1451,108 @@ test("debug node ignores launch parallel options", async () => {
     "gauge",
     "-PadditionalFlags=--hide-suggestion --simple-console",
     "-PspecsDir=specs/example.spec:9",
+  ]);
+});
+
+test("debug node passes configured GAUGE_HOME to the debug environment", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const vscode = {
+    StatusBarAlignment: {
+      Left: "left",
+    },
+    commands: {
+      executeCommand() {
+        return Promise.resolve(undefined);
+      },
+    },
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+      getConfiguration(section) {
+        if (section === "launch") {
+          return {
+            get(key) {
+              assert.equal(key, "configurations");
+              return [];
+            },
+          };
+        }
+        assert.equal(section, "gauge");
+        return {
+          get(key) {
+            return key === "home" ? "/custom/gauge-home" : undefined;
+          },
+        };
+      },
+    },
+    window: {
+      createStatusBarItem() {
+        return {
+          hide() {},
+          show() {},
+        };
+      },
+      showErrorMessage() {},
+    },
+  };
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    debuggerFactory(debugOptions) {
+      calls.push({ type: "debuggerBaseEnv", env: debugOptions.baseEnv });
+      return {
+        async addDebugEnv(env) {
+          calls.push({ type: "addDebugEnv", env });
+          return {
+            ...env,
+            DEBUGGING: true,
+          };
+        },
+        registerStopDebugger() {},
+        stopDebugger() {},
+      };
+    },
+    env: { PATH: "/bin" },
+    async runner(command) {
+      calls.push({ type: "runnerEnv", env: command.env });
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  });
+
+  assert.deepEqual(calls, [
+    {
+      type: "debuggerBaseEnv",
+      env: {
+        PATH: "/bin",
+        GAUGE_HOME: "/custom/gauge-home",
+      },
+    },
+    {
+      type: "addDebugEnv",
+      env: {
+        PATH: "/bin",
+        GAUGE_HOME: "/custom/gauge-home",
+      },
+    },
+    {
+      type: "runnerEnv",
+      env: {
+        PATH: "/bin",
+        GAUGE_HOME: "/custom/gauge-home",
+        DEBUGGING: true,
+      },
+    },
   ]);
 });
 

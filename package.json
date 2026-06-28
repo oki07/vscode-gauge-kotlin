@@ -313,6 +313,16 @@
       "type": "object",
       "title": "Gauge configuration",
       "properties": {
+        "gauge.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Gauge executable. Leave empty to use Gauge from PATH."
+        },
+        "gauge.home": {
+          "type": "string",
+          "default": "",
+          "description": "Path to GAUGE_HOME. Leave empty to use the process environment or Gauge default."
+        },
         "gauge.welcomeNotification.showOn": {
           "type": "string",
           "default": "newProjectLoad",

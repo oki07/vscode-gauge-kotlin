@@ -4,6 +4,7 @@ const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
 const { CLI } = require("./cli");
+const { envWithGaugeHome } = require("./config/gaugeConfig");
 const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
@@ -189,6 +190,7 @@ async function previewGaugeDocument(options = {}) {
   const docsDir = pathModule.join(previewRoot, "docs");
   ensureDirectory(fileSystem, previewRoot);
   ensureDirectory(fileSystem, docsDir);
+  const env = envWithGaugeHome(options.env || process.env, { vscode });
 
   const result = await waitForProcess(
     command,
@@ -196,7 +198,7 @@ async function previewGaugeDocument(options = {}) {
     {
       cwd: projectRoot,
       env: {
-        ...(options.env || process.env),
+        ...env,
         spectacle_out_dir: docsDir,
       },
     },

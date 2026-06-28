@@ -134,6 +134,47 @@ test("process runner uses Command object spawning when available", async () => {
   assert.ok(outputChannel.lines.includes("Running tool: ./gradlew wrapped:clean wrapped:gauge"));
 });
 
+test("process runner adds configured GAUGE_HOME to the base environment", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const spawnCalls = [];
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    env: { PATH: "/bin" },
+    vscode: {
+      workspace: {
+        getConfiguration(section) {
+          assert.equal(section, "gauge");
+          return {
+            get(key) {
+              return key === "home" ? "/custom/gauge-home" : "";
+            },
+          };
+        },
+      },
+    },
+    spawn(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run"],
+    cwd: "/workspace",
+  });
+
+  child.emit("exit", 0);
+
+  assert.equal(await run, true);
+  assert.deepEqual(spawnCalls[0].options.env, {
+    PATH: "/bin",
+    GAUGE_HOME: "/custom/gauge-home",
+  });
+});
+
 test("process runner reports failed exits", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

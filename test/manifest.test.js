@@ -117,6 +117,16 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.preview"));
 
   const configuration = manifest.contributes.configuration.properties;
+  assert.deepEqual(configuration["gauge.executablePath"], {
+    type: "string",
+    default: "",
+    description: "Path to the Gauge executable. Leave empty to use Gauge from PATH.",
+  });
+  assert.deepEqual(configuration["gauge.home"], {
+    type: "string",
+    default: "",
+    description: "Path to GAUGE_HOME. Leave empty to use the process environment or Gauge default.",
+  });
   assert.equal(configuration["gauge.specExplorer.enabled"].default, true);
   assert.equal(configuration["gauge.execution.debugPort"].default, 9229);
   assert.equal(configuration["gauge.codeLenses.reference"].default, true);

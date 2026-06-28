@@ -1,6 +1,7 @@
 "use strict";
 
 const childProcess = require("node:child_process");
+const { envWithGaugeHome, readGaugeExtensionSettings } = require("./config/gaugeConfig");
 const { OutputChannel } = require("./execution/outputChannel");
 
 const GAUGE_COMMAND = "gauge";
@@ -63,7 +64,10 @@ class CLI {
 
   static instance(options = {}) {
     const vscode = options.vscode;
-    const gaugeCommand = this.getCommand(GAUGE_COMMAND);
+    const settings = options.settings || readGaugeExtensionSettings(vscode);
+    const gaugeCommand = settings.executablePath
+      ? this.getConfiguredCommand(settings.executablePath, [GAUGE_VERSION_ARG])
+      : this.getCommand(GAUGE_COMMAND);
     const mavenCommand = this.getCommand(MAVEN_COMMAND, [MAVEN_VERSION_ARG]);
     const gradleCommand = this.getGradleCommand();
     if (!gaugeCommand) {
@@ -112,9 +116,10 @@ class CLI {
     const vscode = getVscode(options.vscode);
     const channel = vscode.window.createOutputChannel("Gauge Install");
     const output = new OutputChannel(channel, `Installing gauge ${language} plugin ...\n`, "");
+    const env = envWithGaugeHome(options.env || process.env, { vscode });
 
     return new Promise((resolve) => {
-      const child = this.command.spawn([GAUGE_INSTALL_ARG, language]);
+      const child = this.command.spawn([GAUGE_INSTALL_ARG, language], { env });
       child.stdout.on("data", (chunk) => output.appendOutBuf(chunk.toString()));
       child.stderr.on("data", (chunk) => output.appendErrBuf(chunk.toString()));
       child.on("exit", (code) => {
@@ -164,6 +169,12 @@ class CLI {
 
   static getCommand(command, testArgs = []) {
     return this.getCommandCandidates(command).find((candidate) => this.isSpawnable(candidate, testArgs));
+  }
+
+  static getConfiguredCommand(command, testArgs = []) {
+    const shellMode = process.platform === "win32" && /\.(?:bat|cmd)$/i.test(command);
+    const candidate = new Command(command, "", shellMode);
+    return this.isSpawnable(candidate, testArgs) ? candidate : undefined;
   }
 
   static getGradleCommand() {

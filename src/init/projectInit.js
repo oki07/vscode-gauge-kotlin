@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { envWithGaugeHome } = require("../config/gaugeConfig");
 
 const CREATE_PROJECT_COMMAND = "gauge.createProject";
 const GAUGE_INIT_ARG = "init";
@@ -75,7 +76,10 @@ class ProjectInitializer {
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
     this.fileSystem = options.fileSystem || nodeFs;
-    this.env = options.env || process.env;
+    this.env = envWithGaugeHome(options.env || process.env, {
+      vscode: this.vscode,
+      gaugeHome: options.gaugeHome,
+    });
     this.cli = options.cli;
     this.createCli = options.createCli;
     this.disposables = [];
