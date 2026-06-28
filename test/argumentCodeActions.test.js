@@ -241,6 +241,36 @@ test("GaugeArgumentCodeActionProvider ignores quoted concept heading text", () =
   );
 });
 
+test("GaugeArgumentCodeActionProvider exposes create step implementation fixes", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const { UNDEFINED_STEP_MESSAGE } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeArgumentCodeActionProvider({ vscode });
+  const diagnosticRange = new vscode.Range(
+    new vscode.Position(0, 0),
+    new vscode.Position(0, 19),
+  );
+  const cursorRange = new vscode.Range(
+    new vscode.Position(0, 2),
+    new vscode.Position(0, 2),
+  );
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    lineAt() {
+      return { text: "* Pay with <amount>" };
+    },
+  };
+
+  const actions = provider.provideCodeActions(document, cursorRange, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range: diagnosticRange }],
+  });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Create step implementation");
+  assert.equal(actions[0].command.command, "gauge.generate.step");
+});
+
 test("selectArgumentRange selects the converted Gauge argument body", () => {
   const { selectArgumentRange } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();

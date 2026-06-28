@@ -4669,6 +4669,33 @@ test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
   assert.deepEqual({ ...diagnostics[1].range.end }, { line: 5, character: 3 });
 });
 
+test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+    "* Confirm order",
+    "*",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [specDocument, kotlinDocument]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Undefined Step",
+      "Step should not be blank",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
+});
+
 test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const opened = [];

@@ -5,6 +5,7 @@ const GAUGE_LANGUAGE = "gauge";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
+const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
 const KOTLIN_FUNCTION_MODIFIERS = new Set([
@@ -63,12 +64,18 @@ function createRange(vscode, start, end) {
   return { start: startPosition, end: endPosition };
 }
 
-function createDiagnostic(vscode, range, message) {
+function createDiagnostic(vscode, range, message, options = {}) {
   const severity = vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Error;
-  if (typeof vscode.Diagnostic === "function") {
-    return new vscode.Diagnostic(range, message, severity);
+  const diagnostic = typeof vscode.Diagnostic === "function"
+    ? new vscode.Diagnostic(range, message, severity)
+    : { range, message, severity };
+  if (options.code !== undefined) {
+    diagnostic.code = options.code;
   }
-  return { range, message, severity };
+  if (options.source !== undefined) {
+    diagnostic.source = options.source;
+  }
+  return diagnostic;
 }
 
 function positionAt(text, offset) {
@@ -3454,6 +3461,61 @@ function findBlankGaugeSteps(text) {
   return entries;
 }
 
+function normalizeStepTemplate(text) {
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const dynamicStart = findDynamicParameterStart(text, index);
+    const staticStart = findStaticParameterStart(text, index);
+    const parameter = findNextStepParameter(dynamicStart, staticStart);
+    if (!parameter) {
+      result += text.slice(index);
+      break;
+    }
+
+    const closeIndex = parameter.type === "dynamic"
+      ? findDynamicParameterEnd(text, parameter.openIndex)
+      : findStaticParameterEnd(text, parameter.openIndex);
+    if (closeIndex === -1) {
+      result += text.slice(index);
+      break;
+    }
+
+    result += `${text.slice(index, parameter.openIndex)}{}`;
+    index = closeIndex + 1;
+  }
+  return result.trim().normalize("NFC");
+}
+
+function isInlineTableLine(line) {
+  return line.trimStart().startsWith("|");
+}
+
+function findGaugeSteps(text) {
+  const entries = [];
+  const lines = text.split("\n");
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    const marker = rawLine.search(/\S/);
+    if (marker === -1 || rawLine[marker] !== "*") {
+      continue;
+    }
+
+    let stepText = rawLine.slice(marker + 1).trim();
+    if (stepText && lines[line + 1] !== undefined && isInlineTableLine(lines[line + 1])) {
+      stepText = `${stepText} <table>`;
+    }
+    entries.push({
+      end: { line, character: rawLine.length },
+      marker,
+      normalized: stepText ? normalizeStepTemplate(stepText) : undefined,
+      start: { line, character: marker },
+      text: stepText,
+    });
+  }
+  return entries;
+}
+
 function splitTopLevelParameters(text) {
   return splitTopLevel(text, ",");
 }
@@ -5697,12 +5759,27 @@ class GaugeStepDiagnosticsProvider {
     const text = document.getText();
     const diagnostics = [];
     if (document.languageId === GAUGE_LANGUAGE) {
-      for (const entry of findBlankGaugeSteps(text)) {
-        diagnostics.push(createDiagnostic(
-          this.vscode,
-          createRange(this.vscode, entry.start, entry.end),
-          BLANK_STEP_MESSAGE,
-        ));
+      const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
+      for (const entry of findGaugeSteps(text)) {
+        const range = createRange(this.vscode, entry.start, entry.end);
+        if (!entry.text) {
+          diagnostics.push(createDiagnostic(
+            this.vscode,
+            range,
+            BLANK_STEP_MESSAGE,
+          ));
+        } else if (
+          entry.marker === 0
+          && implementedSteps
+          && !implementedSteps.has(entry.normalized)
+        ) {
+          diagnostics.push(createDiagnostic(
+            this.vscode,
+            range,
+            UNDEFINED_STEP_MESSAGE,
+            { code: "gauge.undefinedStep", source: "gauge" },
+          ));
+        }
       }
       return diagnostics;
     }
@@ -5725,6 +5802,44 @@ class GaugeStepDiagnosticsProvider {
       }
     }
     return diagnostics;
+  }
+
+  kotlinDocuments(document, workspaceDocuments) {
+    const workspace = this.vscode.workspace || {};
+    const candidates = Array.isArray(workspaceDocuments)
+      ? workspaceDocuments
+      : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    return candidates.filter((candidate) => (
+      candidate
+      && candidate !== document
+      && isKotlinDocument(candidate)
+      && typeof candidate.getText === "function"
+      && this.isGaugeProjectDocument(candidate)
+    ));
+  }
+
+  implementedStepTemplates(document, workspaceDocuments) {
+    const kotlinDocuments = this.kotlinDocuments(document, workspaceDocuments);
+    if (kotlinDocuments.length === 0) {
+      return undefined;
+    }
+
+    const templates = new Set();
+    for (const candidate of kotlinDocuments) {
+      const text = candidate.getText();
+      let externalConstants;
+      try {
+        externalConstants = this.collectWorkspaceConstants(candidate, kotlinDocuments);
+      } catch (_error) {
+        externalConstants = undefined;
+      }
+      for (const entry of findStepFunctions(text, externalConstants)) {
+        for (const alias of entry.aliases) {
+          templates.add(normalizeStepTemplate(alias));
+        }
+      }
+    }
+    return templates;
   }
 
   updateDocument(collection, document, workspaceDocuments) {
@@ -5864,6 +5979,7 @@ class GaugeStepDiagnosticsProvider {
 module.exports = {
   COLLECTION_NAME,
   GaugeStepDiagnosticsProvider,
+  UNDEFINED_STEP_MESSAGE,
   countKotlinParameters,
   countStepParameters,
   findStepFunctions,

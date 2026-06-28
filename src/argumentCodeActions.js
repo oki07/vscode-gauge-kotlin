@@ -1,5 +1,7 @@
 "use strict";
 
+const { GaugeStepCodeActionProvider } = require("./stepCodeActions");
+
 const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
 const SELECT_ARGUMENT_RANGE_COMMAND = "gauge.selectArgumentRange";
@@ -142,20 +144,23 @@ function findArgumentAt(line, range) {
 class GaugeArgumentCodeActionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.stepCodeActionProvider = options.stepCodeActionProvider
+      || new GaugeStepCodeActionProvider({ vscode: this.vscode });
   }
 
-  provideCodeActions(document, range) {
+  provideCodeActions(document, range, context) {
+    const stepActions = this.stepCodeActionProvider.provideCodeActions(document, range, context);
     const line = document.lineAt(range.start.line).text;
     if (!isGaugeStepOrConceptHeading(line, document)) {
-      return [];
+      return stepActions;
     }
 
     const argument = findArgumentAt(line, range);
     if (!argument) {
-      return [];
+      return stepActions;
     }
     if (isConceptHeadingLine(line, document) && argument.text.startsWith("\"")) {
-      return [];
+      return stepActions;
     }
 
     const paramText = argument.text.substring(1, argument.text.length - 1);
@@ -175,7 +180,7 @@ class GaugeArgumentCodeActionProvider {
       title: SELECT_ARGUMENT_RANGE_TITLE,
       arguments: [document.uri, selectionRange],
     };
-    return [createCodeAction(this.vscode, title, edit, command)];
+    return stepActions.concat([createCodeAction(this.vscode, title, edit, command)]);
   }
 }
 
