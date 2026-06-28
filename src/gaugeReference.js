@@ -6,12 +6,12 @@ const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
 const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
 const GAUGE_LANGUAGE = "gauge";
-const KOTLIN_LANGUAGE = "kotlin";
 const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt"];
 
 const {
   GaugeStepDiagnosticsProvider,
   findStepFunctions,
+  isKotlinDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
@@ -340,7 +340,7 @@ class ReferenceProvider {
       if (
         !candidate
         || sameDocument(candidate, sourceDocument)
-        || candidate.languageId !== KOTLIN_LANGUAGE
+        || !isKotlinDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.diagnosticsProvider.isGaugeProjectDocument(candidate)
       ) {
@@ -370,7 +370,7 @@ class ReferenceProvider {
   async kotlinStepValueAt(document, position) {
     if (
       !document
-      || document.languageId !== KOTLIN_LANGUAGE
+      || !isKotlinDocument(document)
       || typeof document.getText !== "function"
       || !position
     ) {
