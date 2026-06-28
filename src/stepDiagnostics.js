@@ -5597,10 +5597,27 @@ function uriPath(uri) {
   return uri && uri.fsPath;
 }
 
+const WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE = "__gaugeStepImplementationScanComplete";
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
+
+function markWorkspaceStepImplementationScanComplete(documents) {
+  Object.defineProperty(documents, WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE, {
+    configurable: true,
+    enumerable: false,
+    value: true,
+  });
+  return documents;
+}
+
+function isWorkspaceStepImplementationScanComplete(workspaceDocuments) {
+  return Boolean(
+    workspaceDocuments
+    && workspaceDocuments[WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE],
+  );
+}
 
 // Identify Kotlin sources by file extension rather than relying on the editor
 // languageId. VS Code ships no built-in Kotlin language, so without a separate
@@ -5903,6 +5920,9 @@ class GaugeStepDiagnosticsProvider {
     const kotlinDocuments = this.kotlinDocuments(document, workspaceDocuments);
     const conceptDocuments = this.conceptDocuments(workspaceDocuments);
     if (kotlinDocuments.length === 0 && conceptDocuments.length === 0) {
+      if (isWorkspaceStepImplementationScanComplete(workspaceDocuments)) {
+        return new Set();
+      }
       return undefined;
     }
 
@@ -6031,7 +6051,7 @@ class GaugeStepDiagnosticsProvider {
           // Keep diagnostics available when one workspace URI is stale or unreadable.
         }
       }
-      return documents;
+      return markWorkspaceStepImplementationScanComplete(documents);
     })();
   }
 
