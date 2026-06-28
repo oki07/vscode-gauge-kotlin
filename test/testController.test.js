@@ -735,7 +735,10 @@ test("GaugeTestController registers a failed run profile for Test UI reruns", as
   await failedProfile[3]({});
 
   assert.deepEqual(executionCalls, [
-    ["gauge.execute.failed"],
+    ["gauge.execute.failed", undefined, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });

@@ -1178,6 +1178,52 @@ test("repeat execution asks for nested Gauge projects discovered under a workspa
   ]);
 });
 
+test("failed and repeat execution accept command flags for Test UI events", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+  });
+  const flags = {
+    "hide-suggestion": true,
+    "machine-readable": true,
+  };
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.failed", undefined, flags);
+  await controller.handleCommand("gauge.execute.repeat", undefined, flags);
+
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--failed", "--hide-suggestion", "--machine-readable"],
+      cwd: "/workspace",
+      status: "/workspace/failed scenarios",
+    },
+    {
+      command: "gauge",
+      args: ["run", "--repeat", "--hide-suggestion", "--machine-readable"],
+      cwd: "/workspace",
+      status: "/workspace/previous run",
+    },
+  ]);
+});
+
 test("spec explorer run all executes the active project without prompting", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
@@ -1779,6 +1825,60 @@ test("execute scenario at cursor runs the provider scenario and ignores launch f
         "gauge",
         "-PadditionalFlags=--hide-suggestion --simple-console",
         "-PspecsDir=specs/example.spec:8",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/specs/example.spec:8",
+    },
+  ]);
+});
+
+test("execute scenario at cursor accepts command flags for Test UI events", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      selection: { active: { line: 8, character: 0 } },
+      document: {
+        fileName: "/workspace/specs/example.spec",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async scenariosProvider() {
+      return {
+        heading: "Checkout order",
+        executionIdentifier: "/workspace/specs/example.spec:8",
+      };
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.scenario", undefined, {
+    "hide-suggestion": true,
+    "machine-readable": true,
+  });
+
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "--machine-readable",
+        "/workspace/specs/example.spec:8",
       ],
       cwd: "/workspace",
       status: "/workspace/specs/example.spec:8",

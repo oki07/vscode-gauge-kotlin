@@ -19,6 +19,29 @@ test("buildRunArgs.forGauge ignores other args when repeat flag is set", () => {
   );
 });
 
+test("buildRunArgs.forGauge keeps Test UI flags for failed and repeat runs", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec:123", {
+      failed: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+      tags: "should be ignored",
+    }),
+    ["run", "--failed", "--hide-suggestion", "--machine-readable"],
+  );
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec:123", {
+      repeat: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+      tags: "should be ignored",
+    }),
+    ["run", "--repeat", "--hide-suggestion", "--machine-readable"],
+  );
+});
+
 test("buildRunArgs.forGauge formats standard run options", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -110,6 +133,29 @@ test("buildRunArgs.forGradle ignores other args when repeat flag is set", () => 
   );
 });
 
+test("buildRunArgs.forGradle keeps Test UI flags for failed and repeat runs", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", {
+      failed: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+      tags: "should be ignored",
+    }).join(" "),
+    "clean gauge -PadditionalFlags=--failed --hide-suggestion --machine-readable",
+  );
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", {
+      repeat: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+      tags: "should be ignored",
+    }).join(" "),
+    "clean gauge -PadditionalFlags=--repeat --hide-suggestion --machine-readable",
+  );
+});
+
 test("buildRunArgs.forGradle formats standard run options", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -194,6 +240,29 @@ test("buildRunArgs.forMaven ignores other args when repeat flag is set", () => {
   assert.equal(
     buildRunArgs.forMaven("my.spec:123", { repeat: true }).join(" "),
     "-q clean compile test-compile gauge:execute -Dflags=--repeat",
+  );
+});
+
+test("buildRunArgs.forMaven keeps Test UI flags for failed and repeat runs", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", {
+      failed: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+      tags: "should be ignored",
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--failed,--hide-suggestion,--machine-readable",
+  );
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", {
+      repeat: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+      tags: "should be ignored",
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--repeat,--hide-suggestion,--machine-readable",
   );
 });
 

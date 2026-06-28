@@ -615,7 +615,11 @@ class GaugeTestController {
     const cancellation = this.registerCancellation(token);
     try {
       if (this.executionController && typeof this.executionController.handleCommand === "function") {
-        await this.executionController.handleCommand("gauge.execute.failed");
+        await this.executionController.handleCommand(
+          "gauge.execute.failed",
+          undefined,
+          testUiRunFlags(),
+        );
       }
     } finally {
       if (cancellation && typeof cancellation.dispose === "function") {

@@ -884,23 +884,25 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
-  async function executeFailed() {
+  async function executeFailed(flags = {}) {
     const projectRoot = await selectProjectRoot(vscode, pathModule, projectFactory);
     if (!projectRoot) {
       return undefined;
     }
     return executeInProject(projectRoot, null, {
+      ...flags,
       failed: true,
       status: pathModule.join(projectRoot, "failed scenarios"),
     });
   }
 
-  async function repeatExecution() {
+  async function repeatExecution(flags = {}) {
     const projectRoot = await selectProjectRoot(vscode, pathModule, projectFactory);
     if (!projectRoot) {
       return undefined;
     }
     return executeInProject(projectRoot, null, {
+      ...flags,
       repeat: true,
       status: pathModule.join(projectRoot, "previous run"),
     });
@@ -913,18 +915,19 @@ function createGaugeExecutionController(options = {}) {
     }));
   }
 
-  async function executeScenarioIdentifier(executionIdentifier) {
+  async function executeScenarioIdentifier(executionIdentifier, flags = {}) {
     const specPath = getScenarioSpecPath(executionIdentifier);
     const projectRoot = getProjectRootForSpec(vscode, specPath, pathModule, projectFactory);
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
     return executeInProject(projectRoot, executionIdentifier, {
+      ...flags,
       status: executionIdentifier,
     });
   }
 
-  async function chooseAndExecuteScenario(scenarios) {
+  async function chooseAndExecuteScenario(scenarios, flags = {}) {
     if (!Array.isArray(scenarios) || scenarios.length === 0) {
       return undefined;
     }
@@ -936,10 +939,10 @@ function createGaugeExecutionController(options = {}) {
     if (!scenario) {
       return undefined;
     }
-    return executeScenarioIdentifier(scenario.executionIdentifier);
+    return executeScenarioIdentifier(scenario.executionIdentifier, flags);
   }
 
-  async function executeScenario(atCursor) {
+  async function executeScenario(atCursor, flags = {}) {
     const context = getActiveSpecificationContext("scenario(s)");
     if (context.error) {
       return vscode.window.showErrorMessage(context.error);
@@ -963,9 +966,9 @@ function createGaugeExecutionController(options = {}) {
     }
 
     if (atCursor && !Array.isArray(scenarios)) {
-      return executeScenarioIdentifier(scenarios.executionIdentifier);
+      return executeScenarioIdentifier(scenarios.executionIdentifier, flags);
     }
-    return chooseAndExecuteScenario(scenarios);
+    return chooseAndExecuteScenario(scenarios, flags);
   }
 
   async function stopExecution(aborted = true) {
@@ -1075,16 +1078,16 @@ function createGaugeExecutionController(options = {}) {
       case "gauge.specexplorer.runAllActiveProjectSpecs":
         return executeAllSpecifications(argument && argument.projectRoot, flags);
       case "gauge.execute.failed":
-        return executeFailed();
+        return executeFailed(flags);
       case "gauge.execute.repeat":
-        return repeatExecution();
+        return repeatExecution(flags);
       case "gauge.execute.scenario":
         if (argument) {
           return executeNode(argument, false, flags);
         }
-        return executeScenario(true);
+        return executeScenario(true, flags);
       case "gauge.execute.scenarios":
-        return executeScenario(false);
+        return executeScenario(false, flags);
       case "gauge.specexplorer.runNode":
         return executeNode(argument, false, flags);
       case "gauge.specexplorer.debugNode":

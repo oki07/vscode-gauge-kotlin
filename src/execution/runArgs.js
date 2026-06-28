@@ -20,6 +20,10 @@ const processExecutionAttributes = new Set([
   "processEnv",
 ]);
 const SPEC_FILE_DELIMITER = "||";
+const RERUN_FLAG_KEYS = [
+  "hide-suggestion",
+  "machine-readable",
+];
 
 function withoutCommonLaunchAttributes(input) {
   return Object.entries(input)
@@ -100,6 +104,16 @@ function flagTokens(key, value) {
   return [];
 }
 
+function rerunFlagTokens(key, option = {}) {
+  const tokens = [flag(key)];
+  for (const rerunKey of RERUN_FLAG_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(option, rerunKey)) {
+      tokens.push(...flagTokens(rerunKey, option[rerunKey]));
+    }
+  }
+  return tokens;
+}
+
 function specTargets(spec) {
   if (Array.isArray(spec)) {
     return spec.filter((entry) => typeof entry === "string" && entry);
@@ -126,10 +140,10 @@ function buildGaugeArgs(spec, option = {}) {
   const launchArgs = additionalArgs(option.args);
 
   if (option.failed) {
-    return args.concat(flag("failed"));
+    return args.concat(rerunFlagTokens("failed", option));
   }
   if (option.repeat) {
-    return args.concat(flag("repeat"));
+    return args.concat(rerunFlagTokens("repeat", option));
   }
 
   const merged = {
@@ -169,10 +183,10 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
   const args = [];
 
   if (failed) {
-    return args.concat(prefixed(additionalFlags(flag("failed"))));
+    return args.concat(prefixed(additionalFlags(...rerunFlagTokens("failed", option))));
   }
   if (repeat) {
-    return args.concat(prefixed(additionalFlags(flag("repeat"))));
+    return args.concat(prefixed(additionalFlags(...rerunFlagTokens("repeat", option))));
   }
   if (parallel) {
     args.push(prefixed("inParallel=true"));

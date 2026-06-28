@@ -957,7 +957,13 @@ test("execution commands delegate to the Gauge execution controller", () => {
   assert.deepEqual(handledCommands, [
     {
       command: "gauge.execute.specification",
-      args: [node],
+      args: [
+        node,
+        {
+          "hide-suggestion": true,
+          "machine-readable": true,
+        },
+      ],
     },
   ]);
 });
