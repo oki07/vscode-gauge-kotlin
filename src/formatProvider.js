@@ -1,6 +1,7 @@
 "use strict";
 
 const nodeFs = require("node:fs");
+const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const FORMAT_COMMAND = "format";
 const GAUGE_LANGUAGE = "gauge";
@@ -71,6 +72,27 @@ function formatFailureMessage(result) {
   return reason ? `Error on formatting spec. ${reason}` : "Error on formatting spec.";
 }
 
+function projectRoot(project) {
+  if (!project) {
+    return "";
+  }
+  if (typeof project.root === "function") {
+    return project.root();
+  }
+  return project.root || project.projectRoot || "";
+}
+
+function projectEnvironment(project, cli) {
+  if (!project || typeof project.envs !== "function") {
+    return {};
+  }
+  return project.envs(cli) || {};
+}
+
+function hasEnvironment(env) {
+  return Boolean(env && Object.keys(env).length > 0);
+}
+
 function showError(vscode, message) {
   if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
     return vscode.window.showErrorMessage(message);
@@ -125,6 +147,7 @@ class GaugeFormatProvider {
   constructor(options = {}) {
     this.cli = options.cli;
     this.createCli = options.createCli;
+    this.env = options.env;
     this.fileSystem = options.fileSystem || nodeFs;
     this.projectFactory = options.projectFactory;
     this.vscode = getVscode(options.vscode);
@@ -149,6 +172,30 @@ class GaugeFormatProvider {
     );
   }
 
+  projectForFile(filePath) {
+    if (!this.projectFactory) {
+      return undefined;
+    }
+    if (typeof this.projectFactory.getProjectByFilepath === "function") {
+      return this.projectFactory.getProjectByFilepath(filePath);
+    }
+    if (typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return undefined;
+    }
+    const root = this.projectFactory.getGaugeRootFromFilePath(filePath);
+    if (typeof this.projectFactory.get === "function") {
+      return this.projectFactory.get(root);
+    }
+    return {
+      root() {
+        return root;
+      },
+      envs() {
+        return {};
+      },
+    };
+  }
+
   async provideDocumentFormattingEdits(document) {
     if (!this.shouldFormat(document)) {
       return [];
@@ -158,11 +205,19 @@ class GaugeFormatProvider {
     }
 
     const filePath = documentPath(document);
-    let projectRoot;
+    let project;
+    let root;
     try {
-      projectRoot = this.projectFactory.getGaugeRootFromFilePath(filePath);
+      project = this.projectForFile(filePath);
+      root = projectRoot(project);
     } catch (error) {
       showError(this.vscode, formatFailureMessage({ error }));
+      return [];
+    }
+    if (!root) {
+      showError(this.vscode, formatFailureMessage({
+        error: new Error("Gauge project root is not available."),
+      }));
       return [];
     }
 
@@ -175,7 +230,17 @@ class GaugeFormatProvider {
       return [];
     }
 
-    const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], { cwd: projectRoot });
+    const processOptions = { cwd: root };
+    const baseEnv = envWithGaugeHome(this.env || process.env, { vscode: this.vscode });
+    const projectEnv = projectEnvironment(project, cli);
+    if (this.env || baseEnv !== process.env || hasEnvironment(projectEnv)) {
+      processOptions.env = {
+        ...baseEnv,
+        ...projectEnv,
+      };
+    }
+
+    const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], processOptions);
     if (result.code !== 0) {
       showError(this.vscode, formatFailureMessage(result));
       return [];

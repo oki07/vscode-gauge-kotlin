@@ -23,7 +23,7 @@ function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec", la
   };
 }
 
-function createFakeVscode() {
+function createFakeVscode(options = {}) {
   return {
     Position: class Position {
       constructor(line, character) {
@@ -45,6 +45,16 @@ function createFakeVscode() {
     window: {
       showErrorMessage(message) {
         throw new Error(message);
+      },
+    },
+    workspace: {
+      getConfiguration(section) {
+        assert.equal(section, "gauge");
+        return {
+          get(key) {
+            return key === "home" ? options.gaugeHome : "";
+          },
+        };
       },
     },
   };
@@ -109,6 +119,69 @@ test("GaugeFormatProvider returns full document edits from gauge format output",
       range: {
         start: { line: 0, character: 0 },
         end: { line: 2, character: 0 },
+      },
+    },
+  ]);
+});
+
+test("GaugeFormatProvider passes configured Gauge home and project environment", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const spawned = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawned.push({ args, options });
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          process.nextTick(() => child.emit("exit", 0));
+          return child;
+        },
+      };
+    },
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    envs(receivedCli) {
+      assert.equal(receivedCli, cli);
+      return { GAUGE_CUSTOM_CLASSPATH: "/workspace/gauge/build/classes" };
+    },
+  };
+  const provider = new GaugeFormatProvider({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: {
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return Buffer.from("# Example\n");
+      },
+    },
+    projectFactory: {
+      getProjectByFilepath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return project;
+      },
+    },
+    vscode: createFakeVscode({ gaugeHome: "/custom/gauge-home" }),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument("# Example\n"));
+
+  assert.deepEqual(edits, []);
+  assert.deepEqual(spawned, [
+    {
+      args: ["format", "/workspace/gauge/specs/example.spec"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: {
+          PATH: "/bin",
+          GAUGE_HOME: "/custom/gauge-home",
+          GAUGE_CUSTOM_CLASSPATH: "/workspace/gauge/build/classes",
+        },
       },
     },
   ]);
