@@ -89,6 +89,7 @@ function createFakeVscode(options = {}) {
         }
       },
       TestRunProfileKind: {
+        Debug: 2,
         Run: 1,
       },
       Uri: {
@@ -131,6 +132,33 @@ function createFakeVscode(options = {}) {
           return { dispose() {} };
         },
       },
+    },
+  };
+}
+
+function createCancellationToken() {
+  const listeners = [];
+  let disposed = false;
+  return {
+    token: {
+      isCancellationRequested: false,
+      onCancellationRequested(listener) {
+        listeners.push(listener);
+        return {
+          dispose() {
+            disposed = true;
+          },
+        };
+      },
+    },
+    cancel() {
+      this.token.isCancellationRequested = true;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    get disposed() {
+      return disposed;
     },
   };
 }
@@ -179,6 +207,7 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
   assert.deepEqual(calls, [
     ["controller", "gauge", "Gauge"],
     ["profile", "Run", 1, calls[1][3], true],
+    ["profile", "Debug", 2, calls[2][3], false],
     ["run", { include: [] }],
     ["started", "/workspace/specs/example.spec"],
     ["started", "/workspace/specs/example.spec:12"],
@@ -255,6 +284,50 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
+test("GaugeTestController debug profile runs included Gauge test items in debug mode", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const debugProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Debug");
+  const spec = controller.createTestItem(
+    "/workspace/specs/example.spec",
+    "Checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  const scenario = controller.createTestItem(
+    "/workspace/specs/example.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+
+  await debugProfile[3]({ include: [spec, scenario] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/example.spec", {
+      debug: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.execute", "/workspace/specs/example.spec:3", {
+      debug: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
 test("GaugeTestController forces machine-readable output for all-spec Test UI runs", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { vscode } = createFakeVscode();
@@ -279,6 +352,78 @@ test("GaugeTestController forces machine-readable output for all-spec Test UI ru
       "machine-readable": true,
     }],
   ]);
+});
+
+test("GaugeTestController debug profile debugs all specs when no tests are included", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const debugProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Debug");
+
+  await debugProfile[3]({});
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.specification.all", undefined, {
+      debug: true,
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
+test("GaugeTestController stops Gauge execution when Test UI run is cancelled", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  let finishRun;
+  const runningCommand = new Promise((resolve) => {
+    finishRun = resolve;
+  });
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        if (command === "gauge.execute") {
+          return runningCommand;
+        }
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+  const cancellation = createCancellationToken();
+
+  gaugeTests.register();
+  const scenario = controller.createTestItem(
+    "/workspace/specs/example.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+
+  const run = gaugeTests.run({ include: [scenario] }, cancellation.token);
+  cancellation.cancel();
+  finishRun();
+  await run;
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/example.spec:3", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.stopExecution"],
+  ]);
+  assert.equal(cancellation.disposed, true);
 });
 
 test("GaugeTestController delays failed and skipped results until finish events provide duration", () => {
@@ -323,7 +468,12 @@ test("GaugeTestController delays failed and skipped results until finish events 
     duration: 9,
   });
 
-  assert.deepEqual(calls.slice(3), [
+  assert.deepEqual(calls.filter((entry) => [
+    "failed",
+    "passed",
+    "skipped",
+    "started",
+  ].includes(entry[0])), [
     ["started", "scenario-1"],
     ["failed", "scenario-1", "Expected success", 7],
     ["started", "scenario-2"],

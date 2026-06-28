@@ -5,6 +5,7 @@ const { headingMarkers } = require("./codeLensProvider");
 const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";
 const GAUGE_LANGUAGE = "gauge";
+const DEBUG_PROFILE_LABEL = "Debug";
 const RUN_PROFILE_LABEL = "Run";
 const ROOT_PARENT_ID = "suite";
 const TEST_UI_RUN_FLAGS = {
@@ -161,6 +162,10 @@ function testUiRunFlags() {
   return { ...TEST_UI_RUN_FLAGS };
 }
 
+function testUiDebugFlags() {
+  return { ...TEST_UI_RUN_FLAGS, debug: true };
+}
+
 class GaugeTestController {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -176,15 +181,7 @@ class GaugeTestController {
       return undefined;
     }
     this.controller = this.vscode.tests.createTestController(CONTROLLER_ID, CONTROLLER_LABEL);
-    if (typeof this.controller.createRunProfile === "function") {
-      const kind = this.vscode.TestRunProfileKind && this.vscode.TestRunProfileKind.Run;
-      this.controller.createRunProfile(
-        RUN_PROFILE_LABEL,
-        kind,
-        (request, token) => this.run(request, token),
-        true,
-      );
-    }
+    this.registerRunProfiles();
     const disposables = this.registerDocumentDiscovery();
     this.discoverOpenDocuments();
     return {
@@ -197,6 +194,25 @@ class GaugeTestController {
         }
       },
     };
+  }
+
+  registerRunProfiles() {
+    if (typeof this.controller.createRunProfile !== "function") {
+      return;
+    }
+    const profileKind = this.vscode.TestRunProfileKind || {};
+    this.controller.createRunProfile(
+      RUN_PROFILE_LABEL,
+      profileKind.Run,
+      (request, token) => this.run(request, token),
+      true,
+    );
+    this.controller.createRunProfile(
+      DEBUG_PROFILE_LABEL,
+      profileKind.Debug,
+      (request, token) => this.debug(request, token),
+      false,
+    );
   }
 
   registerDocumentDiscovery() {
@@ -318,8 +334,27 @@ class GaugeTestController {
     return this.currentRun;
   }
 
-  async run(request = {}) {
+  stopExecution() {
+    if (!this.executionController || typeof this.executionController.handleCommand !== "function") {
+      return;
+    }
+    Promise.resolve(this.executionController.handleCommand("gauge.stopExecution")).catch(() => {});
+  }
+
+  registerCancellation(token) {
+    if (!token || typeof token.onCancellationRequested !== "function") {
+      return undefined;
+    }
+    const disposable = token.onCancellationRequested(() => this.stopExecution());
+    if (token.isCancellationRequested) {
+      this.stopExecution();
+    }
+    return disposable;
+  }
+
+  async runWithFlags(request = {}, flags = testUiRunFlags(), token) {
     const run = this.startTestRun(request);
+    const cancellation = this.registerCancellation(token);
     try {
       if (this.executionController && typeof this.executionController.handleCommand === "function") {
         const targets = Array.isArray(request.include)
@@ -329,15 +364,18 @@ class GaugeTestController {
           await this.executionController.handleCommand(
             "gauge.execute.specification.all",
             undefined,
-            testUiRunFlags(),
+            flags,
           );
         } else {
           for (const target of targets) {
-            await this.executionController.handleCommand("gauge.execute", target, testUiRunFlags());
+            await this.executionController.handleCommand("gauge.execute", target, flags);
           }
         }
       }
     } finally {
+      if (cancellation && typeof cancellation.dispose === "function") {
+        cancellation.dispose();
+      }
       if (run && typeof run.end === "function") {
         run.end();
       }
@@ -345,6 +383,14 @@ class GaugeTestController {
         this.currentRun = undefined;
       }
     }
+  }
+
+  async run(request = {}, token) {
+    return this.runWithFlags(request, testUiRunFlags(), token);
+  }
+
+  async debug(request = {}, token) {
+    return this.runWithFlags(request, testUiDebugFlags(), token);
   }
 
   ensureRun() {
