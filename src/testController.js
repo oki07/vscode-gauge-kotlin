@@ -131,6 +131,10 @@ function createMessage(vscode, message) {
   return message || "";
 }
 
+function createOptionalMessage(vscode, message) {
+  return message ? createMessage(vscode, message) : undefined;
+}
+
 function notificationText(event) {
   const title = String((event && event.title) || "").trim();
   const message = String((event && event.message) || "").trim();
@@ -645,6 +649,9 @@ class GaugeTestController {
       }
     } else if (status === "skipped") {
       result.skipped = true;
+      if (message && !result.message) {
+        result.message = message;
+      }
     } else {
       result.passed = true;
     }
@@ -667,7 +674,7 @@ class GaugeTestController {
         return;
       }
       if (childResult.skipped && !childResult.passed && typeof run.skipped === "function") {
-        run.skipped(item);
+        run.skipped(item, createOptionalMessage(this.vscode, childResult.message));
         return;
       }
     }
@@ -679,8 +686,8 @@ class GaugeTestController {
       return;
     }
     if (pending && pending.status === "skipped" && typeof run.skipped === "function") {
-      this.recordChildResult(event, "skipped");
-      run.skipped(item);
+      this.recordChildResult(event, "skipped", pending.message);
+      run.skipped(item, createOptionalMessage(this.vscode, pending.message));
       return;
     }
     this.recordChildResult(event, "passed");
@@ -724,6 +731,7 @@ class GaugeTestController {
         break;
       case "testIgnored":
         this.pendingResults.set(event.id, {
+          message: event.message,
           status: "skipped",
         });
         break;

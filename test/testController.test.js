@@ -74,8 +74,8 @@ function createFakeVscode(options = {}) {
         passed(item, duration) {
           calls.push(["passed", item.id, duration]);
         },
-        skipped(item) {
-          calls.push(["skipped", item.id]);
+        skipped(item, message) {
+          calls.push(["skipped", item.id, message && (message.message || message)]);
         },
         started(item) {
           calls.push(["started", item.id]);
@@ -816,6 +816,7 @@ test("GaugeTestController delays failed and skipped results until finish events 
     type: "testIgnored",
     id: "scenario-2",
     name: "Scenario two",
+    message: "Skipped: missing dependency",
   });
   sink({
     type: "testFinished",
@@ -833,7 +834,7 @@ test("GaugeTestController delays failed and skipped results until finish events 
     ["started", "scenario-1"],
     ["failed", "scenario-1", "Expected success", 7],
     ["started", "scenario-2"],
-    ["skipped", "scenario-2"],
+    ["skipped", "scenario-2", "Skipped: missing dependency"],
   ]);
 });
 
