@@ -6156,7 +6156,7 @@ class GaugeStepDiagnosticsProvider {
       const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
       for (const entry of findGaugeSteps(text)) {
         const range = createRange(this.vscode, entry.start, entry.end);
-        if (!entry.text) {
+        if (!entry.text && entry.marker === 0) {
           diagnostics.push(createDiagnostic(
             this.vscode,
             range,
