@@ -73,6 +73,20 @@ function createClient(responses, calls) {
   };
 }
 
+function createMultiProjectFactory() {
+  return {
+    getGaugeRootFromFilePath(filename) {
+      if (filename.startsWith("/workspace/project-a/")) {
+        return "/workspace/project-a";
+      }
+      if (filename.startsWith("/workspace/project-b/")) {
+        return "/workspace/project-b";
+      }
+      throw new Error("not a Gauge project file");
+    },
+  };
+}
+
 test("ReferenceProvider shows references for the step at the active cursor", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
@@ -1484,4 +1498,102 @@ test("ReferenceProvider filters unopened local Gauge references outside Gauge pr
   assert.equal(result, false);
   assert.deepEqual(calls.information, ["Action NA: Try this on an implementation."]);
   assert.deepEqual(calls.commands, []);
+});
+
+test("ReferenceProvider ignores local Gauge references from another Gauge project", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const implementationDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/project-a/src/test/kotlin/Steps.kt",
+      toString() {
+        return "file:///workspace/project-a/src/test/kotlin/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const projectASpec = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/project-a/specs/example.spec",
+      toString() {
+        return "file:///workspace/project-a/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Greeting",
+        "",
+        "* Say hello to <name>",
+      ].join("\n");
+    },
+  };
+  const projectBSpec = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/project-b/specs/example.spec",
+      toString() {
+        return "file:///workspace/project-b/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Greeting",
+        "",
+        "* Say hello to <name>",
+      ].join("\n");
+    },
+  };
+  const projectBConcept = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/project-b/specs/concepts/greeting.cpt",
+      toString() {
+        return "file:///workspace/project-b/specs/concepts/greeting.cpt";
+      },
+    },
+    getText() {
+      return [
+        "# Say hello to <name>",
+        "* Use greeting",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [
+        implementationDocument,
+        projectASpec,
+        projectBSpec,
+        projectBConcept,
+      ],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), {
+    projectFactory: createMultiProjectFactory(),
+    vscode,
+  });
+
+  const references = await provider.provideReferences(
+    implementationDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(references, [
+    {
+      uri: "file:///workspace/project-a/specs/example.spec",
+      range: {
+        start: { line: 2, character: 0 },
+        end: { line: 2, character: 21 },
+      },
+    },
+  ]);
 });

@@ -313,8 +313,12 @@ class ReferenceProvider {
   }
 
   showStepReferences(uri, position, stepValue) {
-    const languageClient = this.languageClientForUri(this.vscode.Uri.parse(uri));
-    return this.referenceLocationsForStepValues(languageClient, stepValue, { requestEmpty: true })
+    const sourceUri = this.vscode.Uri.parse(uri);
+    const languageClient = this.languageClientForUri(sourceUri);
+    return this.referenceLocationsForStepValues(languageClient, stepValue, {
+      requestEmpty: true,
+      sourcePath: uriPath(sourceUri),
+    })
       .then((locations) => this.showReferences(locations, uri, languageClient, position));
   }
 
@@ -381,7 +385,7 @@ class ReferenceProvider {
         createCancellationToken(this.vscode),
       );
     }
-    return hasLocations(locations) ? locations : this.localStepReferences(stepValue);
+    return hasLocations(locations) ? locations : this.localStepReferences(stepValue, options);
   }
 
   async referenceLocationsForStepValues(languageClient, stepValue, options = {}) {
@@ -470,8 +474,44 @@ class ReferenceProvider {
   async provideReferences(document, position) {
     const languageClient = this.languageClientForUri(document && document.uri);
     const stepValues = await this.stepValuesAt(document, position, languageClient);
-    const locations = await this.referenceLocationsForStepValues(languageClient, stepValues);
+    const locations = await this.referenceLocationsForStepValues(languageClient, stepValues, {
+      sourceDocument: document,
+    });
     return this.convertLocations(locations, languageClient);
+  }
+
+  sourceGaugeProjectRoot(options = {}) {
+    if (options.sourceDocument) {
+      return this.diagnosticsProvider.gaugeProjectRoot(options.sourceDocument);
+    }
+    if (
+      options.sourcePath
+      && this.projectFactory
+      && typeof this.projectFactory.getGaugeRootFromFilePath === "function"
+    ) {
+      try {
+        return this.projectFactory.getGaugeRootFromFilePath(options.sourcePath);
+      } catch (_error) {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  belongsPathToSourceGaugeProject(file, sourceRoot) {
+    if (
+      !file
+      || !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return true;
+    }
+    try {
+      const candidateRoot = this.projectFactory.getGaugeRootFromFilePath(file);
+      return sourceRoot === undefined || candidateRoot === sourceRoot;
+    } catch (_error) {
+      return false;
+    }
   }
 
   async findWorkspaceStepImplementationDocuments() {
@@ -512,7 +552,7 @@ class ReferenceProvider {
     return documents;
   }
 
-  async findWorkspaceGaugeDocuments() {
+  async findWorkspaceGaugeDocuments(sourceRoot) {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -532,12 +572,8 @@ class ReferenceProvider {
 
       for (const uri of uris || []) {
         const file = uriPath(uri);
-        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-          try {
-            this.projectFactory.getGaugeRootFromFilePath(file);
-          } catch (_error) {
-            continue;
-          }
+        if (!this.belongsPathToSourceGaugeProject(file, sourceRoot)) {
+          continue;
         }
 
         try {
@@ -618,7 +654,7 @@ class ReferenceProvider {
     return [];
   }
 
-  async gaugeDocuments() {
+  async gaugeDocuments(sourceRoot) {
     const workspace = this.vscode.workspace || {};
     const documents = [];
     const seenPaths = new Set();
@@ -627,7 +663,7 @@ class ReferenceProvider {
         !candidate
         || !isGaugeReferenceDocument(candidate)
         || typeof candidate.getText !== "function"
-        || !this.diagnosticsProvider.isGaugeProjectDocument(candidate)
+        || !this.diagnosticsProvider.belongsToSourceGaugeProject(candidate, sourceRoot)
       ) {
         return;
       }
@@ -646,19 +682,20 @@ class ReferenceProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceGaugeDocuments()) {
+    for (const candidate of await this.findWorkspaceGaugeDocuments(sourceRoot)) {
       addDocument(candidate);
     }
     return documents;
   }
 
-  async localStepReferences(stepValue) {
+  async localStepReferences(stepValue, options = {}) {
     if (!stepValue) {
       return undefined;
     }
     const targetTemplate = normalizeStepTemplate(stepValue);
+    const sourceRoot = this.sourceGaugeProjectRoot(options);
     const locations = [];
-    for (const document of await this.gaugeDocuments()) {
+    for (const document of await this.gaugeDocuments(sourceRoot)) {
       locations.push(...localGaugeStepReferences(document, targetTemplate));
     }
     return locations.length > 0 ? locations : undefined;
