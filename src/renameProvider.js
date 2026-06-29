@@ -280,12 +280,23 @@ function literalAliasRange(text, entry, alias) {
   return undefined;
 }
 
-function escapeKotlinStringContent(value) {
+function escapeStringContent(value) {
   return JSON.stringify(value).slice(1, -1);
 }
 
-function replacementForLiteral(value, literal) {
-  return literal.raw ? value : escapeKotlinStringContent(value);
+function escapeKotlinStringContent(value) {
+  return escapeStringContent(value).replace(/\$/g, () => "\\$");
+}
+
+function escapeKotlinRawStringContent(value) {
+  return String(value).replace(/\$/g, () => "${'$'}");
+}
+
+function replacementForLiteral(value, literal, options = {}) {
+  if (literal.raw) {
+    return options.kotlin ? escapeKotlinRawStringContent(value) : value;
+  }
+  return options.kotlin ? escapeKotlinStringContent(value) : escapeStringContent(value);
 }
 
 function stepEntryHasTemplate(entry, template) {
@@ -598,7 +609,8 @@ class GaugeRenameProvider {
   addStepImplementationRenames(edit, document, kotlinDocuments, template, newName, hasInlineTable) {
     const text = document.getText();
     let externalConstants;
-    if (isKotlinDocument(document)) {
+    const kotlinDocument = isKotlinDocument(document);
+    if (kotlinDocument) {
       try {
         externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
       } catch (_error) {
@@ -620,7 +632,9 @@ class GaugeRenameProvider {
       edit.replace(
         document.uri,
         range,
-        replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), literal),
+        replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), literal, {
+          kotlin: kotlinDocument,
+        }),
       );
     }
   }

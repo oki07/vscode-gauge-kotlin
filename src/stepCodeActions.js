@@ -67,7 +67,7 @@ function gaugeStepTextAt(document, lineNumber) {
 }
 
 function kotlinStringLiteral(value) {
-  return JSON.stringify(value);
+  return JSON.stringify(value).replace(/\$/g, () => "\\$");
 }
 
 function isKotlinDocument(document) {
