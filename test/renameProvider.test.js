@@ -574,6 +574,151 @@ test("GaugeRenameProvider renames Kotlin constants from constant-backed Step ann
   );
 });
 
+test("GaugeRenameProvider renames Java constants backing Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps;",
+    "",
+    "public final class JavaStepText {",
+    "  public static final String LOGIN = \"Log in as <user>\";",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java");
+  const javaDocument = createDocument([
+    "package fixtures.impl;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "import fixtures.steps.JavaStepText;",
+    "",
+    "public class LoginSteps {",
+    "  @Step(JavaStepText.LOGIN)",
+    "  public void login(String user) {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/impl/LoginSteps.java");
+  const vscode = createFakeVscode([specDocument, constantsDocument, javaDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Sign in as <user>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/login.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Sign in as <user>",
+      },
+      {
+        file: "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java",
+        range: {
+          start: { line: 3, character: 38 },
+          end: { line: 3, character: 54 },
+        },
+        newText: "Sign in as <user>",
+      },
+    ],
+  );
+});
+
+test("GaugeRenameProvider renames Java constants from constant-backed Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps;",
+    "",
+    "public final class JavaStepText {",
+    "  public static final String LOGIN = \"Log in as <user>\";",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java");
+  const javaDocument = createDocument([
+    "package fixtures.impl;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "import fixtures.steps.JavaStepText;",
+    "",
+    "public class LoginSteps {",
+    "  @Step(JavaStepText.LOGIN)",
+    "  public void login(String user) {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/impl/LoginSteps.java");
+  const vscode = createFakeVscode([specDocument, constantsDocument, javaDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const prepared = await provider.prepareRename(javaDocument, new vscode.Position(6, 12));
+  const edit = await provider.provideRenameEdits(
+    javaDocument,
+    new vscode.Position(6, 12),
+    "Sign in as <user>",
+  );
+
+  assert.deepEqual(
+    {
+      placeholder: prepared.placeholder,
+      range: {
+        start: { ...prepared.range.start },
+        end: { ...prepared.range.end },
+      },
+    },
+    {
+      placeholder: "Log in as <user>",
+      range: {
+        start: { line: 6, character: 8 },
+        end: { line: 6, character: 26 },
+      },
+    },
+  );
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/login.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Sign in as <user>",
+      },
+      {
+        file: "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java",
+        range: {
+          start: { line: 3, character: 38 },
+          end: { line: 3, character: 54 },
+        },
+        newText: "Sign in as <user>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider renames from Java Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

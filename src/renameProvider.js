@@ -5,6 +5,7 @@ const {
   GaugeStepDiagnosticsProvider,
   findStepFunctionsForDocument,
   isConceptDocument,
+  isJavaDocument,
   isKotlinDocument,
   isStepImplementationDocument,
   positionAt,
@@ -420,6 +421,89 @@ function findKotlinConstLiteralRange(vscode, document, reference, alias) {
   return undefined;
 }
 
+function collectJavaNamedScopes(text) {
+  const scopes = [];
+  const pattern = /\b(class|interface|enum|record)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
+  let match = pattern.exec(text);
+  while (match) {
+    const open = text.indexOf("{", pattern.lastIndex);
+    if (open === -1) {
+      match = pattern.exec(text);
+      continue;
+    }
+    let depth = 0;
+    let end = -1;
+    for (let index = open; index < text.length; index += 1) {
+      if (text[index] === "{") {
+        depth += 1;
+      } else if (text[index] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = index;
+          break;
+        }
+      }
+    }
+    if (end !== -1) {
+      scopes.push({
+        end,
+        name: match[2],
+        start: open + 1,
+      });
+      pattern.lastIndex = open + 1;
+    }
+    match = pattern.exec(text);
+  }
+  return scopes;
+}
+
+function enclosingJavaScopePath(scopes, offset) {
+  return scopes
+    .filter((scope) => offset >= scope.start && offset < scope.end)
+    .sort((left, right) => left.start - right.start)
+    .map((scope) => scope.name);
+}
+
+function findJavaConstLiteralRange(vscode, document, reference, alias) {
+  if (!isJavaDocument(document) || typeof document.getText !== "function") {
+    return undefined;
+  }
+  const text = document.getText();
+  const parts = normalizeKotlinReferenceText(reference).split(".");
+  const constName = parts[parts.length - 1];
+  if (!constName) {
+    return undefined;
+  }
+  const scopes = collectJavaNamedScopes(text);
+  const escapedName = constName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `\\b((?:(?:public|protected|private|static|final|transient|volatile)\\s+)*)String\\s+${escapedName}\\b`,
+    "g",
+  );
+  let match = pattern.exec(text);
+  while (match) {
+    const literal = findConstInitializerLiteral(text, pattern.lastIndex);
+    if (!literal || literal.value !== alias) {
+      match = pattern.exec(text);
+      continue;
+    }
+    const scopePath = enclosingJavaScopePath(scopes, match.index);
+    if (referenceMatchesConstScope(reference, scopePath, constName)) {
+      return {
+        literal,
+        range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd),
+      };
+    }
+    match = pattern.exec(text);
+  }
+  return undefined;
+}
+
+function findConstLiteralRange(vscode, document, reference, alias) {
+  return findKotlinConstLiteralRange(vscode, document, reference, alias)
+    || findJavaConstLiteralRange(vscode, document, reference, alias);
+}
+
 function escapeStringContent(value) {
   return JSON.stringify(value).slice(1, -1);
 }
@@ -622,10 +706,10 @@ class GaugeRenameProvider {
           text: alias,
         };
       }
-      if (isKotlinDocument(document)) {
+      if (isStepImplementationDocument(document)) {
         for (const reference of annotationConstantReferenceRanges(text, entry)) {
           if (implementationDocuments.some((candidate) => (
-            findKotlinConstLiteralRange(this.vscode, candidate, reference.reference, alias)
+            findConstLiteralRange(this.vscode, candidate, reference.reference, alias)
           ))) {
             return {
               hasInlineTable: /\s+<table>\s*$/.test(alias),
@@ -764,7 +848,7 @@ class GaugeRenameProvider {
   addConstantBackedStepRenames(edit, implementationDocuments, sourceText, entry, alias, newName, hasInlineTable) {
     for (const reference of annotationConstantReferences(sourceText, entry)) {
       for (const document of implementationDocuments) {
-        const constantRange = findKotlinConstLiteralRange(this.vscode, document, reference, alias);
+        const constantRange = findConstLiteralRange(this.vscode, document, reference, alias);
         if (!constantRange || editHasReplacement(edit, document.uri, constantRange.range)) {
           continue;
         }
@@ -772,7 +856,7 @@ class GaugeRenameProvider {
           document.uri,
           constantRange.range,
           replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), constantRange.literal, {
-            kotlin: true,
+            kotlin: isKotlinDocument(document),
           }),
         );
       }
@@ -796,7 +880,7 @@ class GaugeRenameProvider {
       }
       const literal = literalAliasRange(text, entry, entry.aliases[0]);
       if (!literal) {
-        if (kotlinDocument) {
+        if (isStepImplementationDocument(document)) {
           this.addConstantBackedStepRenames(
             edit,
             implementationDocuments,
