@@ -468,6 +468,10 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       language: "gauge",
       path: "./snippets/gauge.json",
     },
+    {
+      language: "markdown",
+      path: "./snippets/gauge.json",
+    },
   ]);
 
   for (const relativePath of [
