@@ -331,6 +331,63 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
   );
 });
 
+test("GaugeRenameProvider renames from Java Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const javaDocument = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class Steps {",
+    "  @Step(\"Pay with <amount>\")",
+    "  public void pay(String amount) {",
+    "  }",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/java/Steps.java");
+  const vscode = createFakeVscode([specDocument, javaDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    javaDocument,
+    new vscode.Position(5, 12),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/java/Steps.java",
+        range: {
+          start: { line: 5, character: 9 },
+          end: { line: 5, character: 26 },
+        },
+        newText: "Pay with <value>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider preserves inline table step identity when renaming", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -474,6 +531,8 @@ test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () =
     { language: "gauge" },
     { language: "kotlin" },
     { scheme: "file", pattern: "**/*.kt" },
+    { language: "java" },
+    { scheme: "file", pattern: "**/*.java" },
   ]);
   assert.equal(vscode.registration.provider, provider);
 });

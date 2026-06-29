@@ -3,15 +3,17 @@
 const {
   findConceptHeadings,
   GaugeStepDiagnosticsProvider,
-  findStepFunctions,
+  findStepFunctionsForDocument,
   isConceptDocument,
   isKotlinDocument,
+  isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
+const JAVA_FILE_PATTERN = "**/*.java";
 const KOTLIN_FILE_PATTERN = "**/*.kt";
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
@@ -357,7 +359,7 @@ class GaugeRenameProvider {
       if (
         !candidate
         || typeof candidate.getText !== "function"
-        || (!isGaugeDocument(candidate) && !isKotlinDocument(candidate))
+        || (!isGaugeDocument(candidate) && !isStepImplementationDocument(candidate))
         || !this.isGaugeProjectDocument(candidate)
       ) {
         return;
@@ -382,7 +384,7 @@ class GaugeRenameProvider {
       typeof workspace.findFiles === "function"
       && typeof workspace.openTextDocument === "function"
     ) {
-      for (const pattern of [...GAUGE_FILE_PATTERNS, KOTLIN_FILE_PATTERN]) {
+      for (const pattern of [...GAUGE_FILE_PATTERNS, KOTLIN_FILE_PATTERN, JAVA_FILE_PATTERN]) {
         let uris;
         try {
           uris = await workspace.findFiles(pattern);
@@ -411,6 +413,10 @@ class GaugeRenameProvider {
     return documents.filter((document) => isKotlinDocument(document));
   }
 
+  stepImplementationDocuments(documents) {
+    return documents.filter((document) => isStepImplementationDocument(document));
+  }
+
   stepAtGaugePosition(document, position) {
     if (!isGaugeDocument(document) || !position) {
       return undefined;
@@ -419,19 +425,21 @@ class GaugeRenameProvider {
       || conceptHeadingOnLine(this.vscode, document, position.line);
   }
 
-  stepAtKotlinPosition(document, position, kotlinDocuments) {
-    if (!isKotlinDocument(document) || !position || typeof document.getText !== "function") {
+  stepAtImplementationPosition(document, position, kotlinDocuments) {
+    if (!isStepImplementationDocument(document) || !position || typeof document.getText !== "function") {
       return undefined;
     }
     const text = document.getText();
     const offset = offsetAt(text, position);
     let externalConstants;
-    try {
-      externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
-    } catch (_error) {
-      externalConstants = undefined;
+    if (isKotlinDocument(document)) {
+      try {
+        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+      } catch (_error) {
+        externalConstants = undefined;
+      }
     }
-    for (const entry of findStepFunctions(text, externalConstants)) {
+    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset < start || offset > end || entry.aliases.length !== 1) {
@@ -458,7 +466,7 @@ class GaugeRenameProvider {
     return {
       documents,
       step: this.stepAtGaugePosition(document, position)
-        || this.stepAtKotlinPosition(document, position, this.kotlinDocuments(documents)),
+        || this.stepAtImplementationPosition(document, position, this.kotlinDocuments(documents)),
     };
   }
 
@@ -473,15 +481,16 @@ class GaugeRenameProvider {
       return;
     }
     const kotlinDocuments = this.kotlinDocuments(documents);
-    for (const document of kotlinDocuments) {
-      const text = document.getText();
+    for (const document of this.stepImplementationDocuments(documents)) {
       let externalConstants;
-      try {
-        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
-      } catch (_error) {
-        externalConstants = undefined;
+      if (isKotlinDocument(document)) {
+        try {
+          externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+        } catch (_error) {
+          externalConstants = undefined;
+        }
       }
-      for (const entry of findStepFunctions(text, externalConstants)) {
+      for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
         if (entry.aliases.length > 1 && stepEntryHasTemplate(entry, step.template)) {
           throw new Error(ALIASED_STEP_RENAME_ERROR);
         }
@@ -571,15 +580,17 @@ class GaugeRenameProvider {
     }
   }
 
-  addKotlinRenames(edit, document, kotlinDocuments, template, newName, hasInlineTable) {
+  addStepImplementationRenames(edit, document, kotlinDocuments, template, newName, hasInlineTable) {
     const text = document.getText();
     let externalConstants;
-    try {
-      externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
-    } catch (_error) {
-      externalConstants = undefined;
+    if (isKotlinDocument(document)) {
+      try {
+        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+      } catch (_error) {
+        externalConstants = undefined;
+      }
     }
-    for (const entry of findStepFunctions(text, externalConstants)) {
+    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       if (entry.aliases.length !== 1 || normalizeStepTemplate(entry.aliases[0]) !== template) {
         continue;
       }
@@ -609,8 +620,8 @@ class GaugeRenameProvider {
       const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
       if (languageServerEdit) {
         const kotlinDocuments = this.kotlinDocuments(documents);
-        for (const candidate of kotlinDocuments) {
-          this.addKotlinRenames(
+        for (const candidate of this.stepImplementationDocuments(documents)) {
+          this.addStepImplementationRenames(
             languageServerEdit,
             candidate,
             kotlinDocuments,
@@ -628,8 +639,8 @@ class GaugeRenameProvider {
     for (const candidate of documents) {
       if (isGaugeDocument(candidate)) {
         this.addGaugeRenames(edit, candidate, step.template, newName);
-      } else if (isKotlinDocument(candidate)) {
-        this.addKotlinRenames(edit, candidate, kotlinDocuments, step.template, newName, step.hasInlineTable);
+      } else if (isStepImplementationDocument(candidate)) {
+        this.addStepImplementationRenames(edit, candidate, kotlinDocuments, step.template, newName, step.hasInlineTable);
       }
     }
     return edit;
@@ -644,6 +655,8 @@ class GaugeRenameProvider {
         { language: GAUGE_LANGUAGE },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },
+        { language: "java" },
+        { scheme: "file", pattern: "**/*.java" },
       ],
       this,
     );
