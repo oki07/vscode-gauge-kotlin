@@ -8,10 +8,8 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
-const INSTALL_SPECTACLE_ACTION = "Install Spectacle";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_EXTENSION = ".md";
-const MISSING_SPECTACLE_MESSAGE = "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.";
 const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept to preview.";
 const SPECTACLE_PLUGIN_NAME = "spectacle";
 
@@ -142,14 +140,6 @@ function isSpectacleInstalled(cli) {
   return cli.isPluginInstalled(SPECTACLE_PLUGIN_NAME);
 }
 
-async function promptToInstallSpectacle(vscode, cli) {
-  const action = await showError(vscode, MISSING_SPECTACLE_MESSAGE, INSTALL_SPECTACLE_ACTION);
-  if (action === INSTALL_SPECTACLE_ACTION && typeof cli.installGaugeRunner === "function") {
-    return cli.installGaugeRunner(SPECTACLE_PLUGIN_NAME, { vscode });
-  }
-  return undefined;
-}
-
 function previewFailureMessage(pathModule, filePath, result) {
   const base = `Unable to create html file for ${pathModule.basename(filePath)}`;
   const reason = failureReason(result);
@@ -163,6 +153,65 @@ function htmlPathFor(pathModule, projectRoot, docsDir, filePath) {
     : pathModule.join(docsDir, "html");
   const htmlName = `${pathModule.basename(filePath, pathModule.extname(filePath))}.html`;
   return pathModule.join(htmlDir, htmlName);
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatGaugePreviewText(text) {
+  return escapeHtml(String(text || "").replace(/\n\s+\|/g, "\n\t|"));
+}
+
+function activeDocumentText(vscode, filePath) {
+  const editor = vscode.window && vscode.window.activeTextEditor;
+  const document = editor && editor.document;
+  const activePath = document && ((document.uri && document.uri.fsPath) || document.fileName);
+  if (activePath === filePath && typeof document.getText === "function") {
+    return document.getText();
+  }
+  return undefined;
+}
+
+function readGaugeText(vscode, fileSystem, filePath) {
+  const text = activeDocumentText(vscode, filePath);
+  if (text !== undefined) {
+    return text;
+  }
+  return fileSystem.readFileSync(filePath, "utf8");
+}
+
+function fallbackHtml(pathModule, filePath, text) {
+  const title = escapeHtml(pathModule.basename(filePath));
+  const body = formatGaugePreviewText(text);
+  return [
+    "<!doctype html>",
+    "<html>",
+    "<head>",
+    "<meta charset=\"utf-8\">",
+    `<title>${title}</title>`,
+    "<style>",
+    "body { font-family: system-ui, sans-serif; margin: 24px; color: #1f2328; }",
+    "pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.5; }",
+    "</style>",
+    "</head>",
+    "<body>",
+    `<pre>${body}</pre>`,
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
+
+function writeFallbackPreview(vscode, fileSystem, pathModule, projectRoot, docsDir, filePath) {
+  const htmlPath = htmlPathFor(pathModule, projectRoot, docsDir, filePath);
+  ensureDirectory(fileSystem, pathModule.dirname(htmlPath));
+  const text = readGaugeText(vscode, fileSystem, filePath);
+  fileSystem.writeFileSync(htmlPath, fallbackHtml(pathModule, filePath, text), "utf8");
+  return openHtml(vscode, htmlPath);
 }
 
 function openHtml(vscode, filename) {
@@ -196,20 +245,26 @@ async function previewGaugeDocument(options = {}) {
   }
 
   const cli = getCli(vscode, options);
+  const previewRoot = options.tempDirProvider
+    ? options.tempDirProvider(projectRoot, filePath)
+    : defaultTempDir(pathModule, osModule, projectRoot);
+  const docsDir = pathModule.join(previewRoot, "docs");
+  if (!isSpectacleInstalled(cli)) {
+    try {
+      ensureDirectory(fileSystem, previewRoot);
+      ensureDirectory(fileSystem, docsDir);
+      return writeFallbackPreview(vscode, fileSystem, pathModule, projectRoot, docsDir, filePath);
+    } catch (error) {
+      return showError(vscode, previewFailureMessage(pathModule, filePath, { error }));
+    }
+  }
+
   const command = cli && typeof cli.gaugeCommand === "function" && cli.gaugeCommand();
   if (!command || typeof command.spawn !== "function") {
     return showError(vscode, previewFailureMessage(pathModule, filePath, {
       error: new Error("Gauge is not installed."),
     }));
   }
-  if (!isSpectacleInstalled(cli)) {
-    return promptToInstallSpectacle(vscode, cli);
-  }
-
-  const previewRoot = options.tempDirProvider
-    ? options.tempDirProvider(projectRoot, filePath)
-    : defaultTempDir(pathModule, osModule, projectRoot);
-  const docsDir = pathModule.join(previewRoot, "docs");
   ensureDirectory(fileSystem, previewRoot);
   ensureDirectory(fileSystem, docsDir);
   const env = envWithGaugeHome(options.env || process.env, { vscode });

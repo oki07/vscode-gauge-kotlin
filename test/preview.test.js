@@ -251,21 +251,25 @@ test("previewGaugeDocument removes deprecated Gauge lines from Spectacle failure
   ]);
 });
 
-test("previewGaugeDocument prompts to install Spectacle when the plugin is missing", async () => {
+test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is missing", async () => {
   const { previewGaugeDocument } = require("../src/preview");
-  const { errorPrompts, errors, opened, vscode } = createFakeVscode({
-    errorSelection: "Install Spectacle",
+  const { errors, opened, vscode } = createFakeVscode({
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      fileName: "/workspace/gauge/specs/example.spec",
+      getText() {
+        return "# Checkout <item>\n\n|name|\n  |alice|\n";
+      },
+    },
   });
-  const installed = [];
+  const madeDirectories = [];
   const spawns = [];
+  const writes = [];
   const cli = {
     isPluginInstalled(pluginName) {
       assert.equal(pluginName, "spectacle");
       return false;
-    },
-    installGaugeRunner(pluginName, options) {
-      installed.push({ pluginName, vscode: options.vscode });
-      return Promise.resolve(undefined);
     },
     gaugeCommand() {
       return {
@@ -279,7 +283,14 @@ test("previewGaugeDocument prompts to install Spectacle when the plugin is missi
 
   await previewGaugeDocument({
     cli,
-    fileSystem: { mkdirSync() {} },
+    fileSystem: {
+      mkdirSync(directory, options) {
+        madeDirectories.push({ directory, options });
+      },
+      writeFileSync(filename, content, options) {
+        writes.push({ filename, content, options });
+      },
+    },
     pathModule: path.posix,
     projectFactory: {
       getGaugeRootFromFilePath() {
@@ -292,19 +303,26 @@ test("previewGaugeDocument prompts to install Spectacle when the plugin is missi
     vscode,
   });
 
-  assert.deepEqual(opened, []);
+  assert.deepEqual(errors, []);
   assert.deepEqual(spawns, []);
-  assert.deepEqual(errors, [
-    "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.",
-  ]);
-  assert.deepEqual(errorPrompts, [
+  assert.deepEqual(madeDirectories, [
+    { directory: "/tmp/gauge-preview", options: { recursive: true } },
+    { directory: "/tmp/gauge-preview/docs", options: { recursive: true } },
     {
-      message: "Missing plugin: Spectacle. To install, run `gauge install spectacle` or choose Install Spectacle.",
-      actions: ["Install Spectacle"],
+      directory: "/tmp/gauge-preview/docs/html/specs",
+      options: { recursive: true },
     },
   ]);
-  assert.deepEqual(installed, [
-    { pluginName: "spectacle", vscode },
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].filename, "/tmp/gauge-preview/docs/html/specs/example.html");
+  assert.equal(writes[0].options, "utf8");
+  assert.match(writes[0].content, /# Checkout &lt;item&gt;/);
+  assert.match(writes[0].content, /\n\t\|alice\|/);
+  assert.deepEqual(opened, [
+    {
+      fsPath: "/tmp/gauge-preview/docs/html/specs/example.html",
+      scheme: "file",
+    },
   ]);
 });
 
