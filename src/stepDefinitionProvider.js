@@ -246,6 +246,40 @@ class GaugeStepDefinitionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
+  gaugeProjectRoot(document) {
+    if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return undefined;
+    }
+    const file = documentPath(document);
+    if (!file) {
+      return undefined;
+    }
+    try {
+      return this.projectFactory.getGaugeRootFromFilePath(file);
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  belongsToSourceGaugeProject(candidate, sourceRoot) {
+    if (sourceRoot === undefined) {
+      return this.isGaugeProjectDocument(candidate);
+    }
+    const file = documentPath(candidate);
+    if (!file) {
+      return true;
+    }
+    return this.gaugeProjectRoot(candidate) === sourceRoot;
+  }
+
+  isDifferentGaugeProject(candidate, sourceRoot) {
+    if (sourceRoot === undefined) {
+      return false;
+    }
+    const candidateRoot = this.gaugeProjectRoot(candidate);
+    return candidateRoot !== undefined && candidateRoot !== sourceRoot;
+  }
+
   async findWorkspaceStepImplementationDocuments() {
     const workspace = this.vscode.workspace || {};
     if (
@@ -304,6 +338,7 @@ class GaugeStepDefinitionProvider {
 
   async stepImplementationDocumentGroups(sourceDocument) {
     const workspace = this.vscode.workspace || {};
+    const sourceRoot = this.gaugeProjectRoot(sourceDocument);
     const projectDocuments = [];
     const externalDocuments = [];
     const seenPaths = new Set();
@@ -329,8 +364,10 @@ class GaugeStepDefinitionProvider {
       } else if (projectDocuments.includes(candidate) || externalDocuments.includes(candidate)) {
         return;
       }
-      if (this.isGaugeProjectDocument(candidate)) {
+      if (this.belongsToSourceGaugeProject(candidate, sourceRoot)) {
         projectDocuments.push(candidate);
+      } else if (this.isDifferentGaugeProject(candidate, sourceRoot)) {
+        return;
       } else {
         externalDocuments.push(candidate);
       }
@@ -348,6 +385,7 @@ class GaugeStepDefinitionProvider {
 
   async conceptDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
+    const sourceRoot = this.gaugeProjectRoot(sourceDocument);
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -355,7 +393,7 @@ class GaugeStepDefinitionProvider {
         !candidate
         || !isConceptDocument(candidate)
         || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
+        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
       ) {
         return;
       }

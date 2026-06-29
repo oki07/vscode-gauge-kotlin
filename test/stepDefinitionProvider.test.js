@@ -72,6 +72,20 @@ function createProjectFactory() {
   };
 }
 
+function createMultiProjectFactory() {
+  return {
+    getGaugeRootFromFilePath(filename) {
+      if (filename.startsWith("/workspace/project-a/")) {
+        return "/workspace/project-a";
+      }
+      if (filename.startsWith("/workspace/project-b/")) {
+        return "/workspace/project-b";
+      }
+      throw new Error("not a Gauge project file");
+    },
+  };
+}
+
 test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
@@ -108,6 +122,35 @@ test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions",
     { ...definitions[0].range.end },
     { line: 6, character: 26 },
   );
+});
+
+test("GaugeStepDefinitionProvider does not resolve Kotlin step definitions from another Gauge project", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Shared login",
+  ].join("\n"), "gauge", "/workspace/project-a/specs/login.spec");
+  const otherProjectKotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Shared login\")",
+    "  fun login() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/project-b/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, otherProjectKotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createMultiProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.deepEqual(definitions, []);
 });
 
 test("GaugeStepDefinitionProvider resolves Markdown Gauge spec steps to Kotlin Step functions", async () => {
@@ -277,6 +320,29 @@ test("GaugeStepDefinitionProvider resolves spec steps to concept headings", asyn
     { ...definitions[0].range.end },
     { line: 0, character: 19 },
   );
+});
+
+test("GaugeStepDefinitionProvider does not resolve concept definitions from another Gauge project", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Reuses a concept",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/project-a/specs/checkout.spec");
+  const otherProjectConceptDocument = createDocument([
+    "# Pay with <method>",
+    "* Enter payment method <method>",
+  ].join("\n"), "gauge", "/workspace/project-b/specs/concepts/payment.cpt");
+  const vscode = createFakeVscode([specDocument, otherProjectConceptDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createMultiProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.deepEqual(definitions, []);
 });
 
 test("GaugeStepDefinitionProvider matches steps across NFC/NFD unicode normalization", async () => {
