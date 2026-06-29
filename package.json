@@ -251,11 +251,11 @@
         },
         {
           "command": "gauge.extract.concept",
-          "when": "gauge:activated && editorLangId == gauge"
+          "when": "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))"
         },
         {
           "command": "gauge.format",
-          "when": "gauge:activated && editorLangId == gauge"
+          "when": "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))"
         },
         {
           "command": "gauge.preview",
