@@ -30,11 +30,8 @@ function createGaugeSpecDirsProvider(getClientsMap, options = {}) {
 function buildSpecificationDocument(options = {}) {
   const eol = options.eol || nodeOs.EOL;
   const withHelp = options.withHelp !== false;
-  const user = options.user || defaultUser();
-  const date = options.date || defaultDate();
   const lines = [
     "# SPECIFICATION HEADING",
-    `Created by ${user} on ${date}`,
   ];
 
   if (withHelp) {
