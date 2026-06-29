@@ -11,6 +11,7 @@ const {
   positionAt,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
+const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
@@ -679,6 +680,14 @@ class GaugeRenameProvider {
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
+    this.validateDiagnosticsProvider = options.validateDiagnosticsProvider
+      || new GaugeValidateDiagnosticsProvider({
+        cli: options.cli,
+        env: options.env,
+        pathModule: options.pathModule,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
   }
 
   isGaugeProjectDocument(document) {
@@ -915,6 +924,22 @@ class GaugeRenameProvider {
     return this.lspWorkspaceEditToVscodeEdit(lspEdit);
   }
 
+  async preflightLocalRename(document) {
+    if (this.vscode.workspace && typeof this.vscode.workspace.saveAll === "function") {
+      await this.vscode.workspace.saveAll();
+    }
+    if (
+      !this.validateDiagnosticsProvider
+      || typeof this.validateDiagnosticsProvider.validateErrorsForDocument !== "function"
+    ) {
+      return;
+    }
+    const { errors } = this.validateDiagnosticsProvider.validateErrorsForDocument(document, new Map());
+    if (Array.isArray(errors) && errors.length > 0) {
+      throw new Error("Please fix all errors before refactoring.");
+    }
+  }
+
   addGaugeRenames(edit, document, template, newName) {
     const lines = documentLines(document);
     for (let line = 0; line < lines.length; line += 1) {
@@ -1025,6 +1050,7 @@ class GaugeRenameProvider {
       }
     }
 
+    await this.preflightLocalRename(document);
     const edit = createWorkspaceEdit(this.vscode);
     const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const candidate of documents) {

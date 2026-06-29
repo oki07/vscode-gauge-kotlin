@@ -267,6 +267,81 @@ test("GaugeRenameProvider reports Gauge language server rename errors", async ()
   );
 });
 
+test("GaugeRenameProvider rejects local renames when Gauge validate reports errors", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const spawnSyncCalls = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawnSync(args, options) {
+          spawnSyncCalls.push({ args, options });
+          return {
+            stdout: "",
+            stderr: "Error /workspace/gauge/specs/checkout.spec:2: Undefined step",
+          };
+        },
+      };
+    },
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    envs(receivedCli) {
+      assert.equal(receivedCli, cli);
+      return { gauge_custom_classpath: "/workspace/gauge/out/test/gauge" };
+    },
+  };
+  const projectFactory = {
+    getGaugeRootFromFilePath(filename) {
+      assert.ok(filename.startsWith("/workspace/gauge/"));
+      return "/workspace/gauge";
+    },
+    get(root) {
+      assert.equal(root, "/workspace/gauge");
+      return project;
+    },
+  };
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({
+    cli,
+    env: { PATH: "/bin" },
+    projectFactory,
+    vscode,
+  });
+
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /Please fix all errors before refactoring/,
+  );
+  assert.deepEqual(spawnSyncCalls, [
+    {
+      args: ["validate"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: {
+          PATH: "/bin",
+          gauge_custom_classpath: "/workspace/gauge/out/test/gauge",
+        },
+      },
+    },
+  ]);
+});
+
 test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

@@ -744,6 +744,7 @@ function startGaugeServices(context, vscode, options = {}) {
   registerRenameProvider(context, vscode, {
     ...options,
     clientsMap,
+    cli,
     projectFactory,
   });
   registerStepDiagnosticsProvider(context, vscode, {
