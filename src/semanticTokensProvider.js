@@ -229,11 +229,6 @@ class GaugeSemanticTokensProvider {
         let lastIndex = line.search(/\S/);
         const isScenarioHeading = !conceptDocument && isScenarioHashHeading(line);
         const headingToken = isScenarioHeading ? "scenario" : "specification";
-        if (isScenarioHeading || !conceptDocument) {
-          builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
-          index += 1;
-          continue;
-        }
 
         argumentRegex.lastIndex = 0;
         let match = argumentRegex.exec(line);

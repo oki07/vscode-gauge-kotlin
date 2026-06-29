@@ -166,7 +166,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
     getText() {
       return [
         "# Specification <name>",
-        "## Scenario <name>",
+        "## Scenario \"name\"",
       ].join("\n");
     },
   };
@@ -181,9 +181,11 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
   assert.deepEqual(specTokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
     "specification",
+    "dynamicArgument",
   ]);
   assert.deepEqual(specTokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
     "scenario",
+    "argument",
   ]);
 
   const conceptTokens = provider.provideDocumentSemanticTokens(conceptDocument)
