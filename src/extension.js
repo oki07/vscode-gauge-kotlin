@@ -699,6 +699,7 @@ function startGaugeServices(context, vscode, options = {}) {
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
+  registerDebugConfigurationProvider(context, vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerGaugeEnterHandler(context, vscode, {
     ...options,
@@ -854,8 +855,6 @@ function activate(context, vscodeApi, options = {}) {
     setTimeout: options.setTimeout,
     vscode,
   }));
-  registerDebugConfigurationProvider(context, vscode);
-
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
       command,
