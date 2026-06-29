@@ -218,12 +218,16 @@ function documentPath(document) {
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
 }
 
+function isMarkdownPath(document) {
+  return MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
 function isMarkdownGaugeSpecDocument(document, projectFactory) {
   const file = documentPath(document);
   if (
     !document
-    || document.languageId !== MARKDOWN_LANGUAGE
-    || !MARKDOWN_SPEC_FILE_PATTERN.test(file)
+    || !isMarkdownPath(document)
+    || ![MARKDOWN_LANGUAGE, "gauge"].includes(document.languageId)
     || !projectFactory
     || typeof projectFactory.getGaugeRootFromFilePath !== "function"
   ) {
@@ -242,8 +246,10 @@ function hasActiveGaugeDocument(vscode, projectFactory) {
   if (!editor || !editor.document) {
     return false;
   }
-  return editor.document.languageId === "gauge"
-    || isMarkdownGaugeSpecDocument(editor.document, projectFactory);
+  if (editor.document.languageId === "gauge" && !isMarkdownPath(editor.document)) {
+    return true;
+  }
+  return isMarkdownGaugeSpecDocument(editor.document, projectFactory);
 }
 
 function hasActiveImplementationGaugeDocument(vscode, projectFactory) {

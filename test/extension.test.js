@@ -501,6 +501,55 @@ test("activation defers CLI and debug provider creation when Gauge services are 
   assert.equal(createCliCalls, 1);
 });
 
+test("activation ignores Markdown Gauge language documents outside Gauge projects", () => {
+  const extension = require("../src/extension");
+
+  let createCliCalls = 0;
+  let createdWorkspace = false;
+  const context = { subscriptions: [] };
+  const { debugProviders, fakeVscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge",
+        uri: { fsPath: "/notes/readme.md" },
+        fileName: "/notes/readme.md",
+      },
+    },
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      createCliCalls += 1;
+      throw new Error("createCli should not be called");
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      constructor() {
+        createdWorkspace = true;
+      }
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filePath) {
+        assert.equal(filePath, "/notes/readme.md");
+        throw new Error("not a Gauge project");
+      },
+      isGaugeProject() {
+        return false;
+      },
+      findGaugeProjectRoots() {
+        return [];
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(createCliCalls, 0);
+  assert.equal(createdWorkspace, false);
+  assert.deepEqual(debugProviders, []);
+});
+
 test("create specification command delegates to the specification creator", () => {
   const extension = require("../src/extension");
 
