@@ -280,6 +280,146 @@ function literalAliasRange(text, entry, alias) {
   return undefined;
 }
 
+function normalizeKotlinReferenceText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s*\.\s*/g, ".")
+    .replace(/`([^`\r\n]+)`/g, "$1");
+}
+
+function annotationConstantReferenceRanges(text, entry) {
+  if (entry.annotationStart === undefined || entry.annotationEnd === undefined) {
+    return [];
+  }
+  const references = [];
+  const seen = new Set();
+  const annotationText = text.slice(entry.annotationStart, entry.annotationEnd);
+  const pattern = /`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*(?:`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*))*/g;
+  let match = pattern.exec(annotationText);
+  while (match) {
+    const reference = normalizeKotlinReferenceText(match[0]);
+    if (reference !== "Step" && !seen.has(reference)) {
+      references.push({
+        end: entry.annotationStart + match.index + match[0].length,
+        reference,
+        start: entry.annotationStart + match.index,
+      });
+      seen.add(reference);
+    }
+    match = pattern.exec(annotationText);
+  }
+  return references;
+}
+
+function annotationConstantReferences(text, entry) {
+  return annotationConstantReferenceRanges(text, entry).map((match) => match.reference);
+}
+
+function findConstInitializerLiteral(text, declarationStart) {
+  const equalsIndex = text.indexOf("=", declarationStart);
+  if (equalsIndex === -1) {
+    return undefined;
+  }
+  for (let index = equalsIndex + 1; index < text.length; index += 1) {
+    if (text[index] === "\n" || text[index] === "\r" || text[index] === ";") {
+      return undefined;
+    }
+    if (text[index] !== "\"") {
+      continue;
+    }
+    return readQuotedLiteral(text, index, text.length);
+  }
+  return undefined;
+}
+
+function collectKotlinNamedScopes(text) {
+  const scopes = [];
+  const pattern = /\b(object|class|interface)\s+(`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*)/g;
+  let match = pattern.exec(text);
+  while (match) {
+    const open = text.indexOf("{", pattern.lastIndex);
+    if (open === -1) {
+      match = pattern.exec(text);
+      continue;
+    }
+    let depth = 0;
+    let end = -1;
+    for (let index = open; index < text.length; index += 1) {
+      if (text[index] === "{") {
+        depth += 1;
+      } else if (text[index] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = index;
+          break;
+        }
+      }
+    }
+    if (end !== -1) {
+      scopes.push({
+        end,
+        name: normalizeKotlinReferenceText(match[2]),
+        start: open + 1,
+      });
+      pattern.lastIndex = open + 1;
+    }
+    match = pattern.exec(text);
+  }
+  return scopes;
+}
+
+function enclosingKotlinScopePath(scopes, offset) {
+  return scopes
+    .filter((scope) => offset >= scope.start && offset < scope.end)
+    .sort((left, right) => left.start - right.start)
+    .map((scope) => scope.name);
+}
+
+function referenceMatchesConstScope(reference, scopePath, constName) {
+  const parts = normalizeKotlinReferenceText(reference).split(".");
+  if (parts[parts.length - 1] !== constName) {
+    return false;
+  }
+  const containerParts = parts.slice(0, -1);
+  if (containerParts.length === 0) {
+    return true;
+  }
+  const scopedName = [...scopePath, constName].join(".");
+  return scopedName === parts.slice(-scopePath.length - 1).join(".");
+}
+
+function findKotlinConstLiteralRange(vscode, document, reference, alias) {
+  if (!isKotlinDocument(document) || typeof document.getText !== "function") {
+    return undefined;
+  }
+  const text = document.getText();
+  const parts = normalizeKotlinReferenceText(reference).split(".");
+  const constName = parts[parts.length - 1];
+  if (!constName) {
+    return undefined;
+  }
+  const scopes = collectKotlinNamedScopes(text);
+  const escapedName = constName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\bconst\\b[\\s\\S]{0,160}\\bval\\s+\`?${escapedName}\`?\\b`, "g");
+  let match = pattern.exec(text);
+  while (match) {
+    const literal = findConstInitializerLiteral(text, pattern.lastIndex);
+    if (!literal || literal.value !== alias) {
+      match = pattern.exec(text);
+      continue;
+    }
+    const scopePath = enclosingKotlinScopePath(scopes, match.index);
+    if (referenceMatchesConstScope(reference, scopePath, constName)) {
+      return {
+        literal,
+        range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd),
+      };
+    }
+    match = pattern.exec(text);
+  }
+  return undefined;
+}
+
 function escapeStringContent(value) {
   return JSON.stringify(value).slice(1, -1);
 }
@@ -445,7 +585,7 @@ class GaugeRenameProvider {
       || conceptHeadingOnLine(this.vscode, document, position.line);
   }
 
-  stepAtImplementationPosition(document, position, kotlinDocuments) {
+  stepAtImplementationPosition(document, position, implementationDocuments) {
     if (!isStepImplementationDocument(document) || !position || typeof document.getText !== "function") {
       return undefined;
     }
@@ -454,7 +594,7 @@ class GaugeRenameProvider {
     let externalConstants;
     if (isKotlinDocument(document)) {
       try {
-        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
       } catch (_error) {
         externalConstants = undefined;
       }
@@ -473,26 +613,41 @@ class GaugeRenameProvider {
       }
       const alias = entry.aliases[0];
       const literal = literalAliasRange(text, entry, alias);
-      if (!literal) {
-        continue;
+      if (literal) {
+        return {
+          hasInlineTable: /\s+<table>\s*$/.test(alias),
+          engineRename: false,
+          range: createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
+          template: normalizeStepTemplate(alias),
+          text: alias,
+        };
       }
-      return {
-        hasInlineTable: /\s+<table>\s*$/.test(alias),
-        engineRename: false,
-        range: createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
-        template: normalizeStepTemplate(alias),
-        text: alias,
-      };
+      if (isKotlinDocument(document)) {
+        for (const reference of annotationConstantReferenceRanges(text, entry)) {
+          if (implementationDocuments.some((candidate) => (
+            findKotlinConstLiteralRange(this.vscode, candidate, reference.reference, alias)
+          ))) {
+            return {
+              hasInlineTable: /\s+<table>\s*$/.test(alias),
+              engineRename: false,
+              range: createRangeFromOffsets(this.vscode, text, reference.start, reference.end),
+              template: normalizeStepTemplate(alias),
+              text: alias,
+            };
+          }
+        }
+      }
     }
     return undefined;
   }
 
   async stepAt(document, position) {
     const documents = await this.workspaceDocuments(document);
+    const implementationDocuments = this.stepImplementationDocuments(documents);
     return {
       documents,
       step: this.stepAtGaugePosition(document, position)
-        || this.stepAtImplementationPosition(document, position, this.kotlinDocuments(documents)),
+        || this.stepAtImplementationPosition(document, position, implementationDocuments),
     };
   }
 
@@ -506,12 +661,12 @@ class GaugeRenameProvider {
     if (!step) {
       return;
     }
-    const kotlinDocuments = this.kotlinDocuments(documents);
+    const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const document of this.stepImplementationDocuments(documents)) {
       let externalConstants;
       if (isKotlinDocument(document)) {
         try {
-          externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+          externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
         } catch (_error) {
           externalConstants = undefined;
         }
@@ -606,13 +761,31 @@ class GaugeRenameProvider {
     }
   }
 
-  addStepImplementationRenames(edit, document, kotlinDocuments, template, newName, hasInlineTable) {
+  addConstantBackedStepRenames(edit, implementationDocuments, sourceText, entry, alias, newName, hasInlineTable) {
+    for (const reference of annotationConstantReferences(sourceText, entry)) {
+      for (const document of implementationDocuments) {
+        const constantRange = findKotlinConstLiteralRange(this.vscode, document, reference, alias);
+        if (!constantRange || editHasReplacement(edit, document.uri, constantRange.range)) {
+          continue;
+        }
+        edit.replace(
+          document.uri,
+          constantRange.range,
+          replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), constantRange.literal, {
+            kotlin: true,
+          }),
+        );
+      }
+    }
+  }
+
+  addStepImplementationRenames(edit, document, implementationDocuments, template, newName, hasInlineTable) {
     const text = document.getText();
     let externalConstants;
     const kotlinDocument = isKotlinDocument(document);
     if (kotlinDocument) {
       try {
-        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
+        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
       } catch (_error) {
         externalConstants = undefined;
       }
@@ -623,6 +796,17 @@ class GaugeRenameProvider {
       }
       const literal = literalAliasRange(text, entry, entry.aliases[0]);
       if (!literal) {
+        if (kotlinDocument) {
+          this.addConstantBackedStepRenames(
+            edit,
+            implementationDocuments,
+            text,
+            entry,
+            entry.aliases[0],
+            newName,
+            hasInlineTable,
+          );
+        }
         continue;
       }
       const range = createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd);
@@ -648,12 +832,12 @@ class GaugeRenameProvider {
     if (step.engineRename) {
       const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
       if (languageServerEdit) {
-        const kotlinDocuments = this.kotlinDocuments(documents);
+        const implementationDocuments = this.stepImplementationDocuments(documents);
         for (const candidate of this.stepImplementationDocuments(documents)) {
           this.addStepImplementationRenames(
             languageServerEdit,
             candidate,
-            kotlinDocuments,
+            implementationDocuments,
             step.template,
             newName,
             step.hasInlineTable,
@@ -664,12 +848,19 @@ class GaugeRenameProvider {
     }
 
     const edit = createWorkspaceEdit(this.vscode);
-    const kotlinDocuments = this.kotlinDocuments(documents);
+    const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const candidate of documents) {
       if (isGaugeDocument(candidate)) {
         this.addGaugeRenames(edit, candidate, step.template, newName);
       } else if (isStepImplementationDocument(candidate)) {
-        this.addStepImplementationRenames(edit, candidate, kotlinDocuments, step.template, newName, step.hasInlineTable);
+        this.addStepImplementationRenames(
+          edit,
+          candidate,
+          implementationDocuments,
+          step.template,
+          newName,
+          step.hasInlineTable,
+        );
       }
     }
     return edit;

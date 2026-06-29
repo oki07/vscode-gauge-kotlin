@@ -433,6 +433,147 @@ test("GaugeRenameProvider renames Markdown Gauge steps and Kotlin Step annotatio
   );
 });
 
+test("GaugeRenameProvider renames Kotlin constants backing Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package steps",
+    "",
+    "object StepText {",
+    "  const val LOGIN = \"Log in as <user>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/StepText.kt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(StepText.LOGIN)",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, constantsDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Sign in as <user>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/login.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Sign in as <user>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/steps/StepText.kt",
+        range: {
+          start: { line: 3, character: 21 },
+          end: { line: 3, character: 37 },
+        },
+        newText: "Sign in as <user>",
+      },
+    ],
+  );
+});
+
+test("GaugeRenameProvider renames Kotlin constants from constant-backed Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package steps",
+    "",
+    "object StepText {",
+    "  const val LOGIN = \"Log in as <user>\"",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/StepText.kt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(StepText.LOGIN)",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, constantsDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const prepared = await provider.prepareRename(kotlinDocument, new vscode.Position(5, 12));
+  const edit = await provider.provideRenameEdits(
+    kotlinDocument,
+    new vscode.Position(5, 12),
+    "Sign in as <user>",
+  );
+
+  assert.deepEqual(
+    {
+      placeholder: prepared.placeholder,
+      range: {
+        start: { ...prepared.range.start },
+        end: { ...prepared.range.end },
+      },
+    },
+    {
+      placeholder: "Log in as <user>",
+      range: {
+        start: { line: 5, character: 8 },
+        end: { line: 5, character: 22 },
+      },
+    },
+  );
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/login.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Sign in as <user>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/steps/StepText.kt",
+        range: {
+          start: { line: 3, character: 21 },
+          end: { line: 3, character: 37 },
+        },
+        newText: "Sign in as <user>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider renames from Java Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
