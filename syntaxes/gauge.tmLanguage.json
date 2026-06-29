@@ -30,6 +30,9 @@
       "include": "#step"
     },
     {
+      "include": "#teardown"
+    },
+    {
       "include": "#table"
     },
     {
@@ -108,7 +111,7 @@
         },
         {
           "name": "punctuation.definition.heading.spec.gauge",
-          "match": "^\\s*={3,}\\s*$"
+          "match": "^\\s*=+\\s*$"
         }
       ]
     },
@@ -120,7 +123,7 @@
         },
         {
           "name": "punctuation.definition.heading.scenario.gauge",
-          "match": "^\\s*-{3,}\\s*$"
+          "match": "^\\s*-+\\s*$"
         }
       ]
     },
@@ -154,6 +157,10 @@
         }
       ]
     },
+    "teardown": {
+      "name": "keyword.control.teardown.gauge",
+      "match": "^___+[ \\t\\f]*$"
+    },
     "table": {
       "patterns": [
         {
@@ -166,7 +173,7 @@
     },
     "tableSeparator": {
       "name": "meta.table.separator.gauge",
-      "begin": "^(\\|)(?=(?:\\s*-+\\s*\\|)+\\s*$)",
+      "begin": "^(\\s*\\|)(?=(?:\\s*-+\\s*\\|)+\\s*$)",
       "beginCaptures": {
         "1": {
           "name": "punctuation.separator.table.gauge"
@@ -186,7 +193,7 @@
     },
     "tableRow": {
       "name": "meta.table.row.gauge",
-      "begin": "^(\\|)",
+      "begin": "^(\\s*\\|)",
       "beginCaptures": {
         "1": {
           "name": "punctuation.separator.table.gauge"

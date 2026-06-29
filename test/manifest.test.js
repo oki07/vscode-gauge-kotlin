@@ -575,6 +575,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
       "#scenarioHeading",
       "#conceptHeading",
       "#step",
+      "#teardown",
       "#table",
       "#arguments",
       "#markdown",
@@ -589,6 +590,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
     "scenarioHeading",
     "conceptHeading",
     "step",
+    "teardown",
     "table",
     "tableSeparator",
     "tableRow",
@@ -624,11 +626,16 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title", "#");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "##Scenario");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes");
+  assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 1), "=", "=");
+  assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 1), "-", "-");
 
   assertPatternMatches(grammarJson.repository.step, "* do something", "* ");
   assertPatternDoesNotMatch(grammarJson.repository.step, "  * plain comment");
+  assertPatternMatches(grammarJson.repository.teardown, "___", "___");
+  assertPatternMatches(grammarJson.repository.teardown, "___  ", "___  ");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
-  assertPatternDoesNotMatch(grammarJson.repository.tableRow, "  | plain comment |");
+  assertPatternMatches(grammarJson.repository.tableRow, "  | table cell |", "  |");
+  assertPatternMatches(grammarJson.repository.tableSeparator, "  |---|", "  |");
 });
 
 test("Gauge TextMate grammar handles table and argument lexer edge cases", () => {
@@ -647,6 +654,8 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
   assertPatternMatches(fallbackComment, "plain comment");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "___").include, "#teardown");
+  assert.notEqual(firstMatchingTopLevelPattern(grammarJson, "___").include, "#markdown");
 });
 
 test("Gauge TextMate grammar keeps arguments reachable in hash concept headings", () => {
