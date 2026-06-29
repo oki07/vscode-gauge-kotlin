@@ -3,8 +3,9 @@
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
-  findStepFunctions,
+  findStepFunctionsForDocument,
   isKotlinDocument,
+  isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { isScenarioHashHeading } = require("./gaugeHeadings");
 
@@ -598,15 +599,16 @@ class GaugeDynamicArgumentCompletionProvider {
       ) {
         continue;
       }
-      if (!isKotlinDocument(candidate)) {
+      if (!isStepImplementationDocument(candidate)) {
         continue;
       }
-      const text = candidate.getText();
-      const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
-        candidate,
-        workspaceDocuments,
-      );
-      for (const entry of findStepFunctions(text, externalConstants)) {
+      const externalConstants = isKotlinDocument(candidate)
+        ? this.diagnosticsProvider.collectWorkspaceConstants(
+          candidate,
+          workspaceDocuments,
+        )
+        : undefined;
+      for (const entry of findStepFunctionsForDocument(candidate, externalConstants)) {
         for (const alias of entry.aliases) {
           addEntry(alias, "step");
         }

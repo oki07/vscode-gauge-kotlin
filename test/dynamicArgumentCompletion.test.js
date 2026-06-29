@@ -959,6 +959,54 @@ test("GaugeDynamicArgumentCompletionProvider suggests unopened workspace Kotlin 
   assert.equal(items[0].insertText.value, "Pay with \"${0:card}\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests unopened workspace Java Step aliases", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const javaDocument = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class PaymentSteps {",
+    "  @Step(\"Pay with <card>\")",
+    "  public void pay(String card) {",
+    "  }",
+    "}",
+  ].join("\n"), "/workspace/gauge/src/test/java/steps/PaymentSteps.java", "plaintext");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+        async findFiles(pattern) {
+          if (pattern === "**/*.kt" || pattern === "**/*.cpt") {
+            return [];
+          }
+          if (pattern === "**/*.java") {
+            return [javaDocument.uri];
+          }
+          throw new Error(`Unexpected pattern ${pattern}`);
+        },
+        async openTextDocument(uri) {
+          assert.equal(uri, javaDocument.uri);
+          return javaDocument;
+        },
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Pay with <card>"]);
+  assert.equal(items[0].insertText.value, "Pay with \"${0:card}\"");
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests package wildcard const Step aliases", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
