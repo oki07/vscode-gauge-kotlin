@@ -51,7 +51,11 @@ function isInlineTableLine(line) {
   return String(line || "").trimStart().startsWith("|");
 }
 
-function gaugeStepTextAt(document, lineNumber) {
+function isDocStringFenceLine(line) {
+  return String(line || "").trim() === "\"\"\"";
+}
+
+function gaugeStepAt(document, lineNumber) {
   const line = documentLine(document, lineNumber);
   const marker = line.search(/\S/);
   if (marker !== 0 || line[marker] !== "*") {
@@ -61,9 +65,11 @@ function gaugeStepTextAt(document, lineNumber) {
   if (!text) {
     return undefined;
   }
-  return isInlineTableLine(documentLine(document, lineNumber + 1))
-    ? `${text} <table>`
-    : text;
+  const nextLine = documentLine(document, lineNumber + 1);
+  return {
+    implicitParameterCount: isDocStringFenceLine(nextLine) ? 1 : 0,
+    text: isInlineTableLine(nextLine) ? `${text} <table>` : text,
+  };
 }
 
 function kotlinStringLiteral(value) {
@@ -116,9 +122,9 @@ function stepImplementationName(existingNames) {
   }
 }
 
-function stepStubCode(stepText, methodName = "implementation") {
+function stepStubCode(stepText, methodName = "implementation", implicitParameterCount = 0) {
   const params = Array.from(
-    { length: countStepParameters(stepText) },
+    { length: countStepParameters(stepText) + implicitParameterCount },
     (_entry, index) => `arg${index}: Any`,
   ).join(", ");
   return [
@@ -148,8 +154,8 @@ class GaugeStepCodeActionProvider {
       return [];
     }
 
-    const stepText = gaugeStepTextAt(document, range.start.line);
-    if (!stepText) {
+    const step = gaugeStepAt(document, range.start.line);
+    if (!step) {
       return [];
     }
 
@@ -161,8 +167,9 @@ class GaugeStepCodeActionProvider {
       title: CREATE_STEP_IMPLEMENTATION_TITLE,
       arguments: [
         stepStubCode(
-          stepText,
+          step.text,
           stepImplementationName(workspaceKotlinFunctionNames(this.vscode)),
+          step.implicitParameterCount,
         ),
       ],
     };

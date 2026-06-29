@@ -3510,6 +3510,10 @@ function isInlineTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
+function isDocStringFenceLine(line) {
+  return String(line || "").trim() === "\"\"\"";
+}
+
 function conceptHashHeading(rawLine, lineNumber) {
   const match = /^(#+)([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
   if (!match) {
@@ -3590,6 +3594,21 @@ function findGaugeSteps(text) {
     });
   }
   return entries;
+}
+
+function findDocStringStepTemplates(text) {
+  const templates = new Set();
+  const lines = text.split("\n");
+  for (const entry of findGaugeSteps(text)) {
+    if (
+      entry.marker === 0
+      && entry.text
+      && isDocStringFenceLine(lines[entry.start.line + 1])
+    ) {
+      templates.add(entry.normalized);
+    }
+  }
+  return templates;
 }
 
 function splitTopLevelParameters(text) {
@@ -6232,6 +6251,7 @@ const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 const JAVA_WORKSPACE_PATTERN = "**/*.java";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
+const SPEC_WORKSPACE_PATTERN = "**/*.spec";
 
 function markWorkspaceStepImplementationScanComplete(documents) {
   Object.defineProperty(documents, WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE, {
@@ -6575,13 +6595,17 @@ class GaugeStepDiagnosticsProvider {
     const externalConstants = isStepImplementationDocument(document)
       ? this.collectWorkspaceConstants(document, workspaceDocuments)
       : undefined;
+    const docStringSteps = isStepImplementationDocument(document)
+      ? this.docStringStepTemplates(document, workspaceDocuments)
+      : new Set();
     for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart);
       const end = positionAt(text, entry.parameterEnd);
       const range = createRange(this.vscode, start, end);
       for (const alias of entry.aliases) {
-        const expected = countStepParameters(alias);
+        const expected = countStepParameters(alias)
+          + (docStringSteps.has(normalizeStepTemplate(alias)) ? 1 : 0);
         if (actual !== expected) {
           diagnostics.push(createDiagnostic(
             this.vscode,
@@ -6636,6 +6660,30 @@ class GaugeStepDiagnosticsProvider {
       && typeof candidate.getText === "function"
       && this.belongsToSourceGaugeProject(candidate, sourceRoot)
     ));
+  }
+
+  gaugeSpecDocuments(document, workspaceDocuments) {
+    const workspace = this.vscode.workspace || {};
+    const candidates = Array.isArray(workspaceDocuments)
+      ? workspaceDocuments
+      : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    const sourceRoot = this.gaugeProjectRoot(document);
+    return candidates.filter((candidate) => (
+      candidate
+      && isGaugeSpecDocument(candidate)
+      && typeof candidate.getText === "function"
+      && this.belongsToSourceGaugeProject(candidate, sourceRoot)
+    ));
+  }
+
+  docStringStepTemplates(document, workspaceDocuments) {
+    const templates = new Set();
+    for (const candidate of this.gaugeSpecDocuments(document, workspaceDocuments)) {
+      for (const template of findDocStringStepTemplates(candidate.getText())) {
+        templates.add(template);
+      }
+    }
+    return templates;
   }
 
   implementedStepTemplates(document, workspaceDocuments) {
@@ -6730,6 +6778,10 @@ class GaugeStepDiagnosticsProvider {
         {
           matches: isConceptDocument,
           pattern: CONCEPT_WORKSPACE_PATTERN,
+        },
+        {
+          matches: isGaugeSpecDocument,
+          pattern: SPEC_WORKSPACE_PATTERN,
         },
       ];
       for (const { matches, pattern } of documentPatterns) {
