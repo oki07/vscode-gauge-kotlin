@@ -316,6 +316,72 @@ function annotationConstantReferences(text, entry) {
   return annotationConstantReferenceRanges(text, entry).map((match) => match.reference);
 }
 
+function collectJavaPackageName(text) {
+  const match = /^\s*package\s+([^;]+);/m.exec(text);
+  if (!match) {
+    return undefined;
+  }
+  const packageName = normalizeKotlinReferenceText(match[1]);
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(packageName)
+    ? packageName
+    : undefined;
+}
+
+function collectJavaReferenceImports(text) {
+  const imports = {
+    classImports: new Map(),
+    staticImports: new Map(),
+    staticWildcards: [],
+  };
+  const pattern = /^\s*import\s+(static\s+)?([^;]+);/gm;
+  let match = pattern.exec(text);
+  while (match) {
+    const imported = normalizeKotlinReferenceText(match[2]);
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\.\*)*$/.test(imported)) {
+      match = pattern.exec(text);
+      continue;
+    }
+    if (match[1]) {
+      if (imported.endsWith(".*")) {
+        imports.staticWildcards.push(imported.slice(0, -2));
+      } else {
+        const parts = imported.split(".");
+        imports.staticImports.set(parts[parts.length - 1], imported);
+      }
+    } else if (!imported.endsWith(".*")) {
+      const parts = imported.split(".");
+      imports.classImports.set(parts[parts.length - 1], imported);
+    }
+    match = pattern.exec(text);
+  }
+  return imports;
+}
+
+function javaConstantReferenceTargets(sourceText, reference) {
+  const normalized = normalizeKotlinReferenceText(reference);
+  const parts = normalized.split(".");
+  const imports = collectJavaReferenceImports(sourceText);
+  if (parts.length === 1) {
+    const staticImport = imports.staticImports.get(normalized);
+    if (staticImport) {
+      return [staticImport];
+    }
+    if (imports.staticWildcards.length === 1) {
+      return [`${imports.staticWildcards[0]}.${normalized}`];
+    }
+    return [normalized];
+  }
+  const classImport = imports.classImports.get(parts[0]);
+  if (classImport) {
+    return [`${classImport}.${parts.slice(1).join(".")}`];
+  }
+  return [normalized];
+}
+
+function constantReferenceTargets(sourceText, reference) {
+  return javaConstantReferenceTargets(sourceText, reference);
+}
+
 function findConstInitializerLiteral(text, declarationStart) {
   const equalsIndex = text.indexOf("=", declarationStart);
   if (equalsIndex === -1) {
@@ -464,6 +530,29 @@ function enclosingJavaScopePath(scopes, offset) {
     .map((scope) => scope.name);
 }
 
+function referenceMatchesJavaConstScope(reference, packageName, scopePath, constName) {
+  const parts = normalizeKotlinReferenceText(reference).split(".");
+  if (parts[parts.length - 1] !== constName) {
+    return false;
+  }
+  const containerParts = parts.slice(0, -1);
+  if (containerParts.length === 0) {
+    return true;
+  }
+  const scopeMatches = scopePath.length > 0
+    && containerParts.slice(-scopePath.length).join(".") === scopePath.join(".");
+  if (!scopeMatches) {
+    return false;
+  }
+  if (containerParts.length === scopePath.length) {
+    return true;
+  }
+  if (!packageName) {
+    return false;
+  }
+  return containerParts.join(".") === `${packageName}.${scopePath.join(".")}`;
+}
+
 function findJavaConstLiteralRange(vscode, document, reference, alias) {
   if (!isJavaDocument(document) || typeof document.getText !== "function") {
     return undefined;
@@ -475,6 +564,7 @@ function findJavaConstLiteralRange(vscode, document, reference, alias) {
     return undefined;
   }
   const scopes = collectJavaNamedScopes(text);
+  const packageName = collectJavaPackageName(text);
   const escapedName = constName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
     `\\b((?:(?:public|protected|private|static|final|transient|volatile)\\s+)*)String\\s+${escapedName}\\b`,
@@ -488,7 +578,7 @@ function findJavaConstLiteralRange(vscode, document, reference, alias) {
       continue;
     }
     const scopePath = enclosingJavaScopePath(scopes, match.index);
-    if (referenceMatchesConstScope(reference, scopePath, constName)) {
+    if (referenceMatchesJavaConstScope(reference, packageName, scopePath, constName)) {
       return {
         literal,
         range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd),
@@ -708,9 +798,10 @@ class GaugeRenameProvider {
       }
       if (isStepImplementationDocument(document)) {
         for (const reference of annotationConstantReferenceRanges(text, entry)) {
-          if (implementationDocuments.some((candidate) => (
-            findConstLiteralRange(this.vscode, candidate, reference.reference, alias)
-          ))) {
+          const targetReferences = constantReferenceTargets(text, reference.reference);
+          if (implementationDocuments.some((candidate) => targetReferences.some((targetReference) => (
+            findConstLiteralRange(this.vscode, candidate, targetReference, alias)
+          )))) {
             return {
               hasInlineTable: /\s+<table>\s*$/.test(alias),
               engineRename: false,
@@ -847,18 +938,21 @@ class GaugeRenameProvider {
 
   addConstantBackedStepRenames(edit, implementationDocuments, sourceText, entry, alias, newName, hasInlineTable) {
     for (const reference of annotationConstantReferences(sourceText, entry)) {
+      const targetReferences = constantReferenceTargets(sourceText, reference);
       for (const document of implementationDocuments) {
-        const constantRange = findConstLiteralRange(this.vscode, document, reference, alias);
-        if (!constantRange || editHasReplacement(edit, document.uri, constantRange.range)) {
-          continue;
+        for (const targetReference of targetReferences) {
+          const constantRange = findConstLiteralRange(this.vscode, document, targetReference, alias);
+          if (!constantRange || editHasReplacement(edit, document.uri, constantRange.range)) {
+            continue;
+          }
+          edit.replace(
+            document.uri,
+            constantRange.range,
+            replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), constantRange.literal, {
+              kotlin: isKotlinDocument(document),
+            }),
+          );
         }
-        edit.replace(
-          document.uri,
-          constantRange.range,
-          replacementForLiteral(kotlinReplacementName(newName, hasInlineTable), constantRange.literal, {
-            kotlin: isKotlinDocument(document),
-          }),
-        );
       }
     }
   }
