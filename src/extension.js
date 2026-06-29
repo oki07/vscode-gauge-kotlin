@@ -879,6 +879,15 @@ function activate(context, vscodeApi, options = {}) {
   });
   if (
     gaugeWorkspace
+    && typeof testController.registerProjectChangeListener === "function"
+  ) {
+    const disposable = testController.registerProjectChangeListener(gaugeWorkspace);
+    if (disposable) {
+      context.subscriptions.push(disposable);
+    }
+  }
+  if (
+    gaugeWorkspace
     && typeof gaugeWorkspace.ready === "function"
     && typeof testController.discoverWorkspaceTests === "function"
   ) {

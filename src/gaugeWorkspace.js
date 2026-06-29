@@ -260,6 +260,10 @@ class GaugeWorkspace {
     return [...this.clientsMap.keys()].sort((left, right) => (left > right ? 1 : -1))[0];
   }
 
+  projectRootsKey() {
+    return [...this.clientsMap.keys()].sort((left, right) => (left > right ? 1 : -1)).join("\n");
+  }
+
   onDidChangeProjects(listener) {
     this.projectChangeListeners.add(listener);
     return {
@@ -388,6 +392,7 @@ class GaugeWorkspace {
   async onWorkspaceFoldersChanged(event) {
     const added = event && event.added ? event.added : [];
     const removed = event && event.removed ? event.removed : [];
+    const beforeProjectRoots = this.projectRootsKey();
     for (const folder of added) {
       await this.startServersForWorkspaceFolder(folder.uri.fsPath);
     }
@@ -395,7 +400,7 @@ class GaugeWorkspace {
       await this.stopServersForWorkspaceFolder(folder.uri.fsPath);
     }
     await this.setMultiProjectContext();
-    if (removed.length > 0) {
+    if (this.projectRootsKey() !== beforeProjectRoots) {
       await this.notifyProjectsChanged();
     }
   }

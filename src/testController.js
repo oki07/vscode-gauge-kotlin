@@ -289,6 +289,7 @@ class GaugeTestController {
     this.vscode = getVscode(options.vscode);
     this.clientsMap = options.clientsMap;
     this.executionController = options.executionController;
+    this.projectChanges = options.projectChanges;
     this.projectFactory = options.projectFactory;
     this.controller = undefined;
     this.currentRun = undefined;
@@ -305,6 +306,7 @@ class GaugeTestController {
     this.controller = this.vscode.tests.createTestController(CONTROLLER_ID, CONTROLLER_LABEL);
     this.registerRunProfiles();
     const disposables = this.registerDocumentDiscovery();
+    addDisposable(disposables, this.registerProjectChangeListener(this.projectChanges));
     this.discoverOpenDocuments();
     return {
       dispose: () => {
@@ -382,7 +384,35 @@ class GaugeTestController {
     return disposables;
   }
 
+  registerProjectChangeListener(projectChanges) {
+    if (!projectChanges || typeof projectChanges.onDidChangeProjects !== "function") {
+      return undefined;
+    }
+    return projectChanges.onDidChangeProjects(() => this.refreshWorkspaceTests());
+  }
+
+  pruneRemovedClientWorkspaceTests() {
+    if (!this.clientsMap || typeof this.clientsMap.values !== "function") {
+      return;
+    }
+    const activeClients = new Set(
+      [...this.clientsMap.values()]
+        .map((entry) => entry && entry.client)
+        .filter(Boolean),
+    );
+    for (const [client, ids] of [...this.workspaceDiscoveredIdsByClient]) {
+      if (activeClients.has(client)) {
+        continue;
+      }
+      for (const id of ids) {
+        this.removeItem(id);
+      }
+      this.workspaceDiscoveredIdsByClient.delete(client);
+    }
+  }
+
   refreshWorkspaceTests() {
+    this.pruneRemovedClientWorkspaceTests();
     return Promise.resolve(this.discoverWorkspaceTests()).catch(() => []);
   }
 

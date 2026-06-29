@@ -549,6 +549,63 @@ test("GaugeTestController refreshes and prunes workspace tests on spec file chan
   ]);
 });
 
+test("GaugeTestController prunes removed client workspace tests on project changes", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const projectListeners = [];
+  const projectChanges = {
+    onDidChangeProjects(listener) {
+      projectListeners.push(listener);
+      return { dispose() {} };
+    },
+  };
+  const firstClient = {
+    sendRequest(method) {
+      if (method === "gauge/specs") {
+        return Promise.resolve([
+          {
+            heading: "Old checkout",
+            executionIdentifier: "/workspace/old/specs/checkout.spec",
+          },
+        ]);
+      }
+      if (method === "gauge/scenarios") {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    },
+  };
+  const secondClient = {
+    sendRequest(method) {
+      if (method === "gauge/specs") {
+        return Promise.resolve([
+          {
+            heading: "New checkout",
+            executionIdentifier: "/workspace/new/specs/checkout.spec",
+          },
+        ]);
+      }
+      if (method === "gauge/scenarios") {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    },
+  };
+  const clientsMap = new Map([
+    ["/workspace/old", { client: firstClient }],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, projectChanges, vscode });
+
+  gaugeTests.register();
+  await gaugeTests.discoverWorkspaceTests();
+  clientsMap.delete("/workspace/old");
+  clientsMap.set("/workspace/new", { client: secondClient });
+  await projectListeners[0]("/workspace/new");
+
+  assert.equal(controller.items.get("/workspace/old/specs/checkout.spec"), undefined);
+  assert.equal(controller.items.get("/workspace/new/specs/checkout.spec").label, "New checkout");
+});
+
 test("GaugeTestController keeps workspace-discovered tests when documents close", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, documentListeners, vscode } = createFakeVscode();

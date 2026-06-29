@@ -1218,7 +1218,40 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       created.workspace = this;
     }
 
+    onDidChangeProjects(listener) {
+      this.projectListener = listener;
+      this.projectListenerDisposable = { dispose() {} };
+      return this.projectListenerDisposable;
+    }
+
     dispose() {}
+  }
+
+  class FakeGaugeTestController {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      this.refreshes = 0;
+      created.testController = this;
+    }
+
+    refreshWorkspaceTests() {
+      this.refreshes += 1;
+      return Promise.resolve([]);
+    }
+
+    register() {
+      return this.disposable;
+    }
+
+    registerProjectChangeListener(projectChanges) {
+      this.projectChanges = projectChanges;
+      return projectChanges.onDidChangeProjects(() => this.refreshWorkspaceTests());
+    }
+
+    setExecutionController(executionController) {
+      this.executionController = executionController;
+    }
   }
 
   class FakeReferenceProvider {
@@ -1351,6 +1384,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeClients: FakeGaugeClients,
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
+    GaugeTestController: FakeGaugeTestController,
     ConfigProvider: FakeConfigProvider,
     ExtractConceptCommandProvider: FakeExtractConceptCommandProvider,
     GenerateStubCommandProvider: FakeGenerateStubCommandProvider,
@@ -1407,6 +1441,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.specNodeProvider.options.vscode, fakeVscode);
   assert.equal(created.specNodeProvider.options.executionController, executionController);
   assert.equal(created.projectInitializer.options.vscode, fakeVscode);
+  assert.equal(created.testController.options.vscode, fakeVscode);
+  assert.equal(created.testController.options.clientsMap, created.clientsMap);
+  assert.equal(created.testController.executionController, executionController);
+  assert.equal(typeof created.workspace.projectListener, "function");
+  assert.equal(context.subscriptions.includes(created.workspace.projectListenerDisposable), true);
+  created.workspace.projectListener();
+  assert.equal(created.testController.refreshes, 1);
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
   assert.equal(context.subscriptions.includes(created.configProvider), true);

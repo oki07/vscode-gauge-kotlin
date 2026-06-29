@@ -956,6 +956,42 @@ test("GaugeWorkspace notifies project listeners after workspace folder removal",
   assert.deepEqual(notifications, ["/workspace/two"]);
 });
 
+test("GaugeWorkspace notifies project listeners after workspace folder addition", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/one/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/two/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+  });
+  const { vscode, workspaceFolderListeners } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/one" } }],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const notifications = [];
+  workspace.onDidChangeProjects((projectRoot) => {
+    notifications.push(projectRoot);
+  });
+
+  await workspaceFolderListeners[0]({
+    added: [{ uri: { fsPath: "/workspace/two" } }],
+    removed: [],
+  });
+
+  assert.deepEqual(notifications, ["/workspace/one"]);
+});
+
 test("GaugeWorkspace starts a client for the active Gauge document", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
