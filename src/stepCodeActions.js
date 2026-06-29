@@ -54,7 +54,7 @@ function isInlineTableLine(line) {
 function gaugeStepTextAt(document, lineNumber) {
   const line = documentLine(document, lineNumber);
   const marker = line.search(/\S/);
-  if (marker === -1 || line[marker] !== "*") {
+  if (marker !== 0 || line[marker] !== "*") {
     return undefined;
   }
   const text = line.slice(marker + 1).trim();

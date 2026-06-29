@@ -140,6 +140,29 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
   });
 });
 
+test("GaugeStepCodeActionProvider ignores indented step markers", () => {
+  const {
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "  * Draft pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 2),
+    new vscode.Position(1, 27),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.deepEqual(actions, []);
+});
+
 test("GaugeStepCodeActionProvider creates fixes for markdown Gauge specs", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
