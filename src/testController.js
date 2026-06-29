@@ -5,6 +5,8 @@ const { headingMarkers } = require("./codeLensProvider");
 const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";
 const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const DEBUG_PROFILE_LABEL = "Debug";
 const FAILED_PROFILE_LABEL = "Run Failed";
 const RUN_PROFILE_LABEL = "Run";
@@ -86,6 +88,14 @@ function isGaugeSpecificationDocument(document) {
     && document.languageId === GAUGE_LANGUAGE
     && !isConceptDocument(document)
     && documentPath(document),
+  );
+}
+
+function isMarkdownGaugeSpecificationDocument(document) {
+  return Boolean(
+    document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
   );
 }
 
@@ -470,7 +480,17 @@ class GaugeTestController {
   }
 
   discoverDocument(document) {
-    if (!this.controller || !isGaugeSpecificationDocument(document)) {
+    const markdownSpec = isMarkdownGaugeSpecificationDocument(document);
+    if (!this.controller || (!isGaugeSpecificationDocument(document) && !markdownSpec)) {
+      return [];
+    }
+    if (
+      markdownSpec
+      && (
+        !this.projectFactory
+        || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+      )
+    ) {
       return [];
     }
     if (!this.isGaugeProjectDocument(document)) {

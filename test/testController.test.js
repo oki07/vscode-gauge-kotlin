@@ -19,11 +19,11 @@ function createCollection() {
   };
 }
 
-function createDocument(text, filename = "/workspace/specs/example.spec") {
+function createDocument(text, filename = "/workspace/specs/example.spec", languageId = "gauge") {
   const lines = text.split(/\r?\n/);
   return {
     fileName: filename,
-    languageId: "gauge",
+    languageId,
     lineCount: lines.length,
     uri: { fsPath: filename },
     getText() {
@@ -330,6 +330,40 @@ test("GaugeTestController discovers specification and scenario test items from o
   assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
     ["/workspace/specs/example.spec:3", "Successful checkout"],
     ["/workspace/specs/example.spec:6", "Declined checkout"],
+  ]);
+});
+
+test("GaugeTestController discovers specification and scenario test items from open Markdown Gauge specs", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay by card",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/example.md", "markdown");
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.md");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+
+  gaugeTests.register();
+
+  const spec = controller.items.get("/workspace/gauge/specs/example.md");
+  assert.equal(spec.label, "Checkout");
+  assert.deepEqual(spec.uri, { fsPath: "/workspace/gauge/specs/example.md" });
+  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+    ["/workspace/gauge/specs/example.md:3", "Successful checkout"],
   ]);
 });
 
