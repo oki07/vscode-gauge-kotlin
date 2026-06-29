@@ -106,6 +106,12 @@
         "command": "gauge.extract.concept",
         "key": "ctrl+alt+c",
         "when": "editorTextFocus && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))"
+      },
+      {
+        "command": "gauge.toggle.lineComment",
+        "key": "ctrl+/",
+        "mac": "cmd+/",
+        "when": "editorTextFocus && editorLangId == markdown && resourceExtname == .md && gauge:activated"
       }
     ],
     "commands": [
@@ -132,6 +138,11 @@
       {
         "command": "gauge.format",
         "title": "Format Gauge File",
+        "category": "Gauge"
+      },
+      {
+        "command": "gauge.toggle.lineComment",
+        "title": "Toggle Gauge Line Comment",
         "category": "Gauge"
       },
       {
@@ -258,6 +269,10 @@
           "when": "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))"
         },
         {
+          "command": "gauge.toggle.lineComment",
+          "when": "gauge:activated && editorLangId == markdown && resourceExtname == .md"
+        },
+        {
           "command": "gauge.preview",
           "when": "gauge:activated"
         },
@@ -339,6 +354,11 @@
         {
           "command": "gauge.format",
           "when": "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+          "group": "1_modification"
+        },
+        {
+          "command": "gauge.toggle.lineComment",
+          "when": "gauge:activated && editorLangId == markdown && resourceExtname == .md",
           "group": "1_modification"
         }
       ],

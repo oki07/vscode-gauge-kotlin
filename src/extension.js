@@ -7,6 +7,7 @@ const {
   registerArgumentSelectionCommand,
 } = require("./argumentCodeActions");
 const { ConfigProvider } = require("./config/configProvider");
+const { toggleGaugeLineComment } = require("./commentCommand");
 const {
   EXECUTION_COMMANDS,
   createGaugeExecutionController,
@@ -100,6 +101,7 @@ const GAUGE_COMMANDS = [
   "gauge.create.concept",
   "gauge.extract.concept",
   "gauge.format",
+  "gauge.toggle.lineComment",
   "gauge.preview",
   "gauge.config.saveRecommended",
   "gauge.stopExecution",
@@ -665,6 +667,8 @@ function createCommandHandler(command, vscode, executionController, options = {}
         });
       case "gauge.format":
         return (options.formatDocument || formatActiveGaugeDocument)(vscode, options);
+      case "gauge.toggle.lineComment":
+        return (options.toggleLineComment || toggleGaugeLineComment)(vscode, options);
       case "gauge.config.saveRecommended":
         return notify(vscode, "Gauge recommended settings are not available yet.");
       case "gauge.stopExecution":

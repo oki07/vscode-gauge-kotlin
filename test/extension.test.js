@@ -957,6 +957,37 @@ test("format command removes deprecated Gauge lines from failures", async () => 
   assert.deepEqual(errors, ["Error on formatting spec. format failed"]);
 });
 
+test("toggle line comment command delegates to the Gauge comment command", async () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const calls = [];
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+  const projectFactory = {
+    getGaugeRootFromFilePath() {
+      return "/workspace";
+    },
+  };
+
+  extension.activate(context, fakeVscode, {
+    projectFactory,
+    toggleLineComment(vscode, options) {
+      calls.push({ options, vscode });
+      return Promise.resolve(true);
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.toggle.lineComment",
+  );
+  assert.ok(command);
+
+  assert.equal(await command.handler(), true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].vscode, fakeVscode);
+  assert.equal(calls[0].options.projectFactory, projectFactory);
+});
+
 test("create specification command provides Gauge LSP spec directories", async () => {
   const extension = require("../src/extension");
 

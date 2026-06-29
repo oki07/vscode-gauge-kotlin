@@ -182,6 +182,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "gauge.create.concept",
     "gauge.extract.concept",
     "gauge.format",
+    "gauge.toggle.lineComment",
     "gauge.preview",
     "gauge.config.saveRecommended",
     "gauge.stopExecution",
@@ -205,8 +206,10 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.create.concept"));
   assert.ok(commandPaletteIds.includes("gauge.extract.concept"));
   assert.ok(commandPaletteIds.includes("gauge.format"));
+  assert.ok(commandPaletteIds.includes("gauge.toggle.lineComment"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
   const markdownGaugeEditorWhen = "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))";
+  const markdownGaugeSpecWhen = "gauge:activated && editorLangId == markdown && resourceExtname == .md";
   assert.equal(
     manifest.contributes.menus.commandPalette.find(
       (entry) => entry.command === "gauge.extract.concept",
@@ -219,6 +222,12 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     ).when,
     markdownGaugeEditorWhen,
   );
+  assert.equal(
+    manifest.contributes.menus.commandPalette.find(
+      (entry) => entry.command === "gauge.toggle.lineComment",
+    ).when,
+    markdownGaugeSpecWhen,
+  );
   assert.equal(commandById(manifest, "gauge.preview").icon, "$(open-preview)");
   assert.deepEqual(manifest.contributes.keybindings, [
     {
@@ -230,6 +239,12 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       command: "gauge.extract.concept",
       key: "ctrl+alt+c",
       when: "editorTextFocus && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+    },
+    {
+      command: "gauge.toggle.lineComment",
+      key: "ctrl+/",
+      mac: "cmd+/",
+      when: "editorTextFocus && editorLangId == markdown && resourceExtname == .md && gauge:activated",
     },
   ]);
   assert.deepEqual(manifest.contributes.menus["explorer/context"], [
@@ -270,6 +285,11 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     {
       command: "gauge.format",
       when: "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      group: "1_modification",
+    },
+    {
+      command: "gauge.toggle.lineComment",
+      when: "gauge:activated && editorLangId == markdown && resourceExtname == .md",
       group: "1_modification",
     },
   ]);
