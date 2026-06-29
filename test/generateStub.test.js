@@ -7,6 +7,7 @@ function createFakeVscode(overrides = {}) {
   const appliedEdits = [];
   const errors = [];
   const information = [];
+  const inputBoxes = [];
   const openedDocuments = [];
   const quickPicks = [];
   const shownDocuments = [];
@@ -79,6 +80,10 @@ function createFakeVscode(overrides = {}) {
         information.push(message);
         return Promise.resolve(undefined);
       },
+      showInputBox(options) {
+        inputBoxes.push(options);
+        return Promise.resolve(overrides.inputBoxValue);
+      },
       showQuickPick(items) {
         quickPicks.push(items);
         return Promise.resolve(overrides.quickPickSelection || items[2]);
@@ -107,6 +112,7 @@ function createFakeVscode(overrides = {}) {
     commands,
     errors,
     information,
+    inputBoxes,
     openedDocuments,
     quickPicks,
     shownDocuments,
@@ -318,11 +324,13 @@ test("GenerateStubCommandProvider creates missing files before applying generate
   const {
     appliedEdits,
     commands,
+    inputBoxes,
     openedDocuments,
     quickPicks,
     shownDocuments,
     vscode,
   } = createFakeVscode({
+    inputBoxValue: "src/test/kotlin/NewSteps.kt",
     quickPickSelection: {
       label: "New File",
       description: "Create a new file",
@@ -389,10 +397,17 @@ test("GenerateStubCommandProvider creates missing files before applying generate
     { label: "New File", description: "Create a new file", value: "New File" },
     { label: "Copy To Clipboard", description: "", value: "Copy To Clipboard" },
   ]);
+  assert.deepEqual(inputBoxes, [
+    {
+      prompt: "Enter the new Kotlin implementation file path.",
+      placeHolder: "src/test/kotlin/Steps.kt",
+      value: "src/test/kotlin/Steps.kt",
+    },
+  ]);
   assert.deepEqual(requests[1], {
     method: "gauge/putStubImpl",
     params: {
-      implementationFilePath: "New File",
+      implementationFilePath: filename,
       codes: ["fun generatedStep() {}"],
     },
   });

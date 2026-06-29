@@ -10,6 +10,7 @@ const GENERATE_CONCEPT_REQUEST = "gauge/generateConcept";
 const GENERATE_CONCEPT_STUB = "gauge.generate.concept";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const NEW_FILE = "New File";
+const DEFAULT_KOTLIN_IMPLEMENTATION_FILE = "src/test/kotlin/Steps.kt";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -68,7 +69,7 @@ class GenerateStubCommandProvider {
       .then((files) => this.vscode.window.showQuickPick(
         this.getFileLists(files, projectClient.project.root()),
       ))
-      .then((selected) => {
+      .then(async (selected) => {
         if (!selected) {
           return undefined;
         }
@@ -78,9 +79,16 @@ class GenerateStubCommandProvider {
             (reason) => this.handleError(reason),
           );
         }
+        const implementationFilePath = await this.resolveImplementationFilePath(
+          selected,
+          projectClient.project.root(),
+        );
+        if (!implementationFilePath) {
+          return undefined;
+        }
         return this.generateInFile(
           ADD_STUB_REQUEST,
-          { implementationFilePath: selected.value, codes: [code] },
+          { implementationFilePath, codes: [code] },
           projectClient.client,
         );
       }, (reason) => this.handleError(reason));
@@ -113,6 +121,28 @@ class GenerateStubCommandProvider {
       .then((edit) => languageClient.protocol2CodeConverter.asWorkspaceEdit(edit))
       .then((workspaceEdit) => this.workspaceEditorFactory(workspaceEdit).applyChanges())
       .catch((reason) => this.handleError(reason));
+  }
+
+  async resolveImplementationFilePath(selected, projectRoot) {
+    if (selected.value !== NEW_FILE) {
+      return selected.value;
+    }
+    if (!this.vscode.window || typeof this.vscode.window.showInputBox !== "function") {
+      return undefined;
+    }
+    const input = await this.vscode.window.showInputBox({
+      prompt: "Enter the new Kotlin implementation file path.",
+      placeHolder: DEFAULT_KOTLIN_IMPLEMENTATION_FILE,
+      value: DEFAULT_KOTLIN_IMPLEMENTATION_FILE,
+    });
+    const trimmed = typeof input === "string" ? input.trim() : "";
+    if (!trimmed) {
+      return undefined;
+    }
+    if (!projectRoot || this.pathModule.isAbsolute(trimmed)) {
+      return this.pathModule.normalize(trimmed);
+    }
+    return this.pathModule.join(projectRoot, trimmed);
   }
 
   handleError(reason) {
