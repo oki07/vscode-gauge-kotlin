@@ -591,6 +591,14 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
+  gaugeProjectRoot(document) {
+    return this.diagnosticsProvider.gaugeProjectRoot(document);
+  }
+
+  belongsToSourceGaugeProject(candidate, sourceRoot) {
+    return this.diagnosticsProvider.belongsToSourceGaugeProject(candidate, sourceRoot);
+  }
+
   isCompletionDocument(document) {
     if (!document) {
       return false;
@@ -613,9 +621,10 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.diagnosticsProvider.workspaceDocuments();
   }
 
-  stepCompletionEntries(workspaceDocuments) {
+  stepCompletionEntries(document, workspaceDocuments) {
     const entries = [];
     const seen = new Set();
+    const sourceRoot = this.gaugeProjectRoot(document);
     const addEntry = (label, detail) => {
       const key = stepCompletionKey(label);
       if (!label || seen.has(key)) {
@@ -628,7 +637,7 @@ class GaugeDynamicArgumentCompletionProvider {
       if (
         !candidate
         || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
+        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
       ) {
         continue;
       }
@@ -652,7 +661,7 @@ class GaugeDynamicArgumentCompletionProvider {
         !candidate
         || !isConceptDocument(candidate)
         || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
+        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
       ) {
         continue;
       }
@@ -700,7 +709,7 @@ class GaugeDynamicArgumentCompletionProvider {
     const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
-    const localItems = this.stepCompletionEntries(workspaceDocuments).map((entry) => completionItem(
+    const localItems = this.stepCompletionEntries(document, workspaceDocuments).map((entry) => completionItem(
       this.vscode,
       entry.label,
       range,

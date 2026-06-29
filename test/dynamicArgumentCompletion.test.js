@@ -62,6 +62,20 @@ function createProjectFactory() {
   };
 }
 
+function createMultiProjectFactory() {
+  return {
+    getGaugeRootFromFilePath(filename) {
+      if (filename.startsWith("/workspace/project-a/")) {
+        return "/workspace/project-a";
+      }
+      if (filename.startsWith("/workspace/project-b/")) {
+        return "/workspace/project-b";
+      }
+      throw new Error("not a Gauge project file");
+    },
+  };
+}
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers inside dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -817,6 +831,62 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept headings on step l
   assert.deepEqual(labels(items), ["Reuse payment <method>"]);
   assert.equal(items[0].detail, "concept");
   assert.equal(items[0].insertText.value, "Reuse payment \"${0:method}\"");
+});
+
+test("GaugeDynamicArgumentCompletionProvider ignores step aliases from another Gauge project", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Sha",
+  ].join("\n"), "/workspace/project-a/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Shared checkout\")",
+    "fun sharedCheckout() {}",
+  ].join("\n"), "/workspace/project-b/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createMultiProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), []);
+});
+
+test("GaugeDynamicArgumentCompletionProvider ignores concept headings from another Gauge project", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Sha",
+  ].join("\n"), "/workspace/project-a/specs/example.spec");
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Use shared checkout",
+  ].join("\n"), "/workspace/project-b/specs/concepts/shared.cpt", "gauge");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createMultiProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, conceptDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), []);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests Gauge LSP step completions on step lines", async () => {
