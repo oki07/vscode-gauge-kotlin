@@ -499,6 +499,7 @@ function registerRenameProvider(context, vscode, options) {
         ? vscode.languages.registerRenameProvider(
           [
             { language: "gauge" },
+            MARKDOWN_GAUGE_SPEC_SELECTOR,
             { language: KOTLIN_LANGUAGE },
             { scheme: "file", pattern: "**/*.kt" },
           ],

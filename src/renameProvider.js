@@ -12,6 +12,8 @@ const {
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
 const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const JAVA_FILE_PATTERN = "**/*.java";
 const KOTLIN_FILE_PATTERN = "**/*.kt";
@@ -210,7 +212,14 @@ function conceptHeadingOnLine(vscode, document, lineNumber) {
 }
 
 function isGaugeDocument(document) {
-  return Boolean(document && document.languageId === GAUGE_LANGUAGE && typeof document.getText === "function");
+  if (!document || typeof document.getText !== "function") {
+    return false;
+  }
+  if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function readQuotedLiteral(text, start, limit) {
@@ -659,6 +668,7 @@ class GaugeRenameProvider {
     return this.vscode.languages.registerRenameProvider(
       [
         { language: GAUGE_LANGUAGE },
+        { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },
         { language: "java" },
