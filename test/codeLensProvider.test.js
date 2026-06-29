@@ -318,6 +318,55 @@ test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", as
   ]);
 });
 
+test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/tests/LoginSteps.java");
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace");
+        return true;
+      },
+    },
+  });
+  const document = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  public void login(String user) {",
+    "  }",
+    "}",
+  ].join("\n"), "/workspace/tests/LoginSteps.java", "plaintext");
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 6,
+      character: 14,
+      title: "Find Step References",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/tests/LoginSteps.java",
+        { line: 6, character: 14 },
+        "Log in as <user>",
+      ],
+    },
+  ]);
+});
+
 test("GaugeCodeLensProvider suppresses Kotlin reference lenses when disabled", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider({

@@ -1521,6 +1521,8 @@ test("activation registers Gauge run code lenses for Gauge documents", () => {
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { language: "kotlin" },
     { scheme: "file", pattern: "**/*.kt" },
+    { language: "java" },
+    { scheme: "file", pattern: "**/*.java" },
   ]);
   assert.equal(codeLensProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(typeof codeLensProviders[0].provider.options.projectFactory.isGaugeProject, "function");

@@ -6,8 +6,9 @@ const {
 } = require("./gaugeHeadings");
 const {
   GaugeStepDiagnosticsProvider,
-  findStepFunctions,
+  findStepFunctionsForDocument,
   isKotlinDocument,
+  isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
 
@@ -309,7 +310,7 @@ class GaugeCodeLensProvider {
     return documents;
   }
 
-  async provideKotlinReferenceCodeLenses(document) {
+  async provideStepReferenceCodeLenses(document) {
     if (
       !this.referenceCodeLensesEnabled()
       || !this.isGaugeProjectDocument(document)
@@ -324,11 +325,13 @@ class GaugeCodeLensProvider {
     }
 
     const text = document.getText();
-    const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
-      document,
-      await this.kotlinDocuments(document),
-    );
-    return findStepFunctions(text, externalConstants).map((entry) => {
+    const externalConstants = isKotlinDocument(document)
+      ? this.diagnosticsProvider.collectWorkspaceConstants(
+        document,
+        await this.kotlinDocuments(document),
+      )
+      : undefined;
+    return findStepFunctionsForDocument(document, externalConstants).map((entry) => {
       const start = positionAt(text, entry.declarationStart);
       const end = positionAt(text, entry.declarationEnd);
       const range = createRangeFromPositions(this.vscode, start, end);
@@ -348,8 +351,8 @@ class GaugeCodeLensProvider {
     if (!file) {
       return [];
     }
-    if (isKotlinDocument(document)) {
-      return this.provideKotlinReferenceCodeLenses(document);
+    if (isStepImplementationDocument(document)) {
+      return this.provideStepReferenceCodeLenses(document);
     }
     const supportedDocument = document.languageId === GAUGE_LANGUAGE
       || isMarkdownSpecDocument(document, file);
