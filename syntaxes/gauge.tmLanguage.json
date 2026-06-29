@@ -276,6 +276,9 @@
           "include": "#markdownSeparator"
         },
         {
+          "include": "#markdownJavaFencedCode"
+        },
+        {
           "include": "#markdownFencedCode"
         },
         {
@@ -304,6 +307,22 @@
     "markdownSeparator": {
       "name": "meta.separator.markdown.gauge",
       "match": "^\\s{0,3}(?:-{3,}|\\*{3,}|_{3,})\\s*$"
+    },
+    "markdownJavaFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Aa][Vv][Aa]|[Bb][Ss][Hh])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.java",
+      "patterns": [
+        {
+          "include": "source.java"
+        }
+      ]
     },
     "markdownFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
