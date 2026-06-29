@@ -38,6 +38,20 @@ function createDocument(text, languageId = "kotlin", fsPath = "/workspace/gauge/
   };
 }
 
+function createMultiProjectFactory() {
+  return {
+    getGaugeRootFromFilePath(filename) {
+      if (filename.startsWith("/workspace/project-a/")) {
+        return "/workspace/project-a";
+      }
+      if (filename.startsWith("/workspace/project-b/")) {
+        return "/workspace/project-b";
+      }
+      throw new Error("not a Gauge project file");
+    },
+  };
+}
+
 test("GaugeStepDiagnosticsProvider reports Kotlin Step parameter count mismatches", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -4745,6 +4759,92 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
+});
+
+test("GaugeStepDiagnosticsProvider reports undefined steps implemented only in another Gauge project", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Shared checkout",
+  ].join("\n"), "gauge", "/workspace/project-a/specs/checkout.spec");
+  const otherProjectKotlinDocument = createDocument([
+    "@Step(\"Shared checkout\")",
+    "fun checkout() {}",
+  ].join("\n"), "kotlin", "/workspace/project-b/src/test/kotlin/CheckoutSteps.kt");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt") {
+          return [otherProjectKotlinDocument.uri];
+        }
+        if (pattern === "**/*.java" || pattern === "**/*.cpt") {
+          return [];
+        }
+        throw new Error(`Unexpected pattern ${pattern}`);
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, otherProjectKotlinDocument.uri);
+        return otherProjectKotlinDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    projectFactory: createMultiProjectFactory(),
+    vscode,
+  });
+
+  const workspaceDocuments = await provider.workspaceDocuments();
+  const diagnostics = provider.provideDiagnostics(specDocument, workspaceDocuments);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Undefined Step"],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider reports undefined steps defined only by concepts in another Gauge project", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Shared concept",
+  ].join("\n"), "gauge", "/workspace/project-a/specs/checkout.spec");
+  const otherProjectConceptDocument = createDocument([
+    "# Shared concept",
+    "* Inner step",
+  ].join("\n"), "gauge", "/workspace/project-b/specs/concepts/shared.cpt");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        if (pattern === "**/*.cpt") {
+          return [otherProjectConceptDocument.uri];
+        }
+        if (pattern === "**/*.kt" || pattern === "**/*.java") {
+          return [];
+        }
+        throw new Error(`Unexpected pattern ${pattern}`);
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, otherProjectConceptDocument.uri);
+        return otherProjectConceptDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    projectFactory: createMultiProjectFactory(),
+    vscode,
+  });
+
+  const workspaceDocuments = await provider.workspaceDocuments();
+  const diagnostics = provider.provideDiagnostics(specDocument, workspaceDocuments);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Undefined Step"],
+  );
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined Gauge steps when no implementations exist", async () => {

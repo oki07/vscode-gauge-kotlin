@@ -6332,6 +6332,32 @@ class GaugeStepDiagnosticsProvider {
     }
   }
 
+  gaugeProjectRoot(document) {
+    if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return undefined;
+    }
+    const file = documentPath(document);
+    if (!file) {
+      return undefined;
+    }
+    try {
+      return this.projectFactory.getGaugeRootFromFilePath(file);
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  belongsToSourceGaugeProject(candidate, sourceRoot) {
+    if (sourceRoot === undefined) {
+      return this.isGaugeProjectDocument(candidate);
+    }
+    const file = documentPath(candidate);
+    if (!file) {
+      return true;
+    }
+    return this.gaugeProjectRoot(candidate) === sourceRoot;
+  }
+
   shouldDiagnose(document) {
     return Boolean(
       document
@@ -6358,6 +6384,7 @@ class GaugeStepDiagnosticsProvider {
       ? workspaceDocuments
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
     const activeDocumentPath = documentPath(document);
+    const activeProjectRoot = this.gaugeProjectRoot(document);
     const activeText = document.getText();
     const activeIgnoredRanges = collectIgnoredKotlinRanges(activeText);
     const activePackageName = isJavaDocument(document)
@@ -6388,7 +6415,7 @@ class GaugeStepDiagnosticsProvider {
         || candidatePath === activeDocumentPath
         || (!candidateIsKotlin && !candidateIsJava)
         || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
+        || !this.belongsToSourceGaugeProject(candidate, activeProjectRoot)
       ) {
         continue;
       }
@@ -6572,12 +6599,13 @@ class GaugeStepDiagnosticsProvider {
     const candidates = Array.isArray(workspaceDocuments)
       ? workspaceDocuments
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    const sourceRoot = this.gaugeProjectRoot(document);
     return candidates.filter((candidate) => (
       candidate
       && candidate !== document
       && isKotlinDocument(candidate)
       && typeof candidate.getText === "function"
-      && this.isGaugeProjectDocument(candidate)
+      && this.belongsToSourceGaugeProject(candidate, sourceRoot)
     ));
   }
 
@@ -6586,31 +6614,33 @@ class GaugeStepDiagnosticsProvider {
     const candidates = Array.isArray(workspaceDocuments)
       ? workspaceDocuments
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    const sourceRoot = this.gaugeProjectRoot(document);
     return candidates.filter((candidate) => (
       candidate
       && candidate !== document
       && isStepImplementationDocument(candidate)
       && typeof candidate.getText === "function"
-      && this.isGaugeProjectDocument(candidate)
+      && this.belongsToSourceGaugeProject(candidate, sourceRoot)
     ));
   }
 
-  conceptDocuments(workspaceDocuments) {
+  conceptDocuments(document, workspaceDocuments) {
     const workspace = this.vscode.workspace || {};
     const candidates = Array.isArray(workspaceDocuments)
       ? workspaceDocuments
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
+    const sourceRoot = this.gaugeProjectRoot(document);
     return candidates.filter((candidate) => (
       candidate
       && isConceptDocument(candidate)
       && typeof candidate.getText === "function"
-      && this.isGaugeProjectDocument(candidate)
+      && this.belongsToSourceGaugeProject(candidate, sourceRoot)
     ));
   }
 
   implementedStepTemplates(document, workspaceDocuments) {
     const implementationDocuments = this.stepImplementationDocuments(document, workspaceDocuments);
-    const conceptDocuments = this.conceptDocuments(workspaceDocuments);
+    const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
     if (implementationDocuments.length === 0 && conceptDocuments.length === 0) {
       if (isWorkspaceStepImplementationScanComplete(workspaceDocuments)) {
         return new Set();
