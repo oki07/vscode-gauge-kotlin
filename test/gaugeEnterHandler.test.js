@@ -32,6 +32,43 @@ test("GaugeEnterHandler saves Gauge documents after newline edits", () => {
   assert.deepEqual(saves, ["saved"]);
 });
 
+test("GaugeEnterHandler saves Markdown Gauge specifications after newline edits", () => {
+  const { GaugeEnterHandler } = require("../src/gaugeEnterHandler");
+  const listeners = [];
+  const vscode = {
+    workspace: {
+      onDidChangeTextDocument(listener) {
+        listeners.push(listener);
+        return { dispose() {} };
+      },
+    },
+  };
+  const checkedFiles = [];
+  const projectFactory = {
+    getGaugeRootFromFilePath(file) {
+      checkedFiles.push(file);
+      return "/workspace/gauge";
+    },
+  };
+  const saves = [];
+  const handler = new GaugeEnterHandler({ vscode, projectFactory });
+  handler.register();
+
+  listeners[0]({
+    document: {
+      languageId: "markdown",
+      uri: { fsPath: "/workspace/gauge/specs/example.md" },
+      save() {
+        saves.push("saved");
+      },
+    },
+    contentChanges: [{ text: "\n" }],
+  });
+
+  assert.deepEqual(checkedFiles, ["/workspace/gauge/specs/example.md"]);
+  assert.deepEqual(saves, ["saved"]);
+});
+
 test("GaugeEnterHandler ignores non-Gauge documents and non-newline edits", () => {
   const { GaugeEnterHandler } = require("../src/gaugeEnterHandler");
   const listeners = [];

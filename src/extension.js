@@ -299,7 +299,7 @@ function registerGaugeLanguageConfiguration(context, vscode) {
 
 function registerGaugeEnterHandler(context, vscode, options) {
   const GaugeEnterHandlerCtor = options.GaugeEnterHandler || GaugeEnterHandler;
-  const handler = new GaugeEnterHandlerCtor({ vscode });
+  const handler = new GaugeEnterHandlerCtor({ vscode, projectFactory: options.projectFactory });
   const disposable = typeof handler.register === "function" ? handler.register() : undefined;
   if (disposable) {
     context.subscriptions.push(disposable);
@@ -695,7 +695,10 @@ function startGaugeServices(context, vscode, options = {}) {
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
   setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
-  registerGaugeEnterHandler(context, vscode, options);
+  registerGaugeEnterHandler(context, vscode, {
+    ...options,
+    projectFactory,
+  });
   registerArgumentCodeActionProvider(context, vscode, options);
   registerDynamicArgumentCompletionProvider(context, vscode, {
     ...options,

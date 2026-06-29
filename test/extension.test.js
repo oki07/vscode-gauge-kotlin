@@ -327,6 +327,73 @@ test("activation registers the Gauge terminal command provider", () => {
   assert.equal(typeof terminalCommand.handler, "function");
 });
 
+test("activation passes the project factory to the Gauge enter handler", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const projectFactory = {
+    isGaugeProject() {
+      return true;
+    },
+    getGaugeRootFromFilePath() {
+      return "/workspace";
+    },
+  };
+  let enterHandlerOptions;
+  const { fakeVscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+  });
+
+  class FakeGaugeEnterHandler {
+    constructor(options) {
+      enterHandlerOptions = options;
+    }
+
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    semanticTokensLegend: {},
+    showWelcomeNotification() {},
+    GaugeEnterHandler: FakeGaugeEnterHandler,
+    GaugeWorkspace: class GaugeWorkspace {
+      constructor() {}
+      dispose() {}
+    },
+    ConfigProvider: class ConfigProvider {
+      constructor() {}
+      dispose() {}
+    },
+    SpecNodeProvider: class SpecNodeProvider {
+      constructor() {}
+      dispose() {}
+    },
+    projectFactory,
+  });
+
+  assert.equal(enterHandlerOptions.vscode, fakeVscode);
+  assert.equal(enterHandlerOptions.projectFactory, projectFactory);
+});
+
 test("activation registers Gauge reference providers", () => {
   const extension = require("../src/extension");
   const context = { subscriptions: [] };
