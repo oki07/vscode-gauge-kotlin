@@ -6,6 +6,8 @@ const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
 const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
 const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 
 const {
@@ -34,6 +36,17 @@ function textDocumentIdentifier(uri) {
 
 function documentPath(document) {
   return document && document.uri && document.uri.fsPath;
+}
+
+function isGaugeReferenceDocument(document) {
+  if (!document || typeof document.getText !== "function") {
+    return false;
+  }
+  if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function uriPath(uri) {
@@ -339,6 +352,7 @@ class ReferenceProvider {
     return this.vscode.languages.registerReferenceProvider(
       [
         { language: GAUGE_LANGUAGE },
+        { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },
         { language: "java" },
@@ -417,7 +431,7 @@ class ReferenceProvider {
     if (isStepImplementationDocument(document)) {
       return this.stepImplementationValuesAt(document, position);
     }
-    if (document.languageId !== GAUGE_LANGUAGE) {
+    if (!isGaugeReferenceDocument(document)) {
       return [];
     }
     if (!languageClient || typeof languageClient.sendRequest !== "function") {
@@ -447,7 +461,7 @@ class ReferenceProvider {
     if (isStepImplementationDocument(document)) {
       return this.stepImplementationValuesAt(document, position);
     }
-    if (document.languageId === GAUGE_LANGUAGE) {
+    if (isGaugeReferenceDocument(document)) {
       return valuesForStep(stepTextAt(document, position));
     }
     return [];
@@ -609,7 +623,7 @@ class ReferenceProvider {
     const addDocument = (candidate) => {
       if (
         !candidate
-        || candidate.languageId !== GAUGE_LANGUAGE
+        || !isGaugeReferenceDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.diagnosticsProvider.isGaugeProjectDocument(candidate)
       ) {

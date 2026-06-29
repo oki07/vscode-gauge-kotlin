@@ -1304,7 +1304,7 @@ test("ReferenceProvider falls back to unopened local Markdown Gauge references",
     },
   };
   const markdownDocument = {
-    languageId: "gauge",
+    languageId: "markdown",
     uri: {
       fsPath: "/workspace/specs/unopened.md",
       toString() {
@@ -1356,6 +1356,56 @@ test("ReferenceProvider falls back to unopened local Markdown Gauge references",
   assert.equal(result, true);
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/unopened.md");
+});
+
+test("ReferenceProvider provides local references from Markdown Gauge spec steps", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const markdownDocument = {
+    languageId: "markdown",
+    uri: {
+      fsPath: "/workspace/specs/example.md",
+      toString() {
+        return "file:///workspace/specs/example.md";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "* Say hello to \"bob\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    activeDocument: markdownDocument,
+    activePosition: { line: 2, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.spec" || pattern === "**/*.cpt" || pattern === "**/*.md") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [markdownDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const references = await provider.provideReferences(markdownDocument, { line: 2, character: 5 });
+
+  assert.deepEqual(references, [
+    {
+      uri: "file:///workspace/specs/example.md",
+      range: {
+        start: { line: 2, character: 0 },
+        end: { line: 2, character: 20 },
+      },
+    },
+  ]);
 });
 
 test("ReferenceProvider registers reference commands", () => {

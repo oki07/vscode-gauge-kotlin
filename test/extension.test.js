@@ -450,6 +450,7 @@ test("activation registers Gauge reference providers", () => {
   assert.deepEqual(referenceProviders.map((entry) => entry.selector), [
     [
       { language: "gauge" },
+      { language: "markdown", scheme: "file", pattern: "**/*.md" },
       { language: "kotlin" },
       { scheme: "file", pattern: "**/*.kt" },
       { language: "java" },
