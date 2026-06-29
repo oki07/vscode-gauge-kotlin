@@ -5,7 +5,6 @@ const {
   findConceptHeadings,
   findStepFunctionsForDocument,
   isConceptDocument,
-  isKotlinDocument,
   isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
@@ -403,7 +402,7 @@ class GaugeStepDefinitionProvider {
     for (const candidate of documents) {
       const text = candidate.getText();
       let externalConstants;
-      if (isKotlinDocument(candidate)) {
+      if (isStepImplementationDocument(candidate)) {
         try {
           externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
         } catch (error) {

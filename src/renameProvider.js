@@ -592,7 +592,7 @@ class GaugeRenameProvider {
     const text = document.getText();
     const offset = offsetAt(text, position);
     let externalConstants;
-    if (isKotlinDocument(document)) {
+    if (isStepImplementationDocument(document)) {
       try {
         externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
       } catch (_error) {
@@ -664,7 +664,7 @@ class GaugeRenameProvider {
     const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const document of this.stepImplementationDocuments(documents)) {
       let externalConstants;
-      if (isKotlinDocument(document)) {
+      if (isStepImplementationDocument(document)) {
         try {
           externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
         } catch (_error) {
@@ -783,7 +783,7 @@ class GaugeRenameProvider {
     const text = document.getText();
     let externalConstants;
     const kotlinDocument = isKotlinDocument(document);
-    if (kotlinDocument) {
+    if (isStepImplementationDocument(document)) {
       try {
         externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
       } catch (_error) {

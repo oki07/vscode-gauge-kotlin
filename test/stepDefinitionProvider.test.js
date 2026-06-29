@@ -701,6 +701,49 @@ test("GaugeStepDefinitionProvider resolves unopened workspace Java Step function
   );
 });
 
+test("GaugeStepDefinitionProvider resolves Java Step methods using imported Java constants", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps;",
+    "",
+    "public final class JavaStepText {",
+    "  public static final String LOGIN = \"Log in as <user>\";",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java");
+  const javaDocument = createDocument([
+    "package fixtures.impl;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "import fixtures.steps.JavaStepText;",
+    "",
+    "public class LoginSteps {",
+    "  @Step(JavaStepText.LOGIN)",
+    "  public void login(String user) {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/impl/LoginSteps.java");
+  const vscode = createFakeVscode([specDocument, constantsDocument, javaDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, javaDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 7, character: 14 },
+  );
+});
+
 test("GaugeStepDefinitionProvider keeps open Kotlin definitions when workspace search fails", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

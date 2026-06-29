@@ -9,12 +9,12 @@ const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
+const STEP_IMPLEMENTATION_REFERENCE_PATTERNS = ["**/*.kt", "**/*.java"];
 
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
   findStepFunctionsForDocument,
-  isKotlinDocument,
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate, stepTextAt } = require("./stepDefinitionProvider");
@@ -474,7 +474,7 @@ class ReferenceProvider {
     return this.convertLocations(locations, languageClient);
   }
 
-  async findWorkspaceKotlinDocuments() {
+  async findWorkspaceStepImplementationDocuments() {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -483,28 +483,30 @@ class ReferenceProvider {
       return [];
     }
 
-    let uris;
-    try {
-      uris = await workspace.findFiles("**/*.kt");
-    } catch (_error) {
-      return [];
-    }
-
     const documents = [];
-    for (const uri of uris || []) {
-      const file = uriPath(uri);
-      if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-        try {
-          this.projectFactory.getGaugeRootFromFilePath(file);
-        } catch (_error) {
-          continue;
-        }
+    for (const pattern of STEP_IMPLEMENTATION_REFERENCE_PATTERNS) {
+      let uris;
+      try {
+        uris = await workspace.findFiles(pattern);
+      } catch (_error) {
+        continue;
       }
 
-      try {
-        documents.push(await workspace.openTextDocument(uri));
-      } catch (_error) {
-        // Ignore unreadable files so one stale workspace URI does not block references.
+      for (const uri of uris || []) {
+        const file = uriPath(uri);
+        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+          try {
+            this.projectFactory.getGaugeRootFromFilePath(file);
+          } catch (_error) {
+            continue;
+          }
+        }
+
+        try {
+          documents.push(await workspace.openTextDocument(uri));
+        } catch (_error) {
+          // Ignore unreadable files so one stale workspace URI does not block references.
+        }
       }
     }
     return documents;
@@ -548,7 +550,7 @@ class ReferenceProvider {
     return documents;
   }
 
-  async kotlinDocuments(sourceDocument) {
+  async stepImplementationDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const documents = [];
     const seenPaths = new Set();
@@ -556,7 +558,7 @@ class ReferenceProvider {
       if (
         !candidate
         || sameDocument(candidate, sourceDocument)
-        || !isKotlinDocument(candidate)
+        || !isStepImplementationDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.diagnosticsProvider.isGaugeProjectDocument(candidate)
       ) {
@@ -577,7 +579,7 @@ class ReferenceProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+    for (const candidate of await this.findWorkspaceStepImplementationDocuments()) {
       addDocument(candidate);
     }
     return documents;
@@ -600,10 +602,10 @@ class ReferenceProvider {
 
     const text = document.getText();
     const offset = offsetAt(text, position);
-    const externalConstants = isKotlinDocument(document)
+    const externalConstants = isStepImplementationDocument(document)
       ? this.diagnosticsProvider.collectWorkspaceConstants(
         document,
-        await this.kotlinDocuments(document),
+        await this.stepImplementationDocuments(document),
       )
       : undefined;
     for (const entry of findStepFunctionsForDocument(document, externalConstants)) {

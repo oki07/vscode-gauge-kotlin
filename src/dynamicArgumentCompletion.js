@@ -4,7 +4,6 @@ const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
   findStepFunctionsForDocument,
-  isKotlinDocument,
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
@@ -636,7 +635,7 @@ class GaugeDynamicArgumentCompletionProvider {
       if (!isStepImplementationDocument(candidate)) {
         continue;
       }
-      const externalConstants = isKotlinDocument(candidate)
+      const externalConstants = isStepImplementationDocument(candidate)
         ? this.diagnosticsProvider.collectWorkspaceConstants(
           candidate,
           workspaceDocuments,

@@ -4909,6 +4909,72 @@ test("GaugeStepDiagnosticsProvider uses unopened Java Step files for Gauge undef
   );
 });
 
+test("GaugeStepDiagnosticsProvider uses Java constants in Java Step annotations", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps;",
+    "",
+    "public final class JavaStepText {",
+    "  public static final String PAYMENT = \"Pay with <method>\";",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java");
+  const stepDocument = createDocument([
+    "package fixtures.impl;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "import fixtures.steps.JavaStepText;",
+    "",
+    "public class PaymentSteps {",
+    "  @Step(JavaStepText.PAYMENT)",
+    "  public void pay(String method) {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/impl/PaymentSteps.java");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    constantsDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider reports Java constant Step parameter mismatches", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "package fixtures.steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class PaymentSteps {",
+    "  public static final String PAYMENT = \"Pay with <method>\";",
+    "",
+    "  @Step(PAYMENT)",
+    "  public void pay() {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/PaymentSteps.java");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Pay with <method>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider uses Java constants in Kotlin Step annotations", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([

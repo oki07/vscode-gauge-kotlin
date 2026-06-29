@@ -7,7 +7,6 @@ const {
 const {
   GaugeStepDiagnosticsProvider,
   findStepFunctionsForDocument,
-  isKotlinDocument,
   isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
@@ -20,7 +19,7 @@ const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const REFERENCE_CONFIG = "reference";
-const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
+const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const RUN_CODELENS_FLAGS = {
   "hide-suggestion": true,
 };
@@ -238,7 +237,7 @@ class GaugeCodeLensProvider {
     return config.get(REFERENCE_CONFIG) !== false;
   }
 
-  async findWorkspaceKotlinDocuments() {
+  async findWorkspaceStepImplementationDocuments() {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -247,34 +246,36 @@ class GaugeCodeLensProvider {
       return [];
     }
 
-    let uris;
-    try {
-      uris = await workspace.findFiles(KOTLIN_WORKSPACE_PATTERN);
-    } catch (_error) {
-      return [];
-    }
-
     const documents = [];
-    for (const uri of uris || []) {
-      const file = uriPath(uri);
-      if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-        try {
-          this.projectFactory.getGaugeRootFromFilePath(file);
-        } catch (_error) {
-          continue;
-        }
+    for (const pattern of STEP_IMPLEMENTATION_WORKSPACE_PATTERNS) {
+      let uris;
+      try {
+        uris = await workspace.findFiles(pattern);
+      } catch (_error) {
+        continue;
       }
 
-      try {
-        documents.push(await workspace.openTextDocument(uri));
-      } catch (_error) {
-        // Ignore stale workspace files so CodeLens still works for the active document.
+      for (const uri of uris || []) {
+        const file = uriPath(uri);
+        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
+          try {
+            this.projectFactory.getGaugeRootFromFilePath(file);
+          } catch (_error) {
+            continue;
+          }
+        }
+
+        try {
+          documents.push(await workspace.openTextDocument(uri));
+        } catch (_error) {
+          // Ignore stale workspace files so CodeLens still works for the active document.
+        }
       }
     }
     return documents;
   }
 
-  async kotlinDocuments(sourceDocument) {
+  async stepImplementationDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const documents = [];
     const seenPaths = new Set();
@@ -282,7 +283,7 @@ class GaugeCodeLensProvider {
       if (
         !candidate
         || sameDocument(candidate, sourceDocument)
-        || !isKotlinDocument(candidate)
+        || !isStepImplementationDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.isGaugeProjectDocument(candidate)
       ) {
@@ -303,7 +304,7 @@ class GaugeCodeLensProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+    for (const candidate of await this.findWorkspaceStepImplementationDocuments()) {
       addDocument(candidate);
     }
     return documents;
@@ -324,10 +325,10 @@ class GaugeCodeLensProvider {
     }
 
     const text = document.getText();
-    const externalConstants = isKotlinDocument(document)
+    const externalConstants = isStepImplementationDocument(document)
       ? this.diagnosticsProvider.collectWorkspaceConstants(
         document,
-        await this.kotlinDocuments(document),
+        await this.stepImplementationDocuments(document),
       )
       : undefined;
     return findStepFunctionsForDocument(document, externalConstants).map((entry) => {
