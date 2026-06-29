@@ -895,6 +895,102 @@ test("ReferenceProvider includes concept headings in local Step references", asy
   ]);
 });
 
+test("ReferenceProvider provides local references from concept heading cursor without LSP", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const conceptDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/concepts/shared.cpt",
+      toString() {
+        return "file:///workspace/specs/concepts/shared.cpt";
+      },
+    },
+    getText() {
+      return [
+        "# Shared checkout <item>",
+        "* Prepare cart",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/checkout.spec",
+      toString() {
+        return "file:///workspace/specs/checkout.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Checkout",
+        "",
+        "## Scenario",
+        "* Shared checkout \"book\"",
+      ].join("\n");
+    },
+  };
+  const otherConceptDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/concepts/reuse.cpt",
+      toString() {
+        return "file:///workspace/specs/concepts/reuse.cpt";
+      },
+    },
+    getText() {
+      return [
+        "# Reuse checkout",
+        "* Shared checkout \"pen\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.spec" || pattern === "**/*.cpt" || pattern === "**/*.md") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [conceptDocument, specDocument, otherConceptDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const references = await provider.provideReferences(
+    conceptDocument,
+    { line: 0, character: 12 },
+  );
+
+  assert.deepEqual(references, [
+    {
+      uri: "file:///workspace/specs/concepts/shared.cpt",
+      range: {
+        start: { line: 0, character: 2 },
+        end: { line: 0, character: 24 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/checkout.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 24 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/concepts/reuse.cpt",
+      range: {
+        start: { line: 1, character: 0 },
+        end: { line: 1, character: 23 },
+      },
+    },
+  ]);
+});
+
 test("ReferenceProvider resolves package wildcard const Step aliases for local references", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");

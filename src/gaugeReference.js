@@ -227,6 +227,32 @@ function isConceptReferenceDocument(document) {
   return typeof file === "string" && file.toLowerCase().endsWith(".cpt");
 }
 
+function positionInRange(position, range) {
+  if (!position || !range || !range.start || !range.end) {
+    return false;
+  }
+  if (position.line < range.start.line || position.line > range.end.line) {
+    return false;
+  }
+  if (position.line === range.start.line && position.character < range.start.character) {
+    return false;
+  }
+  if (position.line === range.end.line && position.character > range.end.character) {
+    return false;
+  }
+  return true;
+}
+
+function conceptHeadingTextAt(document, position) {
+  if (!isConceptReferenceDocument(document) || typeof document.getText !== "function") {
+    return undefined;
+  }
+  const heading = findConceptHeadings(document.getText()).find((entry) => (
+    positionInRange(position, entry)
+  ));
+  return heading && heading.text;
+}
+
 function localGaugeStepReferences(document, targetTemplate) {
   const uri = documentUri(document);
   if (!uri || typeof document.getText !== "function") {
@@ -439,7 +465,7 @@ class ReferenceProvider {
       return [];
     }
     if (!languageClient || typeof languageClient.sendRequest !== "function") {
-      return valuesForStep(stepTextAt(document, position));
+      return valuesForStep(stepTextAt(document, position) || conceptHeadingTextAt(document, position));
     }
     const params = {
       textDocument: textDocumentIdentifier(documentUri(document)),
@@ -450,7 +476,7 @@ class ReferenceProvider {
       params,
       createCancellationToken(this.vscode),
     );
-    return valuesForStep(stepValue || stepTextAt(document, position));
+    return valuesForStep(stepValue || stepTextAt(document, position) || conceptHeadingTextAt(document, position));
   }
 
   async localStepValueAt(document, position) {
@@ -466,7 +492,7 @@ class ReferenceProvider {
       return this.stepImplementationValuesAt(document, position);
     }
     if (isGaugeReferenceDocument(document)) {
-      return valuesForStep(stepTextAt(document, position));
+      return valuesForStep(stepTextAt(document, position) || conceptHeadingTextAt(document, position));
     }
     return [];
   }
