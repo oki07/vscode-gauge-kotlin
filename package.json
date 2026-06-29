@@ -41,6 +41,7 @@
     "workspaceContains:**/manifest.json",
     "onLanguage:gauge",
     "onLanguage:kotlin",
+    "onLanguage:java",
     "onDebugResolve:gauge"
   ],
   "main": "./src/extension.js",

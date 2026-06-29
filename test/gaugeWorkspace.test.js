@@ -723,6 +723,11 @@ test("GaugeWorkspace generates Java config for mixed-case Java plugins", async (
       projectRoot: "/workspace/gauge",
     },
   ]);
+  assert.deepEqual(entry.client.clientOptions.documentSelector, [
+    { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
+  ]);
   assert.equal(env.SHOULD_BUILD_PROJECT, "false");
   assert.equal(entry.client.serverOptions.options.env.SHOULD_BUILD_PROJECT, "false");
 });

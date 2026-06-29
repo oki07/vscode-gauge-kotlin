@@ -52,6 +52,7 @@ const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
+const IMPLEMENTATION_LANGUAGES = new Set([JAVA_LANGUAGE, KOTLIN_LANGUAGE]);
 const MARKDOWN_GAUGE_SPEC_SELECTOR = { language: "markdown", scheme: "file", pattern: "**/*.md" };
 const JAVA_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.java" };
 const KOTLIN_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.kt" };
@@ -215,9 +216,9 @@ function hasActiveGaugeDocument(vscode) {
   return Boolean(editor && editor.document && editor.document.languageId === "gauge");
 }
 
-function hasActiveKotlinGaugeDocument(vscode, projectFactory) {
+function hasActiveImplementationGaugeDocument(vscode, projectFactory) {
   const editor = vscode.window && vscode.window.activeTextEditor;
-  if (!editor || !editor.document || editor.document.languageId !== KOTLIN_LANGUAGE) {
+  if (!editor || !editor.document || !IMPLEMENTATION_LANGUAGES.has(editor.document.languageId)) {
     return false;
   }
   try {
@@ -243,7 +244,7 @@ function hasGaugeProject(vscode, projectFactory) {
 
 function shouldStartGaugeServices(vscode, projectFactory) {
   return hasActiveGaugeDocument(vscode)
-    || hasActiveKotlinGaugeDocument(vscode, projectFactory)
+    || hasActiveImplementationGaugeDocument(vscode, projectFactory)
     || hasGaugeProject(vscode, projectFactory);
 }
 

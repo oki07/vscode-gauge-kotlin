@@ -18,7 +18,7 @@ const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
 const JAVA_RUNNER = "java";
 const KOTLIN_RUNNER = "kotlin";
-const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER]);
+const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER, JAVA_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
 const RESTART_ACTION = "Restart Now";
@@ -503,6 +503,10 @@ class GaugeWorkspace {
     if (project.language() === KOTLIN_RUNNER) {
       documentSelector.push({ scheme: "file", language: KOTLIN_RUNNER, pattern: `${project.root()}/**/*` });
       documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.kt` });
+    }
+    if (project.language() === JAVA_RUNNER) {
+      documentSelector.push({ scheme: "file", language: JAVA_RUNNER, pattern: `${project.root()}/**/*` });
+      documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.java` });
     }
     return {
       documentSelector,
