@@ -18,6 +18,8 @@ const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
 const JAVA_RUNNER = "java";
 const KOTLIN_RUNNER = "kotlin";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER, JAVA_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
@@ -39,6 +41,22 @@ const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
 
 function getVscode(vscode) {
   return vscode || require("vscode");
+}
+
+function documentPath(document) {
+  const uri = document && document.uri;
+  return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function isActiveGaugeWorkspaceDocument(document) {
+  if (!document) {
+    return false;
+  }
+  if (ACTIVE_DOCUMENT_LANGUAGES.has(document.languageId)) {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function getLanguageClientModule(options) {
@@ -350,11 +368,11 @@ class GaugeWorkspace {
     if (
       !activeEditor
       || !activeEditor.document
-      || !ACTIVE_DOCUMENT_LANGUAGES.has(activeEditor.document.languageId)
+      || !isActiveGaugeWorkspaceDocument(activeEditor.document)
     ) {
       return undefined;
     }
-    return this.startServerForSpecFile(activeEditor.document.uri.fsPath);
+    return this.startServerForSpecFile(documentPath(activeEditor.document));
   }
 
   async startServerForSpecFile(file) {
@@ -499,6 +517,7 @@ class GaugeWorkspace {
   clientOptionsFor(project, folder) {
     const documentSelector = [
       { scheme: "file", language: "gauge", pattern: `${project.root()}/**/*` },
+      { scheme: "file", language: MARKDOWN_LANGUAGE, pattern: `${project.root()}/**/*.md` },
     ];
     if (project.language() === KOTLIN_RUNNER) {
       documentSelector.push({ scheme: "file", language: KOTLIN_RUNNER, pattern: `${project.root()}/**/*` });

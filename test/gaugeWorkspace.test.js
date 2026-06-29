@@ -267,6 +267,7 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   });
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
   ]);
@@ -725,6 +726,7 @@ test("GaugeWorkspace generates Java config for mixed-case Java plugins", async (
   ]);
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
   ]);
@@ -989,6 +991,50 @@ test("GaugeWorkspace starts a client for the active Gauge document", async () =>
   await workspace.ready();
 
   assert.equal(clients.get("/workspace/gauge/specs/login.spec").client.started, true);
+});
+
+test("GaugeWorkspace starts a client for the active Markdown Gauge specification", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "markdown",
+        uri: { fsPath: "/workspace/gauge/specs/login.md" },
+      },
+    },
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(
+      new Command("gauge"),
+      { plugins: [{ name: "kotlin", version: "0.9.0" }] },
+      new Command("mvn"),
+      new Command("gradle"),
+    ),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/login.md");
+  assert.equal(entry.client.started, true);
+  assert.deepEqual(entry.client.clientOptions.documentSelector, [
+    { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
+    { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
+  ]);
 });
 
 test("GaugeWorkspace starts a client for the active Kotlin implementation document", async () => {
