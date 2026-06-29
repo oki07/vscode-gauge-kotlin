@@ -385,6 +385,8 @@ test("activation registers Gauge reference providers", () => {
       { language: "gauge" },
       { language: "kotlin" },
       { scheme: "file", pattern: "**/*.kt" },
+      { language: "java" },
+      { scheme: "file", pattern: "**/*.java" },
     ],
   ]);
 });

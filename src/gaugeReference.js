@@ -11,8 +11,9 @@ const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
-  findStepFunctions,
+  findStepFunctionsForDocument,
   isKotlinDocument,
+  isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate, stepTextAt } = require("./stepDefinitionProvider");
 
@@ -340,6 +341,8 @@ class ReferenceProvider {
         { language: GAUGE_LANGUAGE },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },
+        { language: "java" },
+        { scheme: "file", pattern: "**/*.java" },
       ],
       this,
     );
@@ -411,8 +414,8 @@ class ReferenceProvider {
     if (!document || !position) {
       return [];
     }
-    if (isKotlinDocument(document)) {
-      return this.kotlinStepValuesAt(document, position);
+    if (isStepImplementationDocument(document)) {
+      return this.stepImplementationValuesAt(document, position);
     }
     if (document.languageId !== GAUGE_LANGUAGE) {
       return [];
@@ -441,8 +444,8 @@ class ReferenceProvider {
     if (!document || !position) {
       return [];
     }
-    if (isKotlinDocument(document)) {
-      return this.kotlinStepValuesAt(document, position);
+    if (isStepImplementationDocument(document)) {
+      return this.stepImplementationValuesAt(document, position);
     }
     if (document.languageId === GAUGE_LANGUAGE) {
       return valuesForStep(stepTextAt(document, position));
@@ -567,14 +570,14 @@ class ReferenceProvider {
   }
 
   async kotlinStepValueAt(document, position) {
-    const stepValues = await this.kotlinStepValuesAt(document, position);
+    const stepValues = await this.stepImplementationValuesAt(document, position);
     return stepValues[0];
   }
 
-  async kotlinStepValuesAt(document, position) {
+  async stepImplementationValuesAt(document, position) {
     if (
       !document
-      || !isKotlinDocument(document)
+      || !isStepImplementationDocument(document)
       || typeof document.getText !== "function"
       || !position
     ) {
@@ -583,11 +586,13 @@ class ReferenceProvider {
 
     const text = document.getText();
     const offset = offsetAt(text, position);
-    const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
-      document,
-      await this.kotlinDocuments(document),
-    );
-    for (const entry of findStepFunctions(text, externalConstants)) {
+    const externalConstants = isKotlinDocument(document)
+      ? this.diagnosticsProvider.collectWorkspaceConstants(
+        document,
+        await this.kotlinDocuments(document),
+      )
+      : undefined;
+    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset >= start && offset <= end) {

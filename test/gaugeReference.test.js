@@ -502,6 +502,73 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
   ]);
 });
 
+test("ReferenceProvider provides local references for Java Step aliases", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const activeDocument = {
+    languageId: "plaintext",
+    uri: {
+      fsPath: "/workspace/tests/Steps.java",
+      toString() {
+        return "file:///workspace/tests/Steps.java";
+      },
+    },
+    getText() {
+      return [
+        "package steps;",
+        "",
+        "import com.thoughtworks.gauge.Step;",
+        "",
+        "public class Steps {",
+        "  @Step(\"Say hello to <name>\")",
+        "  public void say(String name) {",
+        "  }",
+        "}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/example.spec",
+      toString() {
+        return "file:///workspace/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "## Scenario",
+        "* Say hello to \"alice\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 6, character: 16 },
+    workspace: {
+      textDocuments: [activeDocument, specDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(
+    activeDocument,
+    { line: 6, character: 16 },
+  );
+
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/specs/example.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 22 },
+      },
+    },
+  ]);
+});
+
 test("ReferenceProvider provides local references for every Kotlin Step alias at declarations", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
