@@ -1823,7 +1823,10 @@ test("activation registers Kotlin step definitions for Gauge documents", () => {
   });
 
   assert.equal(definitionProviders.length, 1);
-  assert.deepEqual(definitionProviders[0].selector, { language: "gauge" });
+  assert.deepEqual(definitionProviders[0].selector, [
+    { language: "gauge" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
+  ]);
   assert.equal(definitionProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(definitionProviders[0].provider.options.projectFactory, projectFactory);
   assert.equal(context.subscriptions.includes(definitionProviders[0].disposable), true);

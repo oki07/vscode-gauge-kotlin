@@ -473,7 +473,10 @@ function registerStepDefinitionProvider(context, vscode, options) {
     : (
       vscode.languages
       && typeof vscode.languages.registerDefinitionProvider === "function"
-        ? vscode.languages.registerDefinitionProvider({ language: "gauge" }, provider)
+        ? vscode.languages.registerDefinitionProvider(
+          [{ language: "gauge" }, MARKDOWN_GAUGE_SPEC_SELECTOR],
+          provider,
+        )
         : undefined
     );
   if (disposable) {

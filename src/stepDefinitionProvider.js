@@ -11,6 +11,8 @@ const {
 } = require("./stepDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 
 function getVscode(vscode) {
@@ -140,6 +142,17 @@ function isStepLine(line) {
   return line.startsWith("*");
 }
 
+function isGaugeStepSourceDocument(document) {
+  if (!document) {
+    return false;
+  }
+  if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
 function docStringStepLineAt(document, line) {
   for (let openLine = line; openLine >= 0; openLine -= 1) {
     if (!isDocStringFenceLine(documentLine(document, openLine))) {
@@ -162,7 +175,7 @@ function docStringStepLineAt(document, line) {
 }
 
 function stepTextCandidatesAt(document, position) {
-  if (!document || document.languageId !== GAUGE_LANGUAGE || !position) {
+  if (!isGaugeStepSourceDocument(document) || !position) {
     return [];
   }
   let lineNumber = position.line;
@@ -474,7 +487,10 @@ class GaugeStepDefinitionProvider {
       return { dispose() {} };
     }
     const disposable = this.vscode.languages.registerDefinitionProvider(
-      { language: GAUGE_LANGUAGE },
+      [
+        { language: GAUGE_LANGUAGE },
+        { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
+      ],
       this,
     );
     return disposable;
