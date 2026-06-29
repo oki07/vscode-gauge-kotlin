@@ -853,6 +853,48 @@ test("GaugeStepDefinitionProvider uses package wildcard top-level Kotlin constan
   );
 });
 
+test("GaugeStepDefinitionProvider uses imported Java constants in Kotlin Step annotations", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps;",
+    "",
+    "public final class JavaStepText {",
+    "  public static final String LOGIN = \"Log in as <user>\";",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java");
+  const kotlinDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.steps.JavaStepText",
+    "",
+    "class LoginSteps {",
+    "  @Step(JavaStepText.LOGIN)",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, constantsDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 7, character: 2 },
+  );
+});
+
 test("GaugeStepDefinitionProvider resolves grouped and accessor Kotlin Step annotations", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const cases = [

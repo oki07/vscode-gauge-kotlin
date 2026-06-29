@@ -4909,6 +4909,44 @@ test("GaugeStepDiagnosticsProvider uses unopened Java Step files for Gauge undef
   );
 });
 
+test("GaugeStepDiagnosticsProvider uses Java constants in Kotlin Step annotations", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const constantsDocument = createDocument([
+    "package fixtures.steps;",
+    "",
+    "public final class JavaStepText {",
+    "  public static final String PAYMENT = \"Pay with <method>\";",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java");
+  const stepDocument = createDocument([
+    "package fixtures.impl",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "import fixtures.steps.JavaStepText",
+    "",
+    "class PaymentSteps {",
+    "  @Step(JavaStepText.PAYMENT)",
+    "  fun pay(method: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/fixtures/impl/PaymentSteps.kt");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    constantsDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const opened = [];

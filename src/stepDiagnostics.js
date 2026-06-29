@@ -2779,15 +2779,33 @@ function applyKotlinNamedConstantImportEntry(
 
 function collectKotlinNamedConstantImportCandidates(constants, constantImports) {
   const candidates = new Map();
+  const constantNames = Array.from(constants.keys());
 
   for (const { exposedName, importedName, wildcardPrefix } of constantImports) {
-    if (wildcardPrefix !== undefined || !constants.has(importedName)) {
+    if (wildcardPrefix !== undefined) {
       continue;
     }
 
-    const importedNames = candidates.get(exposedName) || [];
-    importedNames.push(importedName);
-    candidates.set(exposedName, importedNames);
+    if (constants.has(importedName)) {
+      const importedNames = candidates.get(exposedName) || [];
+      importedNames.push(importedName);
+      candidates.set(exposedName, importedNames);
+    }
+
+    const importedPrefix = `${importedName}.`;
+    for (const constantName of constantNames) {
+      if (!constantName.startsWith(importedPrefix)) {
+        continue;
+      }
+      const suffix = constantName.slice(importedPrefix.length);
+      if (suffix.length === 0) {
+        continue;
+      }
+      const prefixedExposedName = `${exposedName}.${suffix}`;
+      const importedNames = candidates.get(prefixedExposedName) || [];
+      importedNames.push(constantName);
+      candidates.set(prefixedExposedName, importedNames);
+    }
   }
 
   return candidates;
@@ -2877,7 +2895,7 @@ function collectKotlinWildcardConstantImportCandidates(
       }
 
       const wildcardName = candidateName.slice(prefix.length);
-      if (wildcardName.length === 0 || wildcardName.includes(".")) {
+      if (wildcardName.length === 0) {
         continue;
       }
       if (
@@ -5720,6 +5738,172 @@ function readJavaStringLiteral(text, startIndex) {
   return undefined;
 }
 
+function normalizeJavaIdentifierPath(value) {
+  return value.trim().replace(/\s*\.\s*/g, ".");
+}
+
+function collectJavaPackageName(text, ignoredRanges = []) {
+  const packagePattern = /^\s*package\s+([^;]+);/gm;
+  let match = packagePattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = packagePattern.exec(text);
+      continue;
+    }
+    const packageName = normalizeJavaIdentifierPath(match[1]);
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(packageName)) {
+      return packageName;
+    }
+    match = packagePattern.exec(text);
+  }
+  return undefined;
+}
+
+function collectJavaTypeRanges(text, ignoredRanges = []) {
+  const ranges = [];
+  const typePattern = /\b(class|interface|enum|record)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
+  let match = typePattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = typePattern.exec(text);
+      continue;
+    }
+    const bodyStart = findObjectBodyStart(text, typePattern.lastIndex);
+    if (bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          kind: match[1],
+          name: match[2],
+          start: bodyStart + 1,
+        });
+        typePattern.lastIndex = bodyStart + 1;
+      }
+    }
+    match = typePattern.exec(text);
+  }
+  return ranges;
+}
+
+function enclosingJavaTypes(typeRanges, offset) {
+  return typeRanges
+    .filter((range) => offset >= range.start && offset < range.end)
+    .sort((left, right) => left.start - right.start);
+}
+
+function enclosingJavaTypePath(typeRanges, offset) {
+  return enclosingJavaTypes(typeRanges, offset).map((range) => range.name);
+}
+
+function javaStringLiteralTerm(text) {
+  const trimmed = text.trim();
+  const literal = readJavaStringLiteral(trimmed, 0);
+  if (literal && literal.end === trimmed.length) {
+    return literal.value;
+  }
+  return undefined;
+}
+
+function evaluateJavaStringExpression(expression, constants = new Map()) {
+  const trimmed = removeKotlinComments(expression).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith("(") && findMatchingParen(trimmed, 0) === trimmed.length - 1) {
+    return evaluateJavaStringExpression(trimmed.slice(1, -1), constants);
+  }
+
+  const literal = javaStringLiteralTerm(trimmed);
+  if (literal !== undefined) {
+    return literal;
+  }
+
+  const reference = normalizeJavaIdentifierPath(trimmed);
+  if (
+    /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(reference)
+    && constants.has(reference)
+  ) {
+    return constants.get(reference);
+  }
+
+  const parts = splitTopLevel(trimmed, "+").map((part) => part.trim());
+  if (parts.length > 1) {
+    const values = parts.map((part) => evaluateJavaStringExpression(part, constants));
+    if (values.every((value) => value !== undefined)) {
+      return values.join("");
+    }
+  }
+
+  return undefined;
+}
+
+function collectJavaStringConstants(text) {
+  const constants = new Map();
+  const constantTypes = new Map();
+  const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const packageName = collectJavaPackageName(text, ignoredRanges);
+  const typeRanges = collectJavaTypeRanges(text, ignoredRanges);
+  const declarations = [];
+  const pattern = /\b((?:(?:public|protected|private|static|final|transient|volatile)\s+)*)String\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/g;
+  let match = pattern.exec(text);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = pattern.exec(text);
+      continue;
+    }
+    const enclosingTypes = enclosingJavaTypes(typeRanges, match.index);
+    if (enclosingTypes.length === 0) {
+      match = pattern.exec(text);
+      continue;
+    }
+    const modifiers = new Set(match[1].trim().split(/\s+/).filter(Boolean));
+    const inInterface = enclosingTypes[enclosingTypes.length - 1].kind === "interface";
+    if (!inInterface && (!modifiers.has("static") || !modifiers.has("final"))) {
+      match = pattern.exec(text);
+      continue;
+    }
+
+    const name = match[2];
+    const expressionStart = pattern.lastIndex;
+    const expressionEnd = findConstExpressionEnd(text, expressionStart);
+    const typePath = enclosingJavaTypePath(typeRanges, match.index);
+    const names = new Set([name, `${typePath.join(".")}.${name}`]);
+    if (packageName !== undefined) {
+      names.add(`${packageName}.${typePath.join(".")}.${name}`);
+    }
+    declarations.push({
+      expression: text.slice(expressionStart, expressionEnd),
+      names: [...names],
+    });
+    pattern.lastIndex = expressionEnd;
+    match = pattern.exec(text);
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const { expression, names } of declarations) {
+      if (names.every((name) => constants.has(name))) {
+        continue;
+      }
+      const value = evaluateJavaStringExpression(expression, constants);
+      if (value === undefined) {
+        continue;
+      }
+      for (const name of names) {
+        if (!constants.has(name)) {
+          constants.set(name, value);
+          constantTypes.set(name, "String");
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return { constants, constantTypes };
+}
+
 function extractJavaStepAliases(annotationArgs) {
   const aliases = [];
   for (let index = 0; index < annotationArgs.length; index += 1) {
@@ -6003,7 +6187,9 @@ class GaugeStepDiagnosticsProvider {
     const activeDocumentPath = documentPath(document);
     const activeText = document.getText();
     const activeIgnoredRanges = collectIgnoredKotlinRanges(activeText);
-    const activePackageName = collectKotlinPackageName(activeText, activeIgnoredRanges);
+    const activePackageName = isJavaDocument(document)
+      ? collectJavaPackageName(activeText, activeIgnoredRanges)
+      : collectKotlinPackageName(activeText, activeIgnoredRanges);
     const addPackageClassifiers = (packageName, names) => {
       if (packageName === undefined || names.size === 0) {
         return;
@@ -6016,16 +6202,18 @@ class GaugeStepDiagnosticsProvider {
         target.add(name);
       }
     };
-    if (activePackageName !== undefined) {
+    if (activePackageName !== undefined && isKotlinDocument(document)) {
       addPackageClassifiers(activePackageName, localClassifierNames(activeText, activeIgnoredRanges));
     }
     for (const candidate of textDocuments) {
       const candidatePath = documentPath(candidate);
+      const candidateIsKotlin = isKotlinDocument(candidate);
+      const candidateIsJava = isJavaDocument(candidate);
       if (
         !candidate
         || candidate === document
         || candidatePath === activeDocumentPath
-        || !isKotlinDocument(candidate)
+        || (!candidateIsKotlin && !candidateIsJava)
         || typeof candidate.getText !== "function"
         || !this.isGaugeProjectDocument(candidate)
       ) {
@@ -6034,33 +6222,39 @@ class GaugeStepDiagnosticsProvider {
 
       const text = candidate.getText();
       const ignoredRanges = collectIgnoredKotlinRanges(text);
-      const packageName = collectKotlinPackageName(text, ignoredRanges);
+      const packageName = candidateIsJava
+        ? collectJavaPackageName(text, ignoredRanges)
+        : collectKotlinPackageName(text, ignoredRanges);
       if (packageName === undefined) {
         continue;
       }
 
-      const candidateClassifiers = localClassifierNames(text, ignoredRanges);
-      addPackageClassifiers(packageName, candidateClassifiers);
-      if (activePackageName === packageName) {
-        for (const name of candidateClassifiers) {
-          samePackageClassifiers.add(name);
+      if (candidateIsKotlin) {
+        const candidateClassifiers = localClassifierNames(text, ignoredRanges);
+        addPackageClassifiers(packageName, candidateClassifiers);
+        if (activePackageName === packageName) {
+          for (const name of candidateClassifiers) {
+            samePackageClassifiers.add(name);
+          }
+        }
+
+        stepAliasDocuments.push({ ignoredRanges, packageName, text });
+        for (const name of collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges)) {
+          if (ambiguousWorkspaceStepAliases.has(name)) {
+            continue;
+          }
+          if (stepAliasDeclarationNames.has(name)) {
+            ambiguousWorkspaceStepAliases.add(name);
+            stepAliases.delete(name);
+            continue;
+          }
+          stepAliasDeclarationNames.add(name);
         }
       }
 
-      stepAliasDocuments.push({ ignoredRanges, packageName, text });
-      for (const name of collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges)) {
-        if (ambiguousWorkspaceStepAliases.has(name)) {
-          continue;
-        }
-        if (stepAliasDeclarationNames.has(name)) {
-          ambiguousWorkspaceStepAliases.add(name);
-          stepAliases.delete(name);
-          continue;
-        }
-        stepAliasDeclarationNames.add(name);
-      }
-
-      const collected = collectStringConstants(text);
+      const collected = candidateIsJava
+        ? collectJavaStringConstants(text)
+        : collectStringConstants(text);
       const packagePrefix = `${packageName}.`;
       for (const [name, value] of collected.constants) {
         if (!name.startsWith(packagePrefix) || ambiguousWorkspaceConstants.has(name)) {
@@ -6243,7 +6437,6 @@ class GaugeStepDiagnosticsProvider {
 
   implementedStepTemplates(document, workspaceDocuments) {
     const implementationDocuments = this.stepImplementationDocuments(document, workspaceDocuments);
-    const kotlinDocuments = implementationDocuments.filter((candidate) => isKotlinDocument(candidate));
     const conceptDocuments = this.conceptDocuments(workspaceDocuments);
     if (implementationDocuments.length === 0 && conceptDocuments.length === 0) {
       if (isWorkspaceStepImplementationScanComplete(workspaceDocuments)) {
@@ -6257,7 +6450,7 @@ class GaugeStepDiagnosticsProvider {
       let externalConstants;
       if (isKotlinDocument(candidate)) {
         try {
-          externalConstants = this.collectWorkspaceConstants(candidate, kotlinDocuments);
+          externalConstants = this.collectWorkspaceConstants(candidate, implementationDocuments);
         } catch (_error) {
           externalConstants = undefined;
         }

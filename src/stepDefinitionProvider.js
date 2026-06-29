@@ -458,11 +458,10 @@ class GaugeStepDefinitionProvider {
       externalDocuments,
       projectDocuments,
     } = await this.stepImplementationDocumentGroups(document);
-    const projectKotlinDocuments = projectDocuments.filter((candidate) => isKotlinDocument(candidate));
     const projectDefinitions = this.definitionsForDocuments(
       wantedSteps,
       projectDocuments,
-      projectKotlinDocuments,
+      projectDocuments,
     );
     if (projectDefinitions.length > 0) {
       return projectDefinitions;
@@ -477,7 +476,7 @@ class GaugeStepDefinitionProvider {
     return this.definitionsForDocuments(
       wantedSteps,
       externalDocuments,
-      [...projectDocuments, ...externalDocuments].filter((candidate) => isKotlinDocument(candidate)),
+      [...projectDocuments, ...externalDocuments],
       { includeExternalWorkspace: true },
     );
   }
