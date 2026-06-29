@@ -36,8 +36,9 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(line, fsPath = "/workspace/specs/example.spec") {
+function createDocument(line, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
   return {
+    languageId,
     uri: { fsPath },
     lineAt() {
       return { text: line };
@@ -75,6 +76,25 @@ test("GaugeArgumentCodeActionProvider converts static arguments to dynamic param
   assert.deepEqual(actions[0].command.arguments[0], { fsPath: "/workspace/specs/example.spec" });
   assert.deepEqual({ ...actions[0].command.arguments[1].start }, { line: 0, character: 8 });
   assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 12 });
+});
+
+test("GaugeArgumentCodeActionProvider converts Markdown spec arguments", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeArgumentCodeActionProvider({ vscode });
+
+  const actions = provider.provideCodeActions(
+    createDocument('* Open "cart"', "/workspace/specs/checkout.md", "markdown"),
+    createRange(0, 8),
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Convert to Dynamic Parameter");
+  const replacement = actions[0].edit.replacements[0];
+  assert.deepEqual(replacement.uri, { fsPath: "/workspace/specs/checkout.md" });
+  assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 7 });
+  assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 13 });
+  assert.equal(replacement.newText, "<cart>");
 });
 
 test("GaugeArgumentCodeActionProvider converts escaped static arguments to dynamic parameters", () => {

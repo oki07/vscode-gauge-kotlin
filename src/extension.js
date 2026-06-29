@@ -328,7 +328,10 @@ function registerArgumentCodeActionProvider(context, vscode, options) {
     || GaugeArgumentCodeActionProvider;
   const provider = new ArgumentCodeActionProviderCtor({ vscode });
   const disposable = vscode.languages.registerCodeActionsProvider(
-    { language: "gauge" },
+    [
+      { language: "gauge" },
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+    ],
     provider,
   );
   if (disposable) {
@@ -520,7 +523,10 @@ function registerSemanticTokensProvider(context, vscode, options) {
   const legend = options.semanticTokensLegend || createLegend(vscode);
   const provider = new SemanticTokensProviderCtor({ vscode, legend });
   const disposable = vscode.languages.registerDocumentSemanticTokensProvider(
-    { language: "gauge" },
+    [
+      { language: "gauge" },
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+    ],
     provider,
     legend,
   );

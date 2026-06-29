@@ -1436,7 +1436,10 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   );
   assert.deepEqual(semanticTokenProviders, [
     {
-      selector: { language: "gauge" },
+      selector: [
+        { language: "gauge" },
+        { language: "markdown", scheme: "file", pattern: "**/*.md" },
+      ],
       provider: created.semanticTokensProvider,
       legend: { id: "legend" },
       disposable: semanticTokenProviders[0].disposable,
@@ -1473,7 +1476,10 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.renameProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.deepEqual(codeActionProviders, [
     {
-      selector: { language: "gauge" },
+      selector: [
+        { language: "gauge" },
+        { language: "markdown", scheme: "file", pattern: "**/*.md" },
+      ],
       provider: created.argumentCodeActionProvider,
       disposable: codeActionProviders[0].disposable,
     },
