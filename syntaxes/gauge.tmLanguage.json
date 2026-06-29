@@ -9,6 +9,9 @@
   ],
   "patterns": [
     {
+      "include": "#frontMatter"
+    },
+    {
       "include": "#comments"
     },
     {
@@ -46,6 +49,17 @@
     }
   ],
   "repository": {
+    "frontMatter": {
+      "name": "meta.frontmatter.markdown.gauge",
+      "contentName": "meta.embedded.block.frontmatter",
+      "begin": "\\A-{3}\\s*$",
+      "while": "^(?!(-{3}|\\.{3})\\s*$)",
+      "patterns": [
+        {
+          "include": "source.yaml"
+        }
+      ]
+    },
     "comments": {
       "name": "comment.line.double-slash.gauge",
       "match": "^\\s*//.*$"
@@ -289,6 +303,21 @@
           "include": "#markdownJavaFencedCode"
         },
         {
+          "include": "#markdownJavaScriptFencedCode"
+        },
+        {
+          "include": "#markdownJsonFencedCode"
+        },
+        {
+          "include": "#markdownPythonFencedCode"
+        },
+        {
+          "include": "#markdownShellFencedCode"
+        },
+        {
+          "include": "#markdownYamlFencedCode"
+        },
+        {
           "include": "#markdownFencedCode"
         },
         {
@@ -350,6 +379,86 @@
         }
       ]
     },
+    "markdownJavaScriptFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Aa][Vv][Aa][Ss][Cc][Rr][Ii][Pp][Tt]|[Jj][Ss])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "markdownJsonFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Ss][Oo][Nn])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.json",
+      "patterns": [
+        {
+          "include": "source.json"
+        }
+      ]
+    },
+    "markdownPythonFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Pp][Yy][Tt][Hh][Oo][Nn]|[Pp][Yy])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.python",
+      "patterns": [
+        {
+          "include": "source.python"
+        }
+      ]
+    },
+    "markdownShellFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Ss][Hh][Ee][Ll][Ll]|[Ss][Hh]|[Bb][Aa][Ss][Hh]|[Zz][Ss][Hh])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.shell",
+      "patterns": [
+        {
+          "include": "source.shell"
+        }
+      ]
+    },
+    "markdownYamlFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Yy][Aa][Mm][Ll]|[Yy][Mm][Ll])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.yaml",
+      "patterns": [
+        {
+          "include": "source.yaml"
+        }
+      ]
+    },
     "markdownFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
       "begin": "^((?:`{3,}|~{3,})(?:\\s*[A-Za-z0-9_-]+)?\\s*)$",
@@ -366,12 +475,24 @@
     },
     "markdownHtmlBlock": {
       "name": "text.html.markdown.gauge",
-      "match": "^\\s{0,3}</?[A-Za-z][^>]*>"
+      "begin": "^\\s{0,3}</?[A-Za-z][^>]*>",
+      "end": "$",
+      "patterns": [
+        {
+          "include": "text.html.basic"
+        }
+      ]
     },
     "markdownInline": {
       "patterns": [
         {
+          "include": "#markdownReferenceImage"
+        },
+        {
           "include": "#markdownImage"
+        },
+        {
+          "include": "#markdownReferenceLink"
         },
         {
           "include": "#markdownLink"
@@ -400,6 +521,14 @@
     "markdownImage": {
       "name": "meta.image.inline.markdown.gauge",
       "match": "!\\[[^\\]\\n]*\\]\\([^\\s)]+(?:\\s+\"[^\"]*\")?\\)"
+    },
+    "markdownReferenceLink": {
+      "name": "meta.link.reference.markdown.gauge",
+      "match": "\\[[^\\]\\n]+\\]\\s?\\[[^\\]\\n]*\\]"
+    },
+    "markdownReferenceImage": {
+      "name": "meta.image.reference.markdown.gauge",
+      "match": "!\\[[^\\]\\n]*\\]\\s?\\[[^\\]\\n]*\\]"
     },
     "markdownAutoLink": {
       "name": "meta.link.auto.markdown.gauge",

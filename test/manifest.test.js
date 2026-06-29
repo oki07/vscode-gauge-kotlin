@@ -47,6 +47,7 @@ function grammarRegex(source) {
     pattern = pattern.slice("(?i)".length);
     flags += "i";
   }
+  pattern = pattern.replaceAll("\\A", "^");
   return new RegExp(pattern, flags);
 }
 
@@ -592,6 +593,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
   assert.deepEqual(
     grammarJson.patterns.map((entry) => entry.include),
     [
+      "#frontMatter",
       "#comments",
       "#tags",
       "#tableKeyword",
@@ -608,6 +610,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
   );
   for (const key of [
     "comments",
+    "frontMatter",
     "tags",
     "tableKeyword",
     "specHeading",
@@ -628,11 +631,18 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
     "markdownImage",
     "markdownInline",
     "markdownJavaFencedCode",
+    "markdownJavaScriptFencedCode",
+    "markdownJsonFencedCode",
     "markdownKotlinFencedCode",
     "markdownLink",
     "markdownLinkDefinition",
     "markdownList",
+    "markdownPythonFencedCode",
+    "markdownReferenceImage",
+    "markdownReferenceLink",
     "markdownSeparator",
+    "markdownShellFencedCode",
+    "markdownYamlFencedCode",
     "fallbackComment",
   ]) {
     assert.ok(grammarJson.repository[key], `missing ${key}`);
@@ -702,10 +712,18 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   const markdownBlockquote = repositoryPattern(grammarJson, "markdownBlockquote");
   const markdownAutoLink = repositoryPattern(grammarJson, "markdownAutoLink");
   const markdownFence = repositoryPattern(grammarJson, "markdownFencedCode");
-  const markdownHtmlBlock = repositoryPattern(grammarJson, "markdownHtmlBlock");
+  const markdownHtmlBlock = grammarJson.repository.markdownHtmlBlock;
   const markdownImage = repositoryPattern(grammarJson, "markdownImage");
   const markdownJavaFence = grammarJson.repository.markdownJavaFencedCode;
+  const markdownJavaScriptFence = grammarJson.repository.markdownJavaScriptFencedCode;
+  const markdownJsonFence = grammarJson.repository.markdownJsonFencedCode;
   const markdownKotlinFence = grammarJson.repository.markdownKotlinFencedCode;
+  const markdownPythonFence = grammarJson.repository.markdownPythonFencedCode;
+  const markdownReferenceImage = repositoryPattern(grammarJson, "markdownReferenceImage");
+  const markdownReferenceLink = repositoryPattern(grammarJson, "markdownReferenceLink");
+  const markdownShellFence = grammarJson.repository.markdownShellFencedCode;
+  const markdownYamlFence = grammarJson.repository.markdownYamlFencedCode;
+  const frontMatter = grammarJson.repository.frontMatter;
   const markdownLinkDefinition = repositoryPattern(grammarJson, "markdownLinkDefinition");
   const markdownList = repositoryPattern(grammarJson, "markdownList");
   const markdownLink = repositoryPattern(grammarJson, "markdownLink");
@@ -716,6 +734,11 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
     "#markdownSeparator",
     "#markdownKotlinFencedCode",
     "#markdownJavaFencedCode",
+    "#markdownJavaScriptFencedCode",
+    "#markdownJsonFencedCode",
+    "#markdownPythonFencedCode",
+    "#markdownShellFencedCode",
+    "#markdownYamlFencedCode",
     "#markdownFencedCode",
     "#markdownLinkDefinition",
     "#markdownHtmlBlock",
@@ -731,6 +754,25 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assertPatternMatches(markdownKotlinFence, "```kts", "```kts");
   assert.equal(markdownKotlinFence.contentName, "meta.embedded.block.kotlin");
   assert.deepEqual(markdownKotlinFence.patterns, [{ include: "source.kotlin" }]);
+  assertPatternMatches(markdownJavaScriptFence, "```js", "```js");
+  assertPatternMatches(markdownJavaScriptFence, "~~~javascript", "~~~javascript");
+  assert.equal(markdownJavaScriptFence.contentName, "meta.embedded.block.javascript");
+  assert.deepEqual(markdownJavaScriptFence.patterns, [{ include: "source.js" }]);
+  assertPatternMatches(markdownJsonFence, "```json", "```json");
+  assert.equal(markdownJsonFence.contentName, "meta.embedded.block.json");
+  assert.deepEqual(markdownJsonFence.patterns, [{ include: "source.json" }]);
+  assertPatternMatches(markdownPythonFence, "```python", "```python");
+  assertPatternMatches(markdownPythonFence, "~~~py", "~~~py");
+  assert.equal(markdownPythonFence.contentName, "meta.embedded.block.python");
+  assert.deepEqual(markdownPythonFence.patterns, [{ include: "source.python" }]);
+  assertPatternMatches(markdownShellFence, "```bash", "```bash");
+  assertPatternMatches(markdownShellFence, "~~~zsh", "~~~zsh");
+  assert.equal(markdownShellFence.contentName, "meta.embedded.block.shell");
+  assert.deepEqual(markdownShellFence.patterns, [{ include: "source.shell" }]);
+  assertPatternMatches(markdownYamlFence, "```yaml", "```yaml");
+  assertPatternMatches(markdownYamlFence, "~~~yml", "~~~yml");
+  assert.equal(markdownYamlFence.contentName, "meta.embedded.block.yaml");
+  assert.deepEqual(markdownYamlFence.patterns, [{ include: "source.yaml" }]);
   assertPatternMatches(markdownFence, "```kotlin", "```kotlin");
   assertPatternMatches(markdownFence, "~~~", "~~~");
   assertPatternMatches(markdownList, "- markdown item", "- ");
@@ -739,10 +781,17 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assertPatternMatches(markdownLink, "See [Gauge](https://gauge.org)", "[Gauge](https://gauge.org)");
   assertPatternMatches(markdownLinkDefinition, "[docs]: https://docs.gauge.org", "[docs]: https://docs.gauge.org");
   assertPatternMatches(markdownImage, "![Gauge](images/logo.png)", "![Gauge](images/logo.png)");
+  assertPatternMatches(markdownReferenceLink, "See [Gauge][docs]", "[Gauge][docs]");
+  assertPatternMatches(markdownReferenceImage, "![Gauge][logo]", "![Gauge][logo]");
   assertPatternMatches(markdownAutoLink, "<https://gauge.org>", "<https://gauge.org>");
   assertPatternMatches(markdownAutoLink, "<help@example.com>", "<help@example.com>");
   assertPatternMatches(markdownSeparator, "---", "---");
   assertPatternMatches(markdownHtmlBlock, "<details>", "<details>");
+  assert.deepEqual(markdownHtmlBlock.patterns, [{ include: "text.html.basic" }]);
+  assertPatternMatches(frontMatter, "---", "---");
+  assert.equal(frontMatter.contentName, "meta.embedded.block.frontmatter");
+  assert.equal(frontMatter.while, "^(?!(-{3}|\\.{3})\\s*$)");
+  assert.deepEqual(frontMatter.patterns, [{ include: "source.yaml" }]);
 });
 
 test("extension package ignores development-only files while keeping runtime sources", () => {
