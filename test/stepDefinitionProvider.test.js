@@ -615,6 +615,55 @@ test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functi
   );
 });
 
+test("GaugeStepDefinitionProvider resolves unopened workspace Java Step functions", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const javaDocument = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  public void login(String user) {",
+    "  }",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/java/steps/LoginSteps.java");
+  const vscode = createFakeVscode([specDocument], {
+    async findFiles(pattern) {
+      if (pattern === "**/*.kt") {
+        return [];
+      }
+      if (pattern === "**/*.java") {
+        return [javaDocument.uri];
+      }
+      throw new Error(`Unexpected pattern ${pattern}`);
+    },
+    async openTextDocument(uri) {
+      assert.equal(uri, javaDocument.uri);
+      return javaDocument;
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, javaDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 14 },
+  );
+});
+
 test("GaugeStepDefinitionProvider keeps open Kotlin definitions when workspace search fails", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

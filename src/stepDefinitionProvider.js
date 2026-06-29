@@ -3,13 +3,15 @@
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
-  findStepFunctions,
+  findStepFunctionsForDocument,
   isConceptDocument,
   isKotlinDocument,
+  isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
+const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -232,7 +234,7 @@ class GaugeStepDefinitionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
-  async findWorkspaceKotlinDocuments() {
+  async findWorkspaceStepImplementationDocuments() {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -242,18 +244,20 @@ class GaugeStepDefinitionProvider {
     }
 
     const documents = [];
-    let uris;
-    try {
-      uris = await workspace.findFiles("**/*.kt");
-    } catch (error) {
-      return documents;
-    }
-    for (const uri of uris || []) {
+    for (const pattern of STEP_IMPLEMENTATION_WORKSPACE_PATTERNS) {
+      let uris;
       try {
-        const document = await workspace.openTextDocument(uri);
-        documents.push(document);
+        uris = await workspace.findFiles(pattern);
       } catch (error) {
-        // Ignore unreadable files so one stale workspace URI does not block navigation.
+        continue;
+      }
+      for (const uri of uris || []) {
+        try {
+          const document = await workspace.openTextDocument(uri);
+          documents.push(document);
+        } catch (error) {
+          // Ignore unreadable files so one stale workspace URI does not block navigation.
+        }
       }
     }
     return documents;
@@ -286,7 +290,7 @@ class GaugeStepDefinitionProvider {
     return documents;
   }
 
-  async kotlinDocumentGroups(sourceDocument) {
+  async stepImplementationDocumentGroups(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const projectDocuments = [];
     const externalDocuments = [];
@@ -298,7 +302,7 @@ class GaugeStepDefinitionProvider {
       if (sameDocument(candidate, sourceDocument)) {
         return;
       }
-      if (!isKotlinDocument(candidate)) {
+      if (!isStepImplementationDocument(candidate)) {
         return;
       }
       if (typeof candidate.getText !== "function") {
@@ -324,7 +328,7 @@ class GaugeStepDefinitionProvider {
     for (const candidate of openDocuments) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceKotlinDocuments()) {
+    for (const candidate of await this.findWorkspaceStepImplementationDocuments()) {
       addDocument(candidate);
     }
     return { externalDocuments, projectDocuments };
@@ -386,14 +390,16 @@ class GaugeStepDefinitionProvider {
     for (const candidate of documents) {
       const text = candidate.getText();
       let externalConstants;
-      try {
-        externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
-      } catch (error) {
-        // Never let workspace-constant collection abort navigation: plain
-        // @Step("literal") matching still works without resolved constants.
-        externalConstants = undefined;
+      if (isKotlinDocument(candidate)) {
+        try {
+          externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
+        } catch (error) {
+          // Never let workspace-constant collection abort navigation: plain
+          // @Step("literal") matching still works without resolved constants.
+          externalConstants = undefined;
+        }
       }
-      const stepFunctions = findStepFunctions(text, externalConstants);
+      const stepFunctions = findStepFunctionsForDocument(candidate, externalConstants);
       for (const entry of stepFunctions) {
         const normalizedAliases = entry.aliases.map((alias) => normalizeStepTemplate(alias));
         if (!normalizedAliases.some((alias) => wantedStepSet.has(alias))) {
@@ -438,11 +444,12 @@ class GaugeStepDefinitionProvider {
     const {
       externalDocuments,
       projectDocuments,
-    } = await this.kotlinDocumentGroups(document);
+    } = await this.stepImplementationDocumentGroups(document);
+    const projectKotlinDocuments = projectDocuments.filter((candidate) => isKotlinDocument(candidate));
     const projectDefinitions = this.definitionsForDocuments(
       wantedSteps,
       projectDocuments,
-      projectDocuments,
+      projectKotlinDocuments,
     );
     if (projectDefinitions.length > 0) {
       return projectDefinitions;
@@ -457,7 +464,7 @@ class GaugeStepDefinitionProvider {
     return this.definitionsForDocuments(
       wantedSteps,
       externalDocuments,
-      [...projectDocuments, ...externalDocuments],
+      [...projectDocuments, ...externalDocuments].filter((candidate) => isKotlinDocument(candidate)),
       { includeExternalWorkspace: true },
     );
   }
