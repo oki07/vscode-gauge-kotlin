@@ -689,6 +689,81 @@ test("execute in parallel runs the Gauge code lens target", async () => {
   ]);
 });
 
+test("bare execution commands run the active project without a spec target", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const debugProjects = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    env: { PATH: "/bin" },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || filename === "/workspace/build.gradle.kts";
+      },
+    },
+    debuggerFactory(options) {
+      debugProjects.push(options.projectRoot);
+      return {
+        registerStopDebugger() {},
+        async addDebugEnv(env) {
+          return { ...env, GAUGE_DEBUG_OPTS: "debug" };
+        },
+      };
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  assert.equal(await controller.handleCommand("gauge.execute"), true);
+  assert.equal(await controller.handleCommand("gauge.execute.inParallel"), true);
+  assert.equal(await controller.handleCommand("gauge.debug"), true);
+
+  assert.deepEqual(debugProjects, ["/workspace"]);
+  assert.deepEqual(calls, [
+    {
+      command: "gradle",
+      args: [
+        "clean",
+        "gauge",
+        "-PadditionalFlags=--hide-suggestion --simple-console",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/All specs",
+    },
+    {
+      command: "gradle",
+      args: [
+        "clean",
+        "gauge",
+        "-PinParallel=true",
+        "-PadditionalFlags=--hide-suggestion --simple-console",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/All specs",
+    },
+    {
+      command: "gradle",
+      args: [
+        "clean",
+        "gauge",
+        "-PadditionalFlags=--hide-suggestion --simple-console",
+      ],
+      cwd: "/workspace",
+      status: "/workspace/All specs",
+      env: {
+        PATH: "/bin",
+        GAUGE_DEBUG_OPTS: "debug",
+      },
+    },
+  ]);
+});
+
 test("execute target accepts command flags for Test UI machine-readable runs", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

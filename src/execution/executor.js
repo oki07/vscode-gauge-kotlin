@@ -1035,22 +1035,33 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
-  async function executeCodeLensTarget(spec, flags = {}) {
-    if (!spec) {
+  function getActiveEditorPath() {
+    const editor = vscode.window && vscode.window.activeTextEditor;
+    const document = editor && editor.document;
+    if (!document) {
       return undefined;
+    }
+    return document.fileName || (document.uri && document.uri.fsPath);
+  }
+
+  async function executeCodeLensTarget(spec, flags = {}) {
+    const target = spec || null;
+    const rootTarget = spec || getActiveEditorPath();
+    if (!rootTarget) {
+      return vscode.window.showErrorMessage("A Gauge project file should be open to run this command.");
     }
     const projectRoot = getProjectRootForSpec(
       vscode,
-      getScenarioSpecPath(spec),
+      getScenarioSpecPath(rootTarget),
       pathModule,
       projectFactory,
     );
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
-    return executeInProject(projectRoot, spec, {
+    return executeInProject(projectRoot, target, {
       ...flags,
-      status: spec,
+      status: spec || pathModule.join(projectRoot, "All specs"),
     });
   }
 
