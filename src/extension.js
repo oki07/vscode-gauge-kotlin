@@ -69,6 +69,10 @@ const PROVIDER_COMMANDS = new Set([
   "gauge.specexplorer.switchProject",
 ]);
 const GAUGE_WORD_PATTERN = /^(?:[*])([^*].*)$/g;
+const GAUGE_BRACKET_PAIRS = [
+  ["<", ">"],
+  ["\"", "\""],
+];
 const SEMANTIC_TOKEN_COLOR_KEYS = [
   "argument",
   "stepMarker",
@@ -289,6 +293,12 @@ function registerGaugeLanguageConfiguration(context, vscode) {
     return;
   }
   const disposable = vscode.languages.setLanguageConfiguration("gauge", {
+    comments: {
+      lineComment: "//",
+    },
+    brackets: GAUGE_BRACKET_PAIRS,
+    autoClosingPairs: GAUGE_BRACKET_PAIRS,
+    surroundingPairs: GAUGE_BRACKET_PAIRS,
     wordPattern: GAUGE_WORD_PATTERN,
   });
   if (disposable) {

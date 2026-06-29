@@ -327,6 +327,104 @@ test("activation registers the Gauge terminal command provider", () => {
   assert.equal(typeof terminalCommand.handler, "function");
 });
 
+test("activation preserves Gauge editor language configuration", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const { fakeVscode, languageConfigurations } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace" } },
+    ],
+  });
+
+  class DisposableOnly {
+    dispose() {}
+  }
+
+  class RegisteringDisposable extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  class FakeGaugeWorkspace extends DisposableOnly {
+    onDidChangeProjects() {
+      return { dispose() {} };
+    }
+  }
+
+  class FakeGaugeTestController extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+
+    registerProjectChangeListener() {
+      return { dispose() {} };
+    }
+
+    setExecutionController() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    showWelcomeNotification() {},
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+    },
+    GaugeClients: Map,
+    GaugeState: DisposableOnly,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    GaugeTestController: FakeGaugeTestController,
+    GaugeEnterHandler: RegisteringDisposable,
+    GaugeStepDiagnosticsProvider: RegisteringDisposable,
+    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
+    ProjectInitializer: DisposableOnly,
+    TerminalProvider: DisposableOnly,
+    ReferenceProvider: DisposableOnly,
+    ConfigProvider: DisposableOnly,
+    ExtractConceptCommandProvider: DisposableOnly,
+    GenerateStubCommandProvider: DisposableOnly,
+    SpecNodeProvider: DisposableOnly,
+    semanticTokensLegend: {},
+  });
+
+  assert.equal(languageConfigurations.length, 1);
+  assert.equal(languageConfigurations[0].language, "gauge");
+  assert.deepEqual(languageConfigurations[0].configuration.comments, {
+    lineComment: "//",
+  });
+  assert.deepEqual(languageConfigurations[0].configuration.brackets, [
+    ["<", ">"],
+    ["\"", "\""],
+  ]);
+  assert.deepEqual(languageConfigurations[0].configuration.autoClosingPairs, [
+    ["<", ">"],
+    ["\"", "\""],
+  ]);
+  assert.deepEqual(languageConfigurations[0].configuration.surroundingPairs, [
+    ["<", ">"],
+    ["\"", "\""],
+  ]);
+  assert.equal(languageConfigurations[0].configuration.wordPattern.source, "^(?:[*])([^*].*)$");
+  assert.equal(languageConfigurations[0].configuration.wordPattern.flags, "g");
+});
+
 test("activation passes the project factory to the Gauge enter handler", () => {
   const extension = require("../src/extension");
   const context = { subscriptions: [] };
