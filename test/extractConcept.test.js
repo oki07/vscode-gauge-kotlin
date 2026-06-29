@@ -2,11 +2,11 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
-function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec") {
+function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec", languageId = "gauge") {
   const lines = text.split("\n");
   return {
     fileName: fsPath,
-    languageId: "gauge",
+    languageId,
     lineCount: lines.length,
     uri: { fsPath },
     getText() {
@@ -125,10 +125,14 @@ function createFakeVscode(options = {}) {
   };
 }
 
-function createClients(requests, conceptFiles = ["/workspace/gauge/specs/concepts.cpt"]) {
+function createClients(
+  requests,
+  conceptFiles = ["/workspace/gauge/specs/concepts.cpt"],
+  expectedPath = "/workspace/gauge/specs/example.spec",
+) {
   return {
     get(fsPath) {
-      assert.equal(fsPath, "/workspace/gauge/specs/example.spec");
+      assert.equal(fsPath, expectedPath);
       return {
         client: {
           sendRequest(method, params, token) {
@@ -162,6 +166,63 @@ test("buildExtractSelection rejects indented step marker comments", () => {
   });
 
   assert.equal(extraction, undefined);
+});
+
+test("ExtractConceptCommandProvider extracts selected steps from Markdown Gauge specs", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login as <user>",
+    "* Buy item",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/example.md", "markdown");
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "# Existing\n* setup\n",
+    },
+    document,
+    inputResponses: ["Shared checkout <user>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 4, character: 10 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(
+    requests,
+    ["/workspace/gauge/specs/concepts.cpt"],
+    "/workspace/gauge/specs/example.md",
+  ), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  assert.ok(command);
+
+  await command.handler();
+
+  assert.deepEqual(errors, []);
+  assert.equal(requests.length, 1);
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/example.md",
+  );
+  assert.deepEqual({ ...sourceReplacement.range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...sourceReplacement.range.end }, { line: 5, character: 0 });
+  assert.equal(sourceReplacement.newText, "* Shared checkout <user>\n");
 });
 
 test("buildExtractSelection rejects selections that start inside inline tables", () => {

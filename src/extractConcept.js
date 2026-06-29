@@ -5,6 +5,8 @@ const nodePath = require("node:path");
 const EXTRACT_CONCEPT_COMMAND = "gauge.extract.concept";
 const GET_CONCEPT_FILES_REQUEST = "gauge/getImplFiles";
 const INVALID_SELECTION_ERROR = "Cannot Extract to Concept, selected text contains invalid elements";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const NEW_FILE = "New File";
 
 function getVscode(vscode) {
@@ -118,9 +120,20 @@ function selectedEndLine(document, selection) {
   return Math.min(endLine, document.lineCount - 1);
 }
 
+function hasExtractableGaugeSyntax(document) {
+  return document
+    && (
+      document.languageId === "gauge"
+      || (
+        document.languageId === MARKDOWN_LANGUAGE
+        && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
+      )
+    );
+}
+
 function buildExtractSelection(document, selection) {
   const normalized = normalizedSelection(selection);
-  if (!normalized || !document || document.languageId !== "gauge" || document.lineCount < 1) {
+  if (!normalized || !hasExtractableGaugeSyntax(document) || document.lineCount < 1) {
     return undefined;
   }
 
@@ -579,6 +592,23 @@ function normalizeConceptFilePath(file, projectRoot, pathModule) {
   return pathModule.join(projectRoot, projectRelative);
 }
 
+function documentPath(document) {
+  const uri = document && document.uri;
+  return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function canExtractConceptFromDocument(document, projectClient) {
+  if (!document) {
+    return false;
+  }
+  if (document.languageId === "gauge") {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
+    && Boolean(projectClient && projectClient.client && projectClient.project);
+}
+
 class ExtractConceptCommandProvider {
   constructor(clients, options = {}) {
     this.clients = clients;
@@ -605,7 +635,11 @@ class ExtractConceptCommandProvider {
   async extractConcept() {
     try {
       const editor = this.vscode.window && this.vscode.window.activeTextEditor;
-      if (!editor || !editor.document || editor.document.languageId !== "gauge") {
+      const activePath = documentPath(editor && editor.document);
+      const projectClient = activePath && this.clients && typeof this.clients.get === "function"
+        ? this.clients.get(activePath)
+        : undefined;
+      if (!editor || !canExtractConceptFromDocument(editor.document, projectClient)) {
         return this.showError("Cannot find Gauge document for extract to concept.");
       }
 
@@ -622,10 +656,6 @@ class ExtractConceptCommandProvider {
         return undefined;
       }
 
-      const activePath = editor.document.uri.fsPath;
-      const projectClient = this.clients && typeof this.clients.get === "function"
-        ? this.clients.get(activePath)
-        : undefined;
       if (!projectClient || !projectClient.client || !projectClient.project) {
         return this.showError("Cannot find Gauge project for extract to concept.");
       }
