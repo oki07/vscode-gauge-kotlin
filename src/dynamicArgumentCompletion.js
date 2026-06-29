@@ -7,6 +7,7 @@ const {
   isKotlinDocument,
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
+const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 const { isScenarioHashHeading } = require("./gaugeHeadings");
 
 const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
@@ -549,16 +550,27 @@ function lspCompletionItem(vscode, item, fallbackRange) {
 }
 
 function mergeCompletionItems(localItems, serverItems) {
-  const seen = new Set(localItems.map((item) => item.label));
+  const seen = new Set(localItems.map((item) => stepCompletionKey(item)));
   const merged = localItems.slice();
   for (const item of serverItems) {
-    if (!item || seen.has(item.label)) {
+    if (!item) {
       continue;
     }
-    seen.add(item.label);
+    const key = stepCompletionKey(item);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
     merged.push(item);
   }
   return merged;
+}
+
+function stepCompletionKey(item) {
+  const label = typeof item === "string"
+    ? item
+    : item && (item.filterText || item.label);
+  return label ? normalizeStepTemplate(String(label)) : "";
 }
 
 function resolveClientsMap(clientsMap) {
@@ -606,10 +618,11 @@ class GaugeDynamicArgumentCompletionProvider {
     const entries = [];
     const seen = new Set();
     const addEntry = (label, detail) => {
-      if (!label || seen.has(label)) {
+      const key = stepCompletionKey(label);
+      if (!label || seen.has(key)) {
         return;
       }
-      seen.add(label);
+      seen.add(key);
       entries.push({ detail, label });
     };
     for (const candidate of workspaceDocuments || []) {

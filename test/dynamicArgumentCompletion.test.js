@@ -889,6 +889,68 @@ test("GaugeDynamicArgumentCompletionProvider suggests Gauge LSP step completions
   assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 5 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider deduplicates normalized Gauge LSP step completions", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  specDocument.uri.toString = () => "file:///workspace/gauge/specs/example.spec";
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/PaymentSteps.kt", "kotlin");
+  const clientsMap = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/gauge/specs/example.spec");
+      return {
+        client: {
+          sendRequest() {
+            return Promise.resolve({
+              items: [
+                {
+                  detail: "Step",
+                  filterText: "Pay with <value>",
+                  insertTextFormat: 2,
+                  kind: "function",
+                  label: "Pay with <value>",
+                  textEdit: {
+                    newText: "Pay with \"${0:value}\"",
+                    range: {
+                      start: { line: 2, character: 2 },
+                      end: { line: 2, character: 5 },
+                    },
+                  },
+                },
+              ],
+            });
+          },
+        },
+      };
+    },
+  };
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap,
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Pay with <amount>"]);
+  assert.equal(items[0].detail, "step");
+  assert.equal(items[0].insertText.value, "Pay with \"${0:amount}\"");
+});
+
 test("GaugeDynamicArgumentCompletionProvider keeps filled static args in Kotlin Step alias snippets", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
