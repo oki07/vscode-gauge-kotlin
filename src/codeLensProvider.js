@@ -21,9 +21,8 @@ const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const REFERENCE_CONFIG = "reference";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
-const TEST_UI_RUN_FLAGS = {
+const RUN_CODELENS_FLAGS = {
   "hide-suggestion": true,
-  "machine-readable": true,
 };
 
 function getVscode(vscode) {
@@ -184,8 +183,8 @@ function titlesForMarker(marker) {
     : ["Run Specification", "Debug Specification"];
 }
 
-function testUiRunFlags() {
-  return { ...TEST_UI_RUN_FLAGS };
+function runCodeLensFlags() {
+  return { ...RUN_CODELENS_FLAGS };
 }
 
 function stepValueArgument(aliases) {
@@ -371,12 +370,12 @@ class GaugeCodeLensProvider {
       lenses.push(createCodeLens(this.vscode, range, {
         command: RUN_COMMAND,
         title: runTitle,
-        arguments: [target, testUiRunFlags()],
+        arguments: [target, runCodeLensFlags()],
       }));
       lenses.push(createCodeLens(this.vscode, range, {
         command: DEBUG_COMMAND,
         title: debugTitle,
-        arguments: [target, testUiRunFlags()],
+        arguments: [target, runCodeLensFlags()],
       }));
     }
     return lenses;
