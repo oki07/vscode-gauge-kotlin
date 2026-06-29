@@ -1468,9 +1468,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     () => debugProviders[0].provider.resolveDebugConfiguration(),
     /Starting with the Gauge debug configuration is not supported/,
   );
-  assert.deepEqual(contexts, [
-    { command: "setContext", key: "gauge:activated", value: true },
-  ]);
+  assert.deepEqual(contexts, []);
   assert.deepEqual(
     languageConfigurations.map((entry) => entry.language),
     ["gauge"],

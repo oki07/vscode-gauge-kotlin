@@ -278,13 +278,6 @@ function shouldStartGaugeServices(vscode, projectFactory) {
     || hasGaugeProject(vscode, projectFactory);
 }
 
-function setActivatedContext(vscode) {
-  if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
-    return vscode.commands.executeCommand("setContext", "gauge:activated", true);
-  }
-  return undefined;
-}
-
 function registerGaugeLanguageConfiguration(context, vscode) {
   if (!vscode.languages || typeof vscode.languages.setLanguageConfiguration !== "function") {
     return;
@@ -706,7 +699,6 @@ function startGaugeServices(context, vscode, options = {}) {
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
-  setActivatedContext(vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   registerGaugeEnterHandler(context, vscode, {
     ...options,
