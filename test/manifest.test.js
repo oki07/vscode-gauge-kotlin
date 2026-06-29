@@ -589,6 +589,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
     "markdownImage",
     "markdownInline",
     "markdownJavaFencedCode",
+    "markdownKotlinFencedCode",
     "markdownLink",
     "markdownLinkDefinition",
     "markdownList",
@@ -658,15 +659,32 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   const markdownHtmlBlock = repositoryPattern(grammarJson, "markdownHtmlBlock");
   const markdownImage = repositoryPattern(grammarJson, "markdownImage");
   const markdownJavaFence = grammarJson.repository.markdownJavaFencedCode;
+  const markdownKotlinFence = grammarJson.repository.markdownKotlinFencedCode;
   const markdownLinkDefinition = repositoryPattern(grammarJson, "markdownLinkDefinition");
   const markdownList = repositoryPattern(grammarJson, "markdownList");
   const markdownLink = repositoryPattern(grammarJson, "markdownLink");
   const markdownSeparator = repositoryPattern(grammarJson, "markdownSeparator");
 
+  assert.deepEqual(grammarJson.repository.markdown.patterns.map((entry) => entry.include), [
+    "#markdownBlockquote",
+    "#markdownSeparator",
+    "#markdownKotlinFencedCode",
+    "#markdownJavaFencedCode",
+    "#markdownFencedCode",
+    "#markdownLinkDefinition",
+    "#markdownHtmlBlock",
+    "#markdownList",
+    "#markdownInline",
+  ]);
   assertPatternMatches(markdownJavaFence, "```java", "```java");
   assertPatternMatches(markdownJavaFence, "~~~bsh", "~~~bsh");
   assert.equal(markdownJavaFence.contentName, "meta.embedded.block.java");
   assert.deepEqual(markdownJavaFence.patterns, [{ include: "source.java" }]);
+  assertPatternMatches(markdownKotlinFence, "```kotlin", "```kotlin");
+  assertPatternMatches(markdownKotlinFence, "~~~kt", "~~~kt");
+  assertPatternMatches(markdownKotlinFence, "```kts", "```kts");
+  assert.equal(markdownKotlinFence.contentName, "meta.embedded.block.kotlin");
+  assert.deepEqual(markdownKotlinFence.patterns, [{ include: "source.kotlin" }]);
   assertPatternMatches(markdownFence, "```kotlin", "```kotlin");
   assertPatternMatches(markdownFence, "~~~", "~~~");
   assertPatternMatches(markdownList, "- markdown item", "- ");

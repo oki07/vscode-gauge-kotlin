@@ -276,6 +276,9 @@
           "include": "#markdownSeparator"
         },
         {
+          "include": "#markdownKotlinFencedCode"
+        },
+        {
           "include": "#markdownJavaFencedCode"
         },
         {
@@ -307,6 +310,22 @@
     "markdownSeparator": {
       "name": "meta.separator.markdown.gauge",
       "match": "^\\s{0,3}(?:-{3,}|\\*{3,}|_{3,})\\s*$"
+    },
+    "markdownKotlinFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Kk][Oo][Tt][Ll][Ii][Nn]|[Kk][Tt][Ss]?)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.kotlin",
+      "patterns": [
+        {
+          "include": "source.kotlin"
+        }
+      ]
     },
     "markdownJavaFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
