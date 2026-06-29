@@ -11,6 +11,9 @@ const { isScenarioHashHeading } = require("./gaugeHeadings");
 
 const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
 const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
+const GAUGE_LANGUAGE = "gauge";
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -577,6 +580,24 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
+  isCompletionDocument(document) {
+    if (!document) {
+      return false;
+    }
+    if (document.languageId === GAUGE_LANGUAGE) {
+      return this.isGaugeProjectDocument(document);
+    }
+    if (
+      document.languageId !== MARKDOWN_LANGUAGE
+      || !MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
+      || !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return false;
+    }
+    return this.isGaugeProjectDocument(document);
+  }
+
   workspaceDocuments() {
     return this.diagnosticsProvider.workspaceDocuments();
   }
@@ -660,7 +681,7 @@ class GaugeDynamicArgumentCompletionProvider {
   }
 
   stepCompletionItems(document, position, targetRange, workspaceDocuments) {
-    if (!document || document.languageId !== "gauge" || !this.isGaugeProjectDocument(document)) {
+    if (!this.isCompletionDocument(document)) {
       return [];
     }
     const line = document.lineAt(position.line).text;
@@ -686,6 +707,9 @@ class GaugeDynamicArgumentCompletionProvider {
   }
 
   provideCompletionItems(document, position) {
+    if (!this.isCompletionDocument(document)) {
+      return [];
+    }
     const line = document.lineAt(position.line).text;
     const argumentRange = dynamicArgumentRange(line, position);
     const quotedArgumentRange = staticArgumentRange(line, position);

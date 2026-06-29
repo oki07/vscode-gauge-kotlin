@@ -352,7 +352,10 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
     vscode,
   });
   const disposable = vscode.languages.registerCompletionItemProvider(
-    { language: "gauge" },
+    [
+      { language: "gauge" },
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+    ],
     provider,
     "<",
     "\"",

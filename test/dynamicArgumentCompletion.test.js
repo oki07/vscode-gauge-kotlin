@@ -729,6 +729,37 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on ste
   assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 5 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Markdown Gauge specs", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Log",
+  ].join("\n"), "/workspace/gauge/specs/example.md", "markdown");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Log in as <user>"]);
+  assert.equal(items[0].detail, "step");
+  assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests plaintext Kotlin Step aliases on step lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -915,6 +946,28 @@ test("GaugeDynamicArgumentCompletionProvider ignores indented step lines for Kot
   });
 
   const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 7));
+
+  assert.deepEqual(items, []);
+});
+
+test("GaugeDynamicArgumentCompletionProvider ignores Markdown files outside Gauge projects", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+  const document = createDocument([
+    "# Notes",
+    "",
+    "|name|",
+    "|----|",
+    "|Alice|",
+    "",
+    "* Use <",
+  ].join("\n"), "/workspace/readme.md", "markdown");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(6, 7));
 
   assert.deepEqual(items, []);
 });
