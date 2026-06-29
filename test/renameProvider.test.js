@@ -520,6 +520,23 @@ test("GaugeRenameProvider rejects renames for aliased Kotlin Step implementation
   );
 });
 
+test("GaugeRenameProvider rejects implementation renames for aliased Kotlin Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\", \"Pay by <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  await assert.rejects(
+    () => provider.prepareRename(kotlinDocument, new vscode.Position(2, 10)),
+    /Refactoring for steps having aliases are not supported/,
+  );
+});
+
 test("GaugeRenameProvider ignores indented pseudo-step lines", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

@@ -442,7 +442,13 @@ class GaugeRenameProvider {
     for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
-      if (offset < start || offset > end || entry.aliases.length !== 1) {
+      if (offset < start || offset > end) {
+        continue;
+      }
+      if (entry.aliases.length > 1) {
+        throw new Error(ALIASED_STEP_RENAME_ERROR);
+      }
+      if (entry.aliases.length !== 1) {
         continue;
       }
       const alias = entry.aliases[0];
