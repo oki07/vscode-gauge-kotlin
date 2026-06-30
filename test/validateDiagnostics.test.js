@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-function createFakeVscode() {
+function createFakeVscode(options = {}) {
   return {
     Diagnostic: class Diagnostic {
       constructor(range, message, severity) {
@@ -24,6 +24,16 @@ function createFakeVscode() {
         this.start = start;
         this.end = end;
       }
+    },
+    workspace: {
+      getConfiguration(section) {
+        assert.equal(section, "gauge");
+        return {
+          get(key) {
+            return key === "home" ? options.gaugeHome : "";
+          },
+        };
+      },
     },
   };
 }
@@ -159,6 +169,64 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for markdown s
   assert.equal(spawnCalls.length, 1);
   assert.equal(diagnostics.length, 1);
   assert.equal(diagnostics[0].message, "ParseError line number: 3, Step is malformed");
+});
+
+test("GaugeValidateDiagnosticsProvider passes configured GAUGE_HOME to gauge validate", () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const spawnCalls = [];
+  const command = {
+    spawnSync(args, options) {
+      spawnCalls.push({ args, options });
+      return {
+        stdout: Buffer.from(""),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  const cli = {
+    gaugeCommand() {
+      return command;
+    },
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+  };
+  const projectFactory = {
+    getProjectByFilepath(filename) {
+      assert.equal(filename, "/workspace/gauge/specs/example.spec");
+      return project;
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli,
+    env: { PATH: "/bin" },
+    projectFactory,
+    vscode: createFakeVscode({ gaugeHome: "/custom/gauge-home" }),
+  });
+  const document = createDocument([
+    "# Example",
+    "",
+    "* passing",
+    "",
+  ].join("\n"));
+
+  provider.provideDiagnostics(document);
+
+  assert.deepEqual(spawnCalls, [
+    {
+      args: ["validate"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: {
+          PATH: "/bin",
+          GAUGE_HOME: "/custom/gauge-home",
+        },
+      },
+    },
+  ]);
 });
 
 test("GaugeValidateDiagnosticsProvider trims validation ranges to line content", () => {

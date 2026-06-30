@@ -1,6 +1,7 @@
 "use strict";
 
 const nodePath = require("node:path");
+const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const COLLECTION_NAME = "gauge-validate";
 const GAUGE_LANGUAGE = "gauge";
@@ -225,11 +226,12 @@ class GaugeValidateDiagnosticsProvider {
     }
 
     let result;
+    const baseEnv = envWithGaugeHome(this.env, { vscode: this.vscode });
     try {
       result = command.spawnSync([VALIDATE_ARG], {
         cwd: root,
         env: {
-          ...this.env,
+          ...baseEnv,
           ...projectEnvironment(project, this.cli),
         },
       });
