@@ -1,5 +1,6 @@
 "use strict";
 
+const nodePath = require("node:path");
 const { headingMarkers } = require("./codeLensProvider");
 
 const CONTROLLER_ID = "gauge";
@@ -289,6 +290,41 @@ function knownProjectRoots(clientsMap) {
     return [];
   }
   return [...clientsMap.keys()].filter(Boolean);
+}
+
+function targetFile(target) {
+  return String(target || "").replace(/:\d+$/, "");
+}
+
+function isInsideProjectRoot(projectRoot, target) {
+  const relative = nodePath.relative(projectRoot, targetFile(target));
+  return relative === "" || (!relative.startsWith("..") && !nodePath.isAbsolute(relative));
+}
+
+function projectRootForTarget(target, projectRoots) {
+  return projectRoots
+    .filter((projectRoot) => isInsideProjectRoot(projectRoot, target))
+    .sort((left, right) => right.length - left.length)[0];
+}
+
+function groupedTargetsByKnownProject(targets, clientsMap) {
+  const projectRoots = knownProjectRoots(clientsMap);
+  if (projectRoots.length === 0) {
+    return [{ targets }];
+  }
+  const groups = [];
+  const groupIndexes = new Map();
+  for (const target of targets) {
+    const projectRoot = projectRootForTarget(target, projectRoots) || "";
+    let groupIndex = groupIndexes.get(projectRoot);
+    if (groupIndex === undefined) {
+      groupIndex = groups.length;
+      groupIndexes.set(projectRoot, groupIndex);
+      groups.push({ projectRoot, targets: [] });
+    }
+    groups[groupIndex].targets.push(target);
+  }
+  return groups;
 }
 
 class GaugeTestController {
@@ -714,12 +750,14 @@ class GaugeTestController {
             );
           }
         } else if (canBatchSpecificationTargets(targets)) {
-          await this.executionController.handleCommand(
-            "gauge.execute.specification",
-            undefined,
-            targets,
-            flags,
-          );
+          for (const group of groupedTargetsByKnownProject(targets, this.clientsMap)) {
+            await this.executionController.handleCommand(
+              "gauge.execute.specification",
+              undefined,
+              group.targets,
+              flags,
+            );
+          }
         } else {
           for (const target of targets) {
             await this.executionController.handleCommand("gauge.execute", target, flags);
