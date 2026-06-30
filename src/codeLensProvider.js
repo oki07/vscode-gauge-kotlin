@@ -22,6 +22,7 @@ const REFERENCE_CONFIG = "reference";
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const RUN_CODELENS_FLAGS = {
   "hide-suggestion": true,
+  "machine-readable": true,
 };
 
 function getVscode(vscode) {
