@@ -2,7 +2,9 @@
 
 const { countStepParameters, UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
 
+const CREATE_CONCEPT_TITLE = "Create concept";
 const CREATE_STEP_IMPLEMENTATION_TITLE = "Create step implementation";
+const GENERATE_CONCEPT_STUB = "gauge.generate.concept";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const GAUGE_LANGUAGE = "gauge";
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
@@ -53,6 +55,74 @@ function isInlineTableLine(line) {
 
 function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
+}
+
+function isEscapedAt(text, index) {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
+}
+
+function findParameterStart(text, token, startIndex) {
+  let openIndex = text.indexOf(token, startIndex);
+  while (openIndex !== -1 && isEscapedAt(text, openIndex)) {
+    openIndex = text.indexOf(token, openIndex + 1);
+  }
+  return openIndex;
+}
+
+function nextStepParameter(text, startIndex) {
+  const dynamicStart = findParameterStart(text, "<", startIndex);
+  const staticStart = findParameterStart(text, "\"", startIndex);
+  if (dynamicStart === -1 && staticStart === -1) {
+    return undefined;
+  }
+  if (staticStart === -1 || (dynamicStart !== -1 && dynamicStart < staticStart)) {
+    return { openIndex: dynamicStart, closeToken: ">" };
+  }
+  return { openIndex: staticStart, closeToken: "\"" };
+}
+
+function parameterEnd(text, parameter) {
+  let closeIndex = text.indexOf(parameter.closeToken, parameter.openIndex + 1);
+  while (closeIndex !== -1 && isEscapedAt(text, closeIndex)) {
+    closeIndex = text.indexOf(parameter.closeToken, closeIndex + 1);
+  }
+  return closeIndex;
+}
+
+function conceptStepText(stepText) {
+  let result = "";
+  let index = 0;
+  let parameterIndex = 0;
+
+  while (index < stepText.length) {
+    const parameter = nextStepParameter(stepText, index);
+    if (!parameter) {
+      result += stepText.slice(index);
+      break;
+    }
+    const closeIndex = parameterEnd(stepText, parameter);
+    if (closeIndex === -1) {
+      result += stepText.slice(index);
+      break;
+    }
+
+    result += `${stepText.slice(index, parameter.openIndex)}<arg${parameterIndex}>`;
+    parameterIndex += 1;
+    index = closeIndex + 1;
+  }
+  return result.replace(/\*/g, "").trim();
+}
+
+function conceptInfo(stepText) {
+  return {
+    conceptName: `# ${conceptStepText(stepText)}\n* `,
+    conceptFile: "",
+    dir: "",
+  };
 }
 
 function gaugeStepAt(document, lineNumber) {
@@ -173,15 +243,28 @@ class GaugeStepCodeActionProvider {
         ),
       ],
     };
-    return [action];
+    const conceptAction = createCodeAction(this.vscode, CREATE_CONCEPT_TITLE);
+    conceptAction.diagnostics = diagnostics;
+    conceptAction.command = {
+      command: GENERATE_CONCEPT_STUB,
+      title: CREATE_CONCEPT_TITLE,
+      arguments: [
+        conceptInfo(step.text),
+      ],
+    };
+    return [action, conceptAction];
   }
 }
 
 module.exports = {
+  CREATE_CONCEPT_TITLE,
   CREATE_STEP_IMPLEMENTATION_TITLE,
+  GENERATE_CONCEPT_STUB,
   GENERATE_STEP_STUB,
   GaugeStepCodeActionProvider,
   UNDEFINED_STEP_MESSAGE,
+  conceptInfo,
+  conceptStepText,
   kotlinFunctionNames,
   stepImplementationName,
   stepStubCode,

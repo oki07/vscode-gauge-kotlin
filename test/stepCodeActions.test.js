@@ -59,7 +59,7 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
   assert.equal(actions[0].kind, "quickfix");
   assert.deepEqual(actions[0].diagnostics.map((diagnostic) => diagnostic.message), [
@@ -70,6 +70,47 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
       "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+});
+
+test("GaugeStepCodeActionProvider creates a concept quick fix for undefined steps", () => {
+  const {
+    CREATE_CONCEPT_TITLE,
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_CONCEPT_STUB,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].command.command, GENERATE_STEP_STUB);
+  assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
+  assert.deepEqual(actions[1].command, {
+    command: GENERATE_CONCEPT_STUB,
+    title: CREATE_CONCEPT_TITLE,
+    arguments: [
+      {
+        conceptName: "# Pay with <arg0>\n* ",
+        conceptFile: "",
+        dir: "",
+      },
     ],
   });
 });
@@ -96,7 +137,7 @@ test("GaugeStepCodeActionProvider escapes Kotlin string templates in step stubs"
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.deepEqual(actions[0].command, {
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
@@ -130,7 +171,7 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.deepEqual(actions[0].command, {
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
@@ -165,7 +206,7 @@ test("GaugeStepCodeActionProvider includes docstring arguments in step stubs", (
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.deepEqual(actions[0].command, {
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
@@ -220,7 +261,7 @@ test("GaugeStepCodeActionProvider creates fixes for markdown Gauge specs", () =>
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.deepEqual(actions[0].command, {
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
@@ -271,7 +312,7 @@ test("GaugeStepCodeActionProvider avoids duplicate Kotlin step stub names", () =
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.deepEqual(actions[0].command, {
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,

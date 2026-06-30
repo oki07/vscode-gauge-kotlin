@@ -294,9 +294,11 @@ test("GaugeArgumentCodeActionProvider exposes create step implementation fixes",
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range: diagnosticRange }],
   });
 
-  assert.equal(actions.length, 1);
+  assert.equal(actions.length, 2);
   assert.equal(actions[0].title, "Create step implementation");
   assert.equal(actions[0].command.command, "gauge.generate.step");
+  assert.equal(actions[1].title, "Create concept");
+  assert.equal(actions[1].command.command, "gauge.generate.concept");
 });
 
 test("selectArgumentRange selects the converted Gauge argument body", () => {
