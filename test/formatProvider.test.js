@@ -275,6 +275,46 @@ test("GaugeFormatProvider ignores Markdown files outside Gauge projects", async 
   assert.deepEqual(spawned, []);
 });
 
+test("GaugeFormatProvider ignores Markdown when the resolved root is not a Gauge project", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const errors = [];
+  const spawned = [];
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawn(args, options) {
+            spawned.push({ args, options });
+            throw new Error("should not spawn");
+          },
+        };
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.md");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    vscode: createFakeVscode({ errors }),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument(
+    "# Notes\n",
+    "/workspace/notes/example.md",
+    "markdown",
+  ));
+
+  assert.deepEqual(edits, []);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spawned, []);
+});
+
 test("GaugeFormatProvider passes configured Gauge home and project environment", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
 

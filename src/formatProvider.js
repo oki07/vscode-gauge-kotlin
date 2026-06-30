@@ -202,17 +202,34 @@ class GaugeFormatProvider {
     );
   }
 
+  isGaugeProjectRoot(root) {
+    if (!root) {
+      return false;
+    }
+    if (
+      this.projectFactory
+      && typeof this.projectFactory.isGaugeProject === "function"
+    ) {
+      return this.projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  }
+
   projectForFile(filePath) {
     if (!this.projectFactory) {
       return undefined;
     }
     if (typeof this.projectFactory.getProjectByFilepath === "function") {
-      return this.projectFactory.getProjectByFilepath(filePath);
+      const project = this.projectFactory.getProjectByFilepath(filePath);
+      return this.isGaugeProjectRoot(projectRoot(project)) ? project : undefined;
     }
     if (typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return undefined;
     }
     const root = this.projectFactory.getGaugeRootFromFilePath(filePath);
+    if (!this.isGaugeProjectRoot(root)) {
+      return undefined;
+    }
     if (typeof this.projectFactory.get === "function") {
       return this.projectFactory.get(root);
     }
