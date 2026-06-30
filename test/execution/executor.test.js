@@ -1341,6 +1341,48 @@ test("failed execution uses the provided project root without prompting", async 
   ]);
 });
 
+test("repeat execution uses the provided project root without prompting", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, quickPicks } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/shop" } },
+      { uri: { fsPath: "/workspace/admin" } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.repeat", {
+    projectRoot: "/workspace/admin",
+  }, {
+    "hide-suggestion": true,
+    "machine-readable": true,
+  });
+
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: ["run", "--repeat", "--hide-suggestion", "--machine-readable"],
+      cwd: "/workspace/admin",
+      status: "/workspace/admin/previous run",
+    },
+  ]);
+});
+
 test("spec explorer run all executes the active project without prompting", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
