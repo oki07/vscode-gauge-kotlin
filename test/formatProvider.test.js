@@ -184,6 +184,62 @@ test("GaugeFormatProvider formats Markdown language Gauge specs inside Gauge pro
   ]);
 });
 
+test("GaugeFormatProvider formats concept files by extension", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const spawned = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawned.push({ args, options });
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          process.nextTick(() => child.emit("exit", 0));
+          return child;
+        },
+      };
+    },
+  };
+  const provider = new GaugeFormatProvider({
+    cli,
+    fileSystem: {
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/concepts.cpt");
+        return Buffer.from("# Login flow\n\n* formatted\n");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/concepts.cpt");
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument(
+    [
+      "# Login flow",
+      "* unformatted",
+      "",
+    ].join("\n"),
+    "/workspace/gauge/specs/concepts.cpt",
+    "plaintext",
+  ));
+
+  assert.deepEqual(spawned, [
+    {
+      args: ["format", "/workspace/gauge/specs/concepts.cpt"],
+      options: { cwd: "/workspace/gauge" },
+    },
+  ]);
+  assert.deepEqual(edits.map((edit) => edit.newText), [
+    "# Login flow\n\n* formatted\n",
+  ]);
+});
+
 test("GaugeFormatProvider ignores Markdown files outside Gauge projects", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
 

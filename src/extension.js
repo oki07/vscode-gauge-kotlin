@@ -57,6 +57,7 @@ const IMPLEMENTATION_LANGUAGES = new Set([JAVA_LANGUAGE, KOTLIN_LANGUAGE]);
 const MARKDOWN_GAUGE_SPEC_SELECTOR = { language: "markdown", scheme: "file", pattern: "**/*.md" };
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+const CONCEPT_FILE_SELECTOR = { scheme: "file", pattern: "**/*.cpt" };
 const JAVA_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.java" };
 const KOTLIN_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.kt" };
 const PROVIDER_COMMANDS = new Set([
@@ -441,6 +442,7 @@ function registerFormatProvider(context, vscode, options) {
     [
       { language: "gauge" },
       MARKDOWN_GAUGE_SPEC_SELECTOR,
+      CONCEPT_FILE_SELECTOR,
     ],
     provider,
   );

@@ -1984,6 +1984,7 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
   assert.deepEqual(formattingProviders[0].selector, [
     { language: "gauge" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
+    { scheme: "file", pattern: "**/*.cpt" },
   ]);
   assert.equal(formattingProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(formattingProviders[0].provider.options.cli, cli);

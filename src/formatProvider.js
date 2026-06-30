@@ -6,6 +6,7 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 const FORMAT_COMMAND = "format";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const CONCEPT_FILE_EXTENSION = ".cpt";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 
 function getVscode(vscode) {
@@ -23,6 +24,10 @@ function isMarkdownSpecDocument(document, filePath) {
     && document.languageId === MARKDOWN_LANGUAGE
     && filePath.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
   );
+}
+
+function isConceptDocument(filePath) {
+  return filePath.toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
 }
 
 function collectOutput(stream, chunks) {
@@ -191,6 +196,7 @@ class GaugeFormatProvider {
       && filePath
       && (
         document.languageId === GAUGE_LANGUAGE
+        || isConceptDocument(filePath)
         || isMarkdownSpecDocument(document, filePath)
       ),
     );
