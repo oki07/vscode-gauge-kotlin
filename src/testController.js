@@ -306,21 +306,30 @@ function isInsideProjectRoot(projectRoot, target) {
   return relative === "" || (!relative.startsWith("..") && !nodePath.isAbsolute(relative));
 }
 
-function projectRootForTarget(target, projectRoots) {
-  return projectRoots
-    .filter((projectRoot) => isInsideProjectRoot(projectRoot, target))
-    .sort((left, right) => right.length - left.length)[0];
+function projectRootFromFactory(projectFactory, target) {
+  if (!projectFactory || typeof projectFactory.getGaugeRootFromFilePath !== "function") {
+    return undefined;
+  }
+  try {
+    return projectFactory.getGaugeRootFromFilePath(targetFile(target));
+  } catch (_) {
+    return undefined;
+  }
 }
 
-function groupedTargetsByKnownProject(targets, clientsMap) {
+function projectRootForTarget(target, projectRoots, projectFactory) {
+  return projectRoots
+    .filter((projectRoot) => isInsideProjectRoot(projectRoot, target))
+    .sort((left, right) => right.length - left.length)[0]
+    || projectRootFromFactory(projectFactory, target);
+}
+
+function groupedTargetsByKnownProject(targets, clientsMap, projectFactory) {
   const projectRoots = knownProjectRoots(clientsMap);
-  if (projectRoots.length === 0) {
-    return [{ targets }];
-  }
   const groups = [];
   const groupIndexes = new Map();
   for (const target of targets) {
-    const projectRoot = projectRootForTarget(target, projectRoots) || "";
+    const projectRoot = projectRootForTarget(target, projectRoots, projectFactory) || "";
     let groupIndex = groupIndexes.get(projectRoot);
     if (groupIndex === undefined) {
       groupIndex = groups.length;
@@ -332,9 +341,9 @@ function groupedTargetsByKnownProject(targets, clientsMap) {
   return groups;
 }
 
-function projectRootsForTargets(targets, clientsMap) {
+function projectRootsForTargets(targets, clientsMap, projectFactory) {
   const seen = new Set();
-  return groupedTargetsByKnownProject(targets, clientsMap)
+  return groupedTargetsByKnownProject(targets, clientsMap, projectFactory)
     .map((group) => group.projectRoot)
     .filter((projectRoot) => {
       if (!projectRoot || seen.has(projectRoot)) {
@@ -781,7 +790,7 @@ class GaugeTestController {
             );
           }
         } else if (canBatchSpecificationTargets(targets)) {
-          for (const group of groupedTargetsByKnownProject(targets, this.clientsMap)) {
+          for (const group of groupedTargetsByKnownProject(targets, this.clientsMap, this.projectFactory)) {
             if (cancellationRequested(token)) {
               break;
             }
@@ -835,7 +844,7 @@ class GaugeTestController {
         const targets = executionTargetsForRequest(this.controller, request);
         const projectRoots = targets === undefined
           ? []
-          : projectRootsForTargets(targets, this.clientsMap);
+          : projectRootsForTargets(targets, this.clientsMap, this.projectFactory);
         if (projectRoots.length > 0) {
           for (const projectRoot of projectRoots) {
             if (cancellationRequested(token)) {

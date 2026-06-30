@@ -782,6 +782,61 @@ test("GaugeTestController splits included specification batches by project root"
   ]);
 });
 
+test("GaugeTestController uses projectFactory roots to split specification batches", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/checkout/")) {
+          return "/workspace/checkout";
+        }
+        if (filename.startsWith("/workspace/accounts/")) {
+          return "/workspace/accounts";
+        }
+        return undefined;
+      },
+    },
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const checkout = controller.createTestItem(
+    "/workspace/checkout/specs/checkout.spec",
+    "Checkout",
+    { fsPath: "/workspace/checkout/specs/checkout.spec" },
+  );
+  const accounts = controller.createTestItem(
+    "/workspace/accounts/specs/accounts.spec",
+    "Accounts",
+    { fsPath: "/workspace/accounts/specs/accounts.spec" },
+  );
+
+  await gaugeTests.run({ include: [checkout, accounts] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.specification", undefined, [
+      "/workspace/checkout/specs/checkout.spec",
+    ], {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.execute.specification", undefined, [
+      "/workspace/accounts/specs/accounts.spec",
+    ], {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
 test("GaugeTestController expands included specifications when scenarios are excluded", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();
