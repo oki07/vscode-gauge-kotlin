@@ -12,6 +12,8 @@ const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept to preview.";
 const SPECTACLE_PLUGIN_NAME = "spectacle";
+const INSTALL_SPECTACLE_ACTION = "Install Spectacle";
+const MISSING_SPECTACLE_MESSAGE = "Missing plugin: Spectacle. To install, run `gauge install spectacle` or click below.";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -20,6 +22,13 @@ function getVscode(vscode) {
 function showError(vscode, message, ...actions) {
   if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
     return vscode.window.showErrorMessage(message, ...actions);
+  }
+  return undefined;
+}
+
+function showInformation(vscode, message, ...actions) {
+  if (vscode.window && typeof vscode.window.showInformationMessage === "function") {
+    return vscode.window.showInformationMessage(message, ...actions);
   }
   return undefined;
 }
@@ -140,6 +149,22 @@ function isSpectacleInstalled(cli) {
   return cli.isPluginInstalled(SPECTACLE_PLUGIN_NAME);
 }
 
+async function promptToInstallSpectacle(vscode, cli) {
+  const selection = await showInformation(
+    vscode,
+    MISSING_SPECTACLE_MESSAGE,
+    INSTALL_SPECTACLE_ACTION,
+  );
+  if (
+    selection === INSTALL_SPECTACLE_ACTION
+    && cli
+    && typeof cli.installGaugeRunner === "function"
+  ) {
+    return cli.installGaugeRunner(SPECTACLE_PLUGIN_NAME);
+  }
+  return undefined;
+}
+
 function previewFailureMessage(pathModule, filePath, result) {
   const base = `Unable to create html file for ${pathModule.basename(filePath)}`;
   const reason = failureReason(result);
@@ -251,6 +276,7 @@ async function previewGaugeDocument(options = {}) {
   const docsDir = pathModule.join(previewRoot, "docs");
   if (!isSpectacleInstalled(cli)) {
     try {
+      await promptToInstallSpectacle(vscode, cli);
       ensureDirectory(fileSystem, previewRoot);
       ensureDirectory(fileSystem, docsDir);
       return writeFallbackPreview(vscode, fileSystem, pathModule, projectRoot, docsDir, filePath);
