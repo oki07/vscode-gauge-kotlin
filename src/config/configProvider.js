@@ -31,6 +31,14 @@ class ConfigProvider {
     return this.vscode.workspace.getConfiguration();
   }
 
+  inspectConfiguration(key) {
+    const configuration = this.configuration();
+    if (!configuration || typeof configuration.inspect !== "function") {
+      return {};
+    }
+    return configuration.inspect(key) || {};
+  }
+
   configurationTarget() {
     return this.vscode.ConfigurationTarget || {
       Global: 1,
@@ -52,7 +60,7 @@ class ConfigProvider {
 
   applyDefaultSettings() {
     const configuration = this.configuration();
-    const inspected = configuration.inspect(FILE_ASSOCIATIONS_KEY) || {};
+    const inspected = this.inspectConfiguration(FILE_ASSOCIATIONS_KEY);
     const associations = {
       ...(inspected.workspaceValue || {}),
       "*.spec": "gauge",
@@ -66,13 +74,13 @@ class ConfigProvider {
   }
 
   verifyRecommendedConfig() {
-    const recommendedOption = this.configuration().inspect(RECOMMENDED_SETTINGS_OPTION) || {};
+    const recommendedOption = this.inspectConfiguration(RECOMMENDED_SETTINGS_OPTION);
     if (recommendedOption.globalValue === IGNORE) {
       return true;
     }
 
     for (const key of Object.keys(this.recommendedSettings)) {
-      const inspected = this.configuration().inspect(key) || {};
+      const inspected = this.inspectConfiguration(key);
       if (!inspected.workspaceFolderValue
         && !inspected.workspaceValue
         && inspected.globalValue !== this.recommendedSettings[key]) {
@@ -87,7 +95,7 @@ class ConfigProvider {
       return undefined;
     }
 
-    const recommendedOption = this.configuration().inspect(RECOMMENDED_SETTINGS_OPTION) || {};
+    const recommendedOption = this.inspectConfiguration(RECOMMENDED_SETTINGS_OPTION);
     if (recommendedOption.globalValue === APPLY_AND_RELOAD) {
       return this.applyAndReload(
         { ...this.recommendedSettings },
@@ -99,12 +107,16 @@ class ConfigProvider {
       return undefined;
     }
 
-    return this.vscode.window.showInformationMessage(
+    const selection = this.vscode.window.showInformationMessage(
       "Gauge recommends some settings for best experience with Visual Studio Code.",
       APPLY_AND_RELOAD,
       REMIND_ME_LATER,
       IGNORE,
-    ).then((option) => this.applySelectedOption(option));
+    );
+    if (selection && typeof selection.then === "function") {
+      return selection.then((option) => this.applySelectedOption(option));
+    }
+    return undefined;
   }
 
   applySelectedOption(option) {
@@ -123,7 +135,7 @@ class ConfigProvider {
       );
     }
     if (option === REMIND_ME_LATER) {
-      const recommendedOption = this.configuration().inspect(RECOMMENDED_SETTINGS_OPTION) || {};
+      const recommendedOption = this.inspectConfiguration(RECOMMENDED_SETTINGS_OPTION);
       if (recommendedOption.globalValue !== REMIND_ME_LATER) {
         return this.applyAndReload(
           { [RECOMMENDED_SETTINGS_OPTION]: REMIND_ME_LATER },

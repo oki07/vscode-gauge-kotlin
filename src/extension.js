@@ -766,7 +766,6 @@ function startGaugeServices(context, vscode, options = {}) {
   const state = createGaugeState(context, options);
   const GaugeWorkspaceCtor = options.GaugeWorkspace || GaugeWorkspace;
   const ReferenceProviderCtor = options.ReferenceProvider || ReferenceProvider;
-  const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
   const ExtractConceptCommandProviderCtor = options.ExtractConceptCommandProvider
     || ExtractConceptCommandProvider;
   const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
@@ -788,7 +787,6 @@ function startGaugeServices(context, vscode, options = {}) {
     projectFactory,
     vscode,
   });
-  const configProvider = new ConfigProviderCtor(context, { vscode });
   const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
     pathModule: options.pathModule,
     vscode,
@@ -803,7 +801,6 @@ function startGaugeServices(context, vscode, options = {}) {
   context.subscriptions.push(
     gaugeWorkspace,
     referenceProvider,
-    configProvider,
     extractConceptProvider,
     generateStubProvider,
     specNodeProvider,
@@ -862,6 +859,8 @@ function activate(context, vscodeApi, options = {}) {
   if (testControllerDisposable) {
     context.subscriptions.push(testControllerDisposable);
   }
+  const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
+  context.subscriptions.push(new ConfigProviderCtor(context, { vscode }));
   const ProjectInitializerCtor = options.ProjectInitializer || ProjectInitializer;
   context.subscriptions.push(new ProjectInitializerCtor({
     cli: options.cli,

@@ -295,6 +295,7 @@ test("activation registers core contributed Gauge commands", () => {
   assert.deepEqual(
     registeredCommands.map((entry) => entry.command),
     [
+      "gauge.config.saveRecommended",
       "gauge.createProject",
       ...INTERNAL_PROVIDER_COMMANDS,
       ...INTERNAL_EXECUTION_COMMANDS,
@@ -305,7 +306,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 2
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 3
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -561,9 +562,20 @@ test("activation defers CLI and debug provider creation when Gauge services are 
   const extension = require("../src/extension");
 
   let createCliCalls = 0;
+  let configProvider;
   let projectInitializerOptions;
   const context = { subscriptions: [] };
   const { debugProviders, fakeVscode } = createFakeVscode();
+
+  class FakeConfigProvider {
+    constructor(receivedContext, options) {
+      this.context = receivedContext;
+      this.options = options;
+      configProvider = this;
+    }
+
+    dispose() {}
+  }
 
   class FakeProjectInitializer {
     constructor(options) {
@@ -588,10 +600,14 @@ test("activation defers CLI and debug provider creation when Gauge services are 
     createExecutionController() {
       return { handleCommand() {} };
     },
+    ConfigProvider: FakeConfigProvider,
     ProjectInitializer: FakeProjectInitializer,
   });
 
   assert.equal(createCliCalls, 0);
+  assert.equal(configProvider.context, context);
+  assert.equal(configProvider.options.vscode, fakeVscode);
+  assert.equal(context.subscriptions.includes(configProvider), true);
   assert.equal(typeof projectInitializerOptions.createCli, "function");
   assert.deepEqual(debugProviders, []);
 
