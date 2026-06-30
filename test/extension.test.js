@@ -19,6 +19,7 @@ const INTERNAL_EXECUTION_COMMANDS = [
 ];
 const INTERNAL_PROVIDER_COMMANDS = [
   "gauge.executeIn.terminal",
+  "gauge.selectArgumentRange",
 ];
 
 function createFakeVscode(overrides = {}) {
@@ -306,7 +307,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 3
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 4
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -2272,9 +2273,14 @@ test("activation starts Gauge workspace services for an active Java implementati
 test("activation shows install guidance when Gauge is unavailable", () => {
   const extension = require("../src/extension");
 
+  const created = {};
   const installCalls = [];
   const context = { subscriptions: [] };
-  const { fakeVscode } = createFakeVscode({
+  const {
+    codeActionProviders,
+    fakeVscode,
+    registeredCommands,
+  } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
   const cli = {
@@ -2286,6 +2292,13 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     },
   };
 
+  class FakeArgumentCodeActionProvider {
+    constructor(options) {
+      this.options = options;
+      created.argumentCodeActionProvider = this;
+    }
+  }
+
   extension.activate(context, fakeVscode, {
     createCli() {
       return cli;
@@ -2296,6 +2309,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     ProjectInitializer: class FakeProjectInitializer {
       dispose() {}
     },
+    GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
     projectFactory: {
       isGaugeProject() {
         return true;
@@ -2307,6 +2321,19 @@ test("activation shows install guidance when Gauge is unavailable", () => {
   });
 
   assert.deepEqual(installCalls, [fakeVscode]);
+  assert.deepEqual(codeActionProviders, [
+    {
+      selector: [
+        { language: "gauge" },
+        { language: "markdown", scheme: "file", pattern: "**/*.md" },
+      ],
+      provider: created.argumentCodeActionProvider,
+      disposable: codeActionProviders[0].disposable,
+    },
+  ]);
+  assert.equal(created.argumentCodeActionProvider.options.vscode, fakeVscode);
+  assert.ok(registeredCommands.some((entry) => entry.command === "gauge.selectArgumentRange"));
+  assert.equal(context.subscriptions.includes(codeActionProviders[0].disposable), true);
 });
 
 test("activation shows unsupported Gauge version guidance when Gauge is too old", () => {
