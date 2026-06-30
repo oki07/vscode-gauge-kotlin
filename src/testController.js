@@ -327,6 +327,19 @@ function groupedTargetsByKnownProject(targets, clientsMap) {
   return groups;
 }
 
+function projectRootsForTargets(targets, clientsMap) {
+  const seen = new Set();
+  return groupedTargetsByKnownProject(targets, clientsMap)
+    .map((group) => group.projectRoot)
+    .filter((projectRoot) => {
+      if (!projectRoot || seen.has(projectRoot)) {
+        return false;
+      }
+      seen.add(projectRoot);
+      return true;
+    });
+}
+
 class GaugeTestController {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -790,11 +803,26 @@ class GaugeTestController {
     const cancellation = this.registerCancellation(token);
     try {
       if (this.executionController && typeof this.executionController.handleCommand === "function") {
-        await this.executionController.handleCommand(
-          "gauge.execute.failed",
-          undefined,
-          testUiRunFlags(),
-        );
+        const flags = testUiRunFlags();
+        const targets = executionTargetsForRequest(this.controller, request);
+        const projectRoots = targets === undefined
+          ? []
+          : projectRootsForTargets(targets, this.clientsMap);
+        if (projectRoots.length > 0) {
+          for (const projectRoot of projectRoots) {
+            await this.executionController.handleCommand(
+              "gauge.execute.failed",
+              { projectRoot },
+              flags,
+            );
+          }
+        } else {
+          await this.executionController.handleCommand(
+            "gauge.execute.failed",
+            undefined,
+            flags,
+          );
+        }
       }
     } finally {
       if (cancellation && typeof cancellation.dispose === "function") {

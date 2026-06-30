@@ -884,15 +884,19 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
-  async function executeFailed(flags = {}) {
-    const projectRoot = await selectProjectRoot(vscode, pathModule, projectFactory);
-    if (!projectRoot) {
+  async function executeFailed(projectRoot, flags = {}) {
+    const selectedProjectRoot = projectRoot || (await selectProjectRoot(
+      vscode,
+      pathModule,
+      projectFactory,
+    ));
+    if (!selectedProjectRoot) {
       return undefined;
     }
-    return executeInProject(projectRoot, null, {
+    return executeInProject(selectedProjectRoot, null, {
       ...flags,
       failed: true,
-      status: pathModule.join(projectRoot, "failed scenarios"),
+      status: pathModule.join(selectedProjectRoot, "failed scenarios"),
     });
   }
 
@@ -1089,7 +1093,7 @@ function createGaugeExecutionController(options = {}) {
       case "gauge.specexplorer.runAllActiveProjectSpecs":
         return executeAllSpecifications(argument && argument.projectRoot, flags);
       case "gauge.execute.failed":
-        return executeFailed(flags);
+        return executeFailed(argument && argument.projectRoot, flags);
       case "gauge.execute.repeat":
         return repeatExecution(flags);
       case "gauge.execute.scenario":

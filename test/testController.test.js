@@ -1015,6 +1015,43 @@ test("GaugeTestController registers a failed run profile for Test UI reruns", as
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
+test("GaugeTestController scopes failed Test UI reruns to included project roots", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const clientsMap = new Map([
+    ["/workspace/checkout", { client: {} }],
+  ]);
+  const gaugeTests = new GaugeTestController({
+    clientsMap,
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const failedProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Run Failed");
+  const spec = controller.createTestItem(
+    "/workspace/checkout/specs/checkout.spec",
+    "Checkout",
+    { fsPath: "/workspace/checkout/specs/checkout.spec" },
+  );
+
+  await failedProfile[3]({ include: [spec] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.failed", { projectRoot: "/workspace/checkout" }, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
 test("GaugeTestController debug profile debugs all specs when no tests are included", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, vscode } = createFakeVscode();
