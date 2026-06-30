@@ -5,7 +5,7 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const COLLECTION_NAME = "gauge-validate";
 const GAUGE_LANGUAGE = "gauge";
-const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
+const SPEC_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const WORKSPACE_GAUGE_FILE_GLOB = "**/*.{spec,md,cpt}";
 const VALIDATE_ARG = "validate";
 const VALIDATE_DIAGNOSTIC_CODE = "gauge.validate";
