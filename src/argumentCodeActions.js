@@ -57,6 +57,33 @@ function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
 }
 
+function isMarkdownDocument(document) {
+  return document
+    && document.languageId === "markdown"
+    && documentPath(document).toLowerCase().endsWith(".md");
+}
+
+function isGaugeProjectDocument(document, projectFactory) {
+  if (!isMarkdownDocument(document) || !projectFactory) {
+    return true;
+  }
+  if (typeof projectFactory.getGaugeRootFromFilePath !== "function") {
+    return true;
+  }
+  try {
+    const root = projectFactory.getGaugeRootFromFilePath(documentPath(document));
+    if (!root) {
+      return false;
+    }
+    if (typeof projectFactory.isGaugeProject === "function") {
+      return projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function isConceptHeadingLine(line, document) {
   return isConceptDocument(document) && line.startsWith("#");
 }
@@ -144,11 +171,18 @@ function findArgumentAt(line, range) {
 class GaugeArgumentCodeActionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.projectFactory = options.projectFactory;
     this.stepCodeActionProvider = options.stepCodeActionProvider
-      || new GaugeStepCodeActionProvider({ vscode: this.vscode });
+      || new GaugeStepCodeActionProvider({
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
   }
 
   provideCodeActions(document, range, context) {
+    if (!isGaugeProjectDocument(document, this.projectFactory)) {
+      return [];
+    }
     const stepActions = this.stepCodeActionProvider.provideCodeActions(document, range, context);
     const line = document.lineAt(range.start.line).text;
     if (!isGaugeStepOrConceptHeading(line, document)) {

@@ -1618,6 +1618,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.workspace.options.state, created.state);
   assert.equal(created.state.context, context);
   assert.equal(created.workspace.options.vscode, fakeVscode);
+  assert.equal(created.argumentCodeActionProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
   assert.equal(created.referenceProvider.options.projectFactory, created.workspace.options.projectFactory);
@@ -2299,6 +2300,12 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     }
   }
 
+  const projectFactory = {
+    isGaugeProject() {
+      return true;
+    },
+  };
+
   extension.activate(context, fakeVscode, {
     createCli() {
       return cli;
@@ -2310,11 +2317,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
       dispose() {}
     },
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
-    projectFactory: {
-      isGaugeProject() {
-        return true;
-      },
-    },
+    projectFactory,
     showInstallGaugeNotification(vscode) {
       installCalls.push(vscode);
     },
@@ -2332,6 +2335,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     },
   ]);
   assert.equal(created.argumentCodeActionProvider.options.vscode, fakeVscode);
+  assert.equal(created.argumentCodeActionProvider.options.projectFactory, projectFactory);
   assert.ok(registeredCommands.some((entry) => entry.command === "gauge.selectArgumentRange"));
   assert.equal(context.subscriptions.includes(codeActionProviders[0].disposable), true);
 });

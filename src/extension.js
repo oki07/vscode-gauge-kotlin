@@ -338,7 +338,10 @@ function registerArgumentCodeActionProvider(context, vscode, options) {
   }
   const ArgumentCodeActionProviderCtor = options.GaugeArgumentCodeActionProvider
     || GaugeArgumentCodeActionProvider;
-  const provider = new ArgumentCodeActionProviderCtor({ vscode });
+  const provider = new ArgumentCodeActionProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+  });
   const disposable = vscode.languages.registerCodeActionsProvider(
     [
       { language: "gauge" },

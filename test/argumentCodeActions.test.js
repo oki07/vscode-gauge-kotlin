@@ -97,6 +97,26 @@ test("GaugeArgumentCodeActionProvider converts Markdown spec arguments", () => {
   assert.equal(replacement.newText, "<cart>");
 });
 
+test("GaugeArgumentCodeActionProvider ignores Markdown files outside Gauge projects", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({
+    vscode: createFakeVscode(),
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/README.md");
+        throw new Error("not a Gauge project");
+      },
+    },
+  });
+
+  const actions = provider.provideCodeActions(
+    createDocument('* Document "cart"', "/workspace/README.md", "markdown"),
+    createRange(0, 12),
+  );
+
+  assert.deepEqual(actions, []);
+});
+
 test("GaugeArgumentCodeActionProvider converts escaped static arguments to dynamic parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();
