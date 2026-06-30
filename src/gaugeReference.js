@@ -169,6 +169,214 @@ function uniqueValues(values) {
   return result;
 }
 
+function normalizeIdentifier(value) {
+  const text = String(value || "").trim();
+  return text.startsWith("`") && text.endsWith("`") ? text.slice(1, -1) : text;
+}
+
+function findMatchingBrace(text, openIndex) {
+  let depth = 0;
+  for (let index = openIndex; index < text.length; index += 1) {
+    const nextCommentEnd = commentEnd(text, index);
+    if (nextCommentEnd !== undefined) {
+      index = nextCommentEnd - 1;
+      continue;
+    }
+    if (text[index] === "\"") {
+      const literalEnd = stringLiteralEnd(text, index, text.length);
+      if (literalEnd !== -1) {
+        index = literalEnd - 1;
+        continue;
+      }
+    }
+    if (text[index] === "{") {
+      depth += 1;
+    } else if (text[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function splitTopLevel(value, separator) {
+  const parts = [];
+  let start = 0;
+  let angleDepth = 0;
+  let parenDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (char === separator && angleDepth === 0 && parenDepth === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function stripTopLevelGenericAndCall(value) {
+  let result = "";
+  let angleDepth = 0;
+  let parenDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "<") {
+      angleDepth += 1;
+      continue;
+    }
+    if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+      continue;
+    }
+    if (char === "(" && angleDepth === 0) {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+      continue;
+    }
+    if (angleDepth === 0 && parenDepth === 0) {
+      result += char;
+    }
+  }
+  return result.trim();
+}
+
+function simpleTypeName(value) {
+  const stripped = stripTopLevelGenericAndCall(String(value || "").split(/\s+by\s+/u)[0]);
+  const match = /(?:`[^`\r\n]+`|[A-Za-z_$][A-Za-z0-9_$]*)\s*$/u.exec(stripped);
+  return match ? normalizeIdentifier(match[0]) : undefined;
+}
+
+function topLevelColon(value) {
+  let angleDepth = 0;
+  let parenDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (char === ":" && angleDepth === 0 && parenDepth === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function kotlinSuperTypes(header) {
+  const colonIndex = topLevelColon(header);
+  if (colonIndex === -1) {
+    return [];
+  }
+  return splitTopLevel(header.slice(colonIndex + 1), ",")
+    .map(simpleTypeName)
+    .filter(Boolean);
+}
+
+function javaTypeList(header, keyword) {
+  const match = new RegExp(`\\b${keyword}\\b([\\s\\S]*?)(?=\\b(?:extends|implements|permits)\\b|$)`).exec(header);
+  if (!match) {
+    return [];
+  }
+  return splitTopLevel(match[1], ",")
+    .map(simpleTypeName)
+    .filter(Boolean);
+}
+
+function javaSuperTypes(header) {
+  return [
+    ...javaTypeList(header, "extends"),
+    ...javaTypeList(header, "implements"),
+  ];
+}
+
+function collectTypeDeclarations(document) {
+  if (!document || typeof document.getText !== "function") {
+    return [];
+  }
+  const text = document.getText();
+  const file = documentPath(document) || "";
+  const isJava = file.toLowerCase().endsWith(".java") || document.languageId === "java";
+  const pattern = isJava
+    ? /\b(?:class|interface|enum|record)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g
+    : /\b(?:class|interface|object)\s+(`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*)/gu;
+  const declarations = [];
+  let match = pattern.exec(text);
+  while (match) {
+    const bodyStart = text.indexOf("{", pattern.lastIndex);
+    if (bodyStart === -1) {
+      match = pattern.exec(text);
+      continue;
+    }
+    const bodyEnd = findMatchingBrace(text, bodyStart);
+    if (bodyEnd === -1) {
+      match = pattern.exec(text);
+      continue;
+    }
+    const header = text.slice(pattern.lastIndex, bodyStart);
+    declarations.push({
+      document,
+      end: bodyEnd,
+      name: normalizeIdentifier(match[1]),
+      start: match.index,
+      superTypes: isJava ? javaSuperTypes(header) : kotlinSuperTypes(header),
+    });
+    pattern.lastIndex = bodyStart + 1;
+    match = pattern.exec(text);
+  }
+  return declarations;
+}
+
+function containingType(declarations, offset) {
+  return declarations
+    .filter((declaration) => offset >= declaration.start && offset <= declaration.end)
+    .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0];
+}
+
+function kotlinFunctionName(header) {
+  let name = String(header || "").replace(/^fun\b/u, "").trim();
+  if (name.startsWith("<")) {
+    const closeIndex = name.indexOf(">");
+    if (closeIndex !== -1) {
+      name = name.slice(closeIndex + 1).trim();
+    }
+  }
+  const dotIndex = name.lastIndexOf(".");
+  if (dotIndex !== -1) {
+    name = name.slice(dotIndex + 1).trim();
+  }
+  const match = /^(?:`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*)/u.exec(name);
+  return match ? normalizeIdentifier(match[0]) : undefined;
+}
+
+function stepEntryMethodName(document, text, entry) {
+  const file = documentPath(document) || "";
+  const isJava = file.toLowerCase().endsWith(".java") || document.languageId === "java";
+  const header = text.slice(entry.declarationStart, Math.max(entry.declarationStart, entry.parameterStart - 1));
+  if (isJava) {
+    const match = /(?:[A-Za-z_$][A-Za-z0-9_$]*)\s*$/u.exec(header.trim());
+    return match ? normalizeIdentifier(match[0]) : undefined;
+  }
+  return kotlinFunctionName(header);
+}
+
 function valuesForStep(stepValue) {
   return Array.isArray(stepValue) ? uniqueValues(stepValue) : uniqueValues([stepValue]);
 }
@@ -664,20 +872,86 @@ class ReferenceProvider {
 
     const text = document.getText();
     const offset = offsetAt(text, position);
+    const implementationDocuments = await this.stepImplementationDocuments(document);
     const externalConstants = isStepImplementationDocument(document)
       ? this.diagnosticsProvider.collectWorkspaceConstants(
         document,
-        await this.stepImplementationDocuments(document),
+        implementationDocuments,
       )
       : undefined;
     for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset >= start && offset <= end) {
-        return uniqueValues(aliasValuesAtOffset(entry, text, offset));
+        return uniqueValues([
+          ...aliasValuesAtOffset(entry, text, offset),
+          ...this.superStepAliasesForEntry(document, entry, [document, ...implementationDocuments]),
+        ]);
       }
     }
     return [];
+  }
+
+  superStepAliasesForEntry(document, entry, implementationDocuments) {
+    const text = document.getText();
+    const methodName = stepEntryMethodName(document, text, entry);
+    if (!methodName) {
+      return [];
+    }
+    const declarationsByDocument = new Map();
+    const typesByName = new Map();
+    for (const candidate of implementationDocuments || []) {
+      if (!candidate || typeof candidate.getText !== "function") {
+        continue;
+      }
+      const declarations = collectTypeDeclarations(candidate);
+      declarationsByDocument.set(candidate, declarations);
+      for (const declaration of declarations) {
+        if (!typesByName.has(declaration.name)) {
+          typesByName.set(declaration.name, []);
+        }
+        typesByName.get(declaration.name).push(declaration);
+      }
+    }
+
+    const currentType = containingType(
+      declarationsByDocument.get(document) || [],
+      entry.declarationStart,
+    );
+    if (!currentType || currentType.superTypes.length === 0) {
+      return [];
+    }
+
+    const aliases = [];
+    const queued = currentType.superTypes.slice();
+    const visited = new Set();
+    while (queued.length > 0) {
+      const typeName = queued.shift();
+      if (!typeName || visited.has(typeName)) {
+        continue;
+      }
+      visited.add(typeName);
+      for (const superType of typesByName.get(typeName) || []) {
+        queued.push(...superType.superTypes);
+        const superText = superType.document.getText();
+        const externalConstants = isStepImplementationDocument(superType.document)
+          ? this.diagnosticsProvider.collectWorkspaceConstants(
+            superType.document,
+            implementationDocuments.filter((candidate) => candidate !== superType.document),
+          )
+          : undefined;
+        for (const superEntry of findStepFunctionsForDocument(superType.document, externalConstants)) {
+          if (
+            containingType(declarationsByDocument.get(superType.document) || [], superEntry.declarationStart) !== superType
+            || stepEntryMethodName(superType.document, superText, superEntry) !== methodName
+          ) {
+            continue;
+          }
+          aliases.push(...superEntry.aliases);
+        }
+      }
+    }
+    return aliases;
   }
 
   async gaugeDocuments(sourceRoot) {
