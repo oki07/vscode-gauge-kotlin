@@ -20,7 +20,11 @@ class ReportEventProcessor extends BaseProcessor {
     if (!this.canProcess(lineText)) {
       return;
     }
-    this.workspace.setReportPath(lineText.replace(this.eventPrefix, ""));
+    const event = parseMachineReadableEvent(lineText);
+    const text = event && String(event.type || "").toLowerCase() === "out"
+      ? event.message
+      : lineText;
+    this.workspace.setReportPath(String(text || "").replace(this.eventPrefix, ""));
   }
 }
 

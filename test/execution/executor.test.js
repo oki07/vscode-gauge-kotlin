@@ -1745,6 +1745,31 @@ test("executor routes Gauge machine-readable output to the execution event sink"
   ]);
 });
 
+test("executor stores html report paths from machine-readable output", () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner() {
+      return Promise.resolve(true);
+    },
+  });
+
+  controller.processOutputLine(`${JSON.stringify({
+    type: "out",
+    message: "Successfully generated html-report to => /workspace/reports/html-report/index.html",
+  })}\n`);
+
+  assert.equal(controller.getReportPath(), "/workspace/reports/html-report/index.html");
+});
+
 test("machine-readable Test UI run emits synthetic failed event when Gauge exits before test events", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const events = [];
