@@ -319,6 +319,60 @@ test("ExtractConceptCommandProvider extracts selected Gauge steps into an existi
   );
 });
 
+test("ExtractConceptCommandProvider extracts selected steps from concept files by extension", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Existing concept",
+    "* Login as <user>",
+    "* Buy item",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/shared.cpt", "plaintext");
+  const {
+    appliedEdits,
+    commands,
+    inputs,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "",
+    },
+    document,
+    inputResponses: ["Shared checkout <user>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 1, character: 0 },
+      end: { line: 2, character: 10 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(
+    createClients(requests, ["/workspace/gauge/specs/concepts.cpt"], "/workspace/gauge/specs/shared.cpt"),
+    {
+      pathModule: path.posix,
+      vscode,
+    },
+  );
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.equal(inputs[0].placeHolder, "Enter the concept name");
+  assert.equal(requests.length, 1);
+  assert.equal(appliedEdits.length, 1);
+
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/shared.cpt",
+  );
+  assert.deepEqual({ ...sourceReplacement.range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...sourceReplacement.range.end }, { line: 3, character: 0 });
+  assert.equal(sourceReplacement.newText, "* Shared checkout <user>\n");
+});
+
 test("ExtractConceptCommandProvider extracts selected steps separated by blank lines", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
