@@ -5248,3 +5248,54 @@ test("GaugeStepDiagnosticsProvider resolves unopened workspace Kotlin constants 
     ],
   );
 });
+
+test("GaugeStepDiagnosticsProvider reuses an in-flight workspace scan during refresh", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const stepDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(LOGIN_STEP)",
+    "fun login() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const constantsDocument = createDocument([
+    "package steps",
+    "",
+    "const val LOGIN_STEP = \"Log in as <user>\"",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/StepText.kt");
+  let findFilesCalls = 0;
+  let finishFindFiles;
+  const firstFindFiles = new Promise((resolve) => {
+    finishFindFiles = resolve;
+  });
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [stepDocument],
+      async findFiles(pattern) {
+        findFilesCalls += 1;
+        if (pattern === "**/*.kt") {
+          await firstFindFiles;
+          return [constantsDocument.uri];
+        }
+        return [];
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, constantsDocument.uri);
+        return constantsDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+  const collection = { set() {} };
+
+  const firstRefresh = provider.refreshDocuments(collection);
+  const secondRefresh = provider.refreshDocuments(collection);
+  await Promise.resolve();
+
+  assert.equal(findFilesCalls, 1);
+
+  finishFindFiles();
+  await Promise.all([firstRefresh, secondRefresh]);
+});

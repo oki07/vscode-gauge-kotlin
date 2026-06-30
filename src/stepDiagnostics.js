@@ -6334,6 +6334,7 @@ class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+    this.pendingWorkspaceDocuments = undefined;
   }
 
   isGaugeProjectDocument(document) {
@@ -6749,6 +6750,20 @@ class GaugeStepDiagnosticsProvider {
     documents.push(candidate);
   }
 
+  mergeWorkspaceDocuments(openDocuments, scannedDocuments) {
+    const documents = [];
+    const seenPaths = new Set();
+    for (const candidate of openDocuments || []) {
+      this.addWorkspaceDocument(documents, seenPaths, candidate);
+    }
+    for (const candidate of scannedDocuments || []) {
+      this.addWorkspaceDocument(documents, seenPaths, candidate);
+    }
+    return isWorkspaceStepImplementationScanComplete(scannedDocuments)
+      ? markWorkspaceStepImplementationScanComplete(documents)
+      : documents;
+  }
+
   workspaceDocuments() {
     const workspace = this.vscode.workspace || {};
     const documents = [];
@@ -6765,7 +6780,13 @@ class GaugeStepDiagnosticsProvider {
       return documents;
     }
 
-    return (async () => {
+    if (this.pendingWorkspaceDocuments) {
+      return this.pendingWorkspaceDocuments.then((scannedDocuments) => (
+        this.mergeWorkspaceDocuments(workspace.textDocuments, scannedDocuments)
+      ));
+    }
+
+    const scan = (async () => {
       const documentPatterns = [
         {
           matches: isKotlinDocument,
@@ -6816,6 +6837,13 @@ class GaugeStepDiagnosticsProvider {
       }
       return markWorkspaceStepImplementationScanComplete(documents);
     })();
+    const pendingScan = scan.finally(() => {
+      if (this.pendingWorkspaceDocuments === pendingScan) {
+        this.pendingWorkspaceDocuments = undefined;
+      }
+    });
+    this.pendingWorkspaceDocuments = pendingScan;
+    return pendingScan;
   }
 
   refreshDocumentsWith(collection, workspaceDocuments) {
