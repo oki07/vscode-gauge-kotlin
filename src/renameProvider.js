@@ -924,7 +924,7 @@ class GaugeRenameProvider {
     return this.lspWorkspaceEditToVscodeEdit(lspEdit);
   }
 
-  async preflightLocalRename(document) {
+  async preflightRename(document) {
     if (this.vscode.workspace && typeof this.vscode.workspace.saveAll === "function") {
       await this.vscode.workspace.saveAll();
     }
@@ -1032,6 +1032,7 @@ class GaugeRenameProvider {
       return undefined;
     }
     this.validateRenameTarget(documents, step);
+    await this.preflightRename(document);
     if (step.engineRename) {
       const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
       if (languageServerEdit) {
@@ -1050,7 +1051,6 @@ class GaugeRenameProvider {
       }
     }
 
-    await this.preflightLocalRename(document);
     const edit = createWorkspaceEdit(this.vscode);
     const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const candidate of documents) {

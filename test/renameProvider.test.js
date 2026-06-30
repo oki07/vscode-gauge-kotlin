@@ -342,6 +342,58 @@ test("GaugeRenameProvider rejects local renames when Gauge validate reports erro
   ]);
 });
 
+test("GaugeRenameProvider rejects language server renames when Gauge validate reports errors", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const requests = [];
+  const saveAllCalls = [];
+  const client = {
+    sendRequest(method, params, token) {
+      requests.push({ method, params, token });
+      return { changes: {} };
+    },
+  };
+  const clientsMap = {
+    get(file) {
+      assert.equal(file, "/workspace/gauge/specs/checkout.spec");
+      return { client };
+    },
+  };
+  const validateDiagnosticsProvider = {
+    validateErrorsForDocument(document, diagnostics) {
+      assert.equal(document, specDocument);
+      assert.ok(diagnostics instanceof Map);
+      return {
+        errors: [{ message: "Undefined step" }],
+      };
+    },
+  };
+  const vscode = createFakeVscode([specDocument]);
+  vscode.workspace.saveAll = () => {
+    saveAllCalls.push(true);
+    return Promise.resolve(true);
+  };
+  const provider = new GaugeRenameProvider({
+    clientsMap,
+    validateDiagnosticsProvider,
+    vscode,
+  });
+
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /Please fix all errors before refactoring/,
+  );
+  assert.deepEqual(saveAllCalls, [true]);
+  assert.deepEqual(requests, []);
+});
+
 test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
