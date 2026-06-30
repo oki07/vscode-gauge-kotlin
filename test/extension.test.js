@@ -1826,7 +1826,7 @@ test("activation registers dynamic argument completions for Gauge documents", ()
     { language: "gauge" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
   ]);
-  assert.deepEqual(completionProviders[0].triggerCharacters, ["<", "\""]);
+  assert.deepEqual(completionProviders[0].triggerCharacters, ["*", " ", "<", "\""]);
   assert.equal(completionProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(typeof completionProviders[0].provider.options.clientsMap.get, "function");
   assert.equal(typeof completionProviders[0].provider.options.projectFactory.isGaugeProject, "function");

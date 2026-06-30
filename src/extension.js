@@ -372,6 +372,8 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
       MARKDOWN_GAUGE_SPEC_SELECTOR,
     ],
     provider,
+    "*",
+    " ",
     "<",
     "\"",
   );
