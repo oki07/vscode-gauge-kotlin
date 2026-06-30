@@ -241,7 +241,10 @@ function isMarkdownGaugeSpecDocument(document, projectFactory) {
     return false;
   }
   try {
-    projectFactory.getGaugeRootFromFilePath(file);
+    const root = projectFactory.getGaugeRootFromFilePath(file);
+    if (typeof projectFactory.isGaugeProject === "function") {
+      return projectFactory.isGaugeProject(root) !== false;
+    }
     return true;
   } catch (_error) {
     return false;

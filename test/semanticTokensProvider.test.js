@@ -251,6 +251,37 @@ test("GaugeSemanticTokensProvider ignores Markdown outside Gauge projects", () =
   assert.deepEqual(tokens, []);
 });
 
+test("GaugeSemanticTokensProvider ignores Markdown when the resolved root is not a Gauge project", () => {
+  const { GaugeSemanticTokensProvider } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/readme.md");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+  });
+  const document = {
+    languageId: "markdown",
+    uri: { fsPath: "/workspace/notes/readme.md" },
+    getText() {
+      return [
+        "# Notes",
+        "* List item",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document);
+
+  assert.deepEqual(tokens, []);
+});
+
 test("GaugeSemanticTokensProvider tokenizes quoted concept heading arguments", () => {
   const {
     GaugeSemanticTokensProvider,
