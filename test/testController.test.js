@@ -1150,6 +1150,54 @@ test("GaugeTestController debug profile debugs all specs when no tests are inclu
   ]);
 });
 
+test("GaugeTestController stops queuing Test UI project runs after cancellation", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { vscode } = createFakeVscode();
+  const executionCalls = [];
+  let finishRun;
+  const runningCommand = new Promise((resolve) => {
+    finishRun = resolve;
+  });
+  const clientsMap = new Map([
+    ["/workspace/checkout", { client: {} }],
+    ["/workspace/accounts", { client: {} }],
+  ]);
+  const gaugeTests = new GaugeTestController({
+    clientsMap,
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        if (
+          command === "gauge.specexplorer.runAllActiveProjectSpecs"
+          && args[0]
+          && args[0].projectRoot === "/workspace/checkout"
+        ) {
+          return runningCommand;
+        }
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+  const cancellation = createCancellationToken();
+
+  gaugeTests.register();
+
+  const run = gaugeTests.run({}, cancellation.token);
+  cancellation.cancel();
+  finishRun();
+  await run;
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/checkout" }, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.stopExecution"],
+  ]);
+  assert.equal(cancellation.disposed, true);
+});
+
 test("GaugeTestController stops Gauge execution when Test UI run is cancelled", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();

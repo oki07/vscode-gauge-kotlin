@@ -75,6 +75,10 @@ function createToken(vscode) {
   return undefined;
 }
 
+function cancellationRequested(token) {
+  return Boolean(token && token.isCancellationRequested);
+}
+
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
@@ -750,12 +754,19 @@ class GaugeTestController {
     const run = this.startTestRun(request);
     const cancellation = this.registerCancellation(token);
     try {
-      if (this.executionController && typeof this.executionController.handleCommand === "function") {
+      if (
+        this.executionController
+        && typeof this.executionController.handleCommand === "function"
+        && !cancellationRequested(token)
+      ) {
         const targets = executionTargetsForRequest(this.controller, request);
         if (targets === undefined) {
           const projectRoots = knownProjectRoots(this.clientsMap);
           if (projectRoots.length > 0) {
             for (const projectRoot of projectRoots) {
+              if (cancellationRequested(token)) {
+                break;
+              }
               await this.executionController.handleCommand(
                 "gauge.specexplorer.runAllActiveProjectSpecs",
                 { projectRoot },
@@ -771,6 +782,9 @@ class GaugeTestController {
           }
         } else if (canBatchSpecificationTargets(targets)) {
           for (const group of groupedTargetsByKnownProject(targets, this.clientsMap)) {
+            if (cancellationRequested(token)) {
+              break;
+            }
             await this.executionController.handleCommand(
               "gauge.execute.specification",
               undefined,
@@ -780,6 +794,9 @@ class GaugeTestController {
           }
         } else {
           for (const target of targets) {
+            if (cancellationRequested(token)) {
+              break;
+            }
             await this.executionController.handleCommand("gauge.execute", target, flags);
           }
         }
@@ -809,7 +826,11 @@ class GaugeTestController {
     const run = this.startTestRun(request);
     const cancellation = this.registerCancellation(token);
     try {
-      if (this.executionController && typeof this.executionController.handleCommand === "function") {
+      if (
+        this.executionController
+        && typeof this.executionController.handleCommand === "function"
+        && !cancellationRequested(token)
+      ) {
         const flags = testUiRunFlags();
         const targets = executionTargetsForRequest(this.controller, request);
         const projectRoots = targets === undefined
@@ -817,6 +838,9 @@ class GaugeTestController {
           : projectRootsForTargets(targets, this.clientsMap);
         if (projectRoots.length > 0) {
           for (const projectRoot of projectRoots) {
+            if (cancellationRequested(token)) {
+              break;
+            }
             await this.executionController.handleCommand(
               command,
               { projectRoot },
