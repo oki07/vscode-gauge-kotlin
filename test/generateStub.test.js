@@ -186,6 +186,90 @@ test("GenerateStubCommandProvider writes a selected step stub through Gauge LSP"
   assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
 });
 
+test("GenerateStubCommandProvider avoids duplicate method names in selected Kotlin files", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const requests = [];
+  const appliedEdits = [];
+  const { commands, vscode } = createFakeVscode();
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const fileSystem = {
+    readFileSync(filename, encoding) {
+      assert.equal(filename, "/workspace/src/test/kotlin/Steps.kt");
+      assert.equal(encoding, "utf8");
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Existing step\")",
+        "fun implementation() {",
+        "}",
+      ].join("\n");
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method, params) {
+      requests.push({ method, params });
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+      }
+      if (method === "gauge/putStubImpl") {
+        return Promise.resolve({ changes: [] });
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/specs/example.spec");
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler([
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+    "fun implementation(arg0: Any) {",
+    "}",
+    "",
+  ].join("\n"));
+
+  assert.deepEqual(requests[1], {
+    method: "gauge/putStubImpl",
+    params: {
+      implementationFilePath: "/workspace/src/test/kotlin/Steps.kt",
+      codes: [[
+        "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+        "fun implementation1(arg0: Any) {",
+        "}",
+        "",
+      ].join("\n")],
+    },
+  });
+  assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});
+
 test("GenerateStubCommandProvider reports clipboard copy failures", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const { commands, errors, vscode } = createFakeVscode({

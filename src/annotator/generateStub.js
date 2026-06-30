@@ -2,6 +2,10 @@
 
 const nodePath = require("node:path");
 const { WorkspaceEditor } = require("../refactor/workspaceEditor");
+const {
+  kotlinFunctionNames,
+  stepImplementationName,
+} = require("../stepCodeActions");
 
 const ADD_STUB_REQUEST = "gauge/putStubImpl";
 const COPY_TO_CLIPBOARD = "Copy To Clipboard";
@@ -29,6 +33,21 @@ function defaultWorkspaceEditorFactory(vscode, edit, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
+}
+
+function generatedImplementationName(code) {
+  const match = /\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(String(code || ""));
+  return match ? match[1] : undefined;
+}
+
+function replacementImplementationCode(code, currentName, nextName) {
+  if (!currentName || !nextName || currentName === nextName) {
+    return code;
+  }
+  return String(code || "").replace(
+    new RegExp(`\\bfun\\s+${currentName}\\s*\\(`),
+    `fun ${nextName}(`,
+  );
 }
 
 class GenerateStubCommandProvider {
@@ -86,9 +105,10 @@ class GenerateStubCommandProvider {
         if (!implementationFilePath) {
           return undefined;
         }
+        const selectedCode = this.stepCodeForImplementationFile(code, implementationFilePath);
         return this.generateInFile(
           ADD_STUB_REQUEST,
-          { implementationFilePath, codes: [code] },
+          { implementationFilePath, codes: [selectedCode] },
           projectClient.client,
         );
       }, (reason) => this.handleError(reason));
@@ -143,6 +163,40 @@ class GenerateStubCommandProvider {
       return this.pathModule.normalize(trimmed);
     }
     return this.pathModule.join(projectRoot, trimmed);
+  }
+
+  implementationFileText(implementationFilePath) {
+    if (!this.fileSystem || typeof this.fileSystem.readFileSync !== "function") {
+      return undefined;
+    }
+    try {
+      return this.fileSystem.readFileSync(implementationFilePath, "utf8");
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  stepCodeForImplementationFile(code, implementationFilePath) {
+    if (!implementationFilePath || !String(implementationFilePath).toLowerCase().endsWith(".kt")) {
+      return code;
+    }
+    const currentName = generatedImplementationName(code);
+    if (!currentName || !/^implementation\d*$/.test(currentName)) {
+      return code;
+    }
+    const text = this.implementationFileText(implementationFilePath);
+    if (typeof text !== "string") {
+      return code;
+    }
+    const existingNames = kotlinFunctionNames(text);
+    if (!existingNames.includes(currentName)) {
+      return code;
+    }
+    return replacementImplementationCode(
+      code,
+      currentName,
+      stepImplementationName(existingNames),
+    );
   }
 
   handleError(reason) {
