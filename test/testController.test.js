@@ -236,6 +236,7 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["profile", "Run", 1, calls[1][3], true],
     ["profile", "Debug", 2, calls[2][3], false],
     ["profile", "Run Failed", 1, calls[3][3], false],
+    ["profile", "Run Repeat", 1, calls[4][3], false],
     ["run", { include: [] }],
     ["started", "/workspace/specs/example.spec"],
     ["started", "/workspace/specs/example.spec:12"],
@@ -1015,6 +1016,38 @@ test("GaugeTestController registers a failed run profile for Test UI reruns", as
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
+test("GaugeTestController registers a repeat run profile for Test UI reruns", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const repeatProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Run Repeat");
+
+  assert.ok(repeatProfile);
+  assert.equal(repeatProfile[2], 1);
+  assert.equal(repeatProfile[4], false);
+
+  await repeatProfile[3]({});
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.repeat", undefined, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
 test("GaugeTestController scopes failed Test UI reruns to included project roots", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, controller, vscode } = createFakeVscode();
@@ -1045,6 +1078,43 @@ test("GaugeTestController scopes failed Test UI reruns to included project roots
 
   assert.deepEqual(executionCalls, [
     ["gauge.execute.failed", { projectRoot: "/workspace/checkout" }, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
+test("GaugeTestController scopes repeat Test UI reruns to included project roots", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const clientsMap = new Map([
+    ["/workspace/checkout", { client: {} }],
+  ]);
+  const gaugeTests = new GaugeTestController({
+    clientsMap,
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const repeatProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Run Repeat");
+  const spec = controller.createTestItem(
+    "/workspace/checkout/specs/checkout.spec",
+    "Checkout",
+    { fsPath: "/workspace/checkout/specs/checkout.spec" },
+  );
+
+  await repeatProfile[3]({ include: [spec] });
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute.repeat", { projectRoot: "/workspace/checkout" }, {
       "hide-suggestion": true,
       "machine-readable": true,
     }],

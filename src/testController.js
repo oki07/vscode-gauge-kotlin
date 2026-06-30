@@ -10,6 +10,7 @@ const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const DEBUG_PROFILE_LABEL = "Debug";
 const FAILED_PROFILE_LABEL = "Run Failed";
+const REPEAT_PROFILE_LABEL = "Run Repeat";
 const RUN_PROFILE_LABEL = "Run";
 const ROOT_PARENT_ID = "suite";
 const SCENARIOS_REQUEST = "gauge/scenarios";
@@ -397,6 +398,12 @@ class GaugeTestController {
       FAILED_PROFILE_LABEL,
       profileKind.Run,
       (request, token) => this.runFailed(request, token),
+      false,
+    );
+    this.controller.createRunProfile(
+      REPEAT_PROFILE_LABEL,
+      profileKind.Run,
+      (request, token) => this.runRepeat(request, token),
       false,
     );
   }
@@ -798,7 +805,7 @@ class GaugeTestController {
     return this.runWithFlags(request, testUiDebugFlags(), token);
   }
 
-  async runFailed(request = {}, token) {
+  async runProjectScopedCommand(command, request = {}, token) {
     const run = this.startTestRun(request);
     const cancellation = this.registerCancellation(token);
     try {
@@ -811,14 +818,14 @@ class GaugeTestController {
         if (projectRoots.length > 0) {
           for (const projectRoot of projectRoots) {
             await this.executionController.handleCommand(
-              "gauge.execute.failed",
+              command,
               { projectRoot },
               flags,
             );
           }
         } else {
           await this.executionController.handleCommand(
-            "gauge.execute.failed",
+            command,
             undefined,
             flags,
           );
@@ -835,6 +842,14 @@ class GaugeTestController {
         this.currentRun = undefined;
       }
     }
+  }
+
+  async runFailed(request = {}, token) {
+    return this.runProjectScopedCommand("gauge.execute.failed", request, token);
+  }
+
+  async runRepeat(request = {}, token) {
+    return this.runProjectScopedCommand("gauge.execute.repeat", request, token);
   }
 
   ensureRun() {
