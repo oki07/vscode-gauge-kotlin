@@ -93,14 +93,11 @@ function createProjectFactory(options = {}) {
   }
 
   function findGaugeProjectRoots(root) {
-    if (isGaugeProject(root)) {
-      return [root];
-    }
     if (!isDirectory(root)) {
-      return [];
+      return isGaugeProject(root) ? [root] : [];
     }
 
-    const roots = [];
+    const roots = isGaugeProject(root) ? [root] : [];
     const pending = [root];
     const seen = new Set();
     while (pending.length > 0) {
@@ -119,9 +116,8 @@ function createProjectFactory(options = {}) {
         }
         if (isGaugeProject(child)) {
           roots.push(child);
-        } else {
-          pending.push(child);
         }
+        pending.push(child);
       }
     }
     return roots.sort();

@@ -435,14 +435,11 @@ class GaugeWorkspace {
     if (typeof this.projectFactory.findGaugeProjectRoots === "function") {
       return this.projectFactory.findGaugeProjectRoots(workspaceRoot);
     }
-    if (this.projectFactory.isGaugeProject(workspaceRoot)) {
-      return [workspaceRoot];
-    }
     if (!this.isDirectory(workspaceRoot)) {
-      return [];
+      return this.projectFactory.isGaugeProject(workspaceRoot) ? [workspaceRoot] : [];
     }
 
-    const roots = [];
+    const roots = this.projectFactory.isGaugeProject(workspaceRoot) ? [workspaceRoot] : [];
     const pending = [workspaceRoot];
     const seen = new Set();
     while (pending.length > 0) {
@@ -461,9 +458,8 @@ class GaugeWorkspace {
         }
         if (this.projectFactory.isGaugeProject(child)) {
           roots.push(child);
-        } else {
-          pending.push(child);
         }
+        pending.push(child);
       }
     }
     return roots.sort();

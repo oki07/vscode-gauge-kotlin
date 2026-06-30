@@ -88,6 +88,28 @@ test("ProjectFactory finds nested Gauge project roots", () => {
   assert.deepEqual(factory.findGaugeProjectRoots("/workspace/missing"), []);
 });
 
+test("ProjectFactory finds nested Gauge project roots under Gauge roots", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const factory = createProjectFactory({
+    fileSystem: createFakeFileSystem({
+      "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin" }),
+      "/workspace/gauge/build.gradle.kts": "",
+      "/workspace/gauge/modules/admin/manifest.json": JSON.stringify({ Language: "kotlin" }),
+      "/workspace/gauge/modules/admin/build.gradle.kts": "",
+      "/workspace/gauge/modules/admin/specs/example.spec": "",
+      "/workspace/gauge/modules/admin/subsystems/reports/manifest.json": JSON.stringify({ Language: "kotlin" }),
+      "/workspace/gauge/modules/admin/subsystems/reports/build.gradle.kts": "",
+    }),
+    pathModule: path.posix,
+  });
+
+  assert.deepEqual(factory.findGaugeProjectRoots("/workspace/gauge"), [
+    "/workspace/gauge",
+    "/workspace/gauge/modules/admin",
+    "/workspace/gauge/modules/admin/subsystems/reports",
+  ]);
+});
+
 test("ProjectFactory creates Kotlin Gradle projects", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
   const { GradleProject } = require("../src/project/gradleProject");

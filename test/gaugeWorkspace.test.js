@@ -376,6 +376,51 @@ test("GaugeWorkspace starts LSP clients for nested Gauge projects under a worksp
   ]);
 });
 
+test("GaugeWorkspace starts LSP clients for nested Gauge projects under Gauge roots", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+    "/workspace/gauge/modules/admin/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/modules/admin/build.gradle.kts": "",
+  });
+  const { contexts, vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(clients.has("/workspace/gauge"), true);
+  assert.equal(clients.has("/workspace/gauge/modules/admin"), true);
+  assert.equal(
+    clients.get("/workspace/gauge/modules/admin/specs/example.spec").project.root(),
+    "/workspace/gauge/modules/admin",
+  );
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:multipleProjects?", value: true },
+  ]);
+});
+
 test("GaugeWorkspace suppresses external implementation definition errors from Gauge LSP", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
