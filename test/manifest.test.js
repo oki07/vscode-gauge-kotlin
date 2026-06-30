@@ -141,7 +141,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
 
   const language = manifest.contributes.languages.find((entry) => entry.id === "gauge");
   assert.ok(language);
-  assert.deepEqual(language.extensions, [".spec", ".cpt", ".md"]);
+  assert.deepEqual(language.extensions, [".spec", ".cpt"]);
   assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec", "Concept"]);
   assert.equal(language.configuration, "./language-configuration.json");
 

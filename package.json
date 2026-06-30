@@ -70,8 +70,7 @@
         "id": "gauge",
         "extensions": [
           ".spec",
-          ".cpt",
-          ".md"
+          ".cpt"
         ],
         "aliases": [
           "Gauge",
