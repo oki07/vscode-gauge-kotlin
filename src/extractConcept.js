@@ -415,6 +415,81 @@ function parameterizedConceptName(conceptName) {
   );
 }
 
+function staticArgumentEnd(line, openIndex) {
+  let escaped = false;
+  for (let index = openIndex + 1; index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === "\"") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function conceptNameParameterSuggestionsInLine(line) {
+  const suggestions = [];
+  let index = 0;
+  while (index < line.length) {
+    const character = line[index];
+    if (character === "\"" && !isEscaped(line, index)) {
+      const closeIndex = staticArgumentEnd(line, index);
+      if (closeIndex === -1) {
+        break;
+      }
+      suggestions.push(line.slice(index, closeIndex + 1));
+      index = closeIndex + 1;
+      continue;
+    }
+    if (character === "<" && !isEscaped(line, index)) {
+      const closeIndex = dynamicParameterEnd(line, index);
+      if (closeIndex === -1) {
+        break;
+      }
+      suggestions.push(line.slice(index, closeIndex + 1));
+      index = closeIndex + 1;
+      continue;
+    }
+    index += 1;
+  }
+  return suggestions;
+}
+
+function conceptNameParameterSuggestions(extraction) {
+  const suggestions = [];
+  const seen = new Set();
+  const tables = tableParameterMap(extraction && extraction.steps);
+  function add(value) {
+    if (!seen.has(value)) {
+      seen.add(value);
+      suggestions.push(value);
+    }
+  }
+  for (const step of (extraction && extraction.steps) || []) {
+    const key = tableKey(step.tableLines || []);
+    const tableName = tables.get(key);
+    const line = tableName ? `${step.text} <${tableName}>` : step.text;
+    for (const suggestion of conceptNameParameterSuggestionsInLine(line)) {
+      add(suggestion);
+    }
+  }
+  return suggestions;
+}
+
+function conceptNameInputOptions(extraction) {
+  const options = {
+    placeHolder: "Enter the concept name",
+  };
+  const suggestions = conceptNameParameterSuggestions(extraction);
+  if (suggestions.length > 0) {
+    options.prompt = `Available parameters: ${suggestions.join(", ")}`;
+  }
+  return options;
+}
+
 function dynamicParametersInLines(lines) {
   const parameters = [];
   const seen = new Set();
@@ -654,9 +729,9 @@ class ExtractConceptCommandProvider {
         return this.showError(INVALID_SELECTION_ERROR);
       }
 
-      const conceptNameInput = await this.vscode.window.showInputBox({
-        placeHolder: "Enter the concept name",
-      });
+      const conceptNameInput = await this.vscode.window.showInputBox(
+        conceptNameInputOptions(extraction),
+      );
       const conceptName = normalizeConceptName(conceptNameInput);
       if (!conceptName) {
         return undefined;

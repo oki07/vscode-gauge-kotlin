@@ -433,6 +433,53 @@ test("ExtractConceptCommandProvider extracts selected steps separated by blank l
   );
 });
 
+test("ExtractConceptCommandProvider offers selected step arguments while naming concepts", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login as <user> with \"password\"",
+    "* Compare users",
+    "|name|age|",
+    "|--|---|",
+    "|Ada |42 |",
+    "",
+  ].join("\n"));
+  const {
+    commands,
+    inputs,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "",
+    },
+    document,
+    inputResponses: ["Shared flow <user> \"password\" <table1>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 7, character: 9 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.equal(inputs[0].placeHolder, "Enter the concept name");
+  assert.equal(inputs[0].prompt, "Available parameters: <user>, \"password\", <table1>");
+});
+
 test("ExtractConceptCommandProvider parameterizes selected inline tables", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
