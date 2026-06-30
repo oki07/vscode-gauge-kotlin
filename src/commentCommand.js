@@ -43,7 +43,10 @@ function isGaugeProjectDocument(document, projectFactory) {
     return true;
   }
   try {
-    projectFactory.getGaugeRootFromFilePath(documentPath(document));
+    const root = projectFactory.getGaugeRootFromFilePath(documentPath(document));
+    if (typeof projectFactory.isGaugeProject === "function") {
+      return projectFactory.isGaugeProject(root) !== false;
+    }
     return true;
   } catch (_error) {
     return false;

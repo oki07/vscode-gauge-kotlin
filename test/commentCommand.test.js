@@ -180,3 +180,32 @@ test("toggleGaugeLineComment uncomments Markdown Gauge spec lines", async () => 
     ],
   );
 });
+
+test("toggleGaugeLineComment delegates Markdown files when the resolved root is not a Gauge project", async () => {
+  const { DEFAULT_COMMENT_COMMAND, toggleGaugeLineComment } = require("../src/commentCommand");
+  const document = createDocument(
+    '* Draft "note"',
+    "markdown",
+    "/workspace/notes/example.md",
+  );
+  const { appliedEdits, commandCalls, vscode } = createFakeVscode(
+    document,
+    createSelection(0, 0, 0, 0),
+  );
+
+  await toggleGaugeLineComment(vscode, {
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.md");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+  });
+
+  assert.deepEqual(appliedEdits, []);
+  assert.deepEqual(commandCalls, [DEFAULT_COMMENT_COMMAND]);
+});

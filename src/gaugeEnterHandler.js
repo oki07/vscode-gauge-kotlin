@@ -50,7 +50,10 @@ class GaugeEnterHandler {
       return false;
     }
     try {
-      this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
+      const root = this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
+      if (typeof this.projectFactory.isGaugeProject === "function") {
+        return this.projectFactory.isGaugeProject(root) !== false;
+      }
       return true;
     } catch (_error) {
       return false;
