@@ -899,6 +899,41 @@ test("GaugeTestController forces machine-readable output for all-spec Test UI ru
   ]);
 });
 
+test("GaugeTestController runs all known project roots for Test UI run all", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { vscode } = createFakeVscode();
+  const executionCalls = [];
+  const clientsMap = new Map([
+    ["/workspace/checkout", { client: {} }],
+    ["/workspace/accounts", { client: {} }],
+  ]);
+  const gaugeTests = new GaugeTestController({
+    clientsMap,
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+
+  await gaugeTests.run({});
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/checkout" }, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+    ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/accounts" }, {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
 test("GaugeTestController registers a failed run profile for Test UI reruns", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, vscode } = createFakeVscode();

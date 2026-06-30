@@ -284,6 +284,13 @@ function testUiDebugFlags() {
   return { ...TEST_UI_RUN_FLAGS, debug: true };
 }
 
+function knownProjectRoots(clientsMap) {
+  if (!clientsMap || typeof clientsMap.keys !== "function") {
+    return [];
+  }
+  return [...clientsMap.keys()].filter(Boolean);
+}
+
 class GaugeTestController {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -690,11 +697,22 @@ class GaugeTestController {
       if (this.executionController && typeof this.executionController.handleCommand === "function") {
         const targets = executionTargetsForRequest(this.controller, request);
         if (targets === undefined) {
-          await this.executionController.handleCommand(
-            "gauge.execute.specification.all",
-            undefined,
-            flags,
-          );
+          const projectRoots = knownProjectRoots(this.clientsMap);
+          if (projectRoots.length > 0) {
+            for (const projectRoot of projectRoots) {
+              await this.executionController.handleCommand(
+                "gauge.specexplorer.runAllActiveProjectSpecs",
+                { projectRoot },
+                flags,
+              );
+            }
+          } else {
+            await this.executionController.handleCommand(
+              "gauge.execute.specification.all",
+              undefined,
+              flags,
+            );
+          }
         } else if (canBatchSpecificationTargets(targets)) {
           await this.executionController.handleCommand(
             "gauge.execute.specification",
