@@ -6,6 +6,9 @@ const {
   isScenarioHashHeading,
 } = require("./gaugeHeadings");
 
+const MARKDOWN_LANGUAGE = "markdown";
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+
 const tokenTypes = [
   "specification",
   "scenario",
@@ -47,6 +50,12 @@ function documentPath(document) {
 
 function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
+function isMarkdownDocument(document) {
+  return document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function pushToken(builder, line, start, length, tokenType) {
@@ -177,13 +186,35 @@ function isTableBlockLine(lines, lineNumber) {
 class GaugeSemanticTokensProvider {
   constructor(options = {}) {
     this.vscode = options.vscode;
+    this.projectFactory = options.projectFactory;
     this.SemanticTokensBuilder = options.SemanticTokensBuilder
       || getVscode(this.vscode).SemanticTokensBuilder;
     this.legend = options.legend || (this.vscode ? createLegend(this.vscode) : fallbackLegend());
   }
 
+  shouldTokenize(document) {
+    if (!isMarkdownDocument(document)) {
+      return true;
+    }
+    if (
+      !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return false;
+    }
+    try {
+      this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   provideDocumentSemanticTokens(document) {
     const builder = new this.SemanticTokensBuilder(this.legend);
+    if (!this.shouldTokenize(document)) {
+      return builder.build();
+    }
     const lines = document.getText().split(/\r?\n/);
     const conceptDocument = isConceptDocument(document);
     const argumentRegex = /(?:"(?:\\"|[^"\r\n])*"|<(?:\\[<>]|[^>\r\n])*>)/g;

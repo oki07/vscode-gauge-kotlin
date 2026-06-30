@@ -532,7 +532,11 @@ function registerSemanticTokensProvider(context, vscode, options) {
   }
   const SemanticTokensProviderCtor = options.GaugeSemanticTokensProvider || GaugeSemanticTokensProvider;
   const legend = options.semanticTokensLegend || createLegend(vscode);
-  const provider = new SemanticTokensProviderCtor({ vscode, legend });
+  const provider = new SemanticTokensProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+    legend,
+  });
   const disposable = vscode.languages.registerDocumentSemanticTokensProvider(
     [
       { language: "gauge" },
