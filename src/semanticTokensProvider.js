@@ -6,7 +6,10 @@ const {
   isScenarioHashHeading,
 } = require("./gaugeHeadings");
 
+const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 
 const tokenTypes = [
@@ -49,13 +52,42 @@ function documentPath(document) {
 }
 
 function isConceptDocument(document) {
-  return documentPath(document).toLowerCase().endsWith(".cpt");
+  return CONCEPT_FILE_PATTERN.test(documentPath(document));
+}
+
+function isSpecDocument(document) {
+  return SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
+function isGaugeFileDocument(document) {
+  return isSpecDocument(document) || isConceptDocument(document);
 }
 
 function isMarkdownDocument(document) {
   return document
     && document.languageId === MARKDOWN_LANGUAGE
     && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
+function isGaugeProjectDocument(document, projectFactory, fallback) {
+  if (!document || document.languageId === GAUGE_LANGUAGE) {
+    return Boolean(document);
+  }
+  if (
+    !projectFactory
+    || typeof projectFactory.getGaugeRootFromFilePath !== "function"
+  ) {
+    return fallback;
+  }
+  try {
+    const root = projectFactory.getGaugeRootFromFilePath(documentPath(document));
+    if (typeof projectFactory.isGaugeProject === "function") {
+      return projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function pushToken(builder, line, start, length, tokenType) {
@@ -193,24 +225,13 @@ class GaugeSemanticTokensProvider {
   }
 
   shouldTokenize(document) {
-    if (!isMarkdownDocument(document)) {
-      return true;
+    if (isMarkdownDocument(document)) {
+      return isGaugeProjectDocument(document, this.projectFactory, false);
     }
-    if (
-      !this.projectFactory
-      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
-    ) {
-      return false;
+    if (isGaugeFileDocument(document)) {
+      return isGaugeProjectDocument(document, this.projectFactory, true);
     }
-    try {
-      const root = this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
-      if (typeof this.projectFactory.isGaugeProject === "function") {
-        return this.projectFactory.isGaugeProject(root) !== false;
-      }
-      return true;
-    } catch (_error) {
-      return false;
-    }
+    return true;
   }
 
   provideDocumentSemanticTokens(document) {

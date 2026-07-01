@@ -282,6 +282,51 @@ test("GaugeSemanticTokensProvider ignores Markdown when the resolved root is not
   assert.deepEqual(tokens, []);
 });
 
+test("GaugeSemanticTokensProvider ignores Gauge files by extension outside Gauge projects", () => {
+  const { GaugeSemanticTokensProvider } = require("../src/semanticTokensProvider");
+  const checkedFiles = [];
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        checkedFiles.push(filename);
+        return filename.includes("/concepts/") ? "/workspace/concepts" : "/workspace/specs";
+      },
+      isGaugeProject(root) {
+        assert.equal(root === "/workspace/specs" || root === "/workspace/concepts", true);
+        return false;
+      },
+    },
+  });
+  const specDocument = {
+    languageId: "plaintext",
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "# Checkout",
+        "* Pay",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    languageId: "plaintext",
+    uri: { fsPath: "/workspace/concepts/shared.cpt" },
+    getText() {
+      return [
+        "# Shared checkout",
+        "* Reuse cart",
+      ].join("\n");
+    },
+  };
+
+  assert.deepEqual(provider.provideDocumentSemanticTokens(specDocument), []);
+  assert.deepEqual(provider.provideDocumentSemanticTokens(conceptDocument), []);
+  assert.deepEqual(checkedFiles, [
+    "/workspace/specs/example.spec",
+    "/workspace/concepts/shared.cpt",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes quoted concept heading arguments", () => {
   const {
     GaugeSemanticTokensProvider,

@@ -582,7 +582,9 @@ function registerSemanticTokensProvider(context, vscode, options) {
   const disposable = vscode.languages.registerDocumentSemanticTokensProvider(
     [
       { language: "gauge" },
+      SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
+      CONCEPT_FILE_SELECTOR,
     ],
     provider,
     legend,
