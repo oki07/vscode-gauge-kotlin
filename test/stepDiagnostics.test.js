@@ -4938,6 +4938,51 @@ test("GaugeStepDiagnosticsProvider reports undefined markdown Gauge spec steps",
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 15 });
 });
 
+test("GaugeStepDiagnosticsProvider ignores Markdown when the resolved root is not a Gauge project", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Notes",
+    "* Pay with card",
+  ].join("\n"), "markdown", "/workspace/notes/checkout.md");
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.java" || pattern === "**/*.cpt") {
+          return [];
+        }
+        if (pattern === "**/*.{spec,md}") {
+          return [specDocument.uri];
+        }
+        throw new Error(`Unexpected pattern ${pattern}`);
+      },
+      async openTextDocument(uri) {
+        assert.equal(uri, specDocument.uri);
+        return specDocument;
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/checkout.md");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    vscode,
+  });
+
+  const workspaceDocuments = await provider.workspaceDocuments();
+  const diagnostics = provider.provideDiagnostics(specDocument, workspaceDocuments);
+
+  assert.deepEqual(diagnostics, []);
+});
+
 test("GaugeStepDiagnosticsProvider uses unopened plaintext Kotlin files for Gauge undefined steps", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([

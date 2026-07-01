@@ -6337,6 +6337,34 @@ class GaugeStepDiagnosticsProvider {
     this.pendingWorkspaceDocuments = undefined;
   }
 
+  isGaugeProjectRoot(root) {
+    if (!root) {
+      return false;
+    }
+    if (
+      this.projectFactory
+      && typeof this.projectFactory.isGaugeProject === "function"
+    ) {
+      return this.projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  }
+
+  rootForFile(file) {
+    if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
+      return undefined;
+    }
+    if (!file) {
+      return undefined;
+    }
+    try {
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      return this.isGaugeProjectRoot(root) ? root : undefined;
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
   isGaugeProjectDocument(document) {
     if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return true;
@@ -6345,12 +6373,7 @@ class GaugeStepDiagnosticsProvider {
     if (!file) {
       return true;
     }
-    try {
-      this.projectFactory.getGaugeRootFromFilePath(file);
-      return true;
-    } catch (_error) {
-      return false;
-    }
+    return this.rootForFile(file) !== undefined;
   }
 
   gaugeProjectRoot(document) {
@@ -6361,11 +6384,7 @@ class GaugeStepDiagnosticsProvider {
     if (!file) {
       return undefined;
     }
-    try {
-      return this.projectFactory.getGaugeRootFromFilePath(file);
-    } catch (_error) {
-      return undefined;
-    }
+    return this.rootForFile(file);
   }
 
   belongsToSourceGaugeProject(candidate, sourceRoot) {
@@ -6817,12 +6836,13 @@ class GaugeStepDiagnosticsProvider {
           if (file && seenPaths.has(file)) {
             continue;
           }
-          if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-            try {
-              this.projectFactory.getGaugeRootFromFilePath(file);
-            } catch (_error) {
-              continue;
-            }
+          if (
+            file
+            && this.projectFactory
+            && typeof this.projectFactory.getGaugeRootFromFilePath === "function"
+            && !this.rootForFile(file)
+          ) {
+            continue;
           }
 
           try {
