@@ -882,6 +882,81 @@ test("format command saves and runs gauge format for the active Gauge file", asy
   assert.equal(appliedEdits[0].replacements[0].newText, formattedText);
 });
 
+test("format command saves and runs gauge format for active spec files by extension", async () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const calls = [];
+  const formattedText = "# Checkout\n* Login\n";
+  const spawned = [];
+  const { appliedEdits, fakeVscode, registeredCommands } = createFakeVscode();
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        gaugeCommand() {
+          return {
+            spawn(args, options) {
+              spawned.push({ args, options });
+              const child = new EventEmitter();
+              child.stdout = new EventEmitter();
+              child.stderr = new EventEmitter();
+              process.nextTick(() => child.emit("exit", 0));
+              return child;
+            },
+          };
+        },
+      };
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filePath) {
+        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
+    },
+    fileSystem: {
+      readFileSync(filePath) {
+        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        return Buffer.from(formattedText);
+      },
+    },
+  });
+
+  const command = registeredCommands.find(
+    (entry) => entry.command === "gauge.format",
+  );
+
+  assert.ok(command);
+  fakeVscode.window.activeTextEditor = {
+    document: {
+      languageId: "plaintext",
+      lineCount: 2,
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      getText() {
+        return "# Checkout\n*  Login\n";
+      },
+      lineAt(line) {
+        return { text: ["# Checkout", "*  Login"][line] };
+      },
+      save() {
+        calls.push("document.save");
+        return Promise.resolve(true);
+      },
+    },
+  };
+  await command.handler();
+
+  assert.deepEqual(calls, ["document.save"]);
+  assert.deepEqual(spawned, [
+    {
+      args: ["format", "/workspace/gauge/specs/example.spec"],
+      options: { cwd: "/workspace/gauge" },
+    },
+  ]);
+  assert.equal(appliedEdits.length, 1);
+  assert.equal(appliedEdits[0].replacements[0].newText, formattedText);
+});
+
 test("format command saves and runs gauge format for active Markdown Gauge specs", async () => {
   const extension = require("../src/extension");
 
@@ -2053,6 +2128,7 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
   assert.equal(formattingProviders.length, 1);
   assert.deepEqual(formattingProviders[0].selector, [
     { language: "gauge" },
+    { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { scheme: "file", pattern: "**/*.cpt" },
   ]);

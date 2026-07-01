@@ -57,6 +57,8 @@ const KOTLIN_LANGUAGE = "kotlin";
 const IMPLEMENTATION_LANGUAGES = new Set([JAVA_LANGUAGE, KOTLIN_LANGUAGE]);
 const MARKDOWN_GAUGE_SPEC_SELECTOR = { language: "markdown", scheme: "file", pattern: "**/*.md" };
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_SELECTOR = { scheme: "file", pattern: "**/*.spec" };
+const SPEC_FILE_PATTERN = /\.spec$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const CONCEPT_FILE_SELECTOR = { scheme: "file", pattern: "**/*.cpt" };
 const JAVA_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.java" };
@@ -230,6 +232,10 @@ function isMarkdownPath(document) {
   return MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
+function isSpecPath(document) {
+  return SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
 function isMarkdownGaugeSpecDocument(document, projectFactory) {
   const file = documentPath(document);
   if (
@@ -258,6 +264,9 @@ function hasActiveGaugeDocument(vscode, projectFactory) {
     return false;
   }
   if (editor.document.languageId === "gauge" && !isMarkdownPath(editor.document)) {
+    return true;
+  }
+  if (isSpecPath(editor.document)) {
     return true;
   }
   return isMarkdownGaugeSpecDocument(editor.document, projectFactory);
@@ -469,6 +478,7 @@ function registerFormatProvider(context, vscode, options) {
   const disposable = vscode.languages.registerDocumentFormattingEditProvider(
     [
       { language: "gauge" },
+      SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,
     ],
