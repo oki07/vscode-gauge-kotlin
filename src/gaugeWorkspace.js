@@ -20,6 +20,7 @@ const JAVA_RUNNER = "java";
 const KOTLIN_RUNNER = "kotlin";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+const SPEC_FILE_PATTERN = /\.spec$/i;
 const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER, JAVA_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
@@ -55,8 +56,12 @@ function isActiveGaugeWorkspaceDocument(document) {
   if (ACTIVE_DOCUMENT_LANGUAGES.has(document.languageId)) {
     return true;
   }
+  const file = documentPath(document);
+  if (SPEC_FILE_PATTERN.test(file)) {
+    return true;
+  }
   return document.languageId === MARKDOWN_LANGUAGE
-    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+    && MARKDOWN_SPEC_FILE_PATTERN.test(file);
 }
 
 function getLanguageClientModule(options) {
