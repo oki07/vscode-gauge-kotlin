@@ -20,6 +20,7 @@ const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFormatProvider } = require("./formatProvider");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
+const { GaugeStepCodeActionProvider } = require("./stepCodeActions");
 const { GaugeClients } = require("./gaugeClients");
 const { GaugeEnterHandler } = require("./gaugeEnterHandler");
 const { ReferenceProvider } = require("./gaugeReference");
@@ -358,6 +359,25 @@ function registerArgumentCodeActionProvider(context, vscode, options) {
   const commandDisposable = registerArgumentSelectionCommand(vscode);
   if (commandDisposable) {
     context.subscriptions.push(commandDisposable);
+  }
+}
+
+function registerStepCodeActionProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerCodeActionsProvider !== "function") {
+    return;
+  }
+  const StepCodeActionProviderCtor = options.GaugeStepCodeActionProvider
+    || GaugeStepCodeActionProvider;
+  const provider = new StepCodeActionProviderCtor({ vscode });
+  const disposable = vscode.languages.registerCodeActionsProvider(
+    [
+      { language: "gauge" },
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+    ],
+    provider,
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
   }
 }
 
@@ -889,6 +909,7 @@ function activate(context, vscodeApi, options = {}) {
     vscode,
   }));
   registerArgumentCodeActionProvider(context, vscode, options);
+  registerStepCodeActionProvider(context, vscode, options);
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
       command,

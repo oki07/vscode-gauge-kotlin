@@ -307,7 +307,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 4
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 5
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -1581,6 +1581,13 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeStepCodeActionProvider {
+    constructor(options) {
+      this.options = options;
+      created.stepCodeActionProvider = this;
+    }
+  }
+
   class FakeStepDiagnosticsProvider {
     constructor(options) {
       this.options = options;
@@ -1633,6 +1640,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeFoldingRangeProvider: FakeFoldingRangeProvider,
     GaugeRenameProvider: FakeRenameProvider,
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
+    GaugeStepCodeActionProvider: FakeStepCodeActionProvider,
     GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
     GaugeValidateDiagnosticsProvider: FakeValidateDiagnosticsProvider,
     ProjectInitializer: FakeProjectInitializer,
@@ -1697,6 +1705,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(created.specNodeProvider), true);
   assert.equal(context.subscriptions.includes(created.projectInitializer), true);
   assert.equal(context.subscriptions.includes(codeActionProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(codeActionProviders[1].disposable), true);
   assert.equal(context.subscriptions.includes(debugProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(renameProviders[0].disposable), true);
@@ -1763,8 +1772,17 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       provider: created.argumentCodeActionProvider,
       disposable: codeActionProviders[0].disposable,
     },
+    {
+      selector: [
+        { language: "gauge" },
+        { language: "markdown", scheme: "file", pattern: "**/*.md" },
+      ],
+      provider: created.stepCodeActionProvider,
+      disposable: codeActionProviders[1].disposable,
+    },
   ]);
   assert.equal(created.argumentCodeActionProvider.options.vscode, fakeVscode);
+  assert.equal(created.stepCodeActionProvider.options.vscode, fakeVscode);
   assert.equal(created.stepDiagnosticsProvider.options.vscode, fakeVscode);
   assert.equal(created.stepDiagnosticsProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(created.validateDiagnosticsProvider.options.vscode, fakeVscode);
@@ -2350,6 +2368,13 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     }
   }
 
+  class FakeStepCodeActionProvider {
+    constructor(options) {
+      this.options = options;
+      created.stepCodeActionProvider = this;
+    }
+  }
+
   const projectFactory = {
     isGaugeProject() {
       return true;
@@ -2367,6 +2392,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
       dispose() {}
     },
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
+    GaugeStepCodeActionProvider: FakeStepCodeActionProvider,
     projectFactory,
     showInstallGaugeNotification(vscode) {
       installCalls.push(vscode);
@@ -2383,11 +2409,21 @@ test("activation shows install guidance when Gauge is unavailable", () => {
       provider: created.argumentCodeActionProvider,
       disposable: codeActionProviders[0].disposable,
     },
+    {
+      selector: [
+        { language: "gauge" },
+        { language: "markdown", scheme: "file", pattern: "**/*.md" },
+      ],
+      provider: created.stepCodeActionProvider,
+      disposable: codeActionProviders[1].disposable,
+    },
   ]);
   assert.equal(created.argumentCodeActionProvider.options.vscode, fakeVscode);
   assert.equal(created.argumentCodeActionProvider.options.projectFactory, projectFactory);
+  assert.equal(created.stepCodeActionProvider.options.vscode, fakeVscode);
   assert.ok(registeredCommands.some((entry) => entry.command === "gauge.selectArgumentRange"));
   assert.equal(context.subscriptions.includes(codeActionProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(codeActionProviders[1].disposable), true);
 });
 
 test("activation shows unsupported Gauge version guidance when Gauge is too old", () => {
