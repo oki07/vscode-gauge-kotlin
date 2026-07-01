@@ -337,6 +337,95 @@ test("ReferenceProvider falls back to unopened workspace Kotlin constants", asyn
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
 
+test("ReferenceProvider skips unopened Step sources resolved to non-Gauge projects", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const openedFiles = [];
+  const outsideUri = {
+    fsPath: "/workspace/notes/src/test/kotlin/OtherSteps.kt",
+  };
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/gauge/src/test/kotlin/Steps.kt",
+      toString() {
+        return "file:///workspace/gauge/src/test/kotlin/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 2, character: 8 },
+    workspace: {
+      async findFiles(pattern) {
+        return pattern === "**/*.kt" ? [outsideUri] : [];
+      },
+      async openTextDocument(uri) {
+        openedFiles.push(uri.fsPath);
+        return {
+          languageId: "kotlin",
+          uri,
+          getText() {
+            return [
+              "import com.thoughtworks.gauge.Step",
+              "",
+              "@Step(\"Other <value>\")",
+              "fun other(value: String) {}",
+            ].join("\n");
+          },
+        };
+      },
+      textDocuments: [activeDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": [
+      { uri: "file:///workspace/gauge/specs/example.spec", range: { start: { line: 2, character: 0 } } },
+    ],
+  }, requestCalls);
+  clients.set("/workspace/gauge", {
+    project: new GaugeProject("/workspace/gauge", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, {
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        if (filename.startsWith("/workspace/notes/")) {
+          return "/workspace/notes";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.equal(calls.commands[0].command, "editor.action.showReferences");
+  assert.deepEqual(openedFiles, []);
+});
+
 test("ReferenceProvider falls back to local Gauge references for Kotlin Step aliases", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");

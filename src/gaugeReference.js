@@ -10,6 +10,9 @@ const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_REFERENCE_PATTERNS = ["**/*.kt", "**/*.java"];
+const PROJECT_ROOT_GAUGE = "gauge";
+const PROJECT_ROOT_NON_GAUGE = "nonGauge";
+const PROJECT_ROOT_UNKNOWN = "unknown";
 
 const {
   GaugeStepDiagnosticsProvider,
@@ -718,37 +721,52 @@ class ReferenceProvider {
     if (options.sourceDocument) {
       return this.diagnosticsProvider.gaugeProjectRoot(options.sourceDocument);
     }
-    if (
-      options.sourcePath
-      && this.projectFactory
-      && typeof this.projectFactory.getGaugeRootFromFilePath === "function"
-    ) {
-      try {
-        return this.projectFactory.getGaugeRootFromFilePath(options.sourcePath);
-      } catch (_error) {
-        return undefined;
-      }
-    }
-    return undefined;
+    const projectRootInfo = this.projectRootInfoForFile(options.sourcePath);
+    return projectRootInfo.type === PROJECT_ROOT_GAUGE ? projectRootInfo.root : undefined;
   }
 
-  belongsPathToSourceGaugeProject(file, sourceRoot) {
+  projectRootInfoForFile(file) {
     if (
       !file
       || !this.projectFactory
       || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
     ) {
-      return true;
+      return { root: undefined, type: PROJECT_ROOT_UNKNOWN };
     }
     try {
-      const candidateRoot = this.projectFactory.getGaugeRootFromFilePath(file);
-      return sourceRoot === undefined || candidateRoot === sourceRoot;
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      if (!this.diagnosticsProvider.isGaugeProjectRoot(root)) {
+        return { root: undefined, type: PROJECT_ROOT_NON_GAUGE };
+      }
+      return { root, type: PROJECT_ROOT_GAUGE };
     } catch (_error) {
-      return false;
+      return { root: undefined, type: PROJECT_ROOT_NON_GAUGE };
     }
   }
 
-  async findWorkspaceStepImplementationDocuments() {
+  belongsPathToSourceGaugeProject(file, sourceRoot) {
+    const projectRootInfo = this.projectRootInfoForFile(file);
+    if (projectRootInfo.type === PROJECT_ROOT_UNKNOWN) {
+      return true;
+    }
+    if (projectRootInfo.type === PROJECT_ROOT_NON_GAUGE) {
+      return false;
+    }
+    return sourceRoot === undefined || projectRootInfo.root === sourceRoot;
+  }
+
+  shouldOpenWorkspaceStepImplementation(file, sourceRoot) {
+    const projectRootInfo = this.projectRootInfoForFile(file);
+    if (projectRootInfo.type === PROJECT_ROOT_UNKNOWN) {
+      return true;
+    }
+    if (projectRootInfo.type === PROJECT_ROOT_NON_GAUGE) {
+      return false;
+    }
+    return sourceRoot === undefined || projectRootInfo.root === sourceRoot;
+  }
+
+  async findWorkspaceStepImplementationDocuments(sourceRoot) {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -768,12 +786,8 @@ class ReferenceProvider {
 
       for (const uri of uris || []) {
         const file = uriPath(uri);
-        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-          try {
-            this.projectFactory.getGaugeRootFromFilePath(file);
-          } catch (_error) {
-            continue;
-          }
+        if (!this.shouldOpenWorkspaceStepImplementation(file, sourceRoot)) {
+          continue;
         }
 
         try {
@@ -822,6 +836,7 @@ class ReferenceProvider {
 
   async stepImplementationDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
+    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -849,7 +864,7 @@ class ReferenceProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceStepImplementationDocuments()) {
+    for (const candidate of await this.findWorkspaceStepImplementationDocuments(sourceRoot)) {
       addDocument(candidate);
     }
     return documents;
