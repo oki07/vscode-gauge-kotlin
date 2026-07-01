@@ -228,6 +228,61 @@ test("GaugeFoldingRangeProvider folds markdown Gauge specs in Gauge projects", (
   ]);
 });
 
+test("GaugeFoldingRangeProvider folds spec files by extension", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/specs/example.spec");
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        return root === "/workspace";
+      },
+    },
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Open cart",
+    "",
+    "## Successful checkout",
+    "* Pay",
+    "",
+  ].join("\n"), "/workspace/specs/example.spec", "plaintext");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 1 },
+    { start: 3, end: 4 },
+  ]);
+});
+
+test("GaugeFoldingRangeProvider folds concept files by extension", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/specs/concepts/shared.cpt");
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        return root === "/workspace";
+      },
+    },
+  });
+  const document = createDocument([
+    "# Shared checkout",
+    "* Reuse cart",
+    "",
+    "___",
+    "* Still concept text",
+    "",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt", "plaintext");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 4 },
+  ]);
+});
+
 test("GaugeFoldingRangeProvider ignores markdown outside Gauge projects", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider({

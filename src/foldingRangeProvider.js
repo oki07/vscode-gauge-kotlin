@@ -7,6 +7,8 @@ const {
 
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_EXTENSION = ".spec";
+const CONCEPT_FILE_EXTENSION = ".cpt";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 
 function documentLines(document) {
@@ -23,7 +25,11 @@ function documentPath(document) {
 }
 
 function isConceptDocument(document) {
-  return documentPath(document).toLowerCase().endsWith(".cpt");
+  return documentPath(document).toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
+}
+
+function isSpecDocument(document) {
+  return documentPath(document).toLowerCase().endsWith(SPEC_FILE_EXTENSION);
 }
 
 function isMarkdownSpecDocument(document, filePath) {
@@ -107,10 +113,18 @@ class GaugeFoldingRangeProvider {
       return false;
     }
     if (!this.projectFactory) {
-      return document && document.languageId === GAUGE_LANGUAGE;
+      return document && (
+        document.languageId === GAUGE_LANGUAGE
+        || isSpecDocument(document)
+        || isConceptDocument(document)
+      );
     }
     if (typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
-      return document && document.languageId === GAUGE_LANGUAGE;
+      return document && (
+        document.languageId === GAUGE_LANGUAGE
+        || isSpecDocument(document)
+        || isConceptDocument(document)
+      );
     }
 
     try {
@@ -131,6 +145,8 @@ class GaugeFoldingRangeProvider {
     const file = documentPath(document);
     const supportedDocument = document && (
       document.languageId === GAUGE_LANGUAGE
+      || isSpecDocument(document)
+      || isConceptDocument(document)
       || isMarkdownSpecDocument(document, file)
     );
     if (!supportedDocument || !this.isGaugeProjectDocument(document)) {

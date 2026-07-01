@@ -1815,7 +1815,9 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
+        { scheme: "file", pattern: "**/*.cpt" },
       ],
       provider: created.foldingRangeProvider,
       disposable: foldingRangeProviders[0].disposable,
