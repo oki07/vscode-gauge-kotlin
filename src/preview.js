@@ -10,6 +10,7 @@ const { createProjectFactory } = require("./project/projectFactory");
 const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_EXTENSION = ".md";
+const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept to preview.";
 const SPECTACLE_PLUGIN_NAME = "spectacle";
 const INSTALL_SPECTACLE_ACTION = "Install Spectacle";
@@ -41,6 +42,9 @@ function activeGaugeFile(vscode) {
     return undefined;
   }
   if (document.languageId === "gauge") {
+    return filePath;
+  }
+  if (GAUGE_FILE_EXTENSIONS.has(nodePath.extname(filePath).toLowerCase())) {
     return filePath;
   }
   if (
