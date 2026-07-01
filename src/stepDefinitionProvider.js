@@ -13,6 +13,9 @@ const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
+const PROJECT_ROOT_GAUGE = "gauge";
+const PROJECT_ROOT_NON_GAUGE = "nonGauge";
+const PROJECT_ROOT_UNKNOWN = "unknown";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -218,6 +221,10 @@ function documentPath(document) {
   return document && document.uri && document.uri.fsPath;
 }
 
+function uriPath(uri) {
+  return uri && uri.fsPath;
+}
+
 function targetRange(vscode, text, entry) {
   const startOffset = entry.declarationStart !== undefined
     ? entry.declarationStart
@@ -246,19 +253,27 @@ class GaugeStepDefinitionProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
-  gaugeProjectRoot(document) {
+  projectRootInfoForFile(file) {
     if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
-      return undefined;
+      return { root: undefined, type: PROJECT_ROOT_UNKNOWN };
     }
-    const file = documentPath(document);
     if (!file) {
-      return undefined;
+      return { root: undefined, type: PROJECT_ROOT_UNKNOWN };
     }
     try {
-      return this.projectFactory.getGaugeRootFromFilePath(file);
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      if (!this.diagnosticsProvider.isGaugeProjectRoot(root)) {
+        return { root: undefined, type: PROJECT_ROOT_NON_GAUGE };
+      }
+      return { root, type: PROJECT_ROOT_GAUGE };
     } catch (_error) {
-      return undefined;
+      return { root: undefined, type: PROJECT_ROOT_UNKNOWN };
     }
+  }
+
+  gaugeProjectRoot(document) {
+    const projectRootInfo = this.projectRootInfoForFile(documentPath(document));
+    return projectRootInfo.type === PROJECT_ROOT_GAUGE ? projectRootInfo.root : undefined;
   }
 
   belongsToSourceGaugeProject(candidate, sourceRoot) {
@@ -269,18 +284,31 @@ class GaugeStepDefinitionProvider {
     if (!file) {
       return true;
     }
-    return this.gaugeProjectRoot(candidate) === sourceRoot;
+    const projectRootInfo = this.projectRootInfoForFile(file);
+    return projectRootInfo.type === PROJECT_ROOT_GAUGE && projectRootInfo.root === sourceRoot;
   }
 
   isDifferentGaugeProject(candidate, sourceRoot) {
     if (sourceRoot === undefined) {
       return false;
     }
-    const candidateRoot = this.gaugeProjectRoot(candidate);
-    return candidateRoot !== undefined && candidateRoot !== sourceRoot;
+    const projectRootInfo = this.projectRootInfoForFile(documentPath(candidate));
+    return projectRootInfo.type === PROJECT_ROOT_NON_GAUGE
+      || (projectRootInfo.type === PROJECT_ROOT_GAUGE && projectRootInfo.root !== sourceRoot);
   }
 
-  async findWorkspaceStepImplementationDocuments() {
+  shouldOpenWorkspaceDocument(file, sourceRoot) {
+    const projectRootInfo = this.projectRootInfoForFile(file);
+    if (projectRootInfo.type === PROJECT_ROOT_NON_GAUGE) {
+      return false;
+    }
+    if (sourceRoot !== undefined && projectRootInfo.type === PROJECT_ROOT_GAUGE) {
+      return projectRootInfo.root === sourceRoot;
+    }
+    return true;
+  }
+
+  async findWorkspaceStepImplementationDocuments(sourceRoot) {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -298,6 +326,9 @@ class GaugeStepDefinitionProvider {
         continue;
       }
       for (const uri of uris || []) {
+        if (!this.shouldOpenWorkspaceDocument(uriPath(uri), sourceRoot)) {
+          continue;
+        }
         try {
           const document = await workspace.openTextDocument(uri);
           documents.push(document);
@@ -309,7 +340,7 @@ class GaugeStepDefinitionProvider {
     return documents;
   }
 
-  async findWorkspaceConceptDocuments() {
+  async findWorkspaceConceptDocuments(sourceRoot) {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -326,6 +357,9 @@ class GaugeStepDefinitionProvider {
       return documents;
     }
     for (const uri of uris || []) {
+      if (!this.shouldOpenWorkspaceDocument(uriPath(uri), sourceRoot)) {
+        continue;
+      }
       try {
         const document = await workspace.openTextDocument(uri);
         documents.push(document);
@@ -377,7 +411,7 @@ class GaugeStepDefinitionProvider {
     for (const candidate of openDocuments) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceStepImplementationDocuments()) {
+    for (const candidate of await this.findWorkspaceStepImplementationDocuments(sourceRoot)) {
       addDocument(candidate);
     }
     return { externalDocuments, projectDocuments };
@@ -413,7 +447,7 @@ class GaugeStepDefinitionProvider {
     for (const candidate of openDocuments) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceConceptDocuments()) {
+    for (const candidate of await this.findWorkspaceConceptDocuments(sourceRoot)) {
       addDocument(candidate);
     }
     addDocument(sourceDocument);

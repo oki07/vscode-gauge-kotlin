@@ -1082,6 +1082,67 @@ test("GaugeStepDefinitionProvider resolves grouped and accessor Kotlin Step anno
   }
 });
 
+test("GaugeStepDefinitionProvider skips unopened Step sources resolved to non-Gauge projects", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const outsideUri = {
+    fsPath: "/workspace/notes/src/test/kotlin/OtherSteps.kt",
+  };
+  const openedFiles = [];
+  const vscode = createFakeVscode([specDocument, kotlinDocument], {
+    findFiles(pattern) {
+      return pattern === "**/*.kt" ? Promise.resolve([outsideUri]) : Promise.resolve([]);
+    },
+    openTextDocument(uri) {
+      openedFiles.push(uri.fsPath);
+      return Promise.resolve(createDocument([
+        "package notes",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Other <value>\")",
+        "fun other(value: String) {}",
+      ].join("\n"), "kotlin", uri.fsPath));
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        if (filename.startsWith("/workspace/notes/")) {
+          return "/workspace/notes";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(openedFiles, []);
+});
+
 test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
