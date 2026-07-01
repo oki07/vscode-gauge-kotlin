@@ -117,6 +117,36 @@ test("GaugeArgumentCodeActionProvider ignores Markdown files outside Gauge proje
   assert.deepEqual(actions, []);
 });
 
+test("GaugeArgumentCodeActionProvider ignores Gauge files by extension outside Gauge projects", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const checkedFiles = [];
+  const provider = new GaugeArgumentCodeActionProvider({
+    vscode: createFakeVscode(),
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        checkedFiles.push(file);
+        throw new Error("not a Gauge project");
+      },
+    },
+  });
+
+  const specActions = provider.provideCodeActions(
+    createDocument('* Document "cart"', "/workspace/docs/example.spec", "plaintext"),
+    createRange(0, 12),
+  );
+  const conceptActions = provider.provideCodeActions(
+    createDocument("# Shared <cart>", "/workspace/docs/concepts/shared.cpt", "plaintext"),
+    createRange(0, 10),
+  );
+
+  assert.deepEqual(specActions, []);
+  assert.deepEqual(conceptActions, []);
+  assert.deepEqual(checkedFiles, [
+    "/workspace/docs/example.spec",
+    "/workspace/docs/concepts/shared.cpt",
+  ]);
+});
+
 test("GaugeArgumentCodeActionProvider converts escaped static arguments to dynamic parameters", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const vscode = createFakeVscode();

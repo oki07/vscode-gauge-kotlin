@@ -1846,7 +1846,9 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
+        { scheme: "file", pattern: "**/*.cpt" },
       ],
       provider: created.argumentCodeActionProvider,
       disposable: codeActionProviders[0].disposable,
@@ -2486,7 +2488,9 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     {
       selector: [
         { language: "gauge" },
+        { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
+        { scheme: "file", pattern: "**/*.cpt" },
       ],
       provider: created.argumentCodeActionProvider,
       disposable: codeActionProviders[0].disposable,

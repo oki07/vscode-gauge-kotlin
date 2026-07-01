@@ -6,6 +6,9 @@ const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
 const SELECT_ARGUMENT_RANGE_COMMAND = "gauge.selectArgumentRange";
 const SELECT_ARGUMENT_RANGE_TITLE = "Select Gauge Argument";
+const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
+const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -54,17 +57,25 @@ function documentPath(document) {
 }
 
 function isConceptDocument(document) {
-  return documentPath(document).toLowerCase().endsWith(".cpt");
+  return CONCEPT_FILE_PATTERN.test(documentPath(document));
+}
+
+function isSpecDocument(document) {
+  return SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
 function isMarkdownDocument(document) {
   return document
     && document.languageId === "markdown"
-    && documentPath(document).toLowerCase().endsWith(".md");
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
+function isGaugeFileDocument(document) {
+  return isSpecDocument(document) || isConceptDocument(document) || isMarkdownDocument(document);
 }
 
 function isGaugeProjectDocument(document, projectFactory) {
-  if (!isMarkdownDocument(document) || !projectFactory) {
+  if (!isGaugeFileDocument(document) || !projectFactory) {
     return true;
   }
   if (typeof projectFactory.getGaugeRootFromFilePath !== "function") {
