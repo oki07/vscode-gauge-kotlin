@@ -8,6 +8,7 @@ const CONTROLLER_LABEL = "Gauge";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+const SPEC_FILE_PATTERN = /\.spec$/i;
 const DEBUG_PROFILE_LABEL = "Debug";
 const FAILED_PROFILE_LABEL = "Run Failed";
 const REPEAT_PROFILE_LABEL = "Run Repeat";
@@ -90,11 +91,12 @@ function isConceptDocument(document) {
 }
 
 function isGaugeSpecificationDocument(document) {
+  const file = documentPath(document);
   return Boolean(
     document
-    && document.languageId === GAUGE_LANGUAGE
+    && (document.languageId === GAUGE_LANGUAGE || SPEC_FILE_PATTERN.test(file))
     && !isConceptDocument(document)
-    && documentPath(document),
+    && file,
   );
 }
 

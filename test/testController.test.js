@@ -368,6 +368,40 @@ test("GaugeTestController discovers specification and scenario test items from o
   ]);
 });
 
+test("GaugeTestController discovers specification and scenario test items from open spec files by extension", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay by card",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/plain.spec", "plaintext");
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/plain.spec");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+
+  gaugeTests.register();
+
+  const spec = controller.items.get("/workspace/gauge/specs/plain.spec");
+  assert.equal(spec.label, "Checkout");
+  assert.deepEqual(spec.uri, { fsPath: "/workspace/gauge/specs/plain.spec" });
+  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+    ["/workspace/gauge/specs/plain.spec:3", "Successful checkout"],
+  ]);
+});
+
 test("GaugeTestController ignores open Gauge documents outside Gauge projects", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([
