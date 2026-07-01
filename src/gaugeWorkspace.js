@@ -21,6 +21,7 @@ const KOTLIN_RUNNER = "kotlin";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER, JAVA_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
@@ -57,7 +58,7 @@ function isActiveGaugeWorkspaceDocument(document) {
     return true;
   }
   const file = documentPath(document);
-  if (SPEC_FILE_PATTERN.test(file)) {
+  if (SPEC_FILE_PATTERN.test(file) || CONCEPT_FILE_PATTERN.test(file)) {
     return true;
   }
   return document.languageId === MARKDOWN_LANGUAGE

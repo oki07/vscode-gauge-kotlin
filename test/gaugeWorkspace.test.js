@@ -1111,6 +1111,43 @@ test("GaugeWorkspace starts a client for the active spec file by extension", asy
   assert.equal(clients.get("/workspace/gauge/specs/login.spec").client.started, true);
 });
 
+test("GaugeWorkspace starts a client for the active concept file by extension", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "plaintext",
+        uri: { fsPath: "/workspace/gauge/specs/concepts/shared.cpt" },
+      },
+    },
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(
+      new Command("gauge"),
+      { plugins: [{ name: "kotlin", version: "0.9.0" }] },
+      new Command("mvn"),
+      new Command("gradle"),
+    ),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(clients.get("/workspace/gauge/specs/concepts/shared.cpt").client.started, true);
+});
+
 test("GaugeWorkspace starts a client for the active Markdown Gauge specification", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
@@ -1272,6 +1309,47 @@ test("GaugeWorkspace starts a client when the active editor changes to a spec fi
   });
 
   assert.equal(clients.get("/workspace/gauge/specs/login.spec").client.started, true);
+});
+
+test("GaugeWorkspace starts a client when the active editor changes to a concept file by extension", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { activeEditorListeners, vscode } = createFakeVscode({
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(
+      new Command("gauge"),
+      { plugins: [{ name: "kotlin", version: "0.9.0" }] },
+      new Command("mvn"),
+      new Command("gradle"),
+    ),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  assert.equal(activeEditorListeners.length, 1);
+  assert.equal(clients.get("/workspace/gauge/specs/concepts/shared.cpt"), undefined);
+
+  await activeEditorListeners[0]({
+    document: {
+      languageId: "plaintext",
+      uri: { fsPath: "/workspace/gauge/specs/concepts/shared.cpt" },
+    },
+  });
+
+  assert.equal(clients.get("/workspace/gauge/specs/concepts/shared.cpt").client.started, true);
 });
 
 test("GaugeWorkspace starts a client when the active editor changes to Kotlin", async () => {
