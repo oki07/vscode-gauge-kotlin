@@ -190,6 +190,43 @@ test("GaugeStepDefinitionProvider resolves Markdown Gauge spec steps to Kotlin S
   );
 });
 
+test("GaugeStepDefinitionProvider resolves spec files by extension to Kotlin Step functions", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "* Log in as \"alice\"",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class LoginSteps {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 2, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+  assert.deepEqual(
+    { ...definitions[0].range.end },
+    { line: 6, character: 26 },
+  );
+});
+
 test("GaugeStepDefinitionProvider resolves static and dynamic argument spec steps", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

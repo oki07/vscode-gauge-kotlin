@@ -11,6 +11,7 @@ const {
 
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_PATTERN = /\.spec$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const PROJECT_ROOT_GAUGE = "gauge";
@@ -149,6 +150,9 @@ function isGaugeStepSourceDocument(document) {
     return false;
   }
   if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  if (SPEC_FILE_PATTERN.test(documentPath(document))) {
     return true;
   }
   return document.languageId === MARKDOWN_LANGUAGE

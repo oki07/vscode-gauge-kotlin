@@ -2219,6 +2219,7 @@ test("activation registers Kotlin step definitions for Gauge documents", () => {
   assert.equal(definitionProviders.length, 1);
   assert.deepEqual(definitionProviders[0].selector, [
     { language: "gauge" },
+    { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
   ]);
   assert.equal(definitionProviders[0].provider.options.vscode, fakeVscode);
