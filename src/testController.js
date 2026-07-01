@@ -20,6 +20,7 @@ const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
 };
+const NON_GAUGE_PROJECT_ROOT = Symbol("nonGaugeProjectRoot");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -311,9 +312,19 @@ function projectRootFromFactory(projectFactory, target) {
     return undefined;
   }
   try {
-    return projectFactory.getGaugeRootFromFilePath(targetFile(target));
+    const projectRoot = projectFactory.getGaugeRootFromFilePath(targetFile(target));
+    if (!projectRoot) {
+      return NON_GAUGE_PROJECT_ROOT;
+    }
+    if (
+      typeof projectFactory.isGaugeProject === "function"
+      && projectFactory.isGaugeProject(projectRoot) === false
+    ) {
+      return NON_GAUGE_PROJECT_ROOT;
+    }
+    return projectRoot;
   } catch (_) {
-    return undefined;
+    return NON_GAUGE_PROJECT_ROOT;
   }
 }
 
@@ -329,7 +340,11 @@ function groupedTargetsByKnownProject(targets, clientsMap, projectFactory) {
   const groups = [];
   const groupIndexes = new Map();
   for (const target of targets) {
-    const projectRoot = projectRootForTarget(target, projectRoots, projectFactory) || "";
+    const resolvedProjectRoot = projectRootForTarget(target, projectRoots, projectFactory);
+    if (resolvedProjectRoot === NON_GAUGE_PROJECT_ROOT) {
+      continue;
+    }
+    const projectRoot = resolvedProjectRoot || "";
     let groupIndex = groupIndexes.get(projectRoot);
     if (groupIndex === undefined) {
       groupIndex = groups.length;
@@ -341,9 +356,9 @@ function groupedTargetsByKnownProject(targets, clientsMap, projectFactory) {
   return groups;
 }
 
-function projectRootsForTargets(targets, clientsMap, projectFactory) {
+function projectRootsForGroups(groups) {
   const seen = new Set();
-  return groupedTargetsByKnownProject(targets, clientsMap, projectFactory)
+  return groups
     .map((group) => group.projectRoot)
     .filter((projectRoot) => {
       if (!projectRoot || seen.has(projectRoot)) {
@@ -789,24 +804,31 @@ class GaugeTestController {
               flags,
             );
           }
-        } else if (canBatchSpecificationTargets(targets)) {
-          for (const group of groupedTargetsByKnownProject(targets, this.clientsMap, this.projectFactory)) {
-            if (cancellationRequested(token)) {
-              break;
-            }
-            await this.executionController.handleCommand(
-              "gauge.execute.specification",
-              undefined,
-              group.targets,
-              flags,
-            );
-          }
         } else {
-          for (const target of targets) {
-            if (cancellationRequested(token)) {
-              break;
+          const targetGroups = groupedTargetsByKnownProject(targets, this.clientsMap, this.projectFactory);
+          const runnableTargets = targetGroups.flatMap((group) => group.targets);
+          if (runnableTargets.length === 0) {
+            return;
+          }
+          if (canBatchSpecificationTargets(runnableTargets)) {
+            for (const group of targetGroups) {
+              if (cancellationRequested(token)) {
+                break;
+              }
+              await this.executionController.handleCommand(
+                "gauge.execute.specification",
+                undefined,
+                group.targets,
+                flags,
+              );
             }
-            await this.executionController.handleCommand("gauge.execute", target, flags);
+          } else {
+            for (const target of runnableTargets) {
+              if (cancellationRequested(token)) {
+                break;
+              }
+              await this.executionController.handleCommand("gauge.execute", target, flags);
+            }
           }
         }
       }
@@ -842,9 +864,15 @@ class GaugeTestController {
       ) {
         const flags = testUiRunFlags();
         const targets = executionTargetsForRequest(this.controller, request);
-        const projectRoots = targets === undefined
+        const targetGroups = targets === undefined
+          ? undefined
+          : groupedTargetsByKnownProject(targets, this.clientsMap, this.projectFactory);
+        if (targetGroups && targetGroups.length === 0) {
+          return;
+        }
+        const projectRoots = targetGroups === undefined
           ? []
-          : projectRootsForTargets(targets, this.clientsMap, this.projectFactory);
+          : projectRootsForGroups(targetGroups);
         if (projectRoots.length > 0) {
           for (const projectRoot of projectRoots) {
             if (cancellationRequested(token)) {

@@ -837,6 +837,42 @@ test("GaugeTestController uses projectFactory roots to split specification batch
   ]);
 });
 
+test("GaugeTestController skips included specification targets resolved to non-Gauge projects", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/specs/draft.spec");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const draft = controller.createTestItem(
+    "/workspace/notes/specs/draft.spec",
+    "Draft",
+    { fsPath: "/workspace/notes/specs/draft.spec" },
+  );
+
+  await gaugeTests.run({ include: [draft] });
+
+  assert.deepEqual(executionCalls, []);
+});
+
 test("GaugeTestController expands included specifications when scenarios are excluded", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();
@@ -1174,6 +1210,44 @@ test("GaugeTestController scopes repeat Test UI reruns to included project roots
       "machine-readable": true,
     }],
   ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
+test("GaugeTestController skips project-scoped reruns resolved to non-Gauge projects", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/specs/draft.spec");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  const repeatProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Run Repeat");
+  const draft = controller.createTestItem(
+    "/workspace/notes/specs/draft.spec",
+    "Draft",
+    { fsPath: "/workspace/notes/specs/draft.spec" },
+  );
+
+  await repeatProfile[3]({ include: [draft] });
+
+  assert.deepEqual(executionCalls, []);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
