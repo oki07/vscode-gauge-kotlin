@@ -171,6 +171,47 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for markdown s
   assert.equal(diagnostics[0].message, "ParseError line number: 3, Step is malformed");
 });
 
+test("GaugeValidateDiagnosticsProvider ignores Markdown when the resolved root is not a Gauge project", () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const spawnCalls = [];
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawnSync(args, options) {
+            spawnCalls.push({ args, options });
+            throw new Error("should not spawn");
+          },
+        };
+      },
+    },
+    env: { PATH: "/bin" },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.md");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Notes",
+    "",
+    "* not a Gauge step",
+    "",
+  ].join("\n"), "/workspace/notes/example.md", "markdown");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(diagnostics, []);
+  assert.deepEqual(spawnCalls, []);
+});
+
 test("GaugeValidateDiagnosticsProvider maps gauge validate output for concept files", () => {
   const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
 

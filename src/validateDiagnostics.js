@@ -183,6 +183,19 @@ class GaugeValidateDiagnosticsProvider {
     );
   }
 
+  isGaugeProjectRoot(root) {
+    if (!root) {
+      return false;
+    }
+    if (
+      this.projectFactory
+      && typeof this.projectFactory.isGaugeProject === "function"
+    ) {
+      return this.projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  }
+
   projectForDocument(document) {
     if (!this.projectFactory) {
       return undefined;
@@ -190,12 +203,16 @@ class GaugeValidateDiagnosticsProvider {
     const file = documentPath(document);
     try {
       if (typeof this.projectFactory.getProjectByFilepath === "function") {
-        return this.projectFactory.getProjectByFilepath(file);
+        const project = this.projectFactory.getProjectByFilepath(file);
+        return this.isGaugeProjectRoot(projectRoot(project)) ? project : undefined;
       }
       if (typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
         return undefined;
       }
       const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      if (!this.isGaugeProjectRoot(root)) {
+        return undefined;
+      }
       if (typeof this.projectFactory.get === "function") {
         return this.projectFactory.get(root);
       }
