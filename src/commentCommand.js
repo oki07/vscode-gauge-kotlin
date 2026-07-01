@@ -2,6 +2,7 @@
 
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const DEFAULT_COMMENT_COMMAND = "editor.action.commentLine";
 
@@ -35,8 +36,14 @@ function isMarkdownGaugeSpec(document) {
   );
 }
 
+function isGaugeFileByExtension(document) {
+  const file = documentPath(document) || "";
+  const lowerFile = file.toLowerCase();
+  return [...GAUGE_FILE_EXTENSIONS].some((extension) => lowerFile.endsWith(extension));
+}
+
 function isGaugeProjectDocument(document, projectFactory) {
-  if (!isMarkdownGaugeSpec(document) && !isGaugeDocument(document)) {
+  if (!isMarkdownGaugeSpec(document) && !isGaugeDocument(document) && !isGaugeFileByExtension(document)) {
     return false;
   }
   if (!projectFactory || typeof projectFactory.getGaugeRootFromFilePath !== "function") {

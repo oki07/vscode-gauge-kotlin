@@ -134,6 +134,74 @@ test("toggleGaugeLineComment comments Markdown Gauge spec lines with Gauge line 
   );
 });
 
+test("toggleGaugeLineComment comments spec files by extension", async () => {
+  const { toggleGaugeLineComment } = require("../src/commentCommand");
+  const document = createDocument(
+    "* Pay",
+    "plaintext",
+    "/workspace/specs/example.spec",
+  );
+  const { appliedEdits, commandCalls, vscode } = createFakeVscode(
+    document,
+    createSelection(0, 0, 0, 0),
+  );
+
+  const result = await toggleGaugeLineComment(vscode, {
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/specs/example.spec");
+        return "/workspace";
+      },
+    },
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(commandCalls, []);
+  assert.deepEqual(appliedEdits[0].replacements.map((replacement) => ({
+    file: replacement.uri.fsPath,
+    newText: replacement.newText,
+  })), [
+    {
+      file: "/workspace/specs/example.spec",
+      newText: "// * Pay",
+    },
+  ]);
+});
+
+test("toggleGaugeLineComment comments concept files by extension", async () => {
+  const { toggleGaugeLineComment } = require("../src/commentCommand");
+  const document = createDocument(
+    "* Shared step",
+    "plaintext",
+    "/workspace/specs/concepts/shared.cpt",
+  );
+  const { appliedEdits, commandCalls, vscode } = createFakeVscode(
+    document,
+    createSelection(0, 0, 0, 0),
+  );
+
+  const result = await toggleGaugeLineComment(vscode, {
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/specs/concepts/shared.cpt");
+        return "/workspace";
+      },
+    },
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(commandCalls, []);
+  assert.deepEqual(appliedEdits[0].replacements.map((replacement) => ({
+    file: replacement.uri.fsPath,
+    newText: replacement.newText,
+  })), [
+    {
+      file: "/workspace/specs/concepts/shared.cpt",
+      newText: "// * Shared step",
+    },
+  ]);
+});
+
 test("toggleGaugeLineComment uncomments Markdown Gauge spec lines", async () => {
   const { toggleGaugeLineComment } = require("../src/commentCommand");
   const document = createDocument([
