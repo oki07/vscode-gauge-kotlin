@@ -404,7 +404,9 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
   const disposable = vscode.languages.registerCompletionItemProvider(
     [
       { language: "gauge" },
+      SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
+      CONCEPT_FILE_SELECTOR,
     ],
     provider,
     "*",

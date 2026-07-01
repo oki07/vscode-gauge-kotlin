@@ -491,6 +491,23 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept dynamic arguments"
   assert.deepEqual(labels(items), ["item", "user", "u"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests concept dynamic arguments in concept files by extension", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+  const document = createDocument([
+    "# Shared checkout <item> for <user>",
+    "* Select <i>",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "plaintext");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(1, 11));
+
+  assert.deepEqual(labels(items), ["item", "user", "i"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests escaped concept dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -774,14 +791,14 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Mar
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
 });
 
-test("GaugeDynamicArgumentCompletionProvider suggests plaintext Kotlin Step aliases on step lines", async () => {
+test("GaugeDynamicArgumentCompletionProvider suggests Step aliases in spec files by extension", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const specDocument = createDocument([
     "# Checkout",
     "",
     "* Pay",
-  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  ].join("\n"), "/workspace/gauge/specs/example.spec", "plaintext");
   const kotlinDocument = createDocument([
     "import com.thoughtworks.gauge.Step",
     "",

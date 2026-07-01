@@ -13,6 +13,8 @@ const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
 const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 
 function getVscode(vscode) {
@@ -62,7 +64,15 @@ function documentUri(document) {
 }
 
 function isConceptDocument(document) {
-  return documentPath(document).toLowerCase().endsWith(".cpt");
+  return CONCEPT_FILE_PATTERN.test(documentPath(document));
+}
+
+function isSpecDocument(document) {
+  return SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
+function isGaugeFileDocument(document) {
+  return isSpecDocument(document) || isConceptDocument(document);
 }
 
 function dynamicArgumentRange(line, position) {
@@ -604,6 +614,9 @@ class GaugeDynamicArgumentCompletionProvider {
       return false;
     }
     if (document.languageId === GAUGE_LANGUAGE) {
+      return this.isGaugeProjectDocument(document);
+    }
+    if (isGaugeFileDocument(document)) {
       return this.isGaugeProjectDocument(document);
     }
     if (
