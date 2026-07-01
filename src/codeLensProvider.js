@@ -201,11 +201,10 @@ class GaugeCodeLensProvider {
     });
   }
 
-  isGaugeProjectDocument(document) {
+  isGaugeProjectFile(file) {
     if (!this.projectFactory) {
       return true;
     }
-    const file = documentPath(document);
     if (!file || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return true;
     }
@@ -221,6 +220,10 @@ class GaugeCodeLensProvider {
     } catch (_error) {
       return false;
     }
+  }
+
+  isGaugeProjectDocument(document) {
+    return this.isGaugeProjectFile(documentPath(document));
   }
 
   referenceCodeLensesEnabled() {
@@ -258,12 +261,8 @@ class GaugeCodeLensProvider {
 
       for (const uri of uris || []) {
         const file = uriPath(uri);
-        if (file && this.projectFactory && typeof this.projectFactory.getGaugeRootFromFilePath === "function") {
-          try {
-            this.projectFactory.getGaugeRootFromFilePath(file);
-          } catch (_error) {
-            continue;
-          }
+        if (!this.isGaugeProjectFile(file)) {
+          continue;
         }
 
         try {

@@ -25,22 +25,26 @@ function createDocument(text, fsPath = "/workspace/specs/example.spec", language
 }
 
 function createFakeVscode(options = {}) {
+  const workspace = {
+    ...(options.workspace || {}),
+  };
+  if (typeof workspace.getConfiguration !== "function") {
+    workspace.getConfiguration = (section) => {
+      if (section !== "gauge.codeLenses") {
+        return { get() { return undefined; } };
+      }
+      return {
+        has(key) {
+          return Object.prototype.hasOwnProperty.call(options.codeLenses || {}, key);
+        },
+        get(key) {
+          return (options.codeLenses || {})[key];
+        },
+      };
+    };
+  }
   return {
-    workspace: {
-      getConfiguration(section) {
-        if (section !== "gauge.codeLenses") {
-          return { get() { return undefined; } };
-        }
-        return {
-          has(key) {
-            return Object.prototype.hasOwnProperty.call(options.codeLenses || {}, key);
-          },
-          get(key) {
-            return (options.codeLenses || {})[key];
-          },
-        };
-      },
-    },
+    workspace,
   };
 }
 
@@ -316,6 +320,58 @@ test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", as
       ],
     },
   ]);
+});
+
+test("GaugeCodeLensProvider skips unopened Step sources resolved to non-Gauge projects", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const openedFiles = [];
+  const outsideUri = {
+    fsPath: "/workspace/notes/src/test/kotlin/OtherSteps.kt",
+  };
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/LoginSteps.kt", "kotlin");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        if (filename.startsWith("/workspace/notes/")) {
+          return "/workspace/notes";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document],
+        findFiles(pattern) {
+          return pattern === "**/*.kt" ? Promise.resolve([outsideUri]) : Promise.resolve([]);
+        },
+        openTextDocument(uri) {
+          openedFiles.push(uri.fsPath);
+          return Promise.resolve(createDocument([
+            "import com.thoughtworks.gauge.Step",
+            "",
+            "@Step(\"Other <value>\")",
+            "fun other(value: String) {}",
+          ].join("\n"), uri.fsPath, "kotlin"));
+        },
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.equal(lenses.length, 1);
+  assert.deepEqual(openedFiles, []);
 });
 
 test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async () => {
