@@ -61,6 +61,7 @@ const SPEC_FILE_SELECTOR = { scheme: "file", pattern: "**/*.spec" };
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const CONCEPT_FILE_SELECTOR = { scheme: "file", pattern: "**/*.cpt" };
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const JAVA_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.java" };
 const KOTLIN_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.kt" };
 const PROVIDER_COMMANDS = new Set([
@@ -236,6 +237,10 @@ function isSpecPath(document) {
   return SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
+function isConceptPath(document) {
+  return CONCEPT_FILE_PATTERN.test(documentPath(document));
+}
+
 function isMarkdownGaugeSpecDocument(document, projectFactory) {
   const file = documentPath(document);
   if (
@@ -266,7 +271,7 @@ function hasActiveGaugeDocument(vscode, projectFactory) {
   if (editor.document.languageId === "gauge" && !isMarkdownPath(editor.document)) {
     return true;
   }
-  if (isSpecPath(editor.document)) {
+  if (isSpecPath(editor.document) || isConceptPath(editor.document)) {
     return true;
   }
   return isMarkdownGaugeSpecDocument(editor.document, projectFactory);
