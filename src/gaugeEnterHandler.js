@@ -1,11 +1,17 @@
 "use strict";
 
 const MARKDOWN_LANGUAGE = "markdown";
+const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+function isGaugeFileByExtension(document) {
+  const file = documentPath(document).toLowerCase();
+  return [...GAUGE_FILE_EXTENSIONS].some((extension) => file.endsWith(extension));
 }
 
 class GaugeEnterHandler {
@@ -41,10 +47,14 @@ class GaugeEnterHandler {
     if (document.languageId === "gauge") {
       return true;
     }
+    const supportedByExtension = isGaugeFileByExtension(document);
+    const supportedMarkdownSpec = document.languageId === MARKDOWN_LANGUAGE
+      && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+    if (!supportedByExtension && !supportedMarkdownSpec) {
+      return false;
+    }
     if (
-      document.languageId !== MARKDOWN_LANGUAGE
-      || !MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
-      || !this.projectFactory
+      !this.projectFactory
       || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
     ) {
       return false;
