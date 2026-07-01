@@ -241,12 +241,11 @@ function isConceptPath(document) {
   return CONCEPT_FILE_PATTERN.test(documentPath(document));
 }
 
-function isMarkdownGaugeSpecDocument(document, projectFactory) {
+function isGaugeProjectFile(document, projectFactory) {
   const file = documentPath(document);
   if (
     !document
-    || !isMarkdownPath(document)
-    || ![MARKDOWN_LANGUAGE, "gauge"].includes(document.languageId)
+    || !file
     || !projectFactory
     || typeof projectFactory.getGaugeRootFromFilePath !== "function"
   ) {
@@ -263,6 +262,17 @@ function isMarkdownGaugeSpecDocument(document, projectFactory) {
   }
 }
 
+function isMarkdownGaugeSpecDocument(document, projectFactory) {
+  if (
+    !document
+    || !isMarkdownPath(document)
+    || ![MARKDOWN_LANGUAGE, "gauge"].includes(document.languageId)
+  ) {
+    return false;
+  }
+  return isGaugeProjectFile(document, projectFactory);
+}
+
 function hasActiveGaugeDocument(vscode, projectFactory) {
   const editor = vscode.window && vscode.window.activeTextEditor;
   if (!editor || !editor.document) {
@@ -272,7 +282,7 @@ function hasActiveGaugeDocument(vscode, projectFactory) {
     return true;
   }
   if (isSpecPath(editor.document) || isConceptPath(editor.document)) {
-    return true;
+    return isGaugeProjectFile(editor.document, projectFactory);
   }
   return isMarkdownGaugeSpecDocument(editor.document, projectFactory);
 }

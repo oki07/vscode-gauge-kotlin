@@ -715,6 +715,66 @@ test("activation ignores Markdown documents when the resolved root is not a Gaug
   assert.deepEqual(debugProviders, []);
 });
 
+test("activation ignores Gauge files by extension outside Gauge projects", () => {
+  const extension = require("../src/extension");
+  const documents = [
+    {
+      languageId: "plaintext",
+      uri: { fsPath: "/notes/specs/draft.spec" },
+      fileName: "/notes/specs/draft.spec",
+    },
+    {
+      languageId: "plaintext",
+      uri: { fsPath: "/notes/specs/concepts/shared.cpt" },
+      fileName: "/notes/specs/concepts/shared.cpt",
+    },
+  ];
+
+  for (const document of documents) {
+    let createCliCalls = 0;
+    let createdWorkspace = false;
+    const checkedFiles = [];
+    const context = { subscriptions: [] };
+    const { debugProviders, fakeVscode } = createFakeVscode({
+      activeTextEditor: { document },
+    });
+
+    extension.activate(context, fakeVscode, {
+      createCli() {
+        createCliCalls += 1;
+        throw new Error("createCli should not be called");
+      },
+      createExecutionController() {
+        return { handleCommand() {} };
+      },
+      GaugeWorkspace: class FakeGaugeWorkspace {
+        constructor() {
+          createdWorkspace = true;
+        }
+      },
+      projectFactory: {
+        getGaugeRootFromFilePath(filePath) {
+          checkedFiles.push(filePath);
+          return "/notes";
+        },
+        isGaugeProject(root) {
+          assert.equal(root, "/notes");
+          return false;
+        },
+        findGaugeProjectRoots() {
+          return [];
+        },
+      },
+      showWelcomeNotification() {},
+    });
+
+    assert.equal(createCliCalls, 0);
+    assert.equal(createdWorkspace, false);
+    assert.deepEqual(checkedFiles, [document.uri.fsPath]);
+    assert.deepEqual(debugProviders, []);
+  }
+});
+
 test("create specification command delegates to the specification creator", () => {
   const extension = require("../src/extension");
 
@@ -2510,8 +2570,13 @@ test("activation starts Gauge workspace services for an active concept file by e
     GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
     semanticTokensLegend: { id: "legend" },
     projectFactory: {
-      isGaugeProject() {
-        return false;
+      getGaugeRootFromFilePath(filePath) {
+        assert.equal(filePath, "/workspace/gauge/specs/concepts/shared.cpt");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
       },
     },
     showWelcomeNotification() {},
