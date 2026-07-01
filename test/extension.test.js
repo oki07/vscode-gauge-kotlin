@@ -2056,6 +2056,7 @@ test("activation registers Gauge run code lenses for Gauge documents", () => {
   assert.equal(codeLensProviders.length, 1);
   assert.deepEqual(codeLensProviders[0].selector, [
     { language: "gauge" },
+    { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { language: "kotlin" },
     { scheme: "file", pattern: "**/*.kt" },

@@ -16,6 +16,7 @@ const DEBUG_COMMAND = "gauge.debug";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_EXTENSION = ".spec";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const REFERENCE_CONFIG = "reference";
@@ -65,6 +66,10 @@ function isMarkdownSpecDocument(document, file) {
     && document.languageId === MARKDOWN_LANGUAGE
     && file.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
   );
+}
+
+function isSpecDocument(document, file) {
+  return Boolean(document && file.toLowerCase().endsWith(SPEC_FILE_EXTENSION));
 }
 
 function documentLine(document, line) {
@@ -355,6 +360,7 @@ class GaugeCodeLensProvider {
       return this.provideStepReferenceCodeLenses(document);
     }
     const supportedDocument = document.languageId === GAUGE_LANGUAGE
+      || isSpecDocument(document, file)
       || isMarkdownSpecDocument(document, file);
     if (!supportedDocument) {
       return [];

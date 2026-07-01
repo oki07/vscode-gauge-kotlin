@@ -438,6 +438,7 @@ function registerCodeLensProvider(context, vscode, options) {
   const disposable = vscode.languages.registerCodeLensProvider(
     [
       { language: "gauge" },
+      SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       { language: KOTLIN_LANGUAGE },
       KOTLIN_IMPLEMENTATION_SELECTOR,
