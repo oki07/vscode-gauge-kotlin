@@ -186,6 +186,61 @@ test("previewGaugeDocument creates Spectacle docs for a Markdown Gauge spec", as
   ]);
 });
 
+test("previewGaugeDocument ignores Markdown when the resolved root is not a Gauge project", async () => {
+  const {
+    NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE,
+    previewGaugeDocument,
+  } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode({
+    document: {
+      languageId: "markdown",
+      uri: { fsPath: "/workspace/notes/example.md" },
+      fileName: "/workspace/notes/example.md",
+    },
+  });
+  const madeDirectories = [];
+  const spawns = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          throw new Error("should not spawn");
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    fileSystem: {
+      mkdirSync(directory, options) {
+        madeDirectories.push({ directory, options });
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.md");
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(errors, [NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE]);
+  assert.deepEqual(opened, []);
+  assert.deepEqual(madeDirectories, []);
+  assert.deepEqual(spawns, []);
+});
+
 test("previewGaugeDocument reports Spectacle generation failures", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errors, opened, vscode } = createFakeVscode();

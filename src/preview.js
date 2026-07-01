@@ -66,7 +66,15 @@ function getProjectRoot(vscode, fileSystem, pathModule, filePath, options) {
     pathModule,
     vscode,
   });
-  return projectFactory.getGaugeRootFromFilePath(filePath);
+  const root = projectFactory.getGaugeRootFromFilePath(filePath);
+  if (
+    root
+    && typeof projectFactory.isGaugeProject === "function"
+    && projectFactory.isGaugeProject(root) === false
+  ) {
+    return undefined;
+  }
+  return root;
 }
 
 function defaultTempDir(pathModule, osModule, projectRoot) {
@@ -267,6 +275,9 @@ async function previewGaugeDocument(options = {}) {
     projectRoot = getProjectRoot(vscode, fileSystem, pathModule, filePath, options);
   } catch (error) {
     return showError(vscode, previewFailureMessage(pathModule, filePath, { error }));
+  }
+  if (!projectRoot) {
+    return showError(vscode, NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE);
   }
 
   const cli = getCli(vscode, options);
