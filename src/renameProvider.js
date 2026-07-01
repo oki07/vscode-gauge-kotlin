@@ -694,6 +694,16 @@ class GaugeRenameProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
+  shouldOpenWorkspaceFile(file) {
+    if (
+      !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return true;
+    }
+    return this.diagnosticsProvider.rootForFile(file) !== undefined;
+  }
+
   async workspaceDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const documents = [];
@@ -737,6 +747,9 @@ class GaugeRenameProvider {
         for (const uri of uris || []) {
           const file = uriPath(uri);
           if (file && seenPaths.has(file)) {
+            continue;
+          }
+          if (file && !this.shouldOpenWorkspaceFile(file)) {
             continue;
           }
           try {

@@ -1023,6 +1023,60 @@ test("GaugeRenameProvider keeps Java Step annotation dollar text unescaped", asy
   );
 });
 
+test("GaugeRenameProvider does not open unopened files outside Gauge projects during workspace scans", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const nonGaugeUri = { fsPath: "/workspace/notes/example.md" };
+  const opened = [];
+  const patterns = [];
+  const vscode = {
+    ...createFakeVscode([specDocument]),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        patterns.push(pattern);
+        return [nonGaugeUri];
+      },
+      async openTextDocument(uri) {
+        opened.push(uri.fsPath);
+        return createDocument([
+          "# Notes",
+          "",
+          "* Pay with <amount>",
+        ].join("\n"), "markdown", uri.fsPath);
+      },
+    },
+  };
+  const provider = new GaugeRenameProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        if (filename.startsWith("/workspace/notes/")) {
+          return "/workspace/notes";
+        }
+        return undefined;
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  const documents = await provider.workspaceDocuments(specDocument);
+
+  assert.deepEqual(patterns, ["**/*.spec", "**/*.cpt", "**/*.md", "**/*.kt", "**/*.java"]);
+  assert.deepEqual(opened, []);
+  assert.deepEqual(documents.map((document) => document.uri.fsPath), [
+    "/workspace/gauge/specs/checkout.spec",
+  ]);
+});
+
 test("GaugeRenameProvider preserves inline table step identity when renaming", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
