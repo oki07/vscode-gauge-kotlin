@@ -106,10 +106,21 @@ function isInside(root, filename, pathModule) {
   return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
 }
 
+function isGaugeProjectRoot(projectFactory, root) {
+  if (!root) {
+    return false;
+  }
+  if (projectFactory && typeof projectFactory.isGaugeProject === "function") {
+    return projectFactory.isGaugeProject(root) !== false;
+  }
+  return true;
+}
+
 function getProjectRootForSpec(vscode, spec, pathModule, projectFactory) {
   if (projectFactory && typeof projectFactory.getGaugeRootFromFilePath === "function") {
     try {
-      return projectFactory.getGaugeRootFromFilePath(spec);
+      const root = projectFactory.getGaugeRootFromFilePath(spec);
+      return isGaugeProjectRoot(projectFactory, root) ? root : undefined;
     } catch (_error) {
       // Fall back to workspace folders for non-Gauge files or lightweight tests.
     }
@@ -173,7 +184,8 @@ function activeProjectRoot(vscode, projectFactory) {
     return undefined;
   }
   try {
-    return projectFactory.getGaugeRootFromFilePath(file);
+    const root = projectFactory.getGaugeRootFromFilePath(file);
+    return isGaugeProjectRoot(projectFactory, root) ? root : undefined;
   } catch (_error) {
     return undefined;
   }
