@@ -379,11 +379,16 @@ function registerStepCodeActionProvider(context, vscode, options) {
   }
   const StepCodeActionProviderCtor = options.GaugeStepCodeActionProvider
     || GaugeStepCodeActionProvider;
-  const provider = new StepCodeActionProviderCtor({ vscode });
+  const provider = new StepCodeActionProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+  });
   const disposable = vscode.languages.registerCodeActionsProvider(
     [
       { language: "gauge" },
+      SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
+      CONCEPT_FILE_SELECTOR,
     ],
     provider,
   );

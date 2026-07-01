@@ -7,7 +7,7 @@ const CREATE_STEP_IMPLEMENTATION_TITLE = "Create step implementation";
 const GENERATE_CONCEPT_STUB = "gauge.generate.concept";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const GAUGE_LANGUAGE = "gauge";
-const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
+const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -46,7 +46,29 @@ function isGaugeSpecDocument(document) {
   if (document.languageId === GAUGE_LANGUAGE) {
     return true;
   }
-  return SPEC_FILE_PATTERN.test(documentPath(document));
+  return GAUGE_FILE_PATTERN.test(documentPath(document));
+}
+
+function isGaugeProjectDocument(document, projectFactory) {
+  if (!projectFactory || typeof projectFactory.getGaugeRootFromFilePath !== "function") {
+    return true;
+  }
+  const file = documentPath(document);
+  if (!file) {
+    return true;
+  }
+  try {
+    const root = projectFactory.getGaugeRootFromFilePath(file);
+    if (!root) {
+      return false;
+    }
+    if (typeof projectFactory.isGaugeProject === "function") {
+      return projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function isInlineTableLine(line) {
@@ -213,10 +235,16 @@ function undefinedStepDiagnostics(context) {
 class GaugeStepCodeActionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.projectFactory = options.projectFactory;
   }
 
   provideCodeActions(document, range, context = {}) {
-    if (!document || !isGaugeSpecDocument(document) || !range) {
+    if (
+      !document
+      || !isGaugeSpecDocument(document)
+      || !isGaugeProjectDocument(document, this.projectFactory)
+      || !range
+    ) {
       return [];
     }
     const diagnostics = undefinedStepDiagnostics(context);

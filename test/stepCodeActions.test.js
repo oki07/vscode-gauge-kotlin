@@ -271,6 +271,96 @@ test("GaugeStepCodeActionProvider creates fixes for markdown Gauge specs", () =>
   });
 });
 
+test("GaugeStepCodeActionProvider creates fixes for concept files by extension", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/gauge/specs/concepts/payment.cpt");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Shared checkout",
+    "* Pay with <amount>",
+  ], "plaintext", "/workspace/gauge/specs/concepts/payment.cpt");
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+});
+
+test("GaugeStepCodeActionProvider ignores Gauge files by extension outside Gauge projects", () => {
+  const {
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const checkedFiles = [];
+  const provider = new GaugeStepCodeActionProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        checkedFiles.push(file);
+        throw new Error("not a Gauge project");
+      },
+    },
+    vscode,
+  });
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const specActions = provider.provideCodeActions(
+    createDocument([
+      "# Checkout",
+      "* Pay with <amount>",
+    ], "plaintext", "/workspace/docs/checkout.spec"),
+    range,
+    { diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }] },
+  );
+  const conceptActions = provider.provideCodeActions(
+    createDocument([
+      "# Shared checkout",
+      "* Pay with <amount>",
+    ], "plaintext", "/workspace/docs/concepts/payment.cpt"),
+    range,
+    { diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }] },
+  );
+
+  assert.deepEqual(specActions, []);
+  assert.deepEqual(conceptActions, []);
+  assert.deepEqual(checkedFiles, [
+    "/workspace/docs/checkout.spec",
+    "/workspace/docs/concepts/payment.cpt",
+  ]);
+});
+
 test("GaugeStepCodeActionProvider avoids duplicate Kotlin step stub names", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
