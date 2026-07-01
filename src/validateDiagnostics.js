@@ -196,6 +196,32 @@ class GaugeValidateDiagnosticsProvider {
     return true;
   }
 
+  rootForFile(file) {
+    if (
+      !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+      || !file
+    ) {
+      return undefined;
+    }
+    try {
+      const root = this.projectFactory.getGaugeRootFromFilePath(file);
+      return this.isGaugeProjectRoot(root) ? root : undefined;
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  shouldOpenWorkspaceFile(file) {
+    if (
+      !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return true;
+    }
+    return this.rootForFile(file) !== undefined;
+  }
+
   projectForDocument(document) {
     if (!this.projectFactory) {
       return undefined;
@@ -338,6 +364,9 @@ class GaugeValidateDiagnosticsProvider {
     for (const uri of uris || []) {
       const filename = uriPath(uri);
       if (!filename || seen.has(filename)) {
+        continue;
+      }
+      if (!this.shouldOpenWorkspaceFile(filename)) {
         continue;
       }
       try {

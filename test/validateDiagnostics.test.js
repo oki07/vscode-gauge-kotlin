@@ -439,6 +439,67 @@ test("GaugeValidateDiagnosticsProvider refreshes unopened workspace specs", asyn
   assert.deepEqual({ ...sets[0].diagnostics[0].range.end }, { line: 2, character: 11 });
 });
 
+test("GaugeValidateDiagnosticsProvider does not open unopened files outside Gauge projects during refresh", async () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const opened = [];
+  const sets = [];
+  const spawnCalls = [];
+  const nonGaugeUri = { fsPath: "/workspace/notes/example.md" };
+  const fakeVscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [],
+      findFiles(pattern) {
+        assert.equal(pattern, "**/*.{spec,md,cpt}");
+        return Promise.resolve([nonGaugeUri]);
+      },
+      openTextDocument(uri) {
+        opened.push(uri.fsPath);
+        return Promise.resolve(createDocument([
+          "# Notes",
+          "",
+          "* not a Gauge step",
+        ].join("\n"), uri.fsPath, "markdown"));
+      },
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawnSync(args, options) {
+            spawnCalls.push({ args, options });
+            throw new Error("should not spawn");
+          },
+        };
+      },
+    },
+    env: { PATH: "/bin" },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, nonGaugeUri.fsPath);
+        return "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/notes");
+        return false;
+      },
+    },
+    vscode: fakeVscode,
+  });
+
+  await provider.refreshDocuments({
+    set(uri, diagnostics) {
+      sets.push({ diagnostics, uri });
+    },
+  });
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(sets, []);
+  assert.deepEqual(spawnCalls, []);
+});
+
 test("parseGaugeValidateErrors accepts optional colon separators", () => {
   const { parseGaugeValidateErrors } = require("../src/validateDiagnostics");
 
