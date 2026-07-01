@@ -197,6 +197,34 @@ function normalizeStatus(status) {
   return String(status || "").toLowerCase();
 }
 
+function unexpectedEndEvents(event) {
+  const status = normalizeStatus(event && event.result && event.result.status);
+  const skipped = status === "skip" || normalizeStatus(event && event.type) === "skip";
+  const name = skipped ? "Ignored" : "Failed";
+  const resultType = skipped ? "testIgnored" : "testFailed";
+  return [
+    {
+      type: "testStarted",
+      id: name,
+      parentId: SUITE_ID,
+      name,
+    },
+    {
+      type: resultType,
+      id: name,
+      parentId: SUITE_ID,
+      name,
+      message: " ",
+    },
+    {
+      type: "testFinished",
+      id: name,
+      parentId: SUITE_ID,
+      name,
+    },
+  ];
+}
+
 function machineReadableEvents(event) {
   const type = String(event.type || "").toLowerCase();
   switch (type) {
@@ -287,6 +315,9 @@ function machineReadableEvents(event) {
           message: textWithLine(event.message || ""),
         },
       ];
+    case "fail":
+    case "skip":
+      return unexpectedEndEvents(event);
     default:
       return [];
   }

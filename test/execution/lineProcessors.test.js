@@ -362,6 +362,66 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
   ]);
 });
 
+test("MachineReadableEventProcessor maps top-level fail and skip events to synthetic tests", () => {
+  const { MachineReadableEventProcessor } = require("../../src/execution/lineProcessors");
+  const events = [];
+  const processor = new MachineReadableEventProcessor((event) => events.push(event));
+
+  processor.process(JSON.stringify({
+    type: "fail",
+    result: {
+      status: "fail",
+    },
+  }));
+  processor.process(JSON.stringify({
+    type: "skip",
+    result: {
+      status: "skip",
+    },
+  }));
+
+  assert.deepEqual(events, [
+    {
+      type: "testStarted",
+      id: "Failed",
+      parentId: "suite",
+      name: "Failed",
+    },
+    {
+      type: "testFailed",
+      id: "Failed",
+      parentId: "suite",
+      name: "Failed",
+      message: " ",
+    },
+    {
+      type: "testFinished",
+      id: "Failed",
+      parentId: "suite",
+      name: "Failed",
+    },
+    {
+      type: "testStarted",
+      id: "Ignored",
+      parentId: "suite",
+      name: "Ignored",
+    },
+    {
+      type: "testIgnored",
+      id: "Ignored",
+      parentId: "suite",
+      name: "Ignored",
+      message: " ",
+    },
+    {
+      type: "testFinished",
+      id: "Ignored",
+      parentId: "suite",
+      name: "Ignored",
+    },
+  ]);
+});
+
 test("MachineReadableEventProcessor maps Gauge notifications and output events", () => {
   const { MachineReadableEventProcessor } = require("../../src/execution/lineProcessors");
   const events = [];
