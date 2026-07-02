@@ -267,6 +267,8 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   });
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.spec" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.cpt" },
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
@@ -771,6 +773,8 @@ test("GaugeWorkspace generates Java config for mixed-case Java plugins", async (
   ]);
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.spec" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.cpt" },
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
@@ -1186,6 +1190,8 @@ test("GaugeWorkspace starts a client for the active Markdown Gauge specification
   assert.equal(entry.client.started, true);
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.spec" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.cpt" },
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },

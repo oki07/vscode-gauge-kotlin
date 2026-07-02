@@ -524,6 +524,8 @@ class GaugeWorkspace {
   clientOptionsFor(project, folder) {
     const documentSelector = [
       { scheme: "file", language: "gauge", pattern: `${project.root()}/**/*` },
+      { scheme: "file", pattern: `${project.root()}/**/*.spec` },
+      { scheme: "file", pattern: `${project.root()}/**/*.cpt` },
       { scheme: "file", language: MARKDOWN_LANGUAGE, pattern: `${project.root()}/**/*.md` },
     ];
     if (project.language() === KOTLIN_RUNNER) {
