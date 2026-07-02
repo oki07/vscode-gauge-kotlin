@@ -45,6 +45,26 @@ test("GaugeFoldingRangeProvider folds specifications scenarios and teardown bloc
   ]);
 });
 
+test("GaugeFoldingRangeProvider keeps repeated teardown separators in one fold", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider();
+  const document = createDocument([
+    "# Checkout",
+    "* Open cart",
+    "",
+    "___",
+    "* Cleanup one",
+    "___",
+    "* Cleanup two",
+    "",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 1 },
+    { start: 3, end: 6 },
+  ]);
+});
+
 test("GaugeFoldingRangeProvider folds legacy underline headings and concepts", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();
