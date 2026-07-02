@@ -1,8 +1,38 @@
 "use strict";
 
-const SAVE_FILES_REQUEST = {
-  method: "workspace/saveFiles",
-};
+const WORKSPACE_SAVE_FILES_METHOD = "workspace/saveFiles";
+
+class FallbackRequestType0 {
+  constructor(method) {
+    this.method = method;
+    this.numberOfParams = 0;
+  }
+
+  get parameterStructures() {
+    return {
+      toString() {
+        return "auto";
+      },
+    };
+  }
+}
+
+function requestType0Constructor() {
+  for (const moduleName of ["vscode-languageclient", "vscode-jsonrpc"]) {
+    try {
+      const candidate = require(moduleName).RequestType0;
+      if (typeof candidate === "function") {
+        return candidate;
+      }
+    } catch (_error) {
+      // The unit test environment does not install extension runtime dependencies.
+    }
+  }
+  return FallbackRequestType0;
+}
+
+const RequestType0 = requestType0Constructor();
+const SAVE_FILES_REQUEST = new RequestType0(WORKSPACE_SAVE_FILES_METHOD);
 
 function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");

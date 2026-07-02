@@ -2,7 +2,10 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 test("GaugeWorkspaceFeature advertises and handles workspace saveFiles requests", async () => {
-  const { GaugeWorkspaceFeature } = require("../src/gaugeWorkspaceFeature");
+  const {
+    GaugeWorkspaceFeature,
+    SAVE_FILES_REQUEST,
+  } = require("../src/gaugeWorkspaceFeature");
   const requests = [];
   const saves = [];
   const client = {
@@ -26,7 +29,10 @@ test("GaugeWorkspaceFeature advertises and handles workspace saveFiles requests"
   const result = await requests[0].handler();
 
   assert.deepEqual(capabilities, { saveFiles: true });
+  assert.equal(feature.messages, SAVE_FILES_REQUEST);
   assert.equal(feature.messages.method, "workspace/saveFiles");
+  assert.equal(feature.messages.numberOfParams, 0);
+  assert.equal(feature.messages.parameterStructures.toString(), "auto");
   assert.deepEqual(requests.map((request) => request.method), ["workspace/saveFiles"]);
   assert.deepEqual(saves, [false]);
   assert.equal(result, null);
