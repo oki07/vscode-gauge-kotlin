@@ -41,6 +41,7 @@ function createFakeVscode(overrides = {}) {
   const referenceProviders = [];
   const renameProviders = [];
   const semanticTokenProviders = [];
+  const workspaceSymbolProviders = [];
   const semanticTokenColors = {
     argument: "#ae81ff",
     dynamicArgument: "#ae81ff",
@@ -178,6 +179,14 @@ function createFakeVscode(overrides = {}) {
         });
         return disposable;
       },
+      registerWorkspaceSymbolProvider(provider) {
+        const disposable = { dispose() {} };
+        workspaceSymbolProviders.push({
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
       registerReferenceProvider(selector, provider) {
         const disposable = { dispose() {} };
         referenceProviders.push({
@@ -292,6 +301,7 @@ function createFakeVscode(overrides = {}) {
     renameProviders,
     semanticTokenProviders,
     textDocumentListeners,
+    workspaceSymbolProviders,
   };
 }
 
@@ -2295,7 +2305,7 @@ test("activation registers Gauge document symbols for Gauge documents", () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
-  const { documentSymbolProviders, fakeVscode } = createFakeVscode({
+  const { documentSymbolProviders, fakeVscode, workspaceSymbolProviders } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
 
@@ -2367,6 +2377,10 @@ test("activation registers Gauge document symbols for Gauge documents", () => {
   assert.equal(documentSymbolProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(typeof documentSymbolProviders[0].provider.options.projectFactory.isGaugeProject, "function");
   assert.equal(context.subscriptions.includes(documentSymbolProviders[0].disposable), true);
+  assert.equal(workspaceSymbolProviders.length, 1);
+  assert.equal(workspaceSymbolProviders[0].provider.options.vscode, fakeVscode);
+  assert.equal(typeof workspaceSymbolProviders[0].provider.options.projectFactory.isGaugeProject, "function");
+  assert.equal(context.subscriptions.includes(workspaceSymbolProviders[0].disposable), true);
 });
 
 test("activation registers Kotlin step definitions for Gauge documents", () => {

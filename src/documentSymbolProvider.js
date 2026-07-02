@@ -11,6 +11,8 @@ const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SYMBOL_KIND_NAMESPACE = 3;
+const SPEC_WORKSPACE_PATTERN = "**/*.spec";
+const MARKDOWN_WORKSPACE_PATTERN = "**/*.md";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -148,10 +150,16 @@ function legacyHeadingAt(lines, line, conceptDocument) {
     && isSpecUnderline(nextText)
     && (!conceptDocument || isConceptLegacyUnderlineHeadingText(text))
   ) {
-    return text;
+    return {
+      name: `# ${text.trim()}`,
+      text,
+    };
   }
   if (!conceptDocument && hasLegacyHeadingText(text) && isScenarioUnderline(nextText)) {
-    return text;
+    return {
+      name: `## ${text.trim()}`,
+      text,
+    };
   }
   return undefined;
 }
@@ -161,6 +169,29 @@ function hashHeadingAt(line, conceptDocument) {
     return isConceptHashHeading(line) ? line : undefined;
   }
   return isGaugeHashHeading(line) ? line : undefined;
+}
+
+function workspaceSymbolQuery(query) {
+  const text = String(query || "").trim();
+  const quoted = /^"(.*)"$/.exec(text);
+  return quoted ? quoted[1] : text;
+}
+
+function symbolNameCompare(left, right) {
+  return left.name.localeCompare(right.name);
+}
+
+function uriKey(uri) {
+  if (!uri) {
+    return "";
+  }
+  if (uri.fsPath || uri.path) {
+    return uri.fsPath || uri.path;
+  }
+  if (typeof uri.toString === "function") {
+    return uri.toString();
+  }
+  return String(uri);
 }
 
 class GaugeDocumentSymbolProvider {
@@ -198,15 +229,77 @@ class GaugeDocumentSymbolProvider {
           this.vscode,
           document,
           line,
-          headingStart(legacyHeading),
-          legacyHeading.length,
-          legacyHeading.trim(),
+          headingStart(legacyHeading.text),
+          legacyHeading.text.length,
+          legacyHeading.name,
         ));
         line += 1;
       }
     }
 
     return symbols;
+  }
+
+  async workspaceDocuments() {
+    const workspace = this.vscode && this.vscode.workspace;
+    if (
+      !workspace
+      || typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return [];
+    }
+
+    const urisByKey = new Map();
+    for (const pattern of [SPEC_WORKSPACE_PATTERN, MARKDOWN_WORKSPACE_PATTERN]) {
+      const uris = await workspace.findFiles(pattern);
+      for (const uri of uris || []) {
+        urisByKey.set(uriKey(uri), uri);
+      }
+    }
+
+    const documents = [];
+    for (const uri of urisByKey.values()) {
+      try {
+        const document = await workspace.openTextDocument(uri);
+        if (document) {
+          documents.push(document);
+        }
+      } catch (_error) {
+        // Ignore unreadable files so one stale workspace entry does not hide
+        // symbols from the rest of the Gauge project.
+      }
+    }
+    return documents;
+  }
+
+  async provideWorkspaceSymbols(query) {
+    const normalizedQuery = workspaceSymbolQuery(query);
+    if (normalizedQuery.length < 2) {
+      return [];
+    }
+
+    const queryText = normalizedQuery.toLowerCase();
+    const specSymbols = [];
+    const scenarioSymbols = [];
+    const documents = await this.workspaceDocuments();
+    for (const document of documents) {
+      const symbols = this.provideDocumentSymbols(document);
+      for (const symbol of symbols) {
+        if (!symbol.name.toLowerCase().includes(queryText)) {
+          continue;
+        }
+        if (symbol.name.startsWith("##")) {
+          scenarioSymbols.push(symbol);
+        } else if (symbol.name.startsWith("#")) {
+          specSymbols.push(symbol);
+        }
+      }
+    }
+
+    specSymbols.sort(symbolNameCompare);
+    scenarioSymbols.sort(symbolNameCompare);
+    return [...specSymbols, ...scenarioSymbols];
   }
 }
 

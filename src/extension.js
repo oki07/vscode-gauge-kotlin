@@ -500,7 +500,12 @@ function registerFormatProvider(context, vscode, options) {
 }
 
 function registerDocumentSymbolProvider(context, vscode, options) {
-  if (!vscode.languages || typeof vscode.languages.registerDocumentSymbolProvider !== "function") {
+  if (!vscode.languages) {
+    return;
+  }
+  const hasDocumentSymbols = typeof vscode.languages.registerDocumentSymbolProvider === "function";
+  const hasWorkspaceSymbols = typeof vscode.languages.registerWorkspaceSymbolProvider === "function";
+  if (!hasDocumentSymbols && !hasWorkspaceSymbols) {
     return;
   }
   const DocumentSymbolProviderCtor = options.GaugeDocumentSymbolProvider || GaugeDocumentSymbolProvider;
@@ -508,17 +513,25 @@ function registerDocumentSymbolProvider(context, vscode, options) {
     projectFactory: options.projectFactory,
     vscode,
   });
-  const disposable = vscode.languages.registerDocumentSymbolProvider(
-    [
-      { language: "gauge" },
-      SPEC_FILE_SELECTOR,
-      MARKDOWN_GAUGE_SPEC_SELECTOR,
-      CONCEPT_FILE_SELECTOR,
-    ],
-    provider,
-  );
-  if (disposable) {
-    context.subscriptions.push(disposable);
+  if (hasDocumentSymbols) {
+    const disposable = vscode.languages.registerDocumentSymbolProvider(
+      [
+        { language: "gauge" },
+        SPEC_FILE_SELECTOR,
+        MARKDOWN_GAUGE_SPEC_SELECTOR,
+        CONCEPT_FILE_SELECTOR,
+      ],
+      provider,
+    );
+    if (disposable) {
+      context.subscriptions.push(disposable);
+    }
+  }
+  if (hasWorkspaceSymbols) {
+    const disposable = vscode.languages.registerWorkspaceSymbolProvider(provider);
+    if (disposable) {
+      context.subscriptions.push(disposable);
+    }
   }
 }
 
