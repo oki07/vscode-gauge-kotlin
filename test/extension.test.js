@@ -1448,7 +1448,7 @@ test("file creation commands use Explorer folder URI as the target directory", (
   assert.equal(receivedOptions.concept.specDir, "/workspace/gauge/specs/features");
 });
 
-test("execution commands delegate to the Gauge execution controller", () => {
+test("execution commands delegate without Test UI machine-readable flags", () => {
   const extension = require("../src/extension");
 
   const handledCommands = [];
@@ -1483,13 +1483,7 @@ test("execution commands delegate to the Gauge execution controller", () => {
   assert.deepEqual(handledCommands, [
     {
       command: "gauge.execute.specification",
-      args: [
-        node,
-        {
-          "hide-suggestion": true,
-          "machine-readable": true,
-        },
-      ],
+      args: [node],
     },
   ]);
 });

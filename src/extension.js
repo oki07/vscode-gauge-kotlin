@@ -123,24 +123,6 @@ const GAUGE_COMMANDS = [
   "gauge.showReferences.atCursor",
   "gauge.specexplorer.switchProject",
 ];
-const TEST_UI_RUN_FLAGS = {
-  "hide-suggestion": true,
-  "machine-readable": true,
-};
-const TEST_UI_DEFAULT_EXECUTION_COMMANDS = new Set([
-  "gauge.execute",
-  "gauge.debug",
-  "gauge.execute.inParallel",
-  "gauge.execute.failed",
-  "gauge.execute.repeat",
-  "gauge.execute.specification",
-  "gauge.execute.specification.all",
-  "gauge.specexplorer.runAllActiveProjectSpecs",
-  "gauge.specexplorer.runNode",
-  "gauge.specexplorer.debugNode",
-  "gauge.execute.scenario",
-  "gauge.execute.scenarios",
-]);
 const EXECUTION_FLAG_KEYS = new Set([
   "debug",
   "failed",
@@ -660,10 +642,6 @@ function folderPathFromUri(value) {
   return value.fsPath || value.path;
 }
 
-function testUiRunFlags() {
-  return { ...TEST_UI_RUN_FLAGS };
-}
-
 function isExecutionFlagObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -676,23 +654,11 @@ function isExecutionFlagObject(value) {
   return false;
 }
 
-function executionCommandArgs(command, args) {
-  if (!TEST_UI_DEFAULT_EXECUTION_COMMANDS.has(command)) {
-    return args;
-  }
+function executionCommandArgs(_command, args) {
   if (args.length === 1 && isExecutionFlagObject(args[0])) {
     return [undefined, args[0]];
   }
-  if (args.length > 1 && isExecutionFlagObject(args[args.length - 1])) {
-    return args;
-  }
-  if (Array.isArray(args[1])) {
-    return [args[0], args[1], testUiRunFlags()];
-  }
-  if (args.length === 0) {
-    return [undefined, testUiRunFlags()];
-  }
-  return [args[0], testUiRunFlags()];
+  return args;
 }
 
 function createCommandHandler(command, vscode, executionController, options = {}) {
