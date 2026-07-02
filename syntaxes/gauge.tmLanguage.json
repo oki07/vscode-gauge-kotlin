@@ -75,7 +75,7 @@
           "name": "punctuation.separator.key-value.gauge"
         }
       },
-      "end": "$",
+      "end": "(?<![,\\s])\\s*$",
       "patterns": [
         {
           "match": "[^,\\s][^,]*",

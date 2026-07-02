@@ -672,6 +672,21 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(grammarJson.repository.tableSeparator, "  |---|", "  |");
 });
 
+test("Gauge TextMate grammar keeps trailing-comma tag continuations as tag values", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+  const tags = grammarJson.repository.tags;
+  const tagValue = repositoryPattern(grammarJson, "tags", 0);
+  const tagEnd = { match: tags.end };
+
+  assertPatternMatches(tags, "tags: smoke,", "tags: ");
+  assertPatternMatches(tagValue, "smoke,", "smoke");
+  assertPatternDoesNotMatch(tagEnd, "smoke,");
+  assertPatternDoesNotMatch(tagEnd, "smoke,   ");
+  assertPatternMatches(tagEnd, "fast", "");
+});
+
 test("Gauge TextMate grammar handles table and argument lexer edge cases", () => {
   const manifest = readPackageJson();
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");

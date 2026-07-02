@@ -167,6 +167,17 @@ function pushKeywordLine(builder, lineNumber, line, keyword, keywordTokenType, v
   return true;
 }
 
+function lineEndsWithComma(line) {
+  return /,\s*$/.test(line);
+}
+
+function pushTagContinuationLine(builder, lineNumber, line) {
+  const valueStart = line.length - line.trimStart().length;
+  if (valueStart < line.length) {
+    pushToken(builder, lineNumber, valueStart, line.length - valueStart, "tagValue");
+  }
+}
+
 function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
@@ -245,13 +256,28 @@ class GaugeSemanticTokensProvider {
     const dynamicArgumentRegex = /<(?:\\[<>]|[^>\r\n])*>/g;
     const tableDynamicArgumentRegex = /<(?:\\[<>|]|[^>|\r\n])*>/g;
     const tableHeaderSeparatorRegex = /^(?:\|\s*-+\s*)+\|?$/;
+    let inTagContinuation = false;
 
     for (let index = 0; index < lines.length;) {
       const line = lines[index];
       const trimmedLine = line.trim();
 
+      if (
+        !conceptDocument
+        && inTagContinuation
+        && trimmedLine.length > 0
+        && !isHashHeadingLine(line, conceptDocument)
+        && !isStepLine(line)
+      ) {
+        pushTagContinuationLine(builder, index, line);
+        inTagContinuation = lineEndsWithComma(line);
+        index += 1;
+        continue;
+      }
+
       if (trimmedLine.startsWith("//")) {
         builder.push(index, 0, line.length, tokenTypes.indexOf("disabledStep"), 0);
+        inTagContinuation = false;
         index += 1;
         continue;
       }
@@ -304,13 +330,17 @@ class GaugeSemanticTokensProvider {
         if (lastIndex < line.length) {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);
         }
+        inTagContinuation = false;
         index += 1;
       } else if (!conceptDocument && pushKeywordLine(builder, index, line, "table", "tableKeyword", "tableFileValue")) {
+        inTagContinuation = false;
         index += 1;
       } else if (!conceptDocument && pushKeywordLine(builder, index, line, "tags", "tagKeyword", "tagValue")) {
+        inTagContinuation = lineEndsWithComma(line);
         index += 1;
       } else if (!conceptDocument && isTeardownIdentifierLine(line)) {
         pushToken(builder, index, 0, line.length, "teardownIdentifier");
+        inTagContinuation = false;
         index += 1;
       } else if (isStepLine(line)) {
         const markerStart = line.indexOf("*");
@@ -336,8 +366,10 @@ class GaugeSemanticTokensProvider {
             builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf("step"), 0);
           }
         }
+        inTagContinuation = false;
         index += 1;
       } else if (isTableBlockLine(lines, index)) {
+        inTagContinuation = false;
         const tableStartLine = tableBlockStartLine(lines, index);
         if (index === tableStartLine + 1 && tableHeaderSeparatorRegex.test(trimmedLine)) {
           for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
