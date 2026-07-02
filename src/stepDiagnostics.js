@@ -6331,6 +6331,10 @@ function isGaugeSpecDocument(candidate) {
   return typeof file === "string" && SPEC_FILE_PATTERN.test(file);
 }
 
+function isGaugeStepSourceDocument(candidate) {
+  return isGaugeSpecDocument(candidate) || isConceptDocument(candidate);
+}
+
 class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -6402,7 +6406,7 @@ class GaugeStepDiagnosticsProvider {
   shouldDiagnose(document) {
     return Boolean(
       document
-      && (isStepImplementationDocument(document) || isGaugeSpecDocument(document))
+      && (isStepImplementationDocument(document) || isGaugeStepSourceDocument(document))
       && typeof document.getText === "function"
       && this.isGaugeProjectDocument(document),
     );
@@ -6587,7 +6591,7 @@ class GaugeStepDiagnosticsProvider {
 
     const text = document.getText();
     const diagnostics = [];
-    if (isGaugeSpecDocument(document)) {
+    if (isGaugeStepSourceDocument(document)) {
       const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
       for (const entry of findGaugeSteps(text)) {
         const range = createRange(this.vscode, entry.start, entry.end);
