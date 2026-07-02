@@ -296,7 +296,6 @@ test("activation registers core contributed Gauge commands", () => {
   assert.deepEqual(
     registeredCommands.map((entry) => entry.command),
     [
-      "gauge.config.saveRecommended",
       "gauge.createProject",
       ...INTERNAL_PROVIDER_COMMANDS,
       ...INTERNAL_EXECUTION_COMMANDS,
@@ -307,7 +306,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 5
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 4
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -608,14 +607,89 @@ test("activation defers CLI and debug provider creation when Gauge services are 
   });
 
   assert.equal(createCliCalls, 0);
-  assert.equal(configProvider.context, context);
-  assert.equal(configProvider.options.vscode, fakeVscode);
-  assert.equal(context.subscriptions.includes(configProvider), true);
+  assert.equal(configProvider, undefined);
   assert.equal(typeof projectInitializerOptions.createCli, "function");
   assert.deepEqual(debugProviders, []);
 
   projectInitializerOptions.createCli({ vscode: fakeVscode });
   assert.equal(createCliCalls, 1);
+});
+
+test("activation registers config provider only after Gauge services start", () => {
+  const extension = require("../src/extension");
+
+  let configProvider;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  class FakeConfigProvider {
+    constructor(receivedContext, options) {
+      this.context = receivedContext;
+      this.options = options;
+      configProvider = this;
+    }
+
+    dispose() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: FakeConfigProvider,
+    ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
+      dispose() {}
+    },
+    GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    ReferenceProvider: class FakeReferenceProvider {
+      dispose() {}
+    },
+    GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
+    GaugeStepDiagnosticsProvider: class FakeStepDiagnosticsProvider {
+      register() {
+        return { dispose() {} };
+      }
+    },
+    GaugeValidateDiagnosticsProvider: class FakeValidateDiagnosticsProvider {
+      register() {
+        return { dispose() {} };
+      }
+    },
+    semanticTokensLegend: { id: "legend" },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(configProvider.context, context);
+  assert.equal(configProvider.options.vscode, fakeVscode);
+  assert.equal(context.subscriptions.includes(configProvider), true);
 });
 
 test("activation ignores Markdown Gauge language documents outside Gauge projects", () => {

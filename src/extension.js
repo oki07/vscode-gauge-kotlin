@@ -809,6 +809,7 @@ function startGaugeServices(context, vscode, options = {}) {
     || ExtractConceptCommandProvider;
   const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
   const SpecNodeProviderCtor = options.SpecNodeProvider || SpecNodeProvider;
+  const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
     clientsMap,
@@ -836,6 +837,7 @@ function startGaugeServices(context, vscode, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
+  const configProvider = new ConfigProviderCtor(context, { vscode });
   activeClientsMap = clientsMap;
   context.subscriptions.push(
     gaugeWorkspace,
@@ -843,6 +845,7 @@ function startGaugeServices(context, vscode, options = {}) {
     extractConceptProvider,
     generateStubProvider,
     specNodeProvider,
+    configProvider,
   );
   return gaugeWorkspace;
 }
@@ -898,8 +901,6 @@ function activate(context, vscodeApi, options = {}) {
   if (testControllerDisposable) {
     context.subscriptions.push(testControllerDisposable);
   }
-  const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
-  context.subscriptions.push(new ConfigProviderCtor(context, { vscode }));
   const ProjectInitializerCtor = options.ProjectInitializer || ProjectInitializer;
   context.subscriptions.push(new ProjectInitializerCtor({
     cli: options.cli,
