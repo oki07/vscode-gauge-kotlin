@@ -209,7 +209,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.format"));
   assert.ok(commandPaletteIds.includes("gauge.toggle.lineComment"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
-  const markdownGaugeEditorWhen = "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))";
+  const markdownGaugeEditorWhen = "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))";
   const markdownGaugeSpecWhen = "gauge:activated && editorLangId == markdown && resourceExtname == .md";
   assert.equal(
     manifest.contributes.menus.commandPalette.find(
@@ -234,12 +234,12 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     {
       command: "gauge.format",
       key: "ctrl+alt+shift+l",
-      when: "editorTextFocus && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      when: "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
     },
     {
       command: "gauge.extract.concept",
       key: "ctrl+alt+c",
-      when: "editorTextFocus && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      when: "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
     },
     {
       command: "gauge.toggle.lineComment",
@@ -268,24 +268,24 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(manifest.contributes.menus["editor/title"], [
     {
       command: "gauge.preview",
-      when: "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
       group: "navigation@10",
     },
   ]);
   assert.deepEqual(manifest.contributes.menus["editor/context"], [
     {
       command: "gauge.preview",
-      when: "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
       group: "navigation@10",
     },
     {
       command: "gauge.extract.concept",
-      when: "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
       group: "1_modification",
     },
     {
       command: "gauge.format",
-      when: "gauge:activated && (editorLangId == gauge || (editorLangId == markdown && resourceExtname == .md))",
+      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
       group: "1_modification",
     },
     {

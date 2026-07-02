@@ -7,6 +7,7 @@ const GET_CONCEPT_FILES_REQUEST = "gauge/getImplFiles";
 const INVALID_SELECTION_ERROR = "Cannot Extract to Concept, selected text contains invalid elements";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const NEW_FILE = "New File";
 
@@ -126,6 +127,7 @@ function hasExtractableGaugeSyntax(document) {
   return document
     && (
       document.languageId === "gauge"
+      || SPEC_FILE_PATTERN.test(path)
       || CONCEPT_FILE_PATTERN.test(path)
       || (
         document.languageId === MARKDOWN_LANGUAGE
@@ -681,6 +683,9 @@ function canExtractConceptFromDocument(document, projectClient) {
   }
   if (document.languageId === "gauge") {
     return true;
+  }
+  if (SPEC_FILE_PATTERN.test(documentPath(document))) {
+    return Boolean(projectClient && projectClient.client && projectClient.project);
   }
   if (CONCEPT_FILE_PATTERN.test(documentPath(document))) {
     return Boolean(projectClient && projectClient.client && projectClient.project);
