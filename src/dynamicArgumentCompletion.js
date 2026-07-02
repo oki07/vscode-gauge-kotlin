@@ -75,6 +75,16 @@ function isGaugeFileDocument(document) {
   return isSpecDocument(document) || isConceptDocument(document);
 }
 
+function isMarkdownSpecDocument(document) {
+  return document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
+function isTagSourceDocument(document) {
+  return isSpecDocument(document) || isMarkdownSpecDocument(document);
+}
+
 function dynamicArgumentRange(line, position) {
   let openIndex = line.indexOf("<");
   const stopAtUnescapedPipe = isTableLine(line);
@@ -276,6 +286,64 @@ function stepCompletionRange(line, position) {
     start: Math.min(marker[0].length, position.character),
     end: Math.max(line.length, position.character),
   };
+}
+
+function normalizedTagLinePrefix(line) {
+  return String(line || "").trim().split(/\s+/).join("").toLowerCase();
+}
+
+function lineEndsWithComma(line) {
+  return String(line || "").trim().endsWith(",");
+}
+
+function isTagLine(line) {
+  return normalizedTagLinePrefix(line).startsWith("tags:");
+}
+
+function isTagsContext(lines, lineNumber) {
+  if (lineNumber < 0 || lineNumber >= lines.length) {
+    return false;
+  }
+  if (isTagLine(lines[lineNumber])) {
+    return true;
+  }
+  return lineNumber > 0
+    && lineEndsWithComma(lines[lineNumber - 1])
+    && isTagsContext(lines, lineNumber - 1);
+}
+
+function tagCompletionRange(line, position) {
+  const prefix = line.slice(0, position.character);
+  const commaIndex = prefix.lastIndexOf(",");
+  const colonIndex = prefix.lastIndexOf(":");
+  const separatorIndex = commaIndex > colonIndex ? commaIndex : colonIndex;
+  const start = separatorIndex + 1;
+  const textAfterCursor = line.slice(position.character);
+  const nextCommaIndex = textAfterCursor.indexOf(",");
+  const end = nextCommaIndex === -1
+    ? line.length
+    : position.character + nextCommaIndex + 1;
+  const suffix = nextCommaIndex === -1 ? "" : ",";
+  return { end, start, suffix };
+}
+
+function tagValues(text) {
+  const values = [];
+  const lines = String(text || "").split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isTagsContext(lines, index)) {
+      continue;
+    }
+    const line = lines[index];
+    const valueStart = isTagLine(line) ? line.indexOf(":") + 1 : 0;
+    for (const rawValue of line.slice(valueStart).split(",")) {
+      const value = rawValue.trim();
+      if (value) {
+        values.push(value);
+      }
+    }
+  }
+  return values;
 }
 
 function stepParameterRanges(stepText) {
@@ -531,6 +599,9 @@ function completionItem(vscode, label, range, options = {}) {
   if (options.filterText !== undefined) {
     item.filterText = options.filterText;
   }
+  if (options.sortText !== undefined) {
+    item.sortText = options.sortText;
+  }
   return item;
 }
 
@@ -573,6 +644,7 @@ function lspCompletionItem(vscode, item, fallbackRange) {
     filterText: item.filterText,
     insertText: lspCompletionInsertText(vscode, item),
     kind: item.kind || (vscode.CompletionItemKind && vscode.CompletionItemKind.Function),
+    sortText: item.sortText,
   };
   return completionItem(
     vscode,
@@ -594,6 +666,19 @@ function mergeCompletionItems(localItems, serverItems) {
       continue;
     }
     seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function mergeCompletionItemsByLabel(localItems, serverItems) {
+  const seen = new Set(localItems.map((item) => item && item.label).filter(Boolean));
+  const merged = localItems.slice();
+  for (const item of serverItems) {
+    if (!item || !item.label || seen.has(item.label)) {
+      continue;
+    }
+    seen.add(item.label);
     merged.push(item);
   }
   return merged;
@@ -709,6 +794,43 @@ class GaugeDynamicArgumentCompletionProvider {
     return entries;
   }
 
+  tagCompletionEntries(document, workspaceDocuments) {
+    const documents = [];
+    const seenDocuments = new Set();
+    const addDocument = (candidate) => {
+      if (!candidate || typeof candidate.getText !== "function") {
+        return;
+      }
+      const key = documentPath(candidate);
+      if (key) {
+        if (seenDocuments.has(key)) {
+          return;
+        }
+        seenDocuments.add(key);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+    addDocument(document);
+    for (const candidate of workspaceDocuments || []) {
+      addDocument(candidate);
+    }
+
+    const sourceRoot = this.gaugeProjectRoot(document);
+    const values = [];
+    for (const candidate of documents) {
+      if (
+        !isTagSourceDocument(candidate)
+        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
+      ) {
+        continue;
+      }
+      values.push(...tagValues(candidate.getText()));
+    }
+    return unique(values);
+  }
+
   projectClientFor(document) {
     const clientsMap = resolveClientsMap(this.clientsMap);
     if (!clientsMap || typeof clientsMap.get !== "function") {
@@ -717,7 +839,7 @@ class GaugeDynamicArgumentCompletionProvider {
     return clientsMap.get(documentPath(document));
   }
 
-  serverStepCompletionItems(document, position, fallbackRange) {
+  serverCompletionItems(document, position, fallbackRange) {
     const projectClient = this.projectClientFor(document);
     const client = projectClient && projectClient.client;
     const uri = documentUri(document);
@@ -736,6 +858,10 @@ class GaugeDynamicArgumentCompletionProvider {
         .filter(Boolean),
       () => [],
     );
+  }
+
+  serverStepCompletionItems(document, position, fallbackRange) {
+    return this.serverCompletionItems(document, position, fallbackRange);
   }
 
   stepCompletionItems(document, position, targetRange, workspaceDocuments) {
@@ -764,16 +890,54 @@ class GaugeDynamicArgumentCompletionProvider {
     return mergeCompletionItems(localItems, serverItems);
   }
 
+  tagCompletionItems(document, position, targetRange, workspaceDocuments) {
+    if (!this.isCompletionDocument(document)) {
+      return [];
+    }
+    const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
+    const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Variable;
+    const localItems = this.tagCompletionEntries(document, workspaceDocuments).map((label) => completionItem(
+      this.vscode,
+      label,
+      range,
+      {
+        detail: "Tag",
+        filterText: `${label}${targetRange.suffix}`,
+        insertText: ` ${label}${targetRange.suffix}`,
+        kind,
+        sortText: `a${label}`,
+      },
+    ));
+    const serverItems = this.serverCompletionItems(document, position, range);
+    if (isThenable(serverItems)) {
+      return serverItems.then((items) => mergeCompletionItemsByLabel(localItems, items));
+    }
+    return mergeCompletionItemsByLabel(localItems, serverItems);
+  }
+
   provideCompletionItems(document, position) {
     if (!this.isCompletionDocument(document)) {
       return [];
     }
     const line = document.lineAt(position.line).text;
+    const lines = document.getText().split(/\r?\n/);
+    const tagRange = isTagsContext(lines, position.line)
+      ? tagCompletionRange(line, position)
+      : undefined;
     const argumentRange = dynamicArgumentRange(line, position);
     const quotedArgumentRange = staticArgumentRange(line, position);
     const stepRange = stepCompletionRange(line, position);
-    if (!argumentRange && !quotedArgumentRange && !stepRange) {
+    if (!tagRange && !argumentRange && !quotedArgumentRange && !stepRange) {
       return [];
+    }
+    if (tagRange) {
+      const workspaceDocuments = this.workspaceDocuments();
+      if (isThenable(workspaceDocuments)) {
+        return workspaceDocuments.then((documents) => (
+          this.tagCompletionItems(document, position, tagRange, documents)
+        ));
+      }
+      return this.tagCompletionItems(document, position, tagRange, workspaceDocuments);
     }
     if (argumentRange && isTableHeaderLine(document, position.line, { allowIndented: true })) {
       return [];

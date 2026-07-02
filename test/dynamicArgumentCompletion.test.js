@@ -98,6 +98,90 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag lines", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "tags: smoke, fast",
+    "",
+    "## Pay",
+    "tags: ",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  const otherDocument = createDocument([
+    "# Login",
+    "tags: auth, with space",
+  ].join("\n"), "/workspace/gauge/specs/login.spec", "gauge");
+  vscode.workspace = {
+    textDocuments: [otherDocument],
+  };
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const items = await provider.provideCompletionItems(document, new vscode.Position(4, 6));
+
+  assert.deepEqual(labels(items), ["smoke", "fast", "auth", "with space"]);
+  assert.equal(items[0].detail, "Tag");
+  assert.equal(items[0].kind, "variable");
+  assert.equal(items[0].filterText, "smoke");
+  assert.equal(items[0].insertText, " smoke");
+  assert.equal(items[0].sortText, "asmoke");
+  assert.deepEqual({ ...items[0].range.start }, { line: 4, character: 5 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 6 });
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on continuation lines", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "tags: smoke,",
+    "  ",
+    "",
+    "## Pay",
+    "tags: fast",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const items = await provider.provideCompletionItems(document, new vscode.Position(2, 2));
+
+  assert.deepEqual(labels(items), ["smoke", "fast"]);
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 2 });
+});
+
+test("GaugeDynamicArgumentCompletionProvider preserves tag separators when editing in the middle", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "tags: smoke, fast, slow",
+    "",
+    "## Pay",
+    "tags: smoke, fast, slow",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const items = await provider.provideCompletionItems(document, new vscode.Position(4, "tags: smoke,".length));
+
+  assert.deepEqual(labels(items), ["smoke", "fast", "slow"]);
+  assert.equal(items[1].filterText, "fast,");
+  assert.equal(items[1].insertText, " fast,");
+  assert.deepEqual({ ...items[1].range.start }, { line: 4, character: "tags: smoke,".length });
+  assert.deepEqual({ ...items[1].range.end }, { line: 4, character: "tags: smoke, fast,".length });
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests scenario data table headers inside scenario dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

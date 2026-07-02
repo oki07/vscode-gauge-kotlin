@@ -418,6 +418,8 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
     " ",
     "<",
     "\"",
+    ":",
+    ",",
   );
   if (disposable) {
     context.subscriptions.push(disposable);
