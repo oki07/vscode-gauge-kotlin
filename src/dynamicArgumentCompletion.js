@@ -386,6 +386,31 @@ function specDataTableHeaders(text) {
   return [];
 }
 
+function scenarioDataTableHeaders(text, lineNumber) {
+  const lines = text.split(/\r?\n/);
+  let scenarioLine = -1;
+  for (let index = Math.min(lineNumber, lines.length - 1); index >= 0; index -= 1) {
+    if (isScenarioHeading(lines[index] || "")) {
+      scenarioLine = index;
+      break;
+    }
+  }
+  if (scenarioLine === -1) {
+    return [];
+  }
+
+  for (let index = scenarioLine + 1; index <= Math.min(lineNumber, lines.length - 1); index += 1) {
+    const line = lines[index] || "";
+    if (isScenarioHeading(line) || isStepLine(line)) {
+      return [];
+    }
+    if (isFirstTableLine(lines, index)) {
+      return unique(tableCells(line));
+    }
+  }
+  return [];
+}
+
 function isTableSeparatorLine(line) {
   if (!isTableLine(line)) {
     return false;
@@ -765,7 +790,10 @@ class GaugeDynamicArgumentCompletionProvider {
         ? (
           isConceptDocument(document)
             ? conceptDynamicArguments(document.getText())
-            : specDataTableHeaders(document.getText())
+            : unique([
+              ...specDataTableHeaders(document.getText()),
+              ...scenarioDataTableHeaders(document.getText(), position.line),
+            ])
         )
         : staticArguments(document.getText(), {
           excludeTeardown: !isConceptDocument(document),
@@ -793,6 +821,7 @@ class GaugeDynamicArgumentCompletionProvider {
 module.exports = {
   GaugeDynamicArgumentCompletionProvider,
   conceptDynamicArguments,
+  scenarioDataTableHeaders,
   specDataTableHeaders,
   staticArguments,
 };
