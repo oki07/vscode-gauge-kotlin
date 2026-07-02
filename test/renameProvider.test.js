@@ -766,6 +766,65 @@ test("GaugeRenameProvider replaces Kotlin parameters when dynamic argument names
   );
 });
 
+test("GaugeRenameProvider removes Kotlin parameters when rename removes all step parameters", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay now",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay now",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 24 },
+        },
+        newText: "Pay now",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -812,6 +871,14 @@ test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", 
           end: { line: 2, character: 24 },
         },
         newText: "Pay \\$amount",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "",
       },
     ],
   );

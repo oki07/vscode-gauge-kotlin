@@ -984,6 +984,9 @@ function hasStructuralParameterChange(oldParameters, newParameters, positions) {
   if (oldParameters.length === 0 && newParameters.length > 0) {
     return true;
   }
+  if (oldParameters.length > 0 && newParameters.length === 0) {
+    return true;
+  }
   if (positions.some((oldIndex) => oldIndex === -1)) {
     return true;
   }
