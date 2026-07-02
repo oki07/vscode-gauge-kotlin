@@ -855,6 +855,41 @@ function createGaugeExecutionController(options = {}) {
     return undefined;
   }
 
+  function targetGroupsByProjectRoot(targets) {
+    const groups = [];
+    const groupIndexes = new Map();
+    for (const target of targets) {
+      const projectRoot = getProjectRootForSpec(vscode, target, pathModule, projectFactory);
+      if (!projectRoot) {
+        continue;
+      }
+      let groupIndex = groupIndexes.get(projectRoot);
+      if (groupIndex === undefined) {
+        groupIndex = groups.length;
+        groupIndexes.set(projectRoot, groupIndex);
+        groups.push({ projectRoot, targets: [] });
+      }
+      groups[groupIndex].targets.push(target);
+    }
+    return groups;
+  }
+
+  async function executeTargetGroups(targetGroups, flags = {}) {
+    let result = true;
+    for (const group of targetGroups) {
+      const groupResult = await executeInProject(group.projectRoot, group.targets, {
+        ...flags,
+        status: pathModule.join(group.projectRoot, "Specifications"),
+      });
+      if (groupResult === false) {
+        result = false;
+      } else if (groupResult === undefined && result !== false) {
+        result = undefined;
+      }
+    }
+    return result;
+  }
+
   async function executeSpecificationTargets(argument, selectedResources, flags = {}) {
     const selectedProjectRoot = projectRootFromSingleDirectorySelection(argument, selectedResources);
     if (selectedProjectRoot) {
@@ -864,10 +899,12 @@ function createGaugeExecutionController(options = {}) {
     if (targets.length === 0) {
       return undefined;
     }
-    const projectRoot = getProjectRootForSpec(vscode, targets[0], pathModule, projectFactory);
-    if (!projectRoot) {
+    const targetGroups = targetGroupsByProjectRoot(targets);
+    if (targetGroups.length === 0) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
+    const targetGroup = targetGroups[0];
+    const projectRoot = targetGroup.projectRoot;
     if (
       targets.length === 1
       && isDirectory(targets[0], fileSystem)
@@ -875,7 +912,10 @@ function createGaugeExecutionController(options = {}) {
     ) {
       return executeAllSpecifications(projectRoot, flags);
     }
-    return executeInProject(projectRoot, targets, {
+    if (targetGroups.length > 1) {
+      return executeTargetGroups(targetGroups, flags);
+    }
+    return executeInProject(projectRoot, targetGroup.targets, {
       ...flags,
       status: pathModule.join(projectRoot, "Specifications"),
     });

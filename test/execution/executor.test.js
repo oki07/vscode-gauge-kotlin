@@ -455,6 +455,93 @@ test("execute specification runs Explorer selected spec files and directories", 
   ]);
 });
 
+test("execute specification splits Explorer selected specs by project root", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const files = new Set([
+    "/workspace/checkout/manifest.json",
+    "/workspace/checkout/specs/checkout.spec",
+    "/workspace/accounts/manifest.json",
+    "/workspace/accounts/specs/accounts.spec",
+  ]);
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/checkout" } },
+      { uri: { fsPath: "/workspace/accounts" } },
+    ],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return files.has(filename);
+      },
+    },
+    projectFactory: {
+      get(root) {
+        return {
+          root() {
+            return root;
+          },
+        };
+      },
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/checkout/")) {
+          return "/workspace/checkout";
+        }
+        if (filename.startsWith("/workspace/accounts/")) {
+          return "/workspace/accounts";
+        }
+        return undefined;
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/checkout" || root === "/workspace/accounts";
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand(
+    "gauge.execute.specification",
+    { fsPath: "/workspace/checkout/specs/checkout.spec" },
+    [
+      { fsPath: "/workspace/checkout/specs/checkout.spec" },
+      { fsPath: "/workspace/accounts/specs/accounts.spec" },
+    ],
+  );
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/checkout/specs/checkout.spec",
+      ],
+      cwd: "/workspace/checkout",
+      status: "/workspace/checkout/Specifications",
+    },
+    {
+      command: "gauge",
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/accounts/specs/accounts.spec",
+      ],
+      cwd: "/workspace/accounts",
+      status: "/workspace/accounts/Specifications",
+    },
+  ]);
+});
+
 test("execute specification runs all specs when Explorer selected resource is the project root", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
