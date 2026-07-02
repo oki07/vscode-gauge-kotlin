@@ -542,6 +542,12 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "table:4",
     "table:5",
     "table:6",
+    "table:1",
+    "table:2",
+    "table:3",
+    "table:4",
+    "table:5",
+    "table:6",
   ]);
   assert.deepEqual(snippets.Specification.body, [
     "# ${1:SPECIFICATION_HEADING}",
@@ -574,6 +580,16 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(snippets["Table with six columns"].body, [
     "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|${6:HEADER}|",
     "|------|------|------|------|------|------|",
+    "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
+    "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
+  ]);
+  assert.deepEqual(snippets["Legacy Table with two columns"].body, [
+    "|${1:HEADER}|${2:HEADER}|",
+    "|${3:value}|${4:value}|",
+    "|${5:value}|${6:value}$0|",
+  ]);
+  assert.deepEqual(snippets["Legacy Table with six columns"].body, [
+    "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|${6:HEADER}|",
     "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
     "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
   ]);
