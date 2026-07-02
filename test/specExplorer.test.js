@@ -271,7 +271,7 @@ test("SpecNodeProvider populates specifications and scenarios from Gauge LSP", a
   ]);
 });
 
-test("SpecNodeProvider registers explorer commands", async () => {
+test("SpecNodeProvider registers explorer commands without Test UI flags", async () => {
   const { Spec, SpecNodeProvider } = require("../src/explorer/specExplorer");
   const client = createFakeClient();
   const executionCalls = [];
@@ -279,8 +279,8 @@ test("SpecNodeProvider registers explorer commands", async () => {
   const workspace = createFakeWorkspace(client);
   const provider = new SpecNodeProvider(workspace, {
     executionController: {
-      handleCommand(command, argument, flags) {
-        executionCalls.push({ command, argument, flags });
+      handleCommand(...args) {
+        executionCalls.push(args);
         return Promise.resolve("handled");
       },
     },
@@ -306,30 +306,9 @@ test("SpecNodeProvider registers explorer commands", async () => {
   await byName.get("gauge.open")(spec);
 
   assert.deepEqual(executionCalls, [
-    {
-      command: "gauge.specexplorer.runAllActiveProjectSpecs",
-      argument: { projectRoot: "/workspace/gauge" },
-      flags: {
-        "hide-suggestion": true,
-        "machine-readable": true,
-      },
-    },
-    {
-      command: "gauge.specexplorer.runNode",
-      argument: spec,
-      flags: {
-        "hide-suggestion": true,
-        "machine-readable": true,
-      },
-    },
-    {
-      command: "gauge.specexplorer.debugNode",
-      argument: spec,
-      flags: {
-        "hide-suggestion": true,
-        "machine-readable": true,
-      },
-    },
+    ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/gauge" }],
+    ["gauge.specexplorer.runNode", spec],
+    ["gauge.specexplorer.debugNode", spec],
   ]);
   assert.deepEqual(workspace.changes, ["showProjectOptions"]);
   assert.deepEqual(documents, ["/workspace/gauge/specs/checkout.spec"]);

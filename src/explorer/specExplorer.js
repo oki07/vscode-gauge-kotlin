@@ -8,10 +8,6 @@ const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPEC_EXPLORER_VIEW = "gauge:specExplorer";
 const SPECS_REQUEST = "gauge/specs";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
-const TEST_UI_RUN_FLAGS = {
-  "hide-suggestion": true,
-  "machine-readable": true,
-};
 
 function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");
@@ -69,10 +65,6 @@ function addDisposable(disposables, disposable) {
 
 function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
   return executionIdentifier.split(`:${lineNo}`)[0];
-}
-
-function testUiRunFlags() {
-  return { ...TEST_UI_RUN_FLAGS };
 }
 
 class GaugeNode {
@@ -312,7 +304,6 @@ class SpecNodeProvider {
     return this.executionController.handleCommand(
       "gauge.specexplorer.runAllActiveProjectSpecs",
       { projectRoot: this.activeFolder },
-      testUiRunFlags(),
     );
   }
 
@@ -323,7 +314,6 @@ class SpecNodeProvider {
     return this.executionController.handleCommand(
       debug ? "gauge.specexplorer.debugNode" : "gauge.specexplorer.runNode",
       node,
-      testUiRunFlags(),
     );
   }
 
