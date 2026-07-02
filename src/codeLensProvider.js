@@ -13,6 +13,7 @@ const {
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
+const IN_PARALLEL_COMMAND = "gauge.execute.inParallel";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
@@ -130,6 +131,14 @@ function isLegacyScenarioUnderline(line) {
   return /^-+$/.test(line);
 }
 
+function isTableLine(line) {
+  return String(line || "").trimStart().startsWith("|");
+}
+
+function isStepLine(line) {
+  return String(line || "").startsWith("*");
+}
+
 function hasHeadingText(line) {
   return Boolean(line && line.trim());
 }
@@ -190,6 +199,26 @@ function titlesForMarker(marker) {
 
 function runCodeLensFlags() {
   return { ...RUN_CODELENS_FLAGS };
+}
+
+function hasSpecificationDataTable(document, specificationLine) {
+  const lineCount = documentLineCount(document);
+  for (let line = specificationLine + 1; line < lineCount; line += 1) {
+    const text = documentLine(document, line);
+    if (hashHeadingKind(text) === "scenario") {
+      return false;
+    }
+    if (legacyHeadingKind(text, documentLine(document, line + 1)) === "scenario") {
+      return false;
+    }
+    if (isStepLine(text)) {
+      return false;
+    }
+    if (isTableLine(text)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function stepValueArgument(aliases) {
@@ -384,6 +413,13 @@ class GaugeCodeLensProvider {
         title: debugTitle,
         arguments: [target, runCodeLensFlags()],
       }));
+      if (marker.kind === "specification" && hasSpecificationDataTable(document, marker.line)) {
+        lenses.push(createCodeLens(this.vscode, range, {
+          command: IN_PARALLEL_COMMAND,
+          title: "Run in parallel",
+          arguments: [target, runCodeLensFlags()],
+        }));
+      }
     }
     return lenses;
   }
@@ -392,6 +428,7 @@ class GaugeCodeLensProvider {
 module.exports = {
   DEBUG_COMMAND,
   GaugeCodeLensProvider,
+  IN_PARALLEL_COMMAND,
   RUN_COMMAND,
   headingMarkers,
 };

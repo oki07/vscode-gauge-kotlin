@@ -299,6 +299,70 @@ test("GaugeCodeLensProvider adds lenses for legacy underline headings", () => {
   ]);
 });
 
+test("GaugeCodeLensProvider adds run in parallel lens for specification data tables", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "Checkout",
+    "========",
+    "",
+    "  | user | role |",
+    "  | ---- | ---- |",
+    "  | Bob  | admin |",
+    "",
+    "Successful checkout",
+    "-------------------",
+    "* Login as <user>",
+    "",
+  ].join("\n"));
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    title: lens.command.title,
+    command: lens.command.command,
+    argument: lens.command.arguments[0],
+    flags: lens.command.arguments[1],
+  })), [
+    {
+      line: 0,
+      title: "Run Specification",
+      command: "gauge.execute",
+      argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Debug Specification",
+      command: "gauge.debug",
+      argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Run in parallel",
+      command: "gauge.execute.inParallel",
+      argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 7,
+      title: "Run Scenario",
+      command: "gauge.execute",
+      argument: "/workspace/specs/example.spec:8",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 7,
+      title: "Debug Scenario",
+      command: "gauge.debug",
+      argument: "/workspace/specs/example.spec:8",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+  ]);
+});
+
 test("GaugeCodeLensProvider ignores concept documents", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
