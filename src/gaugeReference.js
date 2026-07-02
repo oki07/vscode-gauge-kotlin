@@ -7,6 +7,8 @@ const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
 const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
+const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_REFERENCE_PATTERNS = ["**/*.kt", "**/*.java"];
@@ -48,8 +50,12 @@ function isGaugeReferenceDocument(document) {
   if (document.languageId === GAUGE_LANGUAGE) {
     return true;
   }
+  const file = documentPath(document);
+  if (SPEC_FILE_PATTERN.test(file) || CONCEPT_FILE_PATTERN.test(file)) {
+    return true;
+  }
   return document.languageId === MARKDOWN_LANGUAGE
-    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+    && MARKDOWN_SPEC_FILE_PATTERN.test(file);
 }
 
 function uriPath(uri) {
@@ -593,6 +599,8 @@ class ReferenceProvider {
     return this.vscode.languages.registerReferenceProvider(
       [
         { language: GAUGE_LANGUAGE },
+        { scheme: "file", pattern: "**/*.spec" },
+        { scheme: "file", pattern: "**/*.cpt" },
         { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },

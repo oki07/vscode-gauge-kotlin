@@ -921,6 +921,76 @@ test("ReferenceProvider provides local references from Gauge step cursor without
   ]);
 });
 
+test("ReferenceProvider accepts plaintext .spec documents for local references", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const specDocument = {
+    languageId: "plaintext",
+    uri: {
+      fsPath: "/workspace/specs/example.spec",
+      toString() {
+        return "file:///workspace/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "## Scenario",
+        "* Say hello to \"alice\"",
+      ].join("\n");
+    },
+    lineAt(line) {
+      return { text: this.getText().split(/\r?\n/)[line] || "" };
+    },
+  };
+  const otherSpecDocument = {
+    languageId: "plaintext",
+    uri: {
+      fsPath: "/workspace/specs/other.spec",
+      toString() {
+        return "file:///workspace/specs/other.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Other",
+        "",
+        "## Scenario",
+        "* Say hello to \"bob\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [specDocument, otherSpecDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(
+    specDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/specs/example.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 22 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/other.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 20 },
+      },
+    },
+  ]);
+});
+
 test("ReferenceProvider accepts plaintext .kt documents for local Kotlin Step references", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
@@ -1168,6 +1238,71 @@ test("ReferenceProvider provides local references from concept heading cursor wi
       range: {
         start: { line: 1, character: 0 },
         end: { line: 1, character: 23 },
+      },
+    },
+  ]);
+});
+
+test("ReferenceProvider accepts plaintext .cpt concept headings for local references", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const conceptDocument = {
+    languageId: "plaintext",
+    uri: {
+      fsPath: "/workspace/specs/concepts/shared.cpt",
+      toString() {
+        return "file:///workspace/specs/concepts/shared.cpt";
+      },
+    },
+    getText() {
+      return [
+        "# Shared checkout <item>",
+        "* Prepare cart",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "plaintext",
+    uri: {
+      fsPath: "/workspace/specs/checkout.spec",
+      toString() {
+        return "file:///workspace/specs/checkout.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Checkout",
+        "",
+        "## Scenario",
+        "* Shared checkout \"book\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [conceptDocument, specDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const references = await provider.provideReferences(
+    conceptDocument,
+    { line: 0, character: 12 },
+  );
+
+  assert.deepEqual(references, [
+    {
+      uri: "file:///workspace/specs/concepts/shared.cpt",
+      range: {
+        start: { line: 0, character: 2 },
+        end: { line: 0, character: 24 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/checkout.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 24 },
       },
     },
   ]);
@@ -1710,6 +1845,33 @@ test("ReferenceProvider registers reference commands", () => {
   assert.deepEqual(calls.registered.map((entry) => entry.command), [
     "gauge.showReferences.atCursor",
     "gauge.showReferences",
+  ]);
+});
+
+test("ReferenceProvider registers explicit spec and concept reference selectors", () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const referenceProviders = [];
+  const { vscode } = createFakeVscode();
+  vscode.languages = {
+    registerReferenceProvider(selector, provider) {
+      referenceProviders.push({ selector, provider });
+      return { dispose() {} };
+    },
+  };
+
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  assert.equal(referenceProviders[0].provider, provider);
+  assert.deepEqual(referenceProviders[0].selector, [
+    { language: "gauge" },
+    { scheme: "file", pattern: "**/*.spec" },
+    { scheme: "file", pattern: "**/*.cpt" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
+    { language: "kotlin" },
+    { scheme: "file", pattern: "**/*.kt" },
+    { language: "java" },
+    { scheme: "file", pattern: "**/*.java" },
   ]);
 });
 
