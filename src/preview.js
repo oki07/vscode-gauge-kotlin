@@ -81,6 +81,54 @@ function getProjectRoot(vscode, fileSystem, pathModule, filePath, options) {
   return root;
 }
 
+function projectRoot(project) {
+  if (!project) {
+    return "";
+  }
+  if (typeof project.root === "function") {
+    return project.root();
+  }
+  return project.root || project.projectRoot || "";
+}
+
+function projectEnvironment(project, cli) {
+  if (!project || typeof project.envs !== "function") {
+    return {};
+  }
+  return project.envs(cli) || {};
+}
+
+function getPreviewProject(vscode, fileSystem, pathModule, filePath, options) {
+  const projectFactory = options.projectFactory || createProjectFactory({
+    fileSystem,
+    pathModule,
+    vscode,
+  });
+  if (typeof projectFactory.getProjectByFilepath === "function") {
+    const project = projectFactory.getProjectByFilepath(filePath);
+    const root = projectRoot(project);
+    if (
+      root
+      && typeof projectFactory.isGaugeProject === "function"
+      && projectFactory.isGaugeProject(root) === false
+    ) {
+      return {};
+    }
+    return { project, root };
+  }
+  const root = getProjectRoot(vscode, fileSystem, pathModule, filePath, {
+    ...options,
+    projectFactory,
+  });
+  if (!root) {
+    return {};
+  }
+  const project = typeof projectFactory.get === "function"
+    ? projectFactory.get(root)
+    : undefined;
+  return { project, root };
+}
+
 function defaultTempDir(pathModule, osModule, projectRoot) {
   const projectName = pathModule.basename(projectRoot) || "project";
   return pathModule.join(osModule.tmpdir(), "vscode-gauge-kotlin", "preview", projectName);
@@ -274,9 +322,12 @@ async function previewGaugeDocument(options = {}) {
   const fileSystem = options.fileSystem || nodeFs;
   const pathModule = options.pathModule || nodePath;
   const osModule = options.osModule || nodeOs;
+  let project;
   let projectRoot;
   try {
-    projectRoot = getProjectRoot(vscode, fileSystem, pathModule, filePath, options);
+    const previewProject = getPreviewProject(vscode, fileSystem, pathModule, filePath, options);
+    project = previewProject.project;
+    projectRoot = previewProject.root;
   } catch (error) {
     return showError(vscode, previewFailureMessage(pathModule, filePath, { error }));
   }
@@ -309,6 +360,7 @@ async function previewGaugeDocument(options = {}) {
   ensureDirectory(fileSystem, previewRoot);
   ensureDirectory(fileSystem, docsDir);
   const env = envWithGaugeHome(options.env || process.env, { vscode });
+  const projectEnv = projectEnvironment(project, cli);
 
   const result = await waitForProcess(
     command,
@@ -317,6 +369,7 @@ async function previewGaugeDocument(options = {}) {
       cwd: projectRoot,
       env: {
         ...env,
+        ...projectEnv,
         spectacle_out_dir: docsDir,
       },
     },

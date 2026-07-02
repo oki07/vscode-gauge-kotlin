@@ -127,6 +127,76 @@ test("previewGaugeDocument creates Spectacle docs for the active Gauge document"
   ]);
 });
 
+test("previewGaugeDocument passes project environment to Spectacle", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { opened, vscode } = createFakeVscode();
+  const spawns = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          return createChildProcess({ stdout: "created\n" });
+        },
+      };
+    },
+  };
+  const project = {
+    envs(receivedCli) {
+      assert.equal(receivedCli, cli);
+      return {
+        gauge_custom_classpath: "/workspace/gauge/build/classes",
+      };
+    },
+    root() {
+      return "/workspace/gauge";
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: {
+      mkdirSync() {},
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      get(root) {
+        assert.equal(root, "/workspace/gauge");
+        return project;
+      },
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(spawns, [
+    {
+      args: ["docs", "spectacle", "/workspace/gauge/specs/example.spec"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: {
+          PATH: "/bin",
+          gauge_custom_classpath: "/workspace/gauge/build/classes",
+          spectacle_out_dir: "/tmp/gauge-preview/docs",
+        },
+      },
+    },
+  ]);
+  assert.deepEqual(opened, [
+    {
+      fsPath: "/tmp/gauge-preview/docs/html/specs/example.html",
+      scheme: "file",
+    },
+  ]);
+});
+
 test("previewGaugeDocument creates Spectacle docs for a Markdown Gauge spec", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errors, opened, vscode } = createFakeVscode({
