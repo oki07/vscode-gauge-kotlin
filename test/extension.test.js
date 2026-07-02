@@ -33,6 +33,7 @@ function createFakeVscode(overrides = {}) {
   const completionProviders = [];
   const definitionProviders = [];
   const diagnosticCollections = [];
+  const documentSymbolProviders = [];
   const formattingProviders = [];
   const foldingRangeProviders = [];
   const languageConfigurations = [];
@@ -168,6 +169,15 @@ function createFakeVscode(overrides = {}) {
         });
         return disposable;
       },
+      registerDocumentSymbolProvider(selector, provider) {
+        const disposable = { dispose() {} };
+        documentSymbolProviders.push({
+          selector,
+          provider,
+          disposable,
+        });
+        return disposable;
+      },
       registerReferenceProvider(selector, provider) {
         const disposable = { dispose() {} };
         referenceProviders.push({
@@ -270,6 +280,7 @@ function createFakeVscode(overrides = {}) {
     completionProviders,
     definitionProviders,
     diagnosticCollections,
+    documentSymbolProviders,
     debugProviders,
     editorUpdates,
     fakeVscode,
@@ -2278,6 +2289,84 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
   assert.equal(formattingProviders[0].provider.options.cli, cli);
   assert.equal(typeof formattingProviders[0].provider.options.projectFactory.isGaugeProject, "function");
   assert.equal(context.subscriptions.includes(formattingProviders[0].disposable), true);
+});
+
+test("activation registers Gauge document symbols for Gauge documents", () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const { documentSymbolProviders, fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  class FakeDocumentSymbolProvider {
+    constructor(options) {
+      this.options = options;
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: class FakeConfigProvider {
+      dispose() {}
+    },
+    DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
+    ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
+      dispose() {}
+    },
+    GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    ReferenceProvider: class FakeReferenceProvider {
+      dispose() {}
+    },
+    GaugeDocumentSymbolProvider: FakeDocumentSymbolProvider,
+    GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
+    GaugeStepDiagnosticsProvider: class FakeStepDiagnosticsProvider {
+      register() {
+        return { dispose() {} };
+      }
+    },
+    semanticTokensLegend: { id: "legend" },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(documentSymbolProviders.length, 1);
+  assert.deepEqual(documentSymbolProviders[0].selector, [
+    { language: "gauge" },
+    { scheme: "file", pattern: "**/*.spec" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
+    { scheme: "file", pattern: "**/*.cpt" },
+  ]);
+  assert.equal(documentSymbolProviders[0].provider.options.vscode, fakeVscode);
+  assert.equal(typeof documentSymbolProviders[0].provider.options.projectFactory.isGaugeProject, "function");
+  assert.equal(context.subscriptions.includes(documentSymbolProviders[0].disposable), true);
 });
 
 test("activation registers Kotlin step definitions for Gauge documents", () => {

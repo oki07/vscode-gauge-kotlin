@@ -19,6 +19,7 @@ const { GaugeDynamicArgumentCompletionProvider } = require("./dynamicArgumentCom
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFormatProvider } = require("./formatProvider");
+const { GaugeDocumentSymbolProvider } = require("./documentSymbolProvider");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
 const { GaugeStepCodeActionProvider } = require("./stepCodeActions");
 const { GaugeClients } = require("./gaugeClients");
@@ -498,6 +499,29 @@ function registerFormatProvider(context, vscode, options) {
   }
 }
 
+function registerDocumentSymbolProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerDocumentSymbolProvider !== "function") {
+    return;
+  }
+  const DocumentSymbolProviderCtor = options.GaugeDocumentSymbolProvider || GaugeDocumentSymbolProvider;
+  const provider = new DocumentSymbolProviderCtor({
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = vscode.languages.registerDocumentSymbolProvider(
+    [
+      { language: "gauge" },
+      SPEC_FILE_SELECTOR,
+      MARKDOWN_GAUGE_SPEC_SELECTOR,
+      CONCEPT_FILE_SELECTOR,
+    ],
+    provider,
+  );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerStepDiagnosticsProvider(context, vscode, options) {
   const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider || GaugeStepDiagnosticsProvider;
   const provider = new StepDiagnosticsProviderCtor({
@@ -778,6 +802,10 @@ function startGaugeServices(context, vscode, options = {}) {
   registerFormatProvider(context, vscode, {
     ...options,
     cli,
+    projectFactory,
+  });
+  registerDocumentSymbolProvider(context, vscode, {
+    ...options,
     projectFactory,
   });
   registerStepDefinitionProvider(context, vscode, {
