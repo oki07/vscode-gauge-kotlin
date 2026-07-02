@@ -119,7 +119,7 @@
           "end": "$",
           "patterns": [
             {
-              "include": "#arguments"
+              "include": "#dynamicArguments"
             }
           ]
         },
@@ -152,7 +152,7 @@
       "end": "$",
       "patterns": [
         {
-          "include": "#arguments"
+          "include": "#dynamicArguments"
         }
       ]
     },
@@ -229,6 +229,22 @@
         {
           "match": "[^|]+",
           "name": "string.unquoted.table-cell.gauge"
+        }
+      ]
+    },
+    "dynamicArguments": {
+      "patterns": [
+        {
+          "name": "variable.parameter.dynamic.gauge",
+          "match": "(<)((?:\\\\[<>]|[^>\\n])*)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.begin.gauge"
+            },
+            "3": {
+              "name": "punctuation.definition.variable.end.gauge"
+            }
+          }
         }
       ]
     },

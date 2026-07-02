@@ -692,7 +692,7 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assert.notEqual(firstMatchingTopLevelPattern(grammarJson, "___").include, "#markdown");
 });
 
-test("Gauge TextMate grammar keeps arguments reachable in hash concept headings", () => {
+test("Gauge TextMate grammar keeps only dynamic arguments reachable in hash concept headings", () => {
   const manifest = readPackageJson();
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
@@ -700,9 +700,9 @@ test("Gauge TextMate grammar keeps arguments reachable in hash concept headings"
   const firstMatch = firstMatchingTopLevelPattern(grammarJson, "# Shared checkout <item> \"card\"");
 
   assert.ok(firstMatch, "hash heading should match a top-level pattern");
-  assert.deepEqual(firstMatch.pattern.patterns, [{ include: "#arguments" }]);
-  assertPatternMatches(repositoryPattern(grammarJson, "arguments", 0), "<item>");
-  assertPatternMatches(repositoryPattern(grammarJson, "arguments", 1), "\"card\"", "\"");
+  assert.deepEqual(firstMatch.pattern.patterns, [{ include: "#dynamicArguments" }]);
+  assertPatternMatches(repositoryPattern(grammarJson, "dynamicArguments", 0), "<item>");
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "dynamicArguments", 0), "\"card\"");
 });
 
 test("Gauge TextMate grammar preserves common Markdown constructs", () => {

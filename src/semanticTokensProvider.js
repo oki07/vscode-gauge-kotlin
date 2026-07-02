@@ -284,21 +284,22 @@ class GaugeSemanticTokensProvider {
         let lastIndex = line.search(/\S/);
         const isScenarioHeading = !conceptDocument && isScenarioHashHeading(line);
         const headingToken = isScenarioHeading ? "scenario" : "specification";
+        const headingArgumentRegex = conceptDocument ? dynamicArgumentRegex : argumentRegex;
 
-        argumentRegex.lastIndex = 0;
-        let match = argumentRegex.exec(line);
+        headingArgumentRegex.lastIndex = 0;
+        let match = headingArgumentRegex.exec(line);
         while (match !== null) {
           const matchStart = match.index;
           if (isEscapedCharacter(line, matchStart)) {
-            match = argumentRegex.exec(line);
+            match = headingArgumentRegex.exec(line);
             continue;
           }
           if (matchStart > lastIndex) {
             builder.push(index, lastIndex, matchStart - lastIndex, tokenTypes.indexOf(headingToken), 0);
           }
           pushArgumentToken(builder, index, matchStart, match[0]);
-          lastIndex = argumentRegex.lastIndex;
-          match = argumentRegex.exec(line);
+          lastIndex = headingArgumentRegex.lastIndex;
+          match = headingArgumentRegex.exec(line);
         }
         if (lastIndex < line.length) {
           builder.push(index, lastIndex, line.length - lastIndex, tokenTypes.indexOf(headingToken), 0);

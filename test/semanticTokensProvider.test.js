@@ -327,7 +327,7 @@ test("GaugeSemanticTokensProvider ignores Gauge files by extension outside Gauge
   ]);
 });
 
-test("GaugeSemanticTokensProvider tokenizes quoted concept heading arguments", () => {
+test("GaugeSemanticTokensProvider keeps quoted concept heading text plain", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -347,14 +347,11 @@ test("GaugeSemanticTokensProvider tokenizes quoted concept heading arguments", (
 
   assert.deepEqual(tokens.map((entry) => entry.type), [
     "specification",
-    "argument",
-    "specification",
   ]);
-  const argument = tokens.find((entry) => entry.type === "argument");
-  assert.deepEqual({ line: argument.line, start: argument.start, length: argument.length }, {
+  assert.deepEqual({ line: tokens[0].line, start: tokens[0].start, length: tokens[0].length }, {
     line: 0,
-    start: 9,
-    length: 6,
+    start: 0,
+    length: 20,
   });
 });
 
