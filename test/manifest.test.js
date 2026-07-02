@@ -209,43 +209,44 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.format"));
   assert.ok(commandPaletteIds.includes("gauge.toggle.lineComment"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
-  const markdownGaugeEditorWhen = "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))";
-  const markdownGaugeSpecWhen = "gauge:activated && editorLangId == markdown && resourceExtname == .md";
+  const gaugeEditorWhen = "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))";
+  const gaugeEditorTextFocusWhen = "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))";
+  const activatedGaugeEditorTextFocusWhen = `${gaugeEditorTextFocusWhen} && gauge:activated`;
   assert.equal(
     manifest.contributes.menus.commandPalette.find(
       (entry) => entry.command === "gauge.extract.concept",
     ).when,
-    markdownGaugeEditorWhen,
+    gaugeEditorWhen,
   );
   assert.equal(
     manifest.contributes.menus.commandPalette.find(
       (entry) => entry.command === "gauge.format",
     ).when,
-    markdownGaugeEditorWhen,
+    gaugeEditorWhen,
   );
   assert.equal(
     manifest.contributes.menus.commandPalette.find(
       (entry) => entry.command === "gauge.toggle.lineComment",
     ).when,
-    markdownGaugeSpecWhen,
+    gaugeEditorWhen,
   );
   assert.equal(commandById(manifest, "gauge.preview").icon, "$(open-preview)");
   assert.deepEqual(manifest.contributes.keybindings, [
     {
       command: "gauge.format",
       key: "ctrl+alt+shift+l",
-      when: "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
+      when: gaugeEditorTextFocusWhen,
     },
     {
       command: "gauge.extract.concept",
       key: "ctrl+alt+c",
-      when: "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
+      when: gaugeEditorTextFocusWhen,
     },
     {
       command: "gauge.toggle.lineComment",
       key: "ctrl+/",
       mac: "cmd+/",
-      when: "editorTextFocus && editorLangId == markdown && resourceExtname == .md && gauge:activated",
+      when: activatedGaugeEditorTextFocusWhen,
     },
   ]);
   assert.deepEqual(manifest.contributes.menus["explorer/context"], [
@@ -268,29 +269,29 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(manifest.contributes.menus["editor/title"], [
     {
       command: "gauge.preview",
-      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
+      when: gaugeEditorWhen,
       group: "navigation@10",
     },
   ]);
   assert.deepEqual(manifest.contributes.menus["editor/context"], [
     {
       command: "gauge.preview",
-      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
+      when: gaugeEditorWhen,
       group: "navigation@10",
     },
     {
       command: "gauge.extract.concept",
-      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
+      when: gaugeEditorWhen,
       group: "1_modification",
     },
     {
       command: "gauge.format",
-      when: "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || (editorLangId == markdown && resourceExtname == .md))",
+      when: gaugeEditorWhen,
       group: "1_modification",
     },
     {
       command: "gauge.toggle.lineComment",
-      when: "gauge:activated && editorLangId == markdown && resourceExtname == .md",
+      when: gaugeEditorWhen,
       group: "1_modification",
     },
   ]);
