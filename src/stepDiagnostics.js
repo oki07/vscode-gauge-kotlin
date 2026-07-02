@@ -3538,17 +3538,18 @@ function conceptLegacyHeading(lines, lineNumber) {
   }
   const rawLine = lines[lineNumber].replace(/\r$/, "");
   const underline = lines[lineNumber + 1].replace(/\r$/, "");
-  if (!rawLine || rawLine.search(/\S/) !== 0 || !/^=+\s*$/.test(underline)) {
+  const textStart = rawLine.search(/\S/);
+  if (textStart === -1 || !/^=+\s*$/.test(underline)) {
     return undefined;
   }
-  const text = rawLine.trimEnd();
+  const text = rawLine.slice(textStart).trimEnd();
   if (!text) {
     return undefined;
   }
   return {
-    end: { line: lineNumber, character: text.length },
+    end: { line: lineNumber, character: textStart + text.length },
     normalized: normalizeStepTemplate(text),
-    start: { line: lineNumber, character: 0 },
+    start: { line: lineNumber, character: textStart },
     text,
   };
 }
