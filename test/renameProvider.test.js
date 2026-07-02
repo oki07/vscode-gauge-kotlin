@@ -522,6 +522,65 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
   );
 });
 
+test("GaugeRenameProvider updates Kotlin Step function parameters when rename adds a preceding parameter", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Basic",
+    "* a basic step \"param\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/basic.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"a basic step <param>\")",
+    "fun basic(param: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "a basic step \"before\" \"param\"",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/basic.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 22 },
+        },
+        newText: "a basic step \"before\" \"param\"",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 27 },
+        },
+        newText: "a basic step <before> <param>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 10 },
+          end: { line: 3, character: 23 },
+        },
+        newText: "argBefore: Any, param: String",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

@@ -154,12 +154,112 @@ function withInlineTableSuffix(value) {
   return `${removeInlineTableSuffix(value)} <table>`;
 }
 
+function isEscapedAt(text, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function findStepParameterEnd(text, start, closeCharacter) {
+  for (let index = start + 1; index < text.length; index += 1) {
+    if (text[index] === "\\" && closeCharacter === "\"") {
+      index += 1;
+      continue;
+    }
+    if (text[index] === closeCharacter && !isEscapedAt(text, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function nextStepParameter(text, startIndex) {
+  let dynamicIndex = text.indexOf("<", startIndex);
+  while (dynamicIndex !== -1 && isEscapedAt(text, dynamicIndex)) {
+    dynamicIndex = text.indexOf("<", dynamicIndex + 1);
+  }
+
+  let staticIndex = text.indexOf("\"", startIndex);
+  while (staticIndex !== -1 && isEscapedAt(text, staticIndex)) {
+    staticIndex = text.indexOf("\"", staticIndex + 1);
+  }
+
+  if (dynamicIndex === -1 && staticIndex === -1) {
+    return undefined;
+  }
+  if (staticIndex === -1 || (dynamicIndex !== -1 && dynamicIndex < staticIndex)) {
+    return {
+      closeCharacter: ">",
+      openCharacter: "<",
+      start: dynamicIndex,
+    };
+  }
+  return {
+    closeCharacter: "\"",
+    openCharacter: "\"",
+    start: staticIndex,
+  };
+}
+
+function unescapeQuotedStepParameter(value) {
+  return String(value).replace(/\\(["\\])/g, "$1");
+}
+
+function stepParameters(text) {
+  const parameters = [];
+  let index = 0;
+  while (index < text.length) {
+    const parameter = nextStepParameter(text, index);
+    if (!parameter) {
+      break;
+    }
+    const end = findStepParameterEnd(text, parameter.start, parameter.closeCharacter);
+    if (end === -1) {
+      break;
+    }
+    const rawValue = text.slice(parameter.start + 1, end);
+    parameters.push({
+      type: parameter.openCharacter === "\"" ? "static" : "dynamic",
+      value: parameter.openCharacter === "\"" ? unescapeQuotedStepParameter(rawValue) : rawValue,
+    });
+    index = end + 1;
+  }
+  return parameters;
+}
+
+function implementationStepName(value, hasInlineTable) {
+  const text = hasInlineTable ? withInlineTableSuffix(value) : value;
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const parameter = nextStepParameter(text, index);
+    if (!parameter) {
+      result += text.slice(index);
+      break;
+    }
+    const end = findStepParameterEnd(text, parameter.start, parameter.closeCharacter);
+    if (end === -1) {
+      result += text.slice(index);
+      break;
+    }
+    const rawValue = text.slice(parameter.start + 1, end);
+    const valueText = parameter.openCharacter === "\""
+      ? unescapeQuotedStepParameter(rawValue)
+      : rawValue;
+    result += `${text.slice(index, parameter.start)}<${valueText}>`;
+    index = end + 1;
+  }
+  return result;
+}
+
 function gaugeReplacementName(value, hasInlineTable) {
   return hasInlineTable ? removeInlineTableSuffix(value) : value;
 }
 
 function kotlinReplacementName(value, hasInlineTable) {
-  return hasInlineTable ? withInlineTableSuffix(value) : value;
+  return implementationStepName(value, hasInlineTable);
 }
 
 function offsetAt(text, position) {
@@ -681,6 +781,221 @@ function replacementForLiteral(value, literal, options = {}) {
   return options.kotlin ? escapeKotlinStringContent(value) : escapeStringContent(value);
 }
 
+function skipKotlinLineComment(text, index) {
+  if (!text.startsWith("//", index)) {
+    return index;
+  }
+  const end = text.indexOf("\n", index + 2);
+  return end === -1 ? text.length : end;
+}
+
+function skipKotlinBlockComment(text, index) {
+  if (!text.startsWith("/*", index)) {
+    return index;
+  }
+  let depth = 1;
+  let cursor = index + 2;
+  while (cursor < text.length && depth > 0) {
+    if (text.startsWith("/*", cursor)) {
+      depth += 1;
+      cursor += 2;
+    } else if (text.startsWith("*/", cursor)) {
+      depth -= 1;
+      cursor += 2;
+    } else {
+      cursor += 1;
+    }
+  }
+  return cursor;
+}
+
+function skipKotlinString(text, index) {
+  if (text.startsWith("\"\"\"", index)) {
+    const end = text.indexOf("\"\"\"", index + 3);
+    return end === -1 ? text.length : end + 3;
+  }
+  if (text[index] !== "\"") {
+    return index;
+  }
+  let cursor = index + 1;
+  while (cursor < text.length) {
+    if (text[cursor] === "\\") {
+      cursor += 2;
+      continue;
+    }
+    if (text[cursor] === "\"") {
+      return cursor + 1;
+    }
+    cursor += 1;
+  }
+  return text.length;
+}
+
+function splitKotlinParameterText(text) {
+  const parameters = [];
+  let start = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let angleDepth = 0;
+  let inBacktickIdentifier = false;
+  for (let index = 0; index < text.length; index += 1) {
+    if (!inBacktickIdentifier) {
+      const lineCommentEnd = skipKotlinLineComment(text, index);
+      if (lineCommentEnd !== index) {
+        index = lineCommentEnd - 1;
+        continue;
+      }
+      const blockCommentEnd = skipKotlinBlockComment(text, index);
+      if (blockCommentEnd !== index) {
+        index = blockCommentEnd - 1;
+        continue;
+      }
+      const stringEnd = skipKotlinString(text, index);
+      if (stringEnd !== index) {
+        index = stringEnd - 1;
+        continue;
+      }
+    }
+
+    const character = text[index];
+    if (character === "`") {
+      inBacktickIdentifier = !inBacktickIdentifier;
+      continue;
+    }
+    if (inBacktickIdentifier) {
+      continue;
+    }
+    if (
+      character === ","
+      && parenDepth === 0
+      && bracketDepth === 0
+      && braceDepth === 0
+      && angleDepth === 0
+    ) {
+      parameters.push(text.slice(start, index).trim());
+      start = index + 1;
+      continue;
+    }
+    if (character === "(") {
+      parenDepth += 1;
+    } else if (character === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+    } else if (character === "[") {
+      bracketDepth += 1;
+    } else if (character === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (character === "{") {
+      braceDepth += 1;
+    } else if (character === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (character === "<") {
+      angleDepth += 1;
+    } else if (character === ">" && angleDepth > 0) {
+      angleDepth -= 1;
+    }
+  }
+  const last = text.slice(start).trim();
+  if (last || parameters.length > 0) {
+    parameters.push(last);
+  }
+  return parameters.filter((parameter) => parameter.length > 0);
+}
+
+function kotlinParameterName(parameter) {
+  const cleaned = String(parameter || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\r\n]*/g, " ")
+    .replace(/@\s*(?:`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*)(?:\s*\([^)]*\))?/g, " ")
+    .trim();
+  const match = /^(?:(?:vararg|noinline|crossinline|val|var)\s+)*(`[^`\r\n]+`|[A-Za-z_][A-Za-z0-9_]*)\s*:/.exec(cleaned);
+  if (!match) {
+    return undefined;
+  }
+  return match[1].startsWith("`") ? match[1].slice(1, -1) : match[1];
+}
+
+function upperFirst(value) {
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
+}
+
+function generatedKotlinParameterName(value, index, usedNames) {
+  const words = String(value || "").match(/[A-Za-z0-9]+/g) || [];
+  let name = `arg${words.map((word) => upperFirst(word.toLowerCase())).join("")}`;
+  if (name === "arg") {
+    name = `arg${index}`;
+  }
+  let candidate = name;
+  let suffix = index;
+  while (usedNames.has(candidate)) {
+    candidate = `${name}${suffix}`;
+    suffix += 1;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
+
+function parameterPositionMap(oldParameters, newParameters) {
+  const usedOld = new Set();
+  return newParameters.map((parameter) => {
+    const oldIndex = oldParameters.findIndex((oldParameter, index) => (
+      !usedOld.has(index) && oldParameter.value === parameter.value
+    ));
+    if (oldIndex !== -1) {
+      usedOld.add(oldIndex);
+    }
+    return oldIndex;
+  });
+}
+
+function hasStructuralParameterChange(oldParameters, newParameters, positions) {
+  if (!positions.some((oldIndex) => oldIndex !== -1)) {
+    return false;
+  }
+  if (oldParameters.length !== newParameters.length) {
+    return true;
+  }
+  return positions.some((oldIndex, newIndex) => oldIndex !== -1 && oldIndex !== newIndex);
+}
+
+function isKotlinFunctionStepEntry(text, entry) {
+  if (entry.declarationStart === undefined || !text.startsWith("fun", entry.declarationStart)) {
+    return false;
+  }
+  const before = text[entry.declarationStart - 1] || "";
+  const after = text[entry.declarationStart + "fun".length] || "";
+  return !/[A-Za-z0-9_]/.test(before) && !/[A-Za-z0-9_]/.test(after);
+}
+
+function kotlinFunctionParameterReplacement(text, entry, newName, hasInlineTable) {
+  if (!isKotlinFunctionStepEntry(text, entry)) {
+    return undefined;
+  }
+  const oldParameters = stepParameters(entry.aliases[0]);
+  const newParameters = stepParameters(kotlinReplacementName(newName, hasInlineTable));
+  const positions = parameterPositionMap(oldParameters, newParameters);
+  if (!hasStructuralParameterChange(oldParameters, newParameters, positions)) {
+    return undefined;
+  }
+  const currentParameters = splitKotlinParameterText(entry.parameterText || "");
+  const usedNames = new Set(currentParameters.map(kotlinParameterName).filter(Boolean));
+  const replacementParameters = newParameters.map((parameter, newIndex) => {
+    const oldIndex = positions[newIndex];
+    if (oldIndex !== -1 && currentParameters[oldIndex] !== undefined) {
+      const existing = currentParameters[oldIndex].trim();
+      const existingName = kotlinParameterName(existing);
+      if (existingName) {
+        usedNames.add(existingName);
+      }
+      return existing;
+    }
+    const generatedName = generatedKotlinParameterName(parameter.value, newIndex, usedNames);
+    return `${generatedName}: Any`;
+  });
+  const replacement = replacementParameters.join(", ");
+  return replacement === String(entry.parameterText || "").trim() ? undefined : replacement;
+}
+
 function stepEntryHasTemplate(entry, template) {
   return (entry.aliases || []).some((alias) => normalizeStepTemplate(alias) === template);
 }
@@ -1085,6 +1400,21 @@ class GaugeRenameProvider {
     }
   }
 
+  addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable) {
+    if (!isKotlinDocument(document) || entry.parameterStart === undefined || entry.parameterEnd === undefined) {
+      return;
+    }
+    const replacement = kotlinFunctionParameterReplacement(text, entry, newName, hasInlineTable);
+    if (replacement === undefined) {
+      return;
+    }
+    const range = createRangeFromOffsets(this.vscode, text, entry.parameterStart, entry.parameterEnd);
+    if (editHasReplacement(edit, document.uri, range)) {
+      return;
+    }
+    edit.replace(document.uri, range, replacement);
+  }
+
   addStepImplementationRenames(edit, document, implementationDocuments, template, newName, hasInlineTable) {
     const text = document.getText();
     let externalConstants;
@@ -1113,10 +1443,12 @@ class GaugeRenameProvider {
             hasInlineTable,
           );
         }
+        this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable);
         continue;
       }
       const range = createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd);
       if (editHasReplacement(edit, document.uri, range)) {
+        this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable);
         continue;
       }
       edit.replace(
@@ -1126,6 +1458,7 @@ class GaugeRenameProvider {
           kotlin: kotlinDocument,
         }),
       );
+      this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable);
     }
   }
 
