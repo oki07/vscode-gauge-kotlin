@@ -394,6 +394,70 @@ test("GaugeRenameProvider rejects language server renames when Gauge validate re
   assert.deepEqual(requests, []);
 });
 
+test("GaugeRenameProvider rejects renames when implementation diagnostics report compile errors", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {",
+    "  missingSymbol()",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const saveAllCalls = [];
+  const validateCalls = [];
+  const diagnosticCalls = [];
+  const projectFactory = {
+    getGaugeRootFromFilePath(filename) {
+      assert.ok(filename.startsWith("/workspace/gauge/"));
+      return "/workspace/gauge";
+    },
+  };
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  vscode.DiagnosticSeverity = { Error: 0, Warning: 1 };
+  vscode.workspace.saveAll = () => {
+    saveAllCalls.push(true);
+    return Promise.resolve(true);
+  };
+  vscode.languages = {
+    getDiagnostics(uri) {
+      diagnosticCalls.push(uri);
+      return [
+        [
+          kotlinDocument.uri,
+          [{ message: "Unresolved reference: missingSymbol", severity: vscode.DiagnosticSeverity.Error }],
+        ],
+      ];
+    },
+  };
+  const provider = new GaugeRenameProvider({
+    projectFactory,
+    validateDiagnosticsProvider: {
+      validateErrorsForDocument() {
+        validateCalls.push(true);
+        return { errors: [] };
+      },
+    },
+    vscode,
+  });
+
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /Please fix all errors before refactoring/,
+  );
+  assert.deepEqual(saveAllCalls, [true]);
+  assert.equal(diagnosticCalls.length > 0, true);
+  assert.deepEqual(validateCalls, []);
+});
+
 test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

@@ -21,6 +21,7 @@ const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const JAVA_FILE_PATTERN = "**/*.java";
 const KOTLIN_FILE_PATTERN = "**/*.kt";
+const IMPLEMENTATION_DIAGNOSTIC_FILE_PATTERN = /\.(?:java|kts?)$/i;
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
 
@@ -105,7 +106,19 @@ function uriFromString(vscode, value) {
 }
 
 function uriPath(uri) {
-  return uri && uri.fsPath;
+  if (!uri) {
+    return undefined;
+  }
+  if (uri.fsPath) {
+    return uri.fsPath;
+  }
+  if (uri.path) {
+    return uri.path;
+  }
+  if (typeof uri === "string" && uri.startsWith("file://")) {
+    return uri.slice("file://".length);
+  }
+  return typeof uri === "string" ? uri : undefined;
 }
 
 function documentLine(document, line) {
@@ -230,6 +243,52 @@ function isGaugeDocument(document) {
   }
   return document.languageId === MARKDOWN_LANGUAGE
     && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
+}
+
+function isImplementationDiagnosticFile(file) {
+  return typeof file === "string" && IMPLEMENTATION_DIAGNOSTIC_FILE_PATTERN.test(file);
+}
+
+function diagnosticSeverityIsError(vscode, diagnostic) {
+  const severity = vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Error !== undefined
+    ? vscode.DiagnosticSeverity.Error
+    : 0;
+  return diagnostic && diagnostic.severity === severity;
+}
+
+function diagnosticEntries(vscode) {
+  const getDiagnostics = vscode.languages && vscode.languages.getDiagnostics;
+  if (typeof getDiagnostics !== "function") {
+    return [];
+  }
+
+  const entries = [];
+  const seen = new Set();
+  const addEntry = (uri, diagnostics) => {
+    const file = uriPath(uri);
+    if (!file || seen.has(file)) {
+      return;
+    }
+    seen.add(file);
+    entries.push([uri, Array.isArray(diagnostics) ? diagnostics : []]);
+  };
+
+  const allDiagnostics = getDiagnostics();
+  if (Array.isArray(allDiagnostics)) {
+    for (const entry of allDiagnostics) {
+      if (Array.isArray(entry)) {
+        addEntry(entry[0], entry[1]);
+      }
+    }
+  }
+
+  const documents = (vscode.workspace && vscode.workspace.textDocuments) || [];
+  for (const document of documents) {
+    if (document && document.uri) {
+      addEntry(document.uri, getDiagnostics(document.uri));
+    }
+  }
+  return entries;
 }
 
 function readQuotedLiteral(text, start, limit) {
@@ -949,6 +1008,9 @@ class GaugeRenameProvider {
     if (this.vscode.workspace && typeof this.vscode.workspace.saveAll === "function") {
       await this.vscode.workspace.saveAll();
     }
+    if (this.hasImplementationDiagnosticErrors(document)) {
+      throw new Error("Please fix all errors before refactoring.");
+    }
     if (
       !this.validateDiagnosticsProvider
       || typeof this.validateDiagnosticsProvider.validateErrorsForDocument !== "function"
@@ -959,6 +1021,26 @@ class GaugeRenameProvider {
     if (Array.isArray(errors) && errors.length > 0) {
       throw new Error("Please fix all errors before refactoring.");
     }
+  }
+
+  hasImplementationDiagnosticErrors(document) {
+    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(document);
+    for (const [uri, diagnostics] of diagnosticEntries(this.vscode)) {
+      const file = uriPath(uri);
+      if (!isImplementationDiagnosticFile(file)) {
+        continue;
+      }
+      if (sourceRoot !== undefined && this.diagnosticsProvider.rootForFile(file) !== sourceRoot) {
+        continue;
+      }
+      if (sourceRoot === undefined && this.projectFactory && !this.diagnosticsProvider.rootForFile(file)) {
+        continue;
+      }
+      if ((diagnostics || []).some((diagnostic) => diagnosticSeverityIsError(this.vscode, diagnostic))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   addGaugeRenames(edit, document, template, newName) {
