@@ -509,3 +509,99 @@ test("GenerateStubCommandProvider creates missing files before applying generate
   assert.deepEqual(shownDocuments[0].options.selection.start, new vscode.Position(0, 0));
   assert.deepEqual(appliedEdits[0].entries(), [[{ fsPath: filename }, textEdits]]);
 });
+
+test("GenerateStubCommandProvider defaults new step files to Java paths for Java projects", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const requests = [];
+  const appliedEdits = [];
+  const {
+    commands,
+    inputBoxes,
+    quickPicks,
+    vscode,
+  } = createFakeVscode({
+    inputBoxValue: "src/test/java/NewSteps.java",
+    quickPickSelection: {
+      label: "New File",
+      description: "Create a new file",
+      value: "New File",
+    },
+  });
+  const project = {
+    root() {
+      return "/workspace";
+    },
+    language() {
+      return "java";
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method, params) {
+      requests.push({ method, params });
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve([]);
+      }
+      if (method === "gauge/putStubImpl") {
+        return Promise.resolve({ changes: [] });
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/specs/example.spec");
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler([
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+    "public void implementation(Object arg0) {",
+    "}",
+    "",
+  ].join("\n"));
+
+  assert.deepEqual(quickPicks[0], [
+    { label: "New File", description: "Create a new file", value: "New File" },
+    { label: "Copy To Clipboard", description: "", value: "Copy To Clipboard" },
+  ]);
+  assert.deepEqual(inputBoxes, [
+    {
+      prompt: "Enter the new Java implementation file path.",
+      placeHolder: "src/test/java/Steps.java",
+      value: "src/test/java/Steps.java",
+    },
+  ]);
+  assert.deepEqual(requests[1], {
+    method: "gauge/putStubImpl",
+    params: {
+      implementationFilePath: "/workspace/src/test/java/NewSteps.java",
+      codes: [[
+        "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+        "public void implementation(Object arg0) {",
+        "}",
+        "",
+      ].join("\n")],
+    },
+  });
+  assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});

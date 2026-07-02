@@ -15,6 +15,9 @@ const GENERATE_CONCEPT_STUB = "gauge.generate.concept";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const NEW_FILE = "New File";
 const DEFAULT_KOTLIN_IMPLEMENTATION_FILE = "src/test/kotlin/Steps.kt";
+const DEFAULT_JAVA_IMPLEMENTATION_FILE = "src/test/java/Steps.java";
+const JAVA_LANGUAGE = "java";
+const KOTLIN_LANGUAGE = "kotlin";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -48,6 +51,39 @@ function replacementImplementationCode(code, currentName, nextName) {
     new RegExp(`\\bfun\\s+${currentName}\\s*\\(`),
     `fun ${nextName}(`,
   );
+}
+
+function projectLanguage(project) {
+  if (!project || typeof project.language !== "function") {
+    return undefined;
+  }
+  const language = project.language();
+  return typeof language === "string" ? language.toLowerCase() : undefined;
+}
+
+function generatedCodeLanguage(code) {
+  const text = String(code || "");
+  if (/\bpublic\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(text)) {
+    return JAVA_LANGUAGE;
+  }
+  if (/\bfun\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(text)) {
+    return KOTLIN_LANGUAGE;
+  }
+  return undefined;
+}
+
+function implementationDefaults(project, code) {
+  const language = projectLanguage(project) || generatedCodeLanguage(code);
+  if (language === JAVA_LANGUAGE) {
+    return {
+      defaultFile: DEFAULT_JAVA_IMPLEMENTATION_FILE,
+      label: "Java",
+    };
+  }
+  return {
+    defaultFile: DEFAULT_KOTLIN_IMPLEMENTATION_FILE,
+    label: "Kotlin",
+  };
 }
 
 class GenerateStubCommandProvider {
@@ -101,6 +137,7 @@ class GenerateStubCommandProvider {
         const implementationFilePath = await this.resolveImplementationFilePath(
           selected,
           projectClient.project.root(),
+          implementationDefaults(projectClient.project, code),
         );
         if (!implementationFilePath) {
           return undefined;
@@ -143,7 +180,7 @@ class GenerateStubCommandProvider {
       .catch((reason) => this.handleError(reason));
   }
 
-  async resolveImplementationFilePath(selected, projectRoot) {
+  async resolveImplementationFilePath(selected, projectRoot, defaults = implementationDefaults()) {
     if (selected.value !== NEW_FILE) {
       return selected.value;
     }
@@ -151,9 +188,9 @@ class GenerateStubCommandProvider {
       return undefined;
     }
     const input = await this.vscode.window.showInputBox({
-      prompt: "Enter the new Kotlin implementation file path.",
-      placeHolder: DEFAULT_KOTLIN_IMPLEMENTATION_FILE,
-      value: DEFAULT_KOTLIN_IMPLEMENTATION_FILE,
+      prompt: `Enter the new ${defaults.label} implementation file path.`,
+      placeHolder: defaults.defaultFile,
+      value: defaults.defaultFile,
     });
     const trimmed = typeof input === "string" ? input.trim() : "";
     if (!trimmed) {

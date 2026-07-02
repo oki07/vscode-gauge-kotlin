@@ -8,6 +8,7 @@ const GENERATE_CONCEPT_STUB = "gauge.generate.concept";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
+const JAVA_LANGUAGE = "java";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -69,6 +70,39 @@ function isGaugeProjectDocument(document, projectFactory) {
   } catch (_error) {
     return false;
   }
+}
+
+function projectLanguage(document, projectFactory) {
+  if (!projectFactory) {
+    return undefined;
+  }
+  const file = documentPath(document);
+  if (!file) {
+    return undefined;
+  }
+  try {
+    if (typeof projectFactory.getProjectByFilepath === "function") {
+      const project = projectFactory.getProjectByFilepath(file);
+      if (project && typeof project.language === "function") {
+        const language = project.language();
+        return typeof language === "string" ? language.toLowerCase() : undefined;
+      }
+    }
+    if (
+      typeof projectFactory.getGaugeRootFromFilePath === "function"
+      && typeof projectFactory.get === "function"
+    ) {
+      const root = projectFactory.getGaugeRootFromFilePath(file);
+      const project = projectFactory.get(root);
+      if (project && typeof project.language === "function") {
+        const language = project.language();
+        return typeof language === "string" ? language.toLowerCase() : undefined;
+      }
+    }
+  } catch (_error) {
+    return undefined;
+  }
+  return undefined;
 }
 
 function isInlineTableLine(line) {
@@ -227,6 +261,19 @@ function stepStubCode(stepText, methodName = "implementation", implicitParameter
   ].join("\n");
 }
 
+function javaStepStubCode(stepText, methodName = "implementation", implicitParameterCount = 0) {
+  const params = Array.from(
+    { length: countStepParameters(stepText) + implicitParameterCount },
+    (_entry, index) => `Object arg${index}`,
+  ).join(", ");
+  return [
+    `@com.thoughtworks.gauge.Step(${JSON.stringify(stepText)})`,
+    `public void ${methodName}(${params}) {`,
+    "}",
+    "",
+  ].join("\n");
+}
+
 function undefinedStepDiagnostics(context) {
   return (context && Array.isArray(context.diagnostics) ? context.diagnostics : [])
     .filter((diagnostic) => diagnostic && diagnostic.message === UNDEFINED_STEP_MESSAGE);
@@ -260,16 +307,18 @@ class GaugeStepCodeActionProvider {
     const action = createCodeAction(this.vscode, CREATE_STEP_IMPLEMENTATION_TITLE);
     action.diagnostics = diagnostics;
     action.isPreferred = true;
+    const language = projectLanguage(document, this.projectFactory);
+    const code = language === JAVA_LANGUAGE
+      ? javaStepStubCode(step.text, "implementation", step.implicitParameterCount)
+      : stepStubCode(
+        step.text,
+        stepImplementationName(workspaceKotlinFunctionNames(this.vscode)),
+        step.implicitParameterCount,
+      );
     action.command = {
       command: GENERATE_STEP_STUB,
       title: CREATE_STEP_IMPLEMENTATION_TITLE,
-      arguments: [
-        stepStubCode(
-          step.text,
-          stepImplementationName(workspaceKotlinFunctionNames(this.vscode)),
-          step.implicitParameterCount,
-        ),
-      ],
+      arguments: [code],
     };
     const conceptAction = createCodeAction(this.vscode, CREATE_CONCEPT_TITLE);
     conceptAction.diagnostics = diagnostics;
@@ -293,6 +342,7 @@ module.exports = {
   UNDEFINED_STEP_MESSAGE,
   conceptInfo,
   conceptStepText,
+  javaStepStubCode,
   kotlinFunctionNames,
   stepImplementationName,
   stepStubCode,

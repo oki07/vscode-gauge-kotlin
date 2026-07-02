@@ -74,6 +74,59 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
   });
 });
 
+test("GaugeStepCodeActionProvider creates a Java step implementation quick fix for Java projects", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/gauge/specs/checkout.spec");
+        return "/workspace/gauge";
+      },
+      getProjectByFilepath(file) {
+        assert.equal(file, "/workspace/gauge/specs/checkout.spec");
+        return {
+          language() {
+            return "java";
+          },
+        };
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\npublic void implementation(Object arg0) {\n}\n",
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider creates a concept quick fix for undefined steps", () => {
   const {
     CREATE_CONCEPT_TITLE,
