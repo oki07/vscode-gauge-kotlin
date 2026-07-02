@@ -74,6 +74,92 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
   });
 });
 
+test("GaugeStepCodeActionProvider uses diagnostic code as the step implementation stub", () => {
+  const {
+    CREATE_CONCEPT_TITLE,
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_CONCEPT_STUB,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+  const diagnostic = {
+    message: "Step implementation not found",
+    range,
+    code: "expected generated stub",
+  };
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [diagnostic],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].diagnostics, [diagnostic]);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: ["expected generated stub"],
+  });
+  assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
+  assert.deepEqual(actions[1].command, {
+    command: GENERATE_CONCEPT_STUB,
+    title: CREATE_CONCEPT_TITLE,
+    arguments: [
+      {
+        conceptName: "# Pay with <arg0>\n* ",
+        conceptFile: "",
+        dir: "",
+      },
+    ],
+  });
+});
+
+test("GaugeStepCodeActionProvider creates a diagnostic code step fix outside step lines", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(0, 0),
+    new vscode.Position(0, 0),
+  );
+  const diagnostic = {
+    message: "Step implementation not found",
+    range,
+    code: "expected generated stub",
+  };
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [diagnostic],
+  });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].diagnostics, [diagnostic]);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: ["expected generated stub"],
+  });
+});
+
 test("GaugeStepCodeActionProvider creates a Java step implementation quick fix for Java projects", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,

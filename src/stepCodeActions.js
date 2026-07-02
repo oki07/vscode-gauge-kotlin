@@ -274,9 +274,26 @@ function javaStepStubCode(stepText, methodName = "implementation", implicitParam
   ].join("\n");
 }
 
+function diagnosticStubCode(diagnostic) {
+  const code = diagnostic && diagnostic.code;
+  if (typeof code === "string") {
+    return code.length > 0 ? code : undefined;
+  }
+  if (typeof code === "number") {
+    return String(code);
+  }
+  return undefined;
+}
+
 function undefinedStepDiagnostics(context) {
   return (context && Array.isArray(context.diagnostics) ? context.diagnostics : [])
-    .filter((diagnostic) => diagnostic && diagnostic.message === UNDEFINED_STEP_MESSAGE);
+    .filter((diagnostic) => (
+      diagnostic
+      && (
+        diagnostic.message === UNDEFINED_STEP_MESSAGE
+        || diagnosticStubCode(diagnostic) !== undefined
+      )
+    ));
 }
 
 class GaugeStepCodeActionProvider {
@@ -300,7 +317,8 @@ class GaugeStepCodeActionProvider {
     }
 
     const step = gaugeStepAt(document, range.start.line);
-    if (!step) {
+    const suppliedCode = diagnostics.map(diagnosticStubCode).find((code) => code !== undefined);
+    if (!step && suppliedCode === undefined) {
       return [];
     }
 
@@ -308,18 +326,21 @@ class GaugeStepCodeActionProvider {
     action.diagnostics = diagnostics;
     action.isPreferred = true;
     const language = projectLanguage(document, this.projectFactory);
-    const code = language === JAVA_LANGUAGE
+    const code = suppliedCode || (language === JAVA_LANGUAGE
       ? javaStepStubCode(step.text, "implementation", step.implicitParameterCount)
       : stepStubCode(
         step.text,
         stepImplementationName(workspaceKotlinFunctionNames(this.vscode)),
         step.implicitParameterCount,
-      );
+      ));
     action.command = {
       command: GENERATE_STEP_STUB,
       title: CREATE_STEP_IMPLEMENTATION_TITLE,
       arguments: [code],
     };
+    if (!step) {
+      return [action];
+    }
     const conceptAction = createCodeAction(this.vscode, CREATE_CONCEPT_TITLE);
     conceptAction.diagnostics = diagnostics;
     conceptAction.command = {
