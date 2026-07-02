@@ -640,6 +640,57 @@ test("GaugeRenameProvider normalizes table file parameters in Kotlin Step implem
   );
 });
 
+test("GaugeRenameProvider keeps existing Kotlin parameter names when renaming specs to static arguments", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Vowels",
+    "* Vowels in English language are \"aeiou\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/vowels.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Vowels in English language are <vowelString>\")",
+    "fun setLanguageVowels(vowelString: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Vowels in English language are \"aeiou\"",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/vowels.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 40 },
+        },
+        newText: "Vowels in English language are \"aeiou\"",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 51 },
+        },
+        newText: "Vowels in English language are <vowelString>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
