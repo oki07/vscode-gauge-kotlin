@@ -234,6 +234,14 @@ test("GaugeRenameProvider augments language server Gauge renames with Kotlin Ste
         },
         newText: "Pay with <value>",
       },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "argValue: Any",
+      },
     ],
   );
 });
@@ -518,6 +526,14 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
         },
         newText: "Pay with <value>",
       },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "argValue: Any",
+      },
     ],
   );
 });
@@ -691,6 +707,65 @@ test("GaugeRenameProvider keeps existing Kotlin parameter names when renaming sp
   );
 });
 
+test("GaugeRenameProvider replaces Kotlin parameters when dynamic argument names change", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 24 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "argValue: Any",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -789,6 +864,14 @@ test("GaugeRenameProvider renames Markdown Gauge steps and Kotlin Step annotatio
         },
         newText: "Pay with <value>",
       },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "argValue: Any",
+      },
     ],
   );
 });
@@ -839,6 +922,14 @@ test("GaugeRenameProvider renames spec files by extension and Kotlin Step annota
           end: { line: 2, character: 24 },
         },
         newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "argValue: Any",
       },
     ],
   );
