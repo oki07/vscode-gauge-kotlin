@@ -116,13 +116,15 @@ function isGaugeProjectRoot(projectFactory, root) {
   return true;
 }
 
-function getProjectRootForSpec(vscode, spec, pathModule, projectFactory) {
+function getProjectRootForSpec(vscode, spec, pathModule, projectFactory, allowWorkspaceFallback = true) {
   if (projectFactory && typeof projectFactory.getGaugeRootFromFilePath === "function") {
     try {
       const root = projectFactory.getGaugeRootFromFilePath(spec);
       return isGaugeProjectRoot(projectFactory, root) ? root : undefined;
     } catch (_error) {
-      // Fall back to workspace folders for non-Gauge files or lightweight tests.
+      if (!allowWorkspaceFallback) {
+        return undefined;
+      }
     }
   }
   const roots = getWorkspaceRoots(vscode);
@@ -617,6 +619,7 @@ function createGaugeExecutionController(options = {}) {
   const vscode = options.vscode || require("vscode");
   const pathModule = options.pathModule || nodePath;
   const fileSystem = options.fileSystem || nodeFs;
+  const allowWorkspaceProjectFallback = !options.projectFactory;
   const projectFactory = options.projectFactory || createProjectFactory({
     execSync: options.execSync,
     fileSystem,
@@ -799,7 +802,13 @@ function createGaugeExecutionController(options = {}) {
       };
     }
 
-    const projectRoot = getProjectRootForSpec(vscode, spec, pathModule, projectFactory);
+    const projectRoot = getProjectRootForSpec(
+      vscode,
+      spec,
+      pathModule,
+      projectFactory,
+      allowWorkspaceProjectFallback,
+    );
     if (!projectRoot) {
       return {
         error: "No workspace folder is open.",
@@ -845,7 +854,13 @@ function createGaugeExecutionController(options = {}) {
     if (targets.length !== 1 || !isDirectory(targets[0], fileSystem)) {
       return undefined;
     }
-    const projectRoot = getProjectRootForSpec(vscode, targets[0], pathModule, projectFactory);
+    const projectRoot = getProjectRootForSpec(
+      vscode,
+      targets[0],
+      pathModule,
+      projectFactory,
+      allowWorkspaceProjectFallback,
+    );
     if (
       projectRoot
       && pathModule.normalize(targets[0]) === pathModule.normalize(projectRoot)
@@ -859,7 +874,13 @@ function createGaugeExecutionController(options = {}) {
     const groups = [];
     const groupIndexes = new Map();
     for (const target of targets) {
-      const projectRoot = getProjectRootForSpec(vscode, target, pathModule, projectFactory);
+      const projectRoot = getProjectRootForSpec(
+        vscode,
+        target,
+        pathModule,
+        projectFactory,
+        allowWorkspaceProjectFallback,
+      );
       if (!projectRoot) {
         continue;
       }
@@ -977,7 +998,13 @@ function createGaugeExecutionController(options = {}) {
 
   async function executeScenarioIdentifier(executionIdentifier, flags = {}) {
     const specPath = getScenarioSpecPath(executionIdentifier);
-    const projectRoot = getProjectRootForSpec(vscode, specPath, pathModule, projectFactory);
+    const projectRoot = getProjectRootForSpec(
+      vscode,
+      specPath,
+      pathModule,
+      projectFactory,
+      allowWorkspaceProjectFallback,
+    );
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
     }
@@ -1084,6 +1111,7 @@ function createGaugeExecutionController(options = {}) {
       getScenarioSpecPath(spec),
       pathModule,
       projectFactory,
+      allowWorkspaceProjectFallback,
     );
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");
@@ -1115,6 +1143,7 @@ function createGaugeExecutionController(options = {}) {
       getScenarioSpecPath(rootTarget),
       pathModule,
       projectFactory,
+      allowWorkspaceProjectFallback,
     );
     if (!projectRoot) {
       return vscode.window.showErrorMessage("No workspace folder is open.");

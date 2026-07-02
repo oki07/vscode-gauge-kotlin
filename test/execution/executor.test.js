@@ -771,6 +771,40 @@ test("execute specification ignores active specs when the resolved root is not a
   assert.deepEqual(errors, ["No workspace folder is open."]);
 });
 
+test("execute specification ignores active specs rejected by project root resolution", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { errors, vscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        fileName: "/workspace/notes/example.spec",
+        uri: { fsPath: "/workspace/notes/example.spec" },
+      },
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.spec");
+        throw new Error("not a Gauge project");
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.specification");
+
+  assert.equal(result, undefined);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(errors, ["No workspace folder is open."]);
+});
+
 test("execute in parallel runs the Gauge code lens target", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
