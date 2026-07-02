@@ -1231,6 +1231,69 @@ test("GaugeRenameProvider renames concept headings when renaming concept usages"
   );
 });
 
+test("GaugeRenameProvider renames concept headings from concept files by extension", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Reuse payment <card>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment <method>",
+    "* Confirm order",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/payment.cpt");
+  const vscode = createFakeVscode([specDocument, conceptDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const prepared = await provider.prepareRename(conceptDocument, new vscode.Position(0, 4));
+  const edit = await provider.provideRenameEdits(
+    conceptDocument,
+    new vscode.Position(0, 4),
+    "Shared payment <account>",
+  );
+
+  assert.deepEqual({
+    placeholder: prepared.placeholder,
+    range: {
+      start: { ...prepared.range.start },
+      end: { ...prepared.range.end },
+    },
+  }, {
+    placeholder: "Reuse payment <method>",
+    range: {
+      start: { line: 0, character: 2 },
+      end: { line: 0, character: 24 },
+    },
+  });
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 22 },
+        },
+        newText: "Shared payment <account>",
+      },
+      {
+        file: "/workspace/gauge/specs/concepts/payment.cpt",
+        range: {
+          start: { line: 0, character: 2 },
+          end: { line: 0, character: 24 },
+        },
+        newText: "Shared payment <account>",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider rejects renames for aliased Kotlin Step implementations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -1301,6 +1364,7 @@ test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () =
   assert.deepEqual(vscode.registration.selector, [
     { language: "gauge" },
     { scheme: "file", pattern: "**/*.spec" },
+    { scheme: "file", pattern: "**/*.cpt" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { language: "kotlin" },
     { scheme: "file", pattern: "**/*.kt" },

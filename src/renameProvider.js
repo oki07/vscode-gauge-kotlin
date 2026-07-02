@@ -16,6 +16,7 @@ const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const JAVA_FILE_PATTERN = "**/*.java";
@@ -222,6 +223,9 @@ function isGaugeDocument(document) {
     return true;
   }
   if (SPEC_FILE_PATTERN.test(documentPath(document))) {
+    return true;
+  }
+  if (CONCEPT_FILE_PATTERN.test(documentPath(document))) {
     return true;
   }
   return document.languageId === MARKDOWN_LANGUAGE
@@ -1095,6 +1099,7 @@ class GaugeRenameProvider {
       [
         { language: GAUGE_LANGUAGE },
         { scheme: "file", pattern: "**/*.spec" },
+        { scheme: "file", pattern: "**/*.cpt" },
         { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },
