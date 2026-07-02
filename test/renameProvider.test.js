@@ -581,6 +581,65 @@ test("GaugeRenameProvider updates Kotlin Step function parameters when rename ad
   );
 });
 
+test("GaugeRenameProvider normalizes table file parameters in Kotlin Step implementations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Basic",
+    "* a basic step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/basic.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"a basic step\")",
+    "fun basic() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "a basic step <table:validTable.csv>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/basic.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 14 },
+        },
+        newText: "a basic step <table:validTable.csv>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 19 },
+        },
+        newText: "a basic step <table1>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 10 },
+          end: { line: 3, character: 10 },
+        },
+        newText: "argTable1: Any",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

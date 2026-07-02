@@ -207,8 +207,13 @@ function unescapeQuotedStepParameter(value) {
   return String(value).replace(/\\(["\\])/g, "$1");
 }
 
+function specialTableParameterName(value, index) {
+  return /^\s*table\s*:/.test(String(value || "")) ? `table${index + 1}` : undefined;
+}
+
 function stepParameters(text) {
   const parameters = [];
+  let tableParameterCount = 0;
   let index = 0;
   while (index < text.length) {
     const parameter = nextStepParameter(text, index);
@@ -220,9 +225,16 @@ function stepParameters(text) {
       break;
     }
     const rawValue = text.slice(parameter.start + 1, end);
+    const value = parameter.openCharacter === "\"" ? unescapeQuotedStepParameter(rawValue) : rawValue;
+    const tableName = parameter.openCharacter === "<"
+      ? specialTableParameterName(value, tableParameterCount)
+      : undefined;
+    if (tableName) {
+      tableParameterCount += 1;
+    }
     parameters.push({
       type: parameter.openCharacter === "\"" ? "static" : "dynamic",
-      value: parameter.openCharacter === "\"" ? unescapeQuotedStepParameter(rawValue) : rawValue,
+      value: tableName || value,
     });
     index = end + 1;
   }
@@ -232,6 +244,7 @@ function stepParameters(text) {
 function implementationStepName(value, hasInlineTable) {
   const text = hasInlineTable ? withInlineTableSuffix(value) : value;
   let result = "";
+  let tableParameterCount = 0;
   let index = 0;
   while (index < text.length) {
     const parameter = nextStepParameter(text, index);
@@ -248,7 +261,13 @@ function implementationStepName(value, hasInlineTable) {
     const valueText = parameter.openCharacter === "\""
       ? unescapeQuotedStepParameter(rawValue)
       : rawValue;
-    result += `${text.slice(index, parameter.start)}<${valueText}>`;
+    const tableName = parameter.openCharacter === "<"
+      ? specialTableParameterName(valueText, tableParameterCount)
+      : undefined;
+    if (tableName) {
+      tableParameterCount += 1;
+    }
+    result += `${text.slice(index, parameter.start)}<${tableName || valueText}>`;
     index = end + 1;
   }
   return result;
@@ -949,6 +968,9 @@ function parameterPositionMap(oldParameters, newParameters) {
 }
 
 function hasStructuralParameterChange(oldParameters, newParameters, positions) {
+  if (oldParameters.length === 0 && newParameters.length > 0) {
+    return true;
+  }
   if (!positions.some((oldIndex) => oldIndex !== -1)) {
     return false;
   }
