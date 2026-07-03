@@ -837,7 +837,10 @@ function startGaugeServices(context, vscode, options = {}) {
     ...options,
     projectFactory,
   });
-  registerFoldingRangeProvider(context, vscode, options);
+  registerFoldingRangeProvider(context, vscode, {
+    ...options,
+    projectFactory,
+  });
   registerFormatProvider(context, vscode, {
     ...options,
     cli,
@@ -866,7 +869,10 @@ function startGaugeServices(context, vscode, options = {}) {
     cli,
     projectFactory,
   });
-  registerSemanticTokensProvider(context, vscode, options);
+  registerSemanticTokensProvider(context, vscode, {
+    ...options,
+    projectFactory,
+  });
   registerSemanticTokenColorUpdates(context, vscode);
 
   const state = createGaugeState(context, options);
@@ -982,8 +988,8 @@ function activate(context, vscodeApi, options = {}) {
     setTimeout: options.setTimeout,
     vscode,
   }));
-  registerArgumentCodeActionProvider(context, vscode, options);
-  registerStepCodeActionProvider(context, vscode, options);
+  registerArgumentCodeActionProvider(context, vscode, serviceOptions);
+  registerStepCodeActionProvider(context, vscode, serviceOptions);
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
       command,

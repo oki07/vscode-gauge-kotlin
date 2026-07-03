@@ -2873,6 +2873,131 @@ test("activation shows install guidance when Gauge is unavailable", () => {
   assert.equal(context.subscriptions.includes(codeActionProviders[1].disposable), true);
 });
 
+test("activation propagates the default project factory to Gauge providers", () => {
+  const extension = require("../src/extension");
+
+  const created = {};
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const fileSystem = {
+    existsSync(filename) {
+      return filename === "/workspace/gauge/manifest.json";
+    },
+    readFileSync(filename) {
+      assert.equal(filename, "/workspace/gauge/manifest.json");
+      return JSON.stringify({ Language: "kotlin", Plugins: [] });
+    },
+  };
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    isGaugeVersionGreaterOrEqual() {
+      return true;
+    },
+  };
+  class FakeGaugeClients extends Map {}
+  class FakeGaugeWorkspace {
+    constructor(options) {
+      this.options = options;
+      created.workspace = this;
+    }
+
+    dispose() {}
+  }
+  class FakeGaugeTestController {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      created.testController = this;
+    }
+
+    register() {
+      return this.disposable;
+    }
+
+    setExecutionController(executionController) {
+      this.executionController = executionController;
+    }
+  }
+  class FakeProvider {
+    constructor(options) {
+      this.options = options;
+    }
+
+    dispose() {}
+  }
+  class FakeArgumentCodeActionProvider extends FakeProvider {
+    constructor(options) {
+      super(options);
+      created.argumentCodeActionProvider = this;
+    }
+  }
+  class FakeStepCodeActionProvider extends FakeProvider {
+    constructor(options) {
+      super(options);
+      created.stepCodeActionProvider = this;
+    }
+  }
+  class FakeFoldingRangeProvider extends FakeProvider {
+    constructor(options) {
+      super(options);
+      created.foldingRangeProvider = this;
+    }
+  }
+  class FakeSemanticTokensProvider extends FakeProvider {
+    constructor(options) {
+      super(options);
+      created.semanticTokensProvider = this;
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    ConfigProvider: FakeProvider,
+    createCli() {
+      return cli;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    DynamicArgumentCompletionProvider: FakeProvider,
+    ExtractConceptCommandProvider: FakeProvider,
+    fileSystem,
+    GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
+    GaugeClients: FakeGaugeClients,
+    GaugeCodeLensProvider: FakeProvider,
+    GaugeDocumentSymbolProvider: FakeProvider,
+    GaugeEnterHandler: FakeProvider,
+    GaugeFoldingRangeProvider: FakeFoldingRangeProvider,
+    GaugeFormatProvider: FakeProvider,
+    GaugeRenameProvider: FakeProvider,
+    GaugeSemanticTokensProvider: FakeSemanticTokensProvider,
+    GaugeState: FakeProvider,
+    GaugeStepCodeActionProvider: FakeStepCodeActionProvider,
+    GaugeStepDefinitionProvider: FakeProvider,
+    GaugeStepDiagnosticsProvider: FakeProvider,
+    GaugeTestController: FakeGaugeTestController,
+    GaugeValidateDiagnosticsProvider: FakeProvider,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    GenerateStubCommandProvider: FakeProvider,
+    ProjectInitializer: FakeProvider,
+    ReferenceProvider: FakeProvider,
+    semanticTokensLegend: { id: "legend" },
+    showWelcomeNotification() {},
+    SpecNodeProvider: FakeProvider,
+  });
+
+  const defaultProjectFactory = created.workspace.options.projectFactory;
+  assert.equal(typeof defaultProjectFactory.isGaugeProject, "function");
+  assert.equal(created.testController.options.projectFactory, defaultProjectFactory);
+  assert.equal(created.argumentCodeActionProvider.options.projectFactory, defaultProjectFactory);
+  assert.equal(created.stepCodeActionProvider.options.projectFactory, defaultProjectFactory);
+  assert.equal(created.foldingRangeProvider.options.projectFactory, defaultProjectFactory);
+  assert.equal(created.semanticTokensProvider.options.projectFactory, defaultProjectFactory);
+});
+
 test("activation shows unsupported Gauge version guidance when Gauge is too old", () => {
   const extension = require("../src/extension");
 
