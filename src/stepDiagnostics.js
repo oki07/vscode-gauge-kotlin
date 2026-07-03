@@ -5,6 +5,7 @@ const GAUGE_LANGUAGE = "gauge";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
+const CONCEPT_STATIC_PARAMETER_MESSAGE = "Concept heading can have only Dynamic Parameters";
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
@@ -3696,6 +3697,21 @@ function legacyScenarioHeadingDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function conceptStaticParameterDiagnostics(vscode, text) {
+  const diagnostics = [];
+  for (const heading of findConceptHeadings(text)) {
+    if (findStaticParameterStart(heading.text, 0) === -1) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(vscode, heading.start, heading.end),
+      CONCEPT_STATIC_PARAMETER_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6718,6 +6734,7 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...conceptWithoutStepDiagnostics(this.vscode, text));
         diagnostics.push(...stepsOutsideConceptDiagnostics(this.vscode, text));
         diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
+        diagnostics.push(...conceptStaticParameterDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }

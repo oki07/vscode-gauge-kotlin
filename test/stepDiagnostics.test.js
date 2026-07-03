@@ -4917,6 +4917,33 @@ test("GaugeStepDiagnosticsProvider rejects scenario headings in concept files", 
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 16 });
 });
 
+test("GaugeStepDiagnosticsProvider rejects static arguments in concept headings", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout \"user\"",
+    "* Confirm order",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Concept heading can have only Dynamic Parameters",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 2 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 24 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined steps implemented only in another Gauge project", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
