@@ -1,5 +1,8 @@
 "use strict";
 
+const nodeFs = require("node:fs");
+const nodePath = require("node:path");
+
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
@@ -437,7 +440,86 @@ function snippetString(vscode, value) {
   return value;
 }
 
-function specDataTableHeaders(text) {
+function externalDataTablePath(line) {
+  const match = /^\s*table\s*:\s*(.+?)\s*$/i.exec(String(line || ""));
+  return match ? match[1].trim() : undefined;
+}
+
+function parseCsvRecord(line, delimiter) {
+  const cells = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (quoted) {
+      if (character === "\"" && line[index + 1] === "\"") {
+        cell += "\"";
+        index += 1;
+      } else if (character === "\"") {
+        quoted = false;
+      } else {
+        cell += character;
+      }
+    } else if (character === "\"" && cell.length === 0) {
+      quoted = true;
+    } else if (character === delimiter) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells.filter(Boolean);
+}
+
+function csvDelimiter() {
+  const delimiter = process.env.csv_delimiter;
+  return delimiter ? delimiter[0] : ",";
+}
+
+function csvHeaderCells(content, delimiter = csvDelimiter()) {
+  const lines = String(content || "").split(/\r?\n/);
+  for (const line of lines) {
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    return unique(parseCsvRecord(line, delimiter));
+  }
+  return [];
+}
+
+function resolveExternalDataTablePath(dataTablePath, options = {}) {
+  const pathModule = options.pathModule || nodePath;
+  if (!dataTablePath) {
+    return undefined;
+  }
+  if (pathModule.isAbsolute(dataTablePath)) {
+    return dataTablePath;
+  }
+  if (!options.filePath) {
+    return undefined;
+  }
+  return pathModule.resolve(pathModule.dirname(options.filePath), dataTablePath);
+}
+
+function externalDataTableHeaders(dataTablePath, options = {}) {
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.readFileSync !== "function") {
+    return [];
+  }
+  const filename = resolveExternalDataTablePath(dataTablePath, options);
+  if (!filename) {
+    return [];
+  }
+  try {
+    return csvHeaderCells(fileSystem.readFileSync(filename, "utf8"));
+  } catch (_error) {
+    return [];
+  }
+}
+
+function specDataTableHeaders(text, options = {}) {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index];
@@ -446,6 +528,10 @@ function specDataTableHeaders(text) {
     }
     if (isStepLine(line)) {
       return [];
+    }
+    const dataTablePath = externalDataTablePath(line);
+    if (dataTablePath) {
+      return externalDataTableHeaders(dataTablePath, options);
     }
     if (isFirstTableLine(lines, index)) {
       return unique(tableCells(line));
@@ -699,6 +785,8 @@ class GaugeDynamicArgumentCompletionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
     this.clientsMap = options.clientsMap;
+    this.fileSystem = options.fileSystem || nodeFs;
+    this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
       projectFactory: this.projectFactory,
@@ -954,7 +1042,11 @@ class GaugeDynamicArgumentCompletionProvider {
           isConceptDocument(document)
             ? conceptDynamicArguments(document.getText())
             : unique([
-              ...specDataTableHeaders(document.getText()),
+              ...specDataTableHeaders(document.getText(), {
+                filePath: documentPath(document),
+                fileSystem: this.fileSystem,
+                pathModule: this.pathModule,
+              }),
               ...scenarioDataTableHeaders(document.getText(), position.line),
             ])
         )

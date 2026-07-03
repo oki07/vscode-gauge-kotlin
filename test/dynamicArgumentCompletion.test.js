@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const test = require("node:test");
 
 function createFakeVscode() {
@@ -96,6 +97,41 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.equal(items[0].kind, "variable");
   assert.deepEqual({ ...items[0].range.start }, { line: 6, character: 12 });
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table headers inside dynamic arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const reads = [];
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        reads.push({ encoding, filename });
+        assert.equal(filename, "/workspace/gauge/specs/csv.csv");
+        assert.equal(encoding, "utf8");
+        return "one,two\n1,2\n";
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table : ./csv.csv",
+    "",
+    "## Successful checkout",
+    "* Login as <o>",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
+
+  assert.deepEqual(labels(items), ["one", "two"]);
+  assert.deepEqual(reads, [
+    {
+      encoding: "utf8",
+      filename: "/workspace/gauge/specs/csv.csv",
+    },
+  ]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag lines", async () => {
