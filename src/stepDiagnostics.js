@@ -5,6 +5,7 @@ const GAUGE_LANGUAGE = "gauge";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
+const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
@@ -3615,6 +3616,41 @@ function duplicateConceptDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function isTopLevelConceptStep(line) {
+  if (!String(line || "").startsWith("*")) {
+    return false;
+  }
+  return Boolean(String(line).slice(1).trim());
+}
+
+function conceptHasStep(lines, startLine, endLine) {
+  for (let line = startLine; line < endLine; line += 1) {
+    if (isTopLevelConceptStep(lines[line])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function conceptWithoutStepDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  const headings = findConceptHeadings(text);
+  for (let index = 0; index < headings.length; index += 1) {
+    const heading = headings[index];
+    const nextLine = headings[index + 1] ? headings[index + 1].start.line : lines.length;
+    if (conceptHasStep(lines, heading.start.line + 1, nextLine)) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(vscode, heading.start, heading.end),
+      CONCEPT_WITHOUT_STEP_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6634,6 +6670,7 @@ class GaugeStepDiagnosticsProvider {
       }
       if (isConceptDocument(document)) {
         diagnostics.push(...duplicateConceptDiagnostics(this.vscode, text));
+        diagnostics.push(...conceptWithoutStepDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }
