@@ -8,6 +8,7 @@ const BLANK_STEP_MESSAGE = "Step should not be blank";
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
+const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
@@ -3669,6 +3670,32 @@ function stepsOutsideConceptDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function isLegacyScenarioUnderline(line) {
+  return /^-+\s*$/.test(String(line || ""));
+}
+
+function legacyScenarioHeadingDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  for (let line = 0; line < lines.length - 1; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    const start = rawLine.search(/\S/);
+    if (start === -1 || !isLegacyScenarioUnderline(lines[line + 1].replace(/\r$/, ""))) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(
+        vscode,
+        { line, character: start },
+        { line, character: rawLine.trimEnd().length },
+      ),
+      SCENARIO_HEADING_IN_CONCEPT_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6690,6 +6717,7 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...duplicateConceptDiagnostics(this.vscode, text));
         diagnostics.push(...conceptWithoutStepDiagnostics(this.vscode, text));
         diagnostics.push(...stepsOutsideConceptDiagnostics(this.vscode, text));
+        diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }

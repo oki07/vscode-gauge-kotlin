@@ -4895,6 +4895,28 @@ test("GaugeStepDiagnosticsProvider reports steps outside concept headings", () =
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 15 });
 });
 
+test("GaugeStepDiagnosticsProvider rejects scenario headings in concept files", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "Scenario heading",
+    "----------------",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/scenario.cpt");
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Scenario Heading is not allowed in concept file",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 16 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined steps implemented only in another Gauge project", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
