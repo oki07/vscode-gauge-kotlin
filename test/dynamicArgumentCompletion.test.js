@@ -1058,6 +1058,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on ste
   assert.deepEqual(labels(items), ["Log in as <user>", "Sign in as <user>"]);
   assert.equal(items[0].kind, "function");
   assert.equal(items[0].detail, "step");
+  assert.equal(items[0].documentation, "Log in as <user>");
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
   assert.equal(items[0].filterText, "Log in as <user>");
   assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 2 });
@@ -1406,6 +1407,7 @@ test("GaugeDynamicArgumentCompletionProvider deduplicates normalized Gauge LSP s
 
   assert.deepEqual(labels(items), ["Pay with <amount>"]);
   assert.equal(items[0].detail, "step");
+  assert.equal(items[0].documentation, "Pay with <amount>");
   assert.equal(items[0].insertText.value, "Pay with \"${0:amount}\"");
 });
 

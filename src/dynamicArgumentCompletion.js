@@ -777,6 +777,9 @@ function completionItem(vscode, label, range, options = {}) {
   if (options.detail !== undefined) {
     item.detail = options.detail;
   }
+  if (options.documentation !== undefined) {
+    item.documentation = options.documentation;
+  }
   if (options.insertText !== undefined) {
     item.insertText = options.insertText;
   }
@@ -825,6 +828,7 @@ function lspCompletionItem(vscode, item, fallbackRange) {
   }
   const options = {
     detail: item.detail,
+    documentation: item.documentation,
     filterText: item.filterText,
     insertText: lspCompletionInsertText(vscode, item),
     kind: item.kind || (vscode.CompletionItemKind && vscode.CompletionItemKind.Function),
@@ -1172,6 +1176,7 @@ class GaugeDynamicArgumentCompletionProvider {
       range,
       {
         detail: entry.detail,
+        documentation: entry.label,
         filterText: `${insertPrefix}${stepFilterText(entry.label, prefix)}`,
         insertText: snippetString(this.vscode, `${insertPrefix}${stepSnippetText(entry.label, prefix)}`),
         kind,
