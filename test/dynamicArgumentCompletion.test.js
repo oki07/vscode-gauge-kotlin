@@ -1407,6 +1407,38 @@ test("GaugeDynamicArgumentCompletionProvider keeps filled static args in Kotlin 
   assert.equal(items[0].filterText, "Log in as \"Alice\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider keeps filled dynamic args in Kotlin Step alias filter text", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const stepLine = "* Say <file:test.txt> to";
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    stepLine,
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Say <hello> to <gauge>\")",
+    "fun say(hello: String, gauge: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, stepLine.length));
+
+  assert.deepEqual(labels(items), ["Say <hello> to <gauge>"]);
+  assert.equal(items[0].insertText.value, "Say \"${1:hello}\" to \"${0:gauge}\"");
+  assert.equal(items[0].filterText, "Say <file:test.txt> to <gauge>");
+});
+
 test("GaugeDynamicArgumentCompletionProvider ignores indented step lines for Kotlin Step aliases", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

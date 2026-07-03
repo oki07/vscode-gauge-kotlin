@@ -427,6 +427,45 @@ function filledStaticArguments(prefix) {
   return values;
 }
 
+function nextStepArgumentStart(prefix, startIndex) {
+  const dynamicStart = nextUnescapedCharacterIndex(prefix, "<", startIndex);
+  const staticStart = nextUnescapedCharacterIndex(prefix, "\"", startIndex);
+  if (dynamicStart === -1 && staticStart === -1) {
+    return undefined;
+  }
+  if (staticStart === -1 || (dynamicStart !== -1 && dynamicStart < staticStart)) {
+    return { start: dynamicStart, type: "dynamic" };
+  }
+  return { start: staticStart, type: "static" };
+}
+
+function filledStepArguments(prefix) {
+  const values = [];
+  let index = 0;
+  while (index < prefix.length) {
+    const argument = nextStepArgumentStart(prefix, index);
+    if (!argument) {
+      break;
+    }
+    const closeIndex = argument.type === "dynamic"
+      ? closingAngleIndex(prefix, argument.start)
+      : closingQuoteIndex(prefix, argument.start);
+    if (closeIndex === -1) {
+      break;
+    }
+    values.push({
+      type: argument.type,
+      value: prefix.slice(argument.start + 1, closeIndex),
+    });
+    index = closeIndex + 1;
+  }
+  return values;
+}
+
+function stepFilterArgumentText(argument) {
+  return argument.type === "static" ? `"${argument.value}"` : `<${argument.value}>`;
+}
+
 function stepSnippetText(stepText, prefix = "") {
   const ranges = stepParameterRanges(stepText);
   if (ranges.length === 0) {
@@ -453,7 +492,7 @@ function stepFilterText(stepText, prefix = "") {
     return stepText;
   }
 
-  const filledArgs = filledStaticArguments(prefix);
+  const filledArgs = filledStepArguments(prefix);
   if (filledArgs.length === 0) {
     return stepText;
   }
@@ -464,7 +503,7 @@ function stepFilterText(stepText, prefix = "") {
     const range = ranges[index];
     result += stepText.slice(offset, range.start);
     result += filledArgs[index] !== undefined
-      ? `"${filledArgs[index]}"`
+      ? stepFilterArgumentText(filledArgs[index])
       : stepText.slice(range.start, range.end + 1);
     offset = range.end + 1;
   }
