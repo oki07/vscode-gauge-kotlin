@@ -270,6 +270,95 @@ test("GenerateStubCommandProvider avoids duplicate method names in selected Kotl
   assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
 });
 
+test("GenerateStubCommandProvider avoids duplicate method names in selected Java files", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const requests = [];
+  const appliedEdits = [];
+  const { commands, vscode } = createFakeVscode();
+  const project = {
+    root() {
+      return "/workspace";
+    },
+    language() {
+      return "java";
+    },
+  };
+  const fileSystem = {
+    readFileSync(filename, encoding) {
+      assert.equal(filename, "/workspace/src/test/java/Steps.java");
+      assert.equal(encoding, "utf8");
+      return [
+        "import com.thoughtworks.gauge.Step;",
+        "",
+        "public class Steps {",
+        "  @Step(\"Existing step\")",
+        "  public void implementation() {",
+        "  }",
+        "}",
+      ].join("\n");
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method, params) {
+      requests.push({ method, params });
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve(["/workspace/src/test/java/Steps.java"]);
+      }
+      if (method === "gauge/putStubImpl") {
+        return Promise.resolve({ changes: [] });
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/specs/example.spec");
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler([
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+    "public void implementation(Object arg0) {",
+    "}",
+    "",
+  ].join("\n"));
+
+  assert.deepEqual(requests[1], {
+    method: "gauge/putStubImpl",
+    params: {
+      implementationFilePath: "/workspace/src/test/java/Steps.java",
+      codes: [[
+        "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+        "public void implementation1(Object arg0) {",
+        "}",
+        "",
+      ].join("\n")],
+    },
+  });
+  assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});
+
 test("GenerateStubCommandProvider reports clipboard copy failures", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const { commands, errors, vscode } = createFakeVscode({

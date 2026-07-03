@@ -43,6 +43,11 @@ function generatedImplementationName(code) {
   return match ? match[1] : undefined;
 }
 
+function generatedJavaImplementationName(code) {
+  const match = /\bpublic\s+void\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(String(code || ""));
+  return match ? match[1] : undefined;
+}
+
 function replacementImplementationCode(code, currentName, nextName) {
   if (!currentName || !nextName || currentName === nextName) {
     return code;
@@ -51,6 +56,27 @@ function replacementImplementationCode(code, currentName, nextName) {
     new RegExp(`\\bfun\\s+${currentName}\\s*\\(`),
     `fun ${nextName}(`,
   );
+}
+
+function replacementJavaImplementationCode(code, currentName, nextName) {
+  if (!currentName || !nextName || currentName === nextName) {
+    return code;
+  }
+  return String(code || "").replace(
+    new RegExp(`\\bpublic\\s+void\\s+${currentName}\\s*\\(`),
+    `public void ${nextName}(`,
+  );
+}
+
+function javaMethodNames(text) {
+  const names = [];
+  const pattern = /\b(?:public|protected|private)?\s*(?:static\s+)?(?:final\s+)?[A-Za-z_$][A-Za-z0-9_$.<>\[\]?]*(?:\s*<[^;{}()]*>)?\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
+  let match = pattern.exec(String(text || ""));
+  while (match) {
+    names.push(match[1]);
+    match = pattern.exec(String(text || ""));
+  }
+  return names;
 }
 
 function projectLanguage(project) {
@@ -214,9 +240,20 @@ class GenerateStubCommandProvider {
   }
 
   stepCodeForImplementationFile(code, implementationFilePath) {
-    if (!implementationFilePath || !String(implementationFilePath).toLowerCase().endsWith(".kt")) {
+    if (!implementationFilePath) {
       return code;
     }
+    const lowerPath = String(implementationFilePath).toLowerCase();
+    if (lowerPath.endsWith(".java")) {
+      return this.javaStepCodeForImplementationFile(code, implementationFilePath);
+    }
+    if (!lowerPath.endsWith(".kt")) {
+      return code;
+    }
+    return this.kotlinStepCodeForImplementationFile(code, implementationFilePath);
+  }
+
+  kotlinStepCodeForImplementationFile(code, implementationFilePath) {
     const currentName = generatedImplementationName(code);
     if (!currentName || !/^implementation\d*$/.test(currentName)) {
       return code;
@@ -230,6 +267,26 @@ class GenerateStubCommandProvider {
       return code;
     }
     return replacementImplementationCode(
+      code,
+      currentName,
+      stepImplementationName(existingNames),
+    );
+  }
+
+  javaStepCodeForImplementationFile(code, implementationFilePath) {
+    const currentName = generatedJavaImplementationName(code);
+    if (!currentName || !/^implementation\d*$/.test(currentName)) {
+      return code;
+    }
+    const text = this.implementationFileText(implementationFilePath);
+    if (typeof text !== "string") {
+      return code;
+    }
+    const existingNames = javaMethodNames(text);
+    if (!existingNames.includes(currentName)) {
+      return code;
+    }
+    return replacementJavaImplementationCode(
       code,
       currentName,
       stepImplementationName(existingNames),
