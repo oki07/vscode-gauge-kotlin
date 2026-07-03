@@ -1,0 +1,469 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Gauge Concept",
+  "scopeName": "text.gauge.concept",
+  "fileTypes": [
+    "cpt"
+  ],
+  "patterns": [
+    {
+      "include": "#frontMatter"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#conceptHeading"
+    },
+    {
+      "include": "#step"
+    },
+    {
+      "include": "#table"
+    },
+    {
+      "include": "#arguments"
+    },
+    {
+      "include": "#markdown"
+    },
+    {
+      "include": "#fallbackComment"
+    }
+  ],
+  "repository": {
+    "frontMatter": {
+      "name": "meta.frontmatter.markdown.gauge",
+      "contentName": "meta.embedded.block.frontmatter",
+      "begin": "\\A-{3}\\s*$",
+      "while": "^(?!(-{3}|\\.{3})\\s*$)",
+      "patterns": [
+        {
+          "include": "source.yaml"
+        }
+      ]
+    },
+    "comments": {
+      "name": "comment.line.double-slash.gauge",
+      "match": "^\\s*//.*$"
+    },
+    "conceptHeading": {
+      "name": "markup.heading.concept.gauge",
+      "begin": "^(\\s*)(#)(\\s*)",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.heading.concept.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#dynamicArguments"
+        }
+      ]
+    },
+    "step": {
+      "name": "meta.step.gauge",
+      "begin": "^(\\s*)(\\*)(\\s*)",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.operator.step.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#arguments"
+        }
+      ]
+    },
+    "table": {
+      "patterns": [
+        {
+          "include": "#tableSeparator"
+        },
+        {
+          "include": "#tableRow"
+        }
+      ]
+    },
+    "tableSeparator": {
+      "name": "meta.table.separator.gauge",
+      "begin": "^(\\s*\\|)(?=(?:\\s*-+\\s*\\|)+\\s*$)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.separator.table.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "-+",
+          "name": "punctuation.definition.table-separator.gauge"
+        },
+        {
+          "match": "(?<!\\\\)\\|",
+          "name": "punctuation.separator.table.gauge"
+        }
+      ]
+    },
+    "tableRow": {
+      "name": "meta.table.row.gauge",
+      "begin": "^(\\s*\\|)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.separator.table.gauge"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "(?<!\\\\)\\|",
+          "name": "punctuation.separator.table.gauge"
+        },
+        {
+          "match": "\\\\\\|",
+          "name": "string.unquoted.table-cell.gauge"
+        },
+        {
+          "include": "#tableArguments"
+        },
+        {
+          "match": "[^|]+",
+          "name": "string.unquoted.table-cell.gauge"
+        }
+      ]
+    },
+    "dynamicArguments": {
+      "patterns": [
+        {
+          "name": "variable.parameter.dynamic.gauge",
+          "match": "(<)((?:\\\\[<>]|[^>\\n])*)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.begin.gauge"
+            },
+            "3": {
+              "name": "punctuation.definition.variable.end.gauge"
+            }
+          }
+        }
+      ]
+    },
+    "arguments": {
+      "patterns": [
+        {
+          "name": "variable.parameter.dynamic.gauge",
+          "match": "(<)((?:\\\\[<>]|[^>\\n])*)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.begin.gauge"
+            },
+            "3": {
+              "name": "punctuation.definition.variable.end.gauge"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.argument.gauge",
+          "begin": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.gauge"
+            }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.gauge"
+            }
+          },
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.gauge"
+            }
+          ]
+        }
+      ]
+    },
+    "tableArguments": {
+      "patterns": [
+        {
+          "name": "variable.parameter.dynamic.gauge",
+          "match": "(<)((?:\\\\[<>|]|[^>|\\n])*)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.begin.gauge"
+            },
+            "3": {
+              "name": "punctuation.definition.variable.end.gauge"
+            }
+          }
+        },
+        {
+          "include": "#arguments"
+        }
+      ]
+    },
+    "markdown": {
+      "patterns": [
+        {
+          "include": "#markdownBlockquote"
+        },
+        {
+          "include": "#markdownSeparator"
+        },
+        {
+          "include": "#markdownKotlinFencedCode"
+        },
+        {
+          "include": "#markdownJavaFencedCode"
+        },
+        {
+          "include": "#markdownJavaScriptFencedCode"
+        },
+        {
+          "include": "#markdownJsonFencedCode"
+        },
+        {
+          "include": "#markdownPythonFencedCode"
+        },
+        {
+          "include": "#markdownShellFencedCode"
+        },
+        {
+          "include": "#markdownYamlFencedCode"
+        },
+        {
+          "include": "#markdownFencedCode"
+        },
+        {
+          "include": "#markdownLinkDefinition"
+        },
+        {
+          "include": "#markdownHtmlBlock"
+        },
+        {
+          "include": "#markdownList"
+        },
+        {
+          "include": "#markdownInline"
+        }
+      ]
+    },
+    "markdownBlockquote": {
+      "name": "markup.quote.markdown.gauge",
+      "match": "^(>\\s?)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.blockquote.markdown.gauge"
+        }
+      }
+    },
+    "markdownSeparator": {
+      "name": "meta.separator.markdown.gauge",
+      "match": "^\\s{0,3}(?:-{3,}|\\*{3,}|_{3,})\\s*$"
+    },
+    "markdownKotlinFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Kk][Oo][Tt][Ll][Ii][Nn]|[Kk][Tt][Ss]?)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.kotlin",
+      "patterns": [
+        {
+          "include": "source.kotlin"
+        }
+      ]
+    },
+    "markdownJavaFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Aa][Vv][Aa]|[Bb][Ss][Hh])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.java",
+      "patterns": [
+        {
+          "include": "source.java"
+        }
+      ]
+    },
+    "markdownJavaScriptFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Aa][Vv][Aa][Ss][Cc][Rr][Ii][Pp][Tt]|[Jj][Ss])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "markdownJsonFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Ss][Oo][Nn])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.json",
+      "patterns": [
+        {
+          "include": "source.json"
+        }
+      ]
+    },
+    "markdownPythonFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Pp][Yy][Tt][Hh][Oo][Nn]|[Pp][Yy])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.python",
+      "patterns": [
+        {
+          "include": "source.python"
+        }
+      ]
+    },
+    "markdownShellFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Ss][Hh][Ee][Ll][Ll]|[Ss][Hh]|[Bb][Aa][Ss][Hh]|[Zz][Ss][Hh])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.shell",
+      "patterns": [
+        {
+          "include": "source.shell"
+        }
+      ]
+    },
+    "markdownYamlFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Yy][Aa][Mm][Ll]|[Yy][Mm][Ll])(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.yaml",
+      "patterns": [
+        {
+          "include": "source.yaml"
+        }
+      ]
+    },
+    "markdownFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "^((?:`{3,}|~{3,})(?:\\s*[A-Za-z0-9_-]+)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$"
+    },
+    "markdownLinkDefinition": {
+      "name": "meta.link.reference.def.markdown.gauge",
+      "match": "^\\s{0,3}\\[[^\\]\\n]+\\]:\\s*\\S.*$"
+    },
+    "markdownHtmlBlock": {
+      "name": "text.html.markdown.gauge",
+      "begin": "^\\s{0,3}</?[A-Za-z][^>]*>",
+      "end": "$",
+      "patterns": [
+        {
+          "include": "text.html.basic"
+        }
+      ]
+    },
+    "markdownInline": {
+      "patterns": [
+        {
+          "include": "#markdownReferenceImage"
+        },
+        {
+          "include": "#markdownImage"
+        },
+        {
+          "include": "#markdownReferenceLink"
+        },
+        {
+          "include": "#markdownLink"
+        },
+        {
+          "include": "#markdownAutoLink"
+        },
+        {
+          "match": "`[^`\\n]+`",
+          "name": "markup.raw.inline.markdown.gauge"
+        },
+        {
+          "match": "(?:\\*\\*|__)[^\\n]+?(?:\\*\\*|__)",
+          "name": "markup.bold.markdown.gauge"
+        },
+        {
+          "match": "(?:\\*|_)[^\\s\\n][^\\n]*?(?:\\*|_)",
+          "name": "markup.italic.markdown.gauge"
+        }
+      ]
+    },
+    "markdownLink": {
+      "name": "meta.link.inline.markdown.gauge",
+      "match": "\\[[^\\]\\n]+\\]\\([^\\s)]+(?:\\s+\"[^\"]*\")?\\)"
+    },
+    "markdownImage": {
+      "name": "meta.image.inline.markdown.gauge",
+      "match": "!\\[[^\\]\\n]*\\]\\([^\\s)]+(?:\\s+\"[^\"]*\")?\\)"
+    },
+    "markdownReferenceLink": {
+      "name": "meta.link.reference.markdown.gauge",
+      "match": "\\[[^\\]\\n]+\\]\\s?\\[[^\\]\\n]*\\]"
+    },
+    "markdownReferenceImage": {
+      "name": "meta.image.reference.markdown.gauge",
+      "match": "!\\[[^\\]\\n]*\\]\\s?\\[[^\\]\\n]*\\]"
+    },
+    "markdownAutoLink": {
+      "name": "meta.link.auto.markdown.gauge",
+      "match": "<(?:https?://[^>\\s]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})>"
+    },
+    "markdownList": {
+      "name": "markup.list.markdown.gauge",
+      "match": "^\\s*((?:[-+*]|\\d+\\.)(?:\\s+))",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list.begin.markdown.gauge"
+        }
+      }
+    },
+    "fallbackComment": {
+      "name": "comment.line.gauge",
+      "match": "^\\s*\\S.*$"
+    }
+  }
+}

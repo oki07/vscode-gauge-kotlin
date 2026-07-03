@@ -134,6 +134,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "workspaceContains:manifest.json",
     "workspaceContains:**/manifest.json",
     "onLanguage:gauge",
+    "onLanguage:gauge-concept",
     "onLanguage:kotlin",
     "onLanguage:java",
     "onDebugResolve:gauge",
@@ -141,9 +142,14 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
 
   const language = manifest.contributes.languages.find((entry) => entry.id === "gauge");
   assert.ok(language);
-  assert.deepEqual(language.extensions, [".spec", ".cpt"]);
-  assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec", "Concept"]);
+  assert.deepEqual(language.extensions, [".spec"]);
+  assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec"]);
   assert.equal(language.configuration, "./language-configuration.json");
+  const conceptLanguage = manifest.contributes.languages.find((entry) => entry.id === "gauge-concept");
+  assert.ok(conceptLanguage);
+  assert.deepEqual(conceptLanguage.extensions, [".cpt"]);
+  assert.deepEqual(conceptLanguage.aliases, ["Gauge Concept", "Concept"]);
+  assert.equal(conceptLanguage.configuration, "./language-configuration.json");
 
   assert.deepEqual(manifest.contributes.iconThemes, [
     {
@@ -160,6 +166,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.deepEqual(iconTheme.languageIds, {
     gauge: "_gauge_spec",
+    "gauge-concept": "_gauge_concept",
   });
   assert.equal(
     iconTheme.iconDefinitions._gauge_spec.iconPath,
@@ -484,6 +491,12 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(grammar);
   assert.equal(grammar.scopeName, "text.gauge");
   assert.equal(grammar.path, "./syntaxes/gauge.tmLanguage.json");
+  const conceptGrammar = manifest.contributes.grammars.find(
+    (entry) => entry.language === "gauge-concept",
+  );
+  assert.ok(conceptGrammar);
+  assert.equal(conceptGrammar.scopeName, "text.gauge.concept");
+  assert.equal(conceptGrammar.path, "./syntaxes/gauge-concept.tmLanguage.json");
 
   assert.deepEqual(manifest.contributes.snippets, [
     {
@@ -500,6 +513,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     manifest.main,
     language.configuration,
     grammar.path,
+    conceptGrammar.path,
     manifest.contributes.snippets[0].path,
   ]) {
     assert.equal(fs.existsSync(path.join(root, relativePath)), true, relativePath);
@@ -664,6 +678,38 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
   ]) {
     assert.ok(grammarJson.repository[key], `missing ${key}`);
   }
+});
+
+test("extension manifest contributes a Concept TextMate grammar", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge-concept");
+
+  assert.deepEqual(grammar, {
+    language: "gauge-concept",
+    scopeName: "text.gauge.concept",
+    path: "./syntaxes/gauge-concept.tmLanguage.json",
+  });
+
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+  assert.equal(grammarJson.scopeName, "text.gauge.concept");
+  assert.deepEqual(
+    grammarJson.patterns.map((entry) => entry.include),
+    [
+      "#frontMatter",
+      "#comments",
+      "#conceptHeading",
+      "#step",
+      "#table",
+      "#arguments",
+      "#markdown",
+      "#fallbackComment",
+    ],
+  );
+  assert.equal(Object.hasOwn(grammarJson.repository, "tags"), false);
+  assert.equal(Object.hasOwn(grammarJson.repository, "tableKeyword"), false);
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "tags: smoke").include, "#fallbackComment");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "table: users.csv").include, "#fallbackComment");
+  assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
 });
 
 test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () => {

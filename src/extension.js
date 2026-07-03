@@ -53,6 +53,8 @@ const {
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
+const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const IMPLEMENTATION_LANGUAGES = new Set([JAVA_LANGUAGE, KOTLIN_LANGUAGE]);
@@ -306,7 +308,7 @@ function registerGaugeLanguageConfiguration(context, vscode) {
   if (!vscode.languages || typeof vscode.languages.setLanguageConfiguration !== "function") {
     return;
   }
-  const disposable = vscode.languages.setLanguageConfiguration("gauge", {
+  const configuration = {
     comments: {
       lineComment: "//",
     },
@@ -314,9 +316,12 @@ function registerGaugeLanguageConfiguration(context, vscode) {
     autoClosingPairs: GAUGE_BRACKET_PAIRS,
     surroundingPairs: GAUGE_BRACKET_PAIRS,
     wordPattern: GAUGE_WORD_PATTERN,
-  });
-  if (disposable) {
-    context.subscriptions.push(disposable);
+  };
+  for (const language of [GAUGE_LANGUAGE, GAUGE_CONCEPT_LANGUAGE]) {
+    const disposable = vscode.languages.setLanguageConfiguration(language, configuration);
+    if (disposable) {
+      context.subscriptions.push(disposable);
+    }
   }
 }
 

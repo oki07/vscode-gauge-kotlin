@@ -426,25 +426,29 @@ test("activation preserves Gauge editor language configuration", () => {
     semanticTokensLegend: {},
   });
 
-  assert.equal(languageConfigurations.length, 1);
-  assert.equal(languageConfigurations[0].language, "gauge");
-  assert.deepEqual(languageConfigurations[0].configuration.comments, {
-    lineComment: "//",
-  });
-  assert.deepEqual(languageConfigurations[0].configuration.brackets, [
-    ["<", ">"],
-    ["\"", "\""],
+  assert.deepEqual(languageConfigurations.map((entry) => entry.language), [
+    "gauge",
+    "gauge-concept",
   ]);
-  assert.deepEqual(languageConfigurations[0].configuration.autoClosingPairs, [
-    ["<", ">"],
-    ["\"", "\""],
-  ]);
-  assert.deepEqual(languageConfigurations[0].configuration.surroundingPairs, [
-    ["<", ">"],
-    ["\"", "\""],
-  ]);
-  assert.equal(languageConfigurations[0].configuration.wordPattern.source, "^(?:[*])([^*].*)$");
-  assert.equal(languageConfigurations[0].configuration.wordPattern.flags, "g");
+  for (const entry of languageConfigurations) {
+    assert.deepEqual(entry.configuration.comments, {
+      lineComment: "//",
+    });
+    assert.deepEqual(entry.configuration.brackets, [
+      ["<", ">"],
+      ["\"", "\""],
+    ]);
+    assert.deepEqual(entry.configuration.autoClosingPairs, [
+      ["<", ">"],
+      ["\"", "\""],
+    ]);
+    assert.deepEqual(entry.configuration.surroundingPairs, [
+      ["<", ">"],
+      ["\"", "\""],
+    ]);
+    assert.equal(entry.configuration.wordPattern.source, "^(?:[*])([^*].*)$");
+    assert.equal(entry.configuration.wordPattern.flags, "g");
+  }
 });
 
 test("activation passes the project factory to the Gauge enter handler", () => {
@@ -1947,7 +1951,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.deepEqual(contexts, []);
   assert.deepEqual(
     languageConfigurations.map((entry) => entry.language),
-    ["gauge"],
+    ["gauge", "gauge-concept"],
   );
   assert.deepEqual(semanticTokenProviders, [
     {

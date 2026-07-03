@@ -40,6 +40,7 @@
     "workspaceContains:manifest.json",
     "workspaceContains:**/manifest.json",
     "onLanguage:gauge",
+    "onLanguage:gauge-concept",
     "onLanguage:kotlin",
     "onLanguage:java",
     "onDebugResolve:gauge"
@@ -69,13 +70,22 @@
       {
         "id": "gauge",
         "extensions": [
-          ".spec",
-          ".cpt"
+          ".spec"
         ],
         "aliases": [
           "Gauge",
           "Specification",
-          "Spec",
+          "Spec"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "gauge-concept",
+        "extensions": [
+          ".cpt"
+        ],
+        "aliases": [
+          "Gauge Concept",
           "Concept"
         ],
         "configuration": "./language-configuration.json"
@@ -86,6 +96,11 @@
         "language": "gauge",
         "scopeName": "text.gauge",
         "path": "./syntaxes/gauge.tmLanguage.json"
+      },
+      {
+        "language": "gauge-concept",
+        "scopeName": "text.gauge.concept",
+        "path": "./syntaxes/gauge-concept.tmLanguage.json"
       }
     ],
     "iconThemes": [
