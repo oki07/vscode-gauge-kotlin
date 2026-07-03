@@ -331,7 +331,7 @@ test("ExtractConceptCommandProvider extracts selected steps from spec files by e
   assert.equal(sourceReplacement.newText, "* Shared checkout <user>\n");
 });
 
-test("buildExtractSelection rejects selections that start inside inline tables", () => {
+test("buildExtractSelection expands inline table selections to their owning Gauge step", () => {
   const { buildExtractSelection } = require("../src/extractConcept");
   const document = createDocument([
     "# Checkout",
@@ -343,6 +343,39 @@ test("buildExtractSelection rejects selections that start inside inline tables",
   const extraction = buildExtractSelection(document, {
     start: { line: 2, character: 0 },
     end: { line: 3, character: 18 },
+  });
+
+  assert.deepEqual(extraction, {
+    endLine: 3,
+    lines: [
+      "* Login as <user>",
+      "| item | count |",
+      "| book | 1     |",
+    ],
+    startLine: 1,
+    steps: [
+      {
+        tableLines: [
+          "| item | count |",
+          "| book | 1     |",
+        ],
+        text: "* Login as <user>",
+      },
+    ],
+  });
+});
+
+test("buildExtractSelection rejects table selections without an owning Gauge step", () => {
+  const { buildExtractSelection } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "| item | count |",
+    "| book | 1     |",
+  ].join("\n"));
+
+  const extraction = buildExtractSelection(document, {
+    start: { line: 1, character: 0 },
+    end: { line: 2, character: 18 },
   });
 
   assert.equal(extraction, undefined);

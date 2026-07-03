@@ -110,6 +110,41 @@ function isTableStartLine(text) {
   return isTableLine(text);
 }
 
+function tableBlockBounds(document, line) {
+  if (line < 0 || line >= document.lineCount || !isTableLine(lineText(document, line))) {
+    return undefined;
+  }
+
+  let startLine = line;
+  while (startLine > 0 && isTableLine(lineText(document, startLine - 1))) {
+    startLine -= 1;
+  }
+
+  let endLine = line;
+  while (endLine + 1 < document.lineCount && isTableLine(lineText(document, endLine + 1))) {
+    endLine += 1;
+  }
+
+  return { endLine, startLine };
+}
+
+function owningStepTableBlock(document, line) {
+  const tableBlock = tableBlockBounds(document, line);
+  if (!tableBlock) {
+    return undefined;
+  }
+
+  const stepLine = tableBlock.startLine - 1;
+  if (stepLine < 0 || !isStepLine(lineText(document, stepLine))) {
+    return undefined;
+  }
+
+  return {
+    ...tableBlock,
+    stepLine,
+  };
+}
+
 function isDocStringFenceLine(text) {
   return String(text || "").trim() === "\"\"\"";
 }
@@ -166,10 +201,19 @@ function buildExtractSelection(document, selection) {
     return undefined;
   }
 
-  const startLine = Math.max(0, Math.min(normalized.start.line, document.lineCount - 1));
-  const endLine = selectedEndLine(document, normalized);
+  let startLine = Math.max(0, Math.min(normalized.start.line, document.lineCount - 1));
+  let endLine = selectedEndLine(document, normalized);
   if (endLine < startLine) {
     return undefined;
+  }
+
+  const owningTable = owningStepTableBlock(document, startLine);
+  if (owningTable) {
+    if (endLine < owningTable.startLine || endLine > owningTable.endLine) {
+      return undefined;
+    }
+    startLine = owningTable.stepLine;
+    endLine = owningTable.endLine;
   }
 
   const blocks = [];
