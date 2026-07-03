@@ -1064,6 +1064,40 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on ste
   assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 5 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider inserts a space after bare step markers", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const stepLine = "*Log";
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    stepLine,
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, stepLine.length));
+
+  assert.deepEqual(labels(items), ["Log in as <user>"]);
+  assert.equal(items[0].insertText.value, " Log in as \"${0:user}\"");
+  assert.equal(items[0].filterText, " Log in as <user>");
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 1 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: stepLine.length });
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Markdown Gauge specs", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

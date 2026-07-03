@@ -302,6 +302,10 @@ function stepCompletionRange(line, position) {
   };
 }
 
+function stepCompletionInsertPrefix(line, targetRange) {
+  return /[ \t]$/.test(line.slice(0, targetRange.start)) ? "" : " ";
+}
+
 function isInsideEscapedArgument(line, position) {
   const character = position.character;
   for (let index = 0; index < line.length; index += 1) {
@@ -1159,14 +1163,15 @@ class GaugeDynamicArgumentCompletionProvider {
     const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
+    const insertPrefix = stepCompletionInsertPrefix(line, targetRange);
     const localItems = this.stepCompletionEntries(document, workspaceDocuments, position).map((entry) => completionItem(
       this.vscode,
       entry.label,
       range,
       {
         detail: entry.detail,
-        filterText: stepFilterText(entry.label, prefix),
-        insertText: snippetString(this.vscode, stepSnippetText(entry.label, prefix)),
+        filterText: `${insertPrefix}${stepFilterText(entry.label, prefix)}`,
+        insertText: snippetString(this.vscode, `${insertPrefix}${stepSnippetText(entry.label, prefix)}`),
         kind,
       },
     ));
