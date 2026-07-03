@@ -874,7 +874,7 @@ test("GaugeDynamicArgumentCompletionProvider ignores concept heading static argu
   assert.deepEqual({ ...stepItems[0].range.end }, { line: 2, character: 15 });
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores non-argument positions", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests used steps at non-argument step positions", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -886,9 +886,16 @@ test("GaugeDynamicArgumentCompletionProvider ignores non-argument positions", ()
     "* Confirm \"user\"",
   ].join("\n"));
 
-  assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(3, 3)), []);
-  assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(3, 17)), []);
-  assert.deepEqual(provider.provideCompletionItems(document, new vscode.Position(4, 16)), []);
+  assert.deepEqual(labels(provider.provideCompletionItems(document, new vscode.Position(3, 3))), [
+    "Login as <user>",
+    "Confirm <user>",
+  ]);
+  assert.deepEqual(labels(provider.provideCompletionItems(document, new vscode.Position(3, 17))), [
+    "Confirm <user>",
+  ]);
+  assert.deepEqual(labels(provider.provideCompletionItems(document, new vscode.Position(4, 16))), [
+    "Login as <user>",
+  ]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on step lines", async () => {
@@ -1015,9 +1022,42 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept headings on step l
 
   const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 7));
 
-  assert.deepEqual(labels(items), ["Reuse payment <method>"]);
+  assert.deepEqual(labels(items), ["Reuse payment <method>", "Pay with <method>"]);
   assert.equal(items[0].detail, "concept");
   assert.equal(items[0].insertText.value, "Reuse payment \"${0:method}\"");
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests used Gauge steps without implementations", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const line = "* unimplemented step one";
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    line,
+    "* unimplemented step two",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 18));
+
+  assert.deepEqual(labels(items), [
+    "unimplemented step one",
+    "unimplemented step two",
+  ]);
+  assert.equal(items[0].detail, "step");
+  assert.equal(items[0].insertText.value, "unimplemented step one");
+  assert.equal(items[0].filterText, "unimplemented step one");
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 2 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: line.length });
 });
 
 test("GaugeDynamicArgumentCompletionProvider ignores step aliases from another Gauge project", async () => {

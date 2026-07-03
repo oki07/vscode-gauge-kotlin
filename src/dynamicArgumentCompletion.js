@@ -291,6 +291,33 @@ function stepCompletionRange(line, position) {
   };
 }
 
+function isInsideEscapedArgument(line, position) {
+  const character = position.character;
+  for (let index = 0; index < line.length; index += 1) {
+    if (line[index] === "<" && isEscapedCharacter(line, index)) {
+      const closeIndex = line.indexOf(">", index + 1);
+      const end = closeIndex === -1 ? line.length : closeIndex;
+      if (character > index && character <= end) {
+        return true;
+      }
+    }
+    if (line[index] === "\"" && isEscapedCharacter(line, index)) {
+      let closeIndex = line.indexOf("\"", index + 1);
+      while (closeIndex !== -1 && !isEscapedCharacter(line, closeIndex)) {
+        closeIndex = line.indexOf("\"", closeIndex + 1);
+      }
+      const end = closeIndex === -1 ? line.length : closeIndex;
+      if (character > index && character < end) {
+        return true;
+      }
+      if (closeIndex !== -1) {
+        index = closeIndex;
+      }
+    }
+  }
+  return false;
+}
+
 function normalizedTagLinePrefix(line) {
   return String(line || "").trim().split(/\s+/).join("").toLowerCase();
 }
@@ -793,6 +820,72 @@ function stepCompletionKey(item) {
   return label ? normalizeStepTemplate(String(label)) : "";
 }
 
+function nextStepCompletionParameter(text, startIndex) {
+  const dynamicStart = nextUnescapedCharacterIndex(text, "<", startIndex);
+  const staticStart = nextUnescapedCharacterIndex(text, "\"", startIndex);
+  if (dynamicStart === -1 && staticStart === -1) {
+    return undefined;
+  }
+  if (staticStart === -1 || (dynamicStart !== -1 && dynamicStart < staticStart)) {
+    return {
+      closeIndex: closingAngleIndex(text, dynamicStart),
+      start: dynamicStart,
+      type: "dynamic",
+    };
+  }
+  return {
+    closeIndex: closingQuoteIndex(text, staticStart),
+    start: staticStart,
+    type: "static",
+  };
+}
+
+function usedStepCompletionText(stepText) {
+  let result = "";
+  let index = 0;
+  while (index < stepText.length) {
+    const parameter = nextStepCompletionParameter(stepText, index);
+    if (!parameter || parameter.closeIndex === -1) {
+      result += stepText.slice(index);
+      break;
+    }
+    result += stepText.slice(index, parameter.start);
+    const value = stepText.slice(parameter.start + 1, parameter.closeIndex);
+    result += parameter.type === "static" ? `<${value}>` : `<${value}>`;
+    index = parameter.closeIndex + 1;
+  }
+  return result.trim();
+}
+
+function isUsedStepSourceDocument(document) {
+  return isSpecDocument(document) || isMarkdownSpecDocument(document) || isConceptDocument(document);
+}
+
+function usedStepEntriesFromDocument(document, options = {}) {
+  if (!document || typeof document.getText !== "function" || !isUsedStepSourceDocument(document)) {
+    return [];
+  }
+  const lines = document.getText().split(/\r?\n/);
+  const entries = [];
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    const line = lines[lineNumber] || "";
+    if (!isStepLine(line)) {
+      continue;
+    }
+    if (lineNumber === options.currentLine && !options.includeCurrentLine) {
+      continue;
+    }
+    const text = line.slice(1).trim();
+    if (!text) {
+      continue;
+    }
+    entries.push(isTableLine(lines[lineNumber + 1] || "")
+      ? `${usedStepCompletionText(text)} <table>`
+      : usedStepCompletionText(text));
+  }
+  return entries;
+}
+
 function resolveClientsMap(clientsMap) {
   return typeof clientsMap === "function" ? clientsMap() : clientsMap;
 }
@@ -847,7 +940,7 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.diagnosticsProvider.workspaceDocuments();
   }
 
-  stepCompletionEntries(document, workspaceDocuments) {
+  stepCompletionEntries(document, workspaceDocuments, position) {
     const entries = [];
     const seen = new Set();
     const sourceRoot = this.gaugeProjectRoot(document);
@@ -893,6 +986,46 @@ class GaugeDynamicArgumentCompletionProvider {
       }
       for (const heading of findConceptHeadings(candidate.getText())) {
         addEntry(heading.text, "concept");
+      }
+    }
+    const documents = [];
+    const seenDocuments = new Set();
+    const addDocument = (candidate) => {
+      if (!candidate || typeof candidate.getText !== "function") {
+        return;
+      }
+      const key = documentPath(candidate);
+      if (key) {
+        if (seenDocuments.has(key)) {
+          return;
+        }
+        seenDocuments.add(key);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+    addDocument(document);
+    for (const candidate of workspaceDocuments || []) {
+      addDocument(candidate);
+    }
+    const currentLine = position && position.line;
+    const currentLineText = currentLine !== undefined && document && typeof document.lineAt === "function"
+      ? document.lineAt(currentLine).text
+      : "";
+    const includeCurrentLine = currentLine !== undefined
+      && String(currentLineText || "").slice(position.character).trim().length > 0;
+    const sourcePath = documentPath(document);
+    for (const candidate of documents) {
+      if (!this.belongsToSourceGaugeProject(candidate, sourceRoot)) {
+        continue;
+      }
+      const isCurrentDocument = documentPath(candidate) === sourcePath;
+      for (const label of usedStepEntriesFromDocument(candidate, {
+        currentLine: isCurrentDocument ? currentLine : undefined,
+        includeCurrentLine,
+      })) {
+        addEntry(label, "step");
       }
     }
     return entries;
@@ -976,7 +1109,7 @@ class GaugeDynamicArgumentCompletionProvider {
     const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
-    const localItems = this.stepCompletionEntries(document, workspaceDocuments).map((entry) => completionItem(
+    const localItems = this.stepCompletionEntries(document, workspaceDocuments, position).map((entry) => completionItem(
       this.vscode,
       entry.label,
       range,
@@ -1031,6 +1164,9 @@ class GaugeDynamicArgumentCompletionProvider {
     const argumentRange = dynamicArgumentRange(line, position);
     const quotedArgumentRange = staticArgumentRange(line, position);
     const stepRange = stepCompletionRange(line, position);
+    if (!argumentRange && !quotedArgumentRange && isInsideEscapedArgument(line, position)) {
+      return [];
+    }
     if (!tagRange && !argumentRange && !quotedArgumentRange && !stepRange) {
       return [];
     }
