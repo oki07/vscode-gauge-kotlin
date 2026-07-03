@@ -133,6 +133,10 @@ test("ProjectInitializer creates a Gauge project from the selected template", as
         assert.equal(filename, "/workspace/shop");
         return false;
       },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/shop/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
       mkdirSync(filename) {
         mkdirs.push(filename);
       },
@@ -600,7 +604,7 @@ test("ProjectInitializer does not open the project directory after Gauge init sp
   assert.deepEqual(commands, []);
 });
 
-test("ProjectInitializer prefers the configured Kotlin project template without hiding other templates", async () => {
+test("ProjectInitializer offers only Kotlin project templates by configured preference", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
     quickPicks,
@@ -639,6 +643,10 @@ test("ProjectInitializer prefers the configured Kotlin project template without 
       existsSync() {
         return false;
       },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/shop/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
       mkdirSync() {},
       removeSync() {},
     },
@@ -653,14 +661,16 @@ test("ProjectInitializer prefers the configured Kotlin project template without 
   assert.deepEqual(quickPicks[0].map((template) => template.label), [
     "kotlin_gradle",
     "kotlin_maven",
-    "java",
   ]);
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });
 
-test("ProjectInitializer falls back to all templates when Kotlin templates are unavailable", async () => {
+test("ProjectInitializer rejects project creation when Kotlin templates are unavailable", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {
+    errors,
+    inputs,
+    openDialogs,
     quickPicks,
     registered,
     vscode,
@@ -706,11 +716,74 @@ test("ProjectInitializer falls back to all templates when Kotlin templates are u
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(quickPicks[0].map((template) => template.label), [
-    "java",
-    "js",
+  assert.deepEqual(errors, [
+    "No Kotlin Gauge project templates are available.",
   ]);
-  assert.deepEqual(spawns, [["init", "java"]]);
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(openDialogs, []);
+  assert.deepEqual(inputs, []);
+  assert.deepEqual(spawns, []);
+});
+
+test("ProjectInitializer rejects templates that create non-Kotlin Gauge projects", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const {
+    commands,
+    errors,
+    registered,
+    vscode,
+  } = createFakeVscode();
+  const removes = [];
+  const child = createChildProcess();
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn() {
+          setImmediate(() => child.emit("close", 0));
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "kotlin", Description: "Kotlin", value: "kotlin" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+
+  new ProjectInitializer({
+    cli,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/shop/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "java" }));
+      },
+      mkdirSync() {},
+      removeSync(filename) {
+        removes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await assert.rejects(
+    () => command.handler(),
+    /Selected template did not create a Kotlin Gauge project\./,
+  );
+
+  assert.deepEqual(removes, ["/workspace/shop"]);
+  assert.deepEqual(errors, ["Selected template did not create a Kotlin Gauge project."]);
+  assert.deepEqual(commands, []);
 });
 
 test("ProjectInitializer reports template list parsing failures", async () => {
@@ -760,7 +833,7 @@ test("ProjectInitializer reports template list parsing failures", async () => {
   assert.deepEqual(errorActions, [[
     " Try running 'gauge template --list ----machine-readable' from command line",
   ]]);
-  assert.deepEqual(quickPicks, [[]]);
+  assert.deepEqual(quickPicks, []);
   assert.deepEqual(openDialogs, []);
   assert.deepEqual(inputs, []);
 });

@@ -3,7 +3,11 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { envWithGaugeHome } = require("../config/gaugeConfig");
-const { isGaugeProjectRoot } = require("../project/manifest");
+const {
+  isGaugeProjectRoot,
+  manifestLanguage,
+  readProjectManifest,
+} = require("../project/manifest");
 
 const CREATE_PROJECT_COMMAND = "gauge.createProject";
 const GAUGE_INIT_ARG = "init";
@@ -15,6 +19,8 @@ const TEMPLATE_CONFIGURATION_KEY = "template";
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const EXISTING_GAUGE_PROJECT_MESSAGE =
   "Given location is already a Gauge Project. Please try to initialize a Gauge project in a different location.";
+const NO_KOTLIN_TEMPLATES_MESSAGE = "No Kotlin Gauge project templates are available.";
+const NON_KOTLIN_PROJECT_MESSAGE = "Selected template did not create a Kotlin Gauge project.";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -49,8 +55,21 @@ function templateScore(template, preferredBuildTool) {
   return 1;
 }
 
+function isKotlinTemplate(template) {
+  return templateText(template).includes("kotlin");
+}
+
 function isGaugeProjectDir(fileSystem, pathModule, dirname) {
   return isGaugeProjectRoot(fileSystem, pathModule, dirname);
+}
+
+function isKotlinGaugeProjectDir(fileSystem, pathModule, dirname) {
+  try {
+    const manifest = readProjectManifest(fileSystem, pathModule, dirname);
+    return String(manifestLanguage(manifest) || "").trim().toLowerCase() === "kotlin";
+  } catch (_error) {
+    return false;
+  }
 }
 
 class ProgressHandler {
@@ -130,7 +149,11 @@ class ProjectInitializer {
       );
     }
 
-    const template = await this.vscode.window.showQuickPick(await this.getTemplatesList(cli));
+    const templates = await this.getTemplatesList(cli);
+    if (templates.length === 0) {
+      return undefined;
+    }
+    const template = await this.vscode.window.showQuickPick(templates);
     if (!template) {
       return undefined;
     }
@@ -245,6 +268,10 @@ class ProjectInitializer {
         fail("Failed to initialize project.");
         return;
       }
+      if (!isKotlinGaugeProjectDir(this.fileSystem, this.pathModule, projectFolder.fsPath)) {
+        fail(NON_KOTLIN_PROJECT_MESSAGE);
+        return;
+      }
       finished = true;
       progressHandler.end(projectFolder);
     });
@@ -258,7 +285,12 @@ class ProjectInitializer {
         description: template.Description,
         value: template.value,
       }));
-      return this.sortTemplatesByPreference(templates);
+      const kotlinTemplates = templates.filter(isKotlinTemplate);
+      if (kotlinTemplates.length === 0) {
+        await this.vscode.window.showErrorMessage(NO_KOTLIN_TEMPLATES_MESSAGE);
+        return [];
+      }
+      return this.sortTemplatesByPreference(kotlinTemplates);
     } catch (_error) {
       await this.vscode.window.showErrorMessage(
         "Failed to get list of templates.",
