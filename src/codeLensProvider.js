@@ -25,10 +25,6 @@ const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const REFERENCE_CONFIG = "reference";
 const GAUGE_REFERENCE_WORKSPACE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
-const RUN_CODELENS_FLAGS = {
-  "hide-suggestion": true,
-  "machine-readable": true,
-};
 
 function getVscode(vscode) {
   return vscode || {};
@@ -254,8 +250,8 @@ function codeLensHeadingMarkers(document) {
   ];
 }
 
-function runCodeLensFlags() {
-  return { ...RUN_CODELENS_FLAGS };
+function runLinkRange(vscode, marker, title) {
+  return createRange(vscode, marker.line, marker.start, marker.start + title.length);
 }
 
 function hasSpecificationDataTable(document, specificationLine) {
@@ -605,24 +601,24 @@ class GaugeCodeLensProvider {
 
     const lenses = [];
     for (const marker of codeLensHeadingMarkers(document)) {
-      const range = createRange(this.vscode, marker.line, marker.start, marker.end);
       const target = targetForMarker(file, marker);
       const [runTitle, debugTitle] = titlesForMarker(marker);
-      lenses.push(createCodeLens(this.vscode, range, {
+      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, runTitle), {
         command: RUN_COMMAND,
         title: runTitle,
-        arguments: [target, runCodeLensFlags()],
+        arguments: [target],
       }));
-      lenses.push(createCodeLens(this.vscode, range, {
+      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, debugTitle), {
         command: DEBUG_COMMAND,
         title: debugTitle,
-        arguments: [target, runCodeLensFlags()],
+        arguments: [target],
       }));
       if (marker.kind === "specification" && hasSpecificationDataTable(document, marker.line)) {
-        lenses.push(createCodeLens(this.vscode, range, {
+        const parallelTitle = "Run in parallel";
+        lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, parallelTitle), {
           command: IN_PARALLEL_COMMAND,
-          title: "Run in parallel",
-          arguments: [target, runCodeLensFlags()],
+          title: parallelTitle,
+          arguments: [target],
         }));
       }
     }

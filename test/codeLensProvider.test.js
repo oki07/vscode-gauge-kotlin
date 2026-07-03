@@ -66,36 +66,92 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
     line: lens.range.start.line,
     title: lens.command.title,
     command: lens.command.command,
-    argument: lens.command.arguments[0],
-    flags: lens.command.arguments[1],
+    arguments: lens.command.arguments,
   })), [
     {
       line: 3,
       title: "Run Scenario",
       command: "gauge.execute",
-      argument: "/workspace/specs/example.spec:4",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec:4"],
     },
     {
       line: 3,
       title: "Debug Scenario",
       command: "gauge.debug",
-      argument: "/workspace/specs/example.spec:4",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec:4"],
     },
     {
       line: 0,
       title: "Run Spec",
       command: "gauge.execute",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec"],
     },
     {
       line: 0,
       title: "Debug Spec",
       command: "gauge.debug",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec"],
+    },
+  ]);
+});
+
+test("GaugeCodeLensProvider matches reference run link command arguments and ranges", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay",
+    "",
+  ].join("\n"), "/workspace/specs/simpleSpecification.spec");
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    command: lens.command.command,
+    range: {
+      start: { ...lens.range.start },
+      end: { ...lens.range.end },
+    },
+    title: lens.command.title,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      command: "gauge.execute",
+      range: {
+        start: { line: 2, character: 0 },
+        end: { line: 2, character: 12 },
+      },
+      title: "Run Scenario",
+      arguments: ["/workspace/specs/simpleSpecification.spec:3"],
+    },
+    {
+      command: "gauge.debug",
+      range: {
+        start: { line: 2, character: 0 },
+        end: { line: 2, character: 14 },
+      },
+      title: "Debug Scenario",
+      arguments: ["/workspace/specs/simpleSpecification.spec:3"],
+    },
+    {
+      command: "gauge.execute",
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 8 },
+      },
+      title: "Run Spec",
+      arguments: ["/workspace/specs/simpleSpecification.spec"],
+    },
+    {
+      command: "gauge.debug",
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 10 },
+      },
+      title: "Debug Spec",
+      arguments: ["/workspace/specs/simpleSpecification.spec"],
     },
   ]);
 });
@@ -322,43 +378,37 @@ test("GaugeCodeLensProvider adds run in parallel lens for specification data tab
     line: lens.range.start.line,
     title: lens.command.title,
     command: lens.command.command,
-    argument: lens.command.arguments[0],
-    flags: lens.command.arguments[1],
+    arguments: lens.command.arguments,
   })), [
     {
       line: 7,
       title: "Run Scenario",
       command: "gauge.execute",
-      argument: "/workspace/specs/example.spec:8",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec:8"],
     },
     {
       line: 7,
       title: "Debug Scenario",
       command: "gauge.debug",
-      argument: "/workspace/specs/example.spec:8",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec:8"],
     },
     {
       line: 0,
       title: "Run Spec",
       command: "gauge.execute",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec"],
     },
     {
       line: 0,
       title: "Debug Spec",
       command: "gauge.debug",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec"],
     },
     {
       line: 0,
       title: "Run in parallel",
       command: "gauge.execute.inParallel",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
+      arguments: ["/workspace/specs/example.spec"],
     },
   ]);
 });
