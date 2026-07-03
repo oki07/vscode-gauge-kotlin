@@ -5,6 +5,7 @@ const GAUGE_LANGUAGE = "gauge";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
+const CIRCULAR_CONCEPT_MESSAGE = "Circular reference found in concept.";
 const CONCEPT_STATIC_PARAMETER_MESSAGE = "Concept heading can have only Dynamic Parameters";
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
@@ -3750,6 +3751,150 @@ function conceptTableDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function sameDocumentPath(left, right) {
+  return Boolean(left) && Boolean(right) && left === right;
+}
+
+function uniqueConceptDocuments(document, conceptDocuments) {
+  const documents = [];
+  const seen = new Set();
+  for (const candidate of [document, ...(Array.isArray(conceptDocuments) ? conceptDocuments : [])]) {
+    if (!candidate || typeof candidate.getText !== "function") {
+      continue;
+    }
+    const filename = documentPath(candidate);
+    const key = filename || candidate;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    documents.push(candidate);
+  }
+  return documents;
+}
+
+function conceptSections(document) {
+  const filename = documentPath(document);
+  if (!filename) {
+    return [];
+  }
+  const text = document.getText();
+  const lines = text.split("\n");
+  const headings = findConceptHeadings(text);
+  const steps = findGaugeSteps(text).filter((step) => step.marker === 0 && step.text);
+  return headings.map((heading, index) => {
+    const nextLine = headings[index + 1] ? headings[index + 1].start.line : lines.length;
+    return {
+      end: heading.end,
+      filename,
+      key: heading.normalized,
+      start: heading.start,
+      steps: steps
+        .filter((step) => step.start.line > heading.start.line && step.start.line < nextLine)
+        .map((step) => ({
+          end: step.end,
+          filename,
+          key: step.normalized,
+          start: step.start,
+          text: step.text,
+        })),
+      text: heading.text,
+    };
+  });
+}
+
+function conceptDictionary(conceptDocuments) {
+  const dictionary = new Map();
+  for (const document of conceptDocuments) {
+    for (const concept of conceptSections(document)) {
+      if (!dictionary.has(concept.key)) {
+        dictionary.set(concept.key, concept);
+      }
+    }
+  }
+  return dictionary;
+}
+
+function circularConceptMessage(reference) {
+  return `${CIRCULAR_CONCEPT_MESSAGE} "${reference.text}" => ${reference.filename}:${reference.start.line + 1}`;
+}
+
+function circularConceptErrors(dictionary) {
+  const errors = [];
+  const invalidConcepts = new Set();
+
+  function visit(conceptKey, currentReference, traversed) {
+    if (invalidConcepts.has(conceptKey)) {
+      return undefined;
+    }
+    const concept = dictionary.get(conceptKey);
+    if (!concept) {
+      return undefined;
+    }
+    const nextTraversed = new Map(traversed);
+    nextTraversed.set(conceptKey, currentReference);
+    for (const step of concept.steps) {
+      if (!dictionary.has(step.key) || invalidConcepts.has(step.key)) {
+        continue;
+      }
+      if (nextTraversed.has(step.key)) {
+        return {
+          diagnostics: [
+            {
+              end: step.end,
+              filename: step.filename,
+              message: circularConceptMessage(currentReference),
+              start: step.start,
+            },
+            {
+              end: currentReference.end,
+              filename: currentReference.filename,
+              message: circularConceptMessage(step),
+              start: currentReference.start,
+            },
+          ],
+          keys: new Set([...nextTraversed.keys(), step.key]),
+        };
+      }
+      const nested = visit(step.key, step, nextTraversed);
+      if (nested) {
+        return nested;
+      }
+    }
+    return undefined;
+  }
+
+  for (const [conceptKey, concept] of dictionary) {
+    if (invalidConcepts.has(conceptKey)) {
+      continue;
+    }
+    const circular = visit(conceptKey, concept, new Map());
+    if (!circular) {
+      continue;
+    }
+    for (const key of circular.keys) {
+      invalidConcepts.add(key);
+    }
+    errors.push(...circular.diagnostics);
+  }
+  return errors;
+}
+
+function conceptCircularReferenceDiagnostics(vscode, document, conceptDocuments) {
+  const filename = documentPath(document);
+  if (!filename) {
+    return [];
+  }
+  const dictionary = conceptDictionary(uniqueConceptDocuments(document, conceptDocuments));
+  return circularConceptErrors(dictionary)
+    .filter((error) => sameDocumentPath(error.filename, filename))
+    .map((error) => createDiagnostic(
+      vscode,
+      createRange(vscode, error.start, error.end),
+      error.message,
+    ));
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6774,6 +6919,11 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
         diagnostics.push(...conceptStaticParameterDiagnostics(this.vscode, text));
         diagnostics.push(...conceptTableDiagnostics(this.vscode, text));
+        diagnostics.push(...conceptCircularReferenceDiagnostics(
+          this.vscode,
+          document,
+          this.conceptDocuments(document, workspaceDocuments),
+        ));
       }
       return diagnostics;
     }

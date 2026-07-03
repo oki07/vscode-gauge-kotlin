@@ -4975,6 +4975,34 @@ test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => 
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 7 });
 });
 
+test("GaugeStepDiagnosticsProvider reports circular concept references", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Concept1",
+    "* Concept2",
+    "",
+    "# Concept2",
+    "* Concept1",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/circular.cpt");
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Circular reference found in concept. \"Concept2\" => /workspace/gauge/specs/concepts/circular.cpt:2",
+      "Circular reference found in concept. \"Concept1\" => /workspace/gauge/specs/concepts/circular.cpt:5",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 4, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 4, character: 10 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 1, character: 10 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined steps implemented only in another Gauge project", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
