@@ -681,7 +681,7 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 1), "-", "-");
 
   assertPatternMatches(grammarJson.repository.step, "* do something", "* ");
-  assertPatternDoesNotMatch(grammarJson.repository.step, "  * plain comment");
+  assertPatternMatches(grammarJson.repository.step, "  * do something", "  * ");
   assertPatternMatches(grammarJson.repository.teardown, "___", "___");
   assertPatternMatches(grammarJson.repository.teardown, "___  ", "___  ");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");

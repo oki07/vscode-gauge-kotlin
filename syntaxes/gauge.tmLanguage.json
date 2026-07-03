@@ -158,9 +158,9 @@
     },
     "step": {
       "name": "meta.step.gauge",
-      "begin": "^(\\*)(\\s*)",
+      "begin": "^(\\s*)(\\*)(\\s*)",
       "beginCaptures": {
-        "1": {
+        "2": {
           "name": "keyword.operator.step.gauge"
         }
       },
