@@ -740,6 +740,27 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept table dynamic argu
   assert.deepEqual(labels(items), ["item", "user", "tableUser", "u"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider closes incomplete dynamic argument completions", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const line = "* Confirm <u";
+  const document = createDocument([
+    "# Checkout",
+    "* Login as <user>",
+    line,
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(2, line.length));
+
+  assert.deepEqual(labels(items), ["user"]);
+  assert.equal(items[0].detail, "dynamic");
+  assert.equal(items[0].insertText, "user>");
+  assert.equal(items[0].filterText, "user>");
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 11 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: line.length });
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments inside quotes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -758,6 +779,27 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments insi
   assert.equal(items[0].kind, "variable");
   assert.deepEqual({ ...items[0].range.start }, { line: 4, character: 11 });
   assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 12 });
+});
+
+test("GaugeDynamicArgumentCompletionProvider closes incomplete static argument completions", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const line = "* Confirm \"a";
+  const document = createDocument([
+    "# Checkout",
+    "* Login as \"admin\"",
+    line,
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(2, line.length));
+
+  assert.deepEqual(labels(items), ["admin"]);
+  assert.equal(items[0].detail, "static");
+  assert.equal(items[0].insertText, "admin\"");
+  assert.equal(items[0].filterText, "admin\"");
+  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 11 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: line.length });
 });
 
 test("GaugeDynamicArgumentCompletionProvider excludes teardown static arguments", () => {

@@ -131,6 +131,17 @@ function staticArgumentRange(line, position) {
   return undefined;
 }
 
+function argumentCompletionOptions(label, argumentType, line, targetRange) {
+  const closeCharacter = argumentType === "dynamic" ? ">" : "\"";
+  const suffix = line[targetRange.end] === closeCharacter ? "" : closeCharacter;
+  const text = `${label}${suffix}`;
+  return {
+    detail: argumentType,
+    filterText: text,
+    insertText: suffix ? text : undefined,
+  };
+}
+
 function closingQuoteIndex(line, openIndex) {
   return closingEscapedArgumentIndex(line, openIndex, "\"");
 }
@@ -1208,7 +1219,13 @@ class GaugeDynamicArgumentCompletionProvider {
         });
       const targetRange = argumentRange || quotedArgumentRange;
       const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
-      return labels.map((label) => completionItem(this.vscode, label, range));
+      const argumentType = argumentRange ? "dynamic" : "static";
+      return labels.map((label) => completionItem(
+        this.vscode,
+        label,
+        range,
+        argumentCompletionOptions(label, argumentType, line, targetRange),
+      ));
     }
 
     if (!stepRange) {
