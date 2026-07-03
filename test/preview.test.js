@@ -536,6 +536,99 @@ test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is 
   ]);
 });
 
+test("previewGaugeDocument formats fallback table blocks like IntelliJ preview", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const source = [
+    "Steps Collection",
+    "================",
+    "",
+    "tags: api",
+    "",
+    "* In an empty directory initialize a project with the <current> language",
+    "* Create a specification \"Specification 1\" with the following contexts",
+    "    |step text|implementation         |",
+    "    |---------|-----------------------|",
+    "    |context 1|\"inside first context\" |",
+    "    |context 2|\"inside second context\"|",
+    "* Create a specification \"Specification 1\" with the following contexts",
+    "        |step text|implementation         |",
+    "    |---------|-----------------------|",
+    "       |context 1|\"inside first context\" |",
+    "* Create a specification \"Specification 1\" with the following contexts",
+    "",
+    "",
+    "    |step text|implementation         |",
+    "    |---------|-----------------------|",
+    "    |context 1|\"inside first context\" |",
+    "",
+  ].join("\n");
+  const expectedBody = [
+    "Steps Collection",
+    "================",
+    "",
+    "tags: api",
+    "",
+    "* In an empty directory initialize a project with the &lt;current&gt; language",
+    "* Create a specification \"Specification 1\" with the following contexts",
+    "",
+    "\t|step text|implementation         |",
+    "\t|---------|-----------------------|",
+    "\t|context 1|\"inside first context\" |",
+    "\t|context 2|\"inside second context\"|",
+    "* Create a specification \"Specification 1\" with the following contexts",
+    "",
+    "\t|step text|implementation         |",
+    "\t|---------|-----------------------|",
+    "\t|context 1|\"inside first context\" |",
+    "* Create a specification \"Specification 1\" with the following contexts",
+    "",
+    "\t|step text|implementation         |",
+    "\t|---------|-----------------------|",
+    "\t|context 1|\"inside first context\" |",
+    "",
+  ].join("\n");
+  const { vscode } = createFakeVscode({
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      fileName: "/workspace/gauge/specs/example.spec",
+      getText() {
+        return source;
+      },
+    },
+  });
+  const writes = [];
+  const cli = {
+    isPluginInstalled() {
+      return false;
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    fileSystem: {
+      mkdirSync() {},
+      writeFileSync(filename, content) {
+        writes.push({ filename, content });
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.equal(writes.length, 1);
+  const body = writes[0].content.match(/<pre>([\s\S]*)<\/pre>/)[1];
+  assert.equal(body, expectedBody);
+});
+
 test("previewGaugeDocument installs Spectacle when the missing plugin action is selected", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { informationPrompts, opened, vscode } = createFakeVscode({

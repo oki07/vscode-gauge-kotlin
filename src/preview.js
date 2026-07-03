@@ -248,7 +248,27 @@ function escapeHtml(text) {
 }
 
 function formatGaugePreviewText(text) {
-  return escapeHtml(String(text || "").replace(/\n\s+\|/g, "\n\t|"));
+  const lines = String(text || "").split(/\r?\n/);
+  const formatted = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (/^\s*\|/.test(lines[index])) {
+      while (formatted.length > 0 && formatted[formatted.length - 1] === "") {
+        formatted.pop();
+      }
+      if (formatted.length > 0) {
+        formatted.push("");
+      }
+      while (index < lines.length && /^\s*\|/.test(lines[index])) {
+        formatted.push(`\t${lines[index].trimStart()}`);
+        index += 1;
+      }
+      continue;
+    }
+    formatted.push(lines[index]);
+    index += 1;
+  }
+  return escapeHtml(formatted.join("\n"));
 }
 
 function activeDocumentText(vscode, filePath) {
