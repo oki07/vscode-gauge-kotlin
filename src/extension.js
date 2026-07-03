@@ -360,7 +360,8 @@ function registerArgumentCodeActionProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerCodeActionsProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,
@@ -388,7 +389,8 @@ function registerStepCodeActionProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerCodeActionsProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,
@@ -413,7 +415,8 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerCompletionItemProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,
@@ -442,7 +445,8 @@ function registerCodeLensProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerCodeLensProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       CONCEPT_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
@@ -469,7 +473,8 @@ function registerFoldingRangeProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerFoldingRangeProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,
@@ -495,7 +500,8 @@ function registerFormatProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerDocumentFormattingEditProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,
@@ -524,7 +530,8 @@ function registerDocumentSymbolProvider(context, vscode, options) {
   if (hasDocumentSymbols) {
     const disposable = vscode.languages.registerDocumentSymbolProvider(
       [
-        { language: "gauge" },
+        { language: GAUGE_LANGUAGE },
+        { language: GAUGE_CONCEPT_LANGUAGE },
         SPEC_FILE_SELECTOR,
         MARKDOWN_GAUGE_SPEC_SELECTOR,
         CONCEPT_FILE_SELECTOR,
@@ -582,7 +589,13 @@ function registerStepDefinitionProvider(context, vscode, options) {
       vscode.languages
       && typeof vscode.languages.registerDefinitionProvider === "function"
         ? vscode.languages.registerDefinitionProvider(
-          [{ language: "gauge" }, SPEC_FILE_SELECTOR, MARKDOWN_GAUGE_SPEC_SELECTOR],
+          [
+            { language: GAUGE_LANGUAGE },
+            { language: GAUGE_CONCEPT_LANGUAGE },
+            SPEC_FILE_SELECTOR,
+            CONCEPT_FILE_SELECTOR,
+            MARKDOWN_GAUGE_SPEC_SELECTOR,
+          ],
           provider,
         )
         : undefined
@@ -606,11 +619,15 @@ function registerRenameProvider(context, vscode, options) {
       && typeof vscode.languages.registerRenameProvider === "function"
         ? vscode.languages.registerRenameProvider(
           [
-            { language: "gauge" },
+            { language: GAUGE_LANGUAGE },
+            { language: GAUGE_CONCEPT_LANGUAGE },
             SPEC_FILE_SELECTOR,
+            CONCEPT_FILE_SELECTOR,
             MARKDOWN_GAUGE_SPEC_SELECTOR,
             { language: KOTLIN_LANGUAGE },
-            { scheme: "file", pattern: "**/*.kt" },
+            KOTLIN_IMPLEMENTATION_SELECTOR,
+            { language: JAVA_LANGUAGE },
+            JAVA_IMPLEMENTATION_SELECTOR,
           ],
           provider,
         )
@@ -634,7 +651,8 @@ function registerSemanticTokensProvider(context, vscode, options) {
   });
   const disposable = vscode.languages.registerDocumentSemanticTokensProvider(
     [
-      { language: "gauge" },
+      { language: GAUGE_LANGUAGE },
+      { language: GAUGE_CONCEPT_LANGUAGE },
       SPEC_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       CONCEPT_FILE_SELECTOR,

@@ -1756,6 +1756,7 @@ test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () =
 
   assert.deepEqual(vscode.registration.selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { scheme: "file", pattern: "**/*.cpt" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },

@@ -16,13 +16,15 @@ const GAUGE_LAUNCH_CONFIG = "gauge.launch";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const REFERENCE_CONFIG = "reference";
+const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const JAVA_RUNNER = "java";
 const KOTLIN_RUNNER = "kotlin";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
-const ACTIVE_DOCUMENT_LANGUAGES = new Set(["gauge", KOTLIN_RUNNER, JAVA_RUNNER]);
+const ACTIVE_DOCUMENT_LANGUAGES = new Set([GAUGE_LANGUAGE, GAUGE_CONCEPT_LANGUAGE, KOTLIN_RUNNER, JAVA_RUNNER]);
 const RELOAD_WINDOW_COMMAND = "workbench.action.reloadWindow";
 const RESTART_MESSAGE = "Gauge Language Server configuration changed, please restart VS Code.";
 const RESTART_ACTION = "Restart Now";
@@ -523,7 +525,8 @@ class GaugeWorkspace {
 
   clientOptionsFor(project, folder) {
     const documentSelector = [
-      { scheme: "file", language: "gauge", pattern: `${project.root()}/**/*` },
+      { scheme: "file", language: GAUGE_LANGUAGE, pattern: `${project.root()}/**/*` },
+      { scheme: "file", language: GAUGE_CONCEPT_LANGUAGE, pattern: `${project.root()}/**/*` },
       { scheme: "file", pattern: `${project.root()}/**/*.spec` },
       { scheme: "file", pattern: `${project.root()}/**/*.cpt` },
       { scheme: "file", language: MARKDOWN_LANGUAGE, pattern: `${project.root()}/**/*.md` },

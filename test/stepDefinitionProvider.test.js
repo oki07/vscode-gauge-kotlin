@@ -86,6 +86,20 @@ function createMultiProjectFactory() {
   };
 }
 
+function createRegistrationVscode() {
+  const registration = {};
+  return {
+    languages: {
+      registerDefinitionProvider(selector, provider) {
+        registration.selector = selector;
+        registration.provider = provider;
+        return { dispose() {} };
+      },
+    },
+    registration,
+  };
+}
+
 test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
@@ -1237,4 +1251,21 @@ test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
     await provider.provideDefinition(specDocument, { line: 0, character: 2 }),
     [],
   );
+});
+
+test("GaugeStepDefinitionProvider registers concept definition selectors", () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const vscode = createRegistrationVscode();
+  const provider = new GaugeStepDefinitionProvider({ vscode });
+
+  provider.register();
+
+  assert.deepEqual(vscode.registration.selector, [
+    { language: "gauge" },
+    { language: "gauge-concept" },
+    { scheme: "file", pattern: "**/*.spec" },
+    { scheme: "file", pattern: "**/*.cpt" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
+  ]);
+  assert.equal(vscode.registration.provider, provider);
 });

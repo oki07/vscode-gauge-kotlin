@@ -14,6 +14,7 @@ const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
@@ -364,7 +365,7 @@ function isGaugeDocument(document) {
   if (!document || typeof document.getText !== "function") {
     return false;
   }
-  if (document.languageId === GAUGE_LANGUAGE) {
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return true;
   }
   if (SPEC_FILE_PATTERN.test(documentPath(document))) {
@@ -1575,6 +1576,7 @@ class GaugeRenameProvider {
     return this.vscode.languages.registerRenameProvider(
       [
         { language: GAUGE_LANGUAGE },
+        { language: GAUGE_CONCEPT_LANGUAGE },
         { scheme: "file", pattern: "**/*.spec" },
         { scheme: "file", pattern: "**/*.cpt" },
         { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },

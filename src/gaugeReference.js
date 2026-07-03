@@ -6,6 +6,7 @@ const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
 const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
@@ -47,7 +48,7 @@ function isGaugeReferenceDocument(document) {
   if (!document || typeof document.getText !== "function") {
     return false;
   }
-  if (document.languageId === GAUGE_LANGUAGE) {
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return true;
   }
   const file = documentPath(document);
@@ -606,6 +607,7 @@ class ReferenceProvider {
     return this.vscode.languages.registerReferenceProvider(
       [
         { language: GAUGE_LANGUAGE },
+        { language: GAUGE_CONCEPT_LANGUAGE },
         { scheme: "file", pattern: "**/*.spec" },
         { scheme: "file", pattern: "**/*.cpt" },
         { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },

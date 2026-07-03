@@ -114,18 +114,18 @@
       {
         "command": "gauge.format",
         "key": "ctrl+alt+shift+l",
-        "when": "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
       },
       {
         "command": "gauge.extract.concept",
         "key": "ctrl+alt+c",
-        "when": "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
       },
       {
         "command": "gauge.toggle.lineComment",
         "key": "ctrl+/",
         "mac": "cmd+/",
-        "when": "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md)) && gauge:activated"
+        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md)) && gauge:activated"
       }
     ],
     "commands": [
@@ -276,15 +276,15 @@
         },
         {
           "command": "gauge.extract.concept",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
         },
         {
           "command": "gauge.format",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
         },
         {
           "command": "gauge.toggle.lineComment",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
         },
         {
           "command": "gauge.preview",
@@ -350,29 +350,29 @@
       "editor/title": [
         {
           "command": "gauge.preview",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
           "group": "navigation@10"
         }
       ],
       "editor/context": [
         {
           "command": "gauge.preview",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
           "group": "navigation@10"
         },
         {
           "command": "gauge.extract.concept",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
           "group": "1_modification"
         },
         {
           "command": "gauge.format",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
           "group": "1_modification"
         },
         {
           "command": "gauge.toggle.lineComment",
-          "when": "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
+          "when": "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))",
           "group": "1_modification"
         }
       ],

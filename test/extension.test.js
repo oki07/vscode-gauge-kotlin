@@ -574,6 +574,7 @@ test("activation registers Gauge reference providers", () => {
   assert.deepEqual(referenceProviders.map((entry) => entry.selector), [
     [
       { language: "gauge" },
+      { language: "gauge-concept" },
       { scheme: "file", pattern: "**/*.spec" },
       { scheme: "file", pattern: "**/*.cpt" },
       { language: "markdown", scheme: "file", pattern: "**/*.md" },
@@ -1957,6 +1958,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { scheme: "file", pattern: "**/*.cpt" },
@@ -1972,6 +1974,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { scheme: "file", pattern: "**/*.cpt" },
@@ -1986,10 +1989,14 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
+        { scheme: "file", pattern: "**/*.cpt" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { language: "kotlin" },
         { scheme: "file", pattern: "**/*.kt" },
+        { language: "java" },
+        { scheme: "file", pattern: "**/*.java" },
       ],
       provider: created.renameProvider,
       disposable: renameProviders[0].disposable,
@@ -2002,6 +2009,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { scheme: "file", pattern: "**/*.cpt" },
@@ -2012,6 +2020,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { scheme: "file", pattern: "**/*.cpt" },
@@ -2132,6 +2141,7 @@ test("activation registers dynamic argument completions for Gauge documents", ()
   assert.equal(completionProviders.length, 1);
   assert.deepEqual(completionProviders[0].selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { scheme: "file", pattern: "**/*.cpt" },
@@ -2212,6 +2222,7 @@ test("activation registers Gauge run code lenses for Gauge documents", () => {
   assert.equal(codeLensProviders.length, 1);
   assert.deepEqual(codeLensProviders[0].selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { scheme: "file", pattern: "**/*.cpt" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
@@ -2296,6 +2307,7 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
   assert.equal(formattingProviders.length, 1);
   assert.deepEqual(formattingProviders[0].selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { scheme: "file", pattern: "**/*.cpt" },
@@ -2375,6 +2387,7 @@ test("activation registers Gauge document symbols for Gauge documents", () => {
   assert.equal(documentSymbolProviders.length, 1);
   assert.deepEqual(documentSymbolProviders[0].selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { scheme: "file", pattern: "**/*.cpt" },
@@ -2458,7 +2471,9 @@ test("activation registers Kotlin step definitions for Gauge documents", () => {
   assert.equal(definitionProviders.length, 1);
   assert.deepEqual(definitionProviders[0].selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
+    { scheme: "file", pattern: "**/*.cpt" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
   ]);
   assert.equal(definitionProviders[0].provider.options.vscode, fakeVscode);
@@ -2830,6 +2845,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { scheme: "file", pattern: "**/*.cpt" },
@@ -2840,6 +2856,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
     {
       selector: [
         { language: "gauge" },
+        { language: "gauge-concept" },
         { scheme: "file", pattern: "**/*.spec" },
         { language: "markdown", scheme: "file", pattern: "**/*.md" },
         { scheme: "file", pattern: "**/*.cpt" },

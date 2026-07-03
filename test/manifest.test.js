@@ -216,8 +216,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.ok(commandPaletteIds.includes("gauge.format"));
   assert.ok(commandPaletteIds.includes("gauge.toggle.lineComment"));
   assert.ok(commandPaletteIds.includes("gauge.preview"));
-  const gaugeEditorWhen = "gauge:activated && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))";
-  const gaugeEditorTextFocusWhen = "editorTextFocus && (editorLangId == gauge || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))";
+  const gaugeEditorWhen = "gauge:activated && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))";
+  const gaugeEditorTextFocusWhen = "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))";
   const activatedGaugeEditorTextFocusWhen = `${gaugeEditorTextFocusWhen} && gauge:activated`;
   assert.equal(
     manifest.contributes.menus.commandPalette.find(

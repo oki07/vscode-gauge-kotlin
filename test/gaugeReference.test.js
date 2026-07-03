@@ -1865,6 +1865,7 @@ test("ReferenceProvider registers explicit spec and concept reference selectors"
   assert.equal(referenceProviders[0].provider, provider);
   assert.deepEqual(referenceProviders[0].selector, [
     { language: "gauge" },
+    { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { scheme: "file", pattern: "**/*.cpt" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },

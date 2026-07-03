@@ -10,8 +10,10 @@ const {
 } = require("./stepDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
+const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const PROJECT_ROOT_GAUGE = "gauge";
@@ -155,10 +157,10 @@ function isGaugeStepSourceDocument(document) {
   if (!document) {
     return false;
   }
-  if (document.languageId === GAUGE_LANGUAGE) {
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return true;
   }
-  if (SPEC_FILE_PATTERN.test(documentPath(document))) {
+  if (SPEC_FILE_PATTERN.test(documentPath(document)) || CONCEPT_FILE_PATTERN.test(documentPath(document))) {
     return true;
   }
   return document.languageId === MARKDOWN_LANGUAGE
@@ -570,6 +572,9 @@ class GaugeStepDefinitionProvider {
     const disposable = this.vscode.languages.registerDefinitionProvider(
       [
         { language: GAUGE_LANGUAGE },
+        { language: GAUGE_CONCEPT_LANGUAGE },
+        { scheme: "file", pattern: "**/*.spec" },
+        { scheme: "file", pattern: "**/*.cpt" },
         { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
       ],
       this,
