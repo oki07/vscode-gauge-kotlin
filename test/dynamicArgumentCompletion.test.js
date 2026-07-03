@@ -761,6 +761,91 @@ test("GaugeDynamicArgumentCompletionProvider closes incomplete dynamic argument 
   assert.deepEqual({ ...items[0].range.end }, { line: 2, character: line.length });
 });
 
+test("GaugeDynamicArgumentCompletionProvider merges Gauge LSP dynamic argument completions", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const requests = [];
+  const line = "* Confirm <u>";
+  const specDocument = createDocument([
+    "# Checkout",
+    "| user |",
+    "| ---- |",
+    "| Ada  |",
+    line,
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  specDocument.uri.toString = () => "file:///workspace/gauge/specs/example.spec";
+  const clientsMap = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/gauge/specs/example.spec");
+      return {
+        client: {
+          sendRequest(method, params) {
+            requests.push({ method, params });
+            return Promise.resolve({
+              items: [
+                {
+                  detail: "dynamic",
+                  filterText: "user",
+                  kind: "variable",
+                  label: "user",
+                  textEdit: {
+                    newText: "user",
+                    range: {
+                      start: { line: 4, character: 11 },
+                      end: { line: 4, character: 12 },
+                    },
+                  },
+                },
+                {
+                  detail: "dynamic",
+                  filterText: "account",
+                  kind: "variable",
+                  label: "account",
+                  textEdit: {
+                    newText: "account",
+                    range: {
+                      start: { line: 4, character: 11 },
+                      end: { line: 4, character: 12 },
+                    },
+                  },
+                },
+              ],
+            });
+          },
+        },
+      };
+    },
+  };
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap,
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(4, 12));
+
+  assert.deepEqual(requests, [
+    {
+      method: "textDocument/completion",
+      params: {
+        position: { line: 4, character: 12 },
+        textDocument: { uri: "file:///workspace/gauge/specs/example.spec" },
+      },
+    },
+  ]);
+  assert.deepEqual(labels(items), ["user", "account"]);
+  assert.equal(items[1].detail, "dynamic");
+  assert.equal(items[1].insertText, "account");
+  assert.equal(items[1].filterText, "account");
+  assert.deepEqual({ ...items[1].range.start }, { line: 4, character: 11 });
+  assert.deepEqual({ ...items[1].range.end }, { line: 4, character: 12 });
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments inside quotes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

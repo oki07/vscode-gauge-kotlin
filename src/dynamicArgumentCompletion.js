@@ -1220,12 +1220,17 @@ class GaugeDynamicArgumentCompletionProvider {
       const targetRange = argumentRange || quotedArgumentRange;
       const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
       const argumentType = argumentRange ? "dynamic" : "static";
-      return labels.map((label) => completionItem(
+      const localItems = labels.map((label) => completionItem(
         this.vscode,
         label,
         range,
         argumentCompletionOptions(label, argumentType, line, targetRange),
       ));
+      const serverItems = this.serverCompletionItems(document, position, range);
+      if (isThenable(serverItems)) {
+        return serverItems.then((items) => mergeCompletionItemsByLabel(localItems, items));
+      }
+      return mergeCompletionItemsByLabel(localItems, serverItems);
     }
 
     if (!stepRange) {
