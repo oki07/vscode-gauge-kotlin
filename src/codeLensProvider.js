@@ -241,7 +241,15 @@ function targetForMarker(file, marker) {
 function titlesForMarker(marker) {
   return marker.kind === "scenario"
     ? ["Run Scenario", "Debug Scenario"]
-    : ["Run Specification", "Debug Specification"];
+    : ["Run Spec", "Debug Spec"];
+}
+
+function codeLensHeadingMarkers(document) {
+  const markers = headingMarkers(document);
+  return [
+    ...markers.filter((marker) => marker.kind === "scenario"),
+    ...markers.filter((marker) => marker.kind !== "scenario"),
+  ];
 }
 
 function runCodeLensFlags() {
@@ -594,7 +602,7 @@ class GaugeCodeLensProvider {
     }
 
     const lenses = [];
-    for (const marker of headingMarkers(document)) {
+    for (const marker of codeLensHeadingMarkers(document)) {
       const range = createRange(this.vscode, marker.line, marker.start, marker.end);
       const target = targetForMarker(file, marker);
       const [runTitle, debugTitle] = titlesForMarker(marker);

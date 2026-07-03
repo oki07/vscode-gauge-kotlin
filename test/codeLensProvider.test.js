@@ -70,20 +70,6 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
     flags: lens.command.arguments[1],
   })), [
     {
-      line: 0,
-      title: "Run Specification",
-      command: "gauge.execute",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
-    },
-    {
-      line: 0,
-      title: "Debug Specification",
-      command: "gauge.debug",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
-    },
-    {
       line: 3,
       title: "Run Scenario",
       command: "gauge.execute",
@@ -95,6 +81,20 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
       title: "Debug Scenario",
       command: "gauge.debug",
       argument: "/workspace/specs/example.spec:4",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Run Spec",
+      command: "gauge.execute",
+      argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Debug Spec",
+      command: "gauge.debug",
+      argument: "/workspace/specs/example.spec",
       flags: { "hide-suggestion": true, "machine-readable": true },
     },
   ]);
@@ -130,16 +130,6 @@ test("GaugeCodeLensProvider adds lenses for Markdown Gauge specifications", () =
     argument: lens.command.arguments[0],
   })), [
     {
-      line: 0,
-      title: "Run Specification",
-      argument: "/workspace/specs/example.md",
-    },
-    {
-      line: 0,
-      title: "Debug Specification",
-      argument: "/workspace/specs/example.md",
-    },
-    {
       line: 3,
       title: "Run Scenario",
       argument: "/workspace/specs/example.md:4",
@@ -148,6 +138,16 @@ test("GaugeCodeLensProvider adds lenses for Markdown Gauge specifications", () =
       line: 3,
       title: "Debug Scenario",
       argument: "/workspace/specs/example.md:4",
+    },
+    {
+      line: 0,
+      title: "Run Spec",
+      argument: "/workspace/specs/example.md",
+    },
+    {
+      line: 0,
+      title: "Debug Spec",
+      argument: "/workspace/specs/example.md",
     },
   ]);
 });
@@ -182,16 +182,6 @@ test("GaugeCodeLensProvider adds lenses for spec files by extension", () => {
     argument: lens.command.arguments[0],
   })), [
     {
-      line: 0,
-      title: "Run Specification",
-      argument: "/workspace/specs/example.spec",
-    },
-    {
-      line: 0,
-      title: "Debug Specification",
-      argument: "/workspace/specs/example.spec",
-    },
-    {
       line: 3,
       title: "Run Scenario",
       argument: "/workspace/specs/example.spec:4",
@@ -200,6 +190,16 @@ test("GaugeCodeLensProvider adds lenses for spec files by extension", () => {
       line: 3,
       title: "Debug Scenario",
       argument: "/workspace/specs/example.spec:4",
+    },
+    {
+      line: 0,
+      title: "Run Spec",
+      argument: "/workspace/specs/example.spec",
+    },
+    {
+      line: 0,
+      title: "Debug Spec",
+      argument: "/workspace/specs/example.spec",
     },
   ]);
 });
@@ -244,12 +244,12 @@ test("GaugeCodeLensProvider ignores non-Gauge markdown subheadings", () => {
   })), [
     {
       line: 0,
-      title: "Run Specification",
+      title: "Run Spec",
       argument: "/workspace/specs/example.spec",
     },
     {
       line: 0,
-      title: "Debug Specification",
+      title: "Debug Spec",
       argument: "/workspace/specs/example.spec",
     },
   ]);
@@ -277,16 +277,6 @@ test("GaugeCodeLensProvider adds lenses for legacy underline headings", () => {
     argument: lens.command.arguments[0],
   })), [
     {
-      line: 0,
-      title: "Run Specification",
-      argument: "/workspace/specs/example.spec",
-    },
-    {
-      line: 0,
-      title: "Debug Specification",
-      argument: "/workspace/specs/example.spec",
-    },
-    {
       line: 4,
       title: "Run Scenario",
       argument: "/workspace/specs/example.spec:5",
@@ -295,6 +285,16 @@ test("GaugeCodeLensProvider adds lenses for legacy underline headings", () => {
       line: 4,
       title: "Debug Scenario",
       argument: "/workspace/specs/example.spec:5",
+    },
+    {
+      line: 0,
+      title: "Run Spec",
+      argument: "/workspace/specs/example.spec",
+    },
+    {
+      line: 0,
+      title: "Debug Spec",
+      argument: "/workspace/specs/example.spec",
     },
   ]);
 });
@@ -326,27 +326,6 @@ test("GaugeCodeLensProvider adds run in parallel lens for specification data tab
     flags: lens.command.arguments[1],
   })), [
     {
-      line: 0,
-      title: "Run Specification",
-      command: "gauge.execute",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
-    },
-    {
-      line: 0,
-      title: "Debug Specification",
-      command: "gauge.debug",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
-    },
-    {
-      line: 0,
-      title: "Run in parallel",
-      command: "gauge.execute.inParallel",
-      argument: "/workspace/specs/example.spec",
-      flags: { "hide-suggestion": true, "machine-readable": true },
-    },
-    {
       line: 7,
       title: "Run Scenario",
       command: "gauge.execute",
@@ -358,6 +337,27 @@ test("GaugeCodeLensProvider adds run in parallel lens for specification data tab
       title: "Debug Scenario",
       command: "gauge.debug",
       argument: "/workspace/specs/example.spec:8",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Run Spec",
+      command: "gauge.execute",
+      argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Debug Spec",
+      command: "gauge.debug",
+      argument: "/workspace/specs/example.spec",
+      flags: { "hide-suggestion": true, "machine-readable": true },
+    },
+    {
+      line: 0,
+      title: "Run in parallel",
+      command: "gauge.execute.inParallel",
+      argument: "/workspace/specs/example.spec",
       flags: { "hide-suggestion": true, "machine-readable": true },
     },
   ]);
