@@ -3604,14 +3604,48 @@ function findGaugeSteps(text) {
   return entries;
 }
 
-function duplicateConceptDiagnostics(vscode, text) {
+function sameDocument(left, right) {
+  if (left === right) {
+    return true;
+  }
+  return sameDocumentPath(documentPath(left), documentPath(right));
+}
+
+function compareHeadingsByPosition(left, right) {
+  return left.start.line - right.start.line
+    || left.start.character - right.start.character
+    || left.end.line - right.end.line
+    || left.end.character - right.end.character;
+}
+
+function duplicateConceptDiagnostics(vscode, document, conceptDocuments) {
   const diagnostics = [];
-  const seen = new Set();
-  for (const heading of findConceptHeadings(text)) {
-    if (!seen.has(heading.normalized)) {
-      seen.add(heading.normalized);
+  const documents = uniqueConceptDocuments(document, conceptDocuments);
+
+  const headingsByTemplate = new Map();
+  for (const candidate of documents) {
+    for (const heading of findConceptHeadings(candidate.getText())) {
+      if (!headingsByTemplate.has(heading.normalized)) {
+        headingsByTemplate.set(heading.normalized, []);
+      }
+      headingsByTemplate.get(heading.normalized).push({
+        ...heading,
+        document: candidate,
+      });
+    }
+  }
+
+  const activeDuplicateHeadings = [];
+  for (const headings of headingsByTemplate.values()) {
+    if (headings.length < 2) {
       continue;
     }
+    activeDuplicateHeadings.push(
+      ...headings.filter((heading) => sameDocument(heading.document, document)),
+    );
+  }
+
+  for (const heading of activeDuplicateHeadings.sort(compareHeadingsByPosition)) {
     diagnostics.push(createDiagnostic(
       vscode,
       createRange(vscode, heading.start, heading.end),
@@ -6913,7 +6947,8 @@ class GaugeStepDiagnosticsProvider {
         }
       }
       if (isConceptDocument(document)) {
-        diagnostics.push(...duplicateConceptDiagnostics(this.vscode, text));
+        const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
+        diagnostics.push(...duplicateConceptDiagnostics(this.vscode, document, conceptDocuments));
         diagnostics.push(...conceptWithoutStepDiagnostics(this.vscode, text));
         diagnostics.push(...stepsOutsideConceptDiagnostics(this.vscode, text));
         diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
@@ -6922,7 +6957,7 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...conceptCircularReferenceDiagnostics(
           this.vscode,
           document,
-          this.conceptDocuments(document, workspaceDocuments),
+          conceptDocuments,
         ));
       }
       return diagnostics;

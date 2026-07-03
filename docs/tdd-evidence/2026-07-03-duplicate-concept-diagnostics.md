@@ -1,79 +1,40 @@
-# Duplicate Concept Diagnostics
+# Duplicate concept diagnostics
 
-## Reference Sources
+## Reference behavior
 
-- `references/gauge-lsp-tests/specifications/diagnostics/duplicate-diagnostics.json`
-- `references/gauge-lsp-tests/data/diagnostics/duplicate-concepts/specifications/concepts/duplicateConcepts.cpt`
-- `references/gauge/api/lang/diagnostics.go`
+Gauge core reports `Duplicate concept definition found` for both the newly
+encountered duplicate concept and the existing concept definition already in the
+concept dictionary. The concept dictionary is built across concept files, so
+duplicates can come from the same `.cpt` file or from another `.cpt` file in the
+same project.
+
+Reference source:
+
 - `references/gauge/parser/conceptParser.go`
 
-## Gap
+## Target behavior
 
-Gauge reports duplicate concept definitions as diagnostics with the message
-`Duplicate concept definition found`. The VS Code Kotlin local diagnostics only
-reported blank and undefined Gauge steps for spec and concept documents.
+`GaugeStepDiagnosticsProvider` reports duplicate concept diagnostics for every
+duplicate concept heading that belongs to the active concept document. Duplicate
+detection uses all concept documents in the same Gauge project, then filters the
+result back to the active document for the diagnostics collection update.
 
 ## RED
 
-Command:
-
-```text
-node --test --test-name-pattern "duplicate concept definitions" test/stepDiagnostics.test.js
-```
-
-Result:
-
-```text
-pass 0
-fail 1
-duplicate concept headings produced no diagnostic
-```
+- Command: `node --test --test-name-pattern "duplicate concept definitions" test/stepDiagnostics.test.js`
+- Result: failed.
+- Failure summary:
+  - Same-file duplicate concepts returned one diagnostic instead of two.
+  - Cross-file duplicate concepts returned no diagnostic for the active concept document.
 
 ## GREEN
 
-Command:
+- Command: `node --test --test-name-pattern "duplicate concept definitions" test/stepDiagnostics.test.js`
+- Result: passed, 2 tests.
 
-```text
-node --test --test-name-pattern "duplicate concept definitions" test/stepDiagnostics.test.js
-```
+## Broader checks
 
-Result:
-
-```text
-pass 1
-fail 0
-```
-
-## Focused Check
-
-Command:
-
-```text
-node --test test/stepDiagnostics.test.js
-```
-
-Result:
-
-```text
-pass 209
-fail 0
-```
-
-## Broad Check
-
-Command:
-
-```text
-npm run check
-```
-
-Result:
-
-```text
-typecheck pass
-lint pass
-test:unit pass 834 fail 0
-test:lsp pass 32 fail 0
-test:vscode pass 46 fail 0
-package pass
-```
+- Command: `node --test test/stepDiagnostics.test.js`
+- Result: passed, 216 tests.
+- Command: `npm run check`
+- Result: passed. Unit tests: 848 passed. LSP tests: 32 passed. VS Code tests: 48 passed. Package step passed.

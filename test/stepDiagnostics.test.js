@@ -4850,10 +4850,55 @@ test("GaugeStepDiagnosticsProvider reports duplicate concept definitions", () =>
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Duplicate concept definition found",
+      "Duplicate concept definition found",
     ],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 2 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 17 });
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 2 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 17 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 3, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 3, character: 17 });
+});
+
+test("GaugeStepDiagnosticsProvider reports cross-file duplicate concept definitions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const firstConceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/checkout.cpt");
+  const secondConceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/duplicate.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+  const workspaceDocuments = [
+    firstConceptDocument,
+    secondConceptDocument,
+    kotlinDocument,
+  ];
+
+  const firstDiagnostics = provider.provideDiagnostics(firstConceptDocument, workspaceDocuments);
+  const secondDiagnostics = provider.provideDiagnostics(secondConceptDocument, workspaceDocuments);
+
+  assert.deepEqual(
+    firstDiagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Duplicate concept definition found",
+    ],
+  );
+  assert.deepEqual({ ...firstDiagnostics[0].range.start }, { line: 0, character: 2 });
+  assert.deepEqual({ ...firstDiagnostics[0].range.end }, { line: 0, character: 17 });
+  assert.deepEqual(
+    secondDiagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Duplicate concept definition found",
+    ],
+  );
+  assert.deepEqual({ ...secondDiagnostics[0].range.start }, { line: 0, character: 2 });
+  assert.deepEqual({ ...secondDiagnostics[0].range.end }, { line: 0, character: 17 });
 });
 
 test("GaugeStepDiagnosticsProvider reports concepts without steps", () => {
