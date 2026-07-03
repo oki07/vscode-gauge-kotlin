@@ -5,6 +5,7 @@ const GAUGE_LANGUAGE = "gauge";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
+const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
@@ -3597,6 +3598,23 @@ function findGaugeSteps(text) {
   return entries;
 }
 
+function duplicateConceptDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const seen = new Set();
+  for (const heading of findConceptHeadings(text)) {
+    if (!seen.has(heading.normalized)) {
+      seen.add(heading.normalized);
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(vscode, heading.start, heading.end),
+      DUPLICATE_CONCEPT_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6613,6 +6631,9 @@ class GaugeStepDiagnosticsProvider {
             { code: "gauge.undefinedStep", source: "gauge" },
           ));
         }
+      }
+      if (isConceptDocument(document)) {
+        diagnostics.push(...duplicateConceptDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }

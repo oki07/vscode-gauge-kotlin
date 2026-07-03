@@ -4815,6 +4815,36 @@ test("GaugeStepDiagnosticsProvider reports undefined concept steps by extension"
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 15 });
 });
 
+test("GaugeStepDiagnosticsProvider reports duplicate concept definitions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "",
+    "# Shared checkout",
+    "* Confirm order",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Duplicate concept definition found",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 2 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 17 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined steps implemented only in another Gauge project", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
