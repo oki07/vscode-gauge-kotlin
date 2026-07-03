@@ -124,6 +124,42 @@ test("GaugeStepCodeActionProvider uses diagnostic code as the step implementatio
   });
 });
 
+test("GaugeStepCodeActionProvider ignores local undefined-step diagnostic code identifiers", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{
+      message: UNDEFINED_STEP_MESSAGE,
+      range,
+      code: "gauge.undefinedStep",
+    }],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider creates a diagnostic code step fix outside step lines", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,

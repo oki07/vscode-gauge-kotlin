@@ -277,7 +277,10 @@ function javaStepStubCode(stepText, methodName = "implementation", implicitParam
 function diagnosticStubCode(diagnostic) {
   const code = diagnostic && diagnostic.code;
   if (typeof code === "string") {
-    return code.length > 0 ? code : undefined;
+    if (!code || /^gauge\./.test(code)) {
+      return undefined;
+    }
+    return code;
   }
   if (typeof code === "number") {
     return String(code);
