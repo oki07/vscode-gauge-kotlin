@@ -268,8 +268,18 @@ function hasSpecificationDataTable(document, specificationLine) {
   return false;
 }
 
-function stepValueArgument(aliases) {
-  return aliases.length === 1 ? aliases[0] : [...aliases];
+function normalizedStepValues(aliases) {
+  const values = [];
+  const seen = new Set();
+  for (const alias of aliases || []) {
+    const value = normalizeStepTemplate(alias);
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    values.push(value);
+  }
+  return values;
 }
 
 class GaugeCodeLensProvider {
@@ -440,7 +450,7 @@ class GaugeCodeLensProvider {
     return documents;
   }
 
-  conceptReferenceCount(referenceDocuments, normalizedStep) {
+  referenceCountInDocuments(referenceDocuments, normalizedStep) {
     let count = 0;
     for (const candidate of referenceDocuments) {
       count += countStepReferences(candidate, normalizedStep);
@@ -475,7 +485,7 @@ class GaugeCodeLensProvider {
         Math.max(marker, heading.end.character),
       );
       const position = createPosition(this.vscode, heading.start.line, marker);
-      const count = this.conceptReferenceCount(referenceDocuments, heading.normalized);
+      const count = this.referenceCountInDocuments(referenceDocuments, heading.normalized);
       lenses.push(createCodeLens(this.vscode, range, {
         command: SHOW_REFERENCES_FOR_STEP,
         title: referenceTitle(count),
@@ -541,16 +551,22 @@ class GaugeCodeLensProvider {
         await this.stepImplementationDocuments(document),
       )
       : undefined;
-    return findStepFunctionsForDocument(document, externalConstants).map((entry) => {
+    const lenses = [];
+    const referenceDocuments = await this.gaugeReferenceDocuments(document);
+    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
       const start = positionAt(text, entry.declarationStart);
       const end = positionAt(text, entry.declarationEnd);
       const range = createRangeFromPositions(this.vscode, start, end);
-      return createCodeLens(this.vscode, range, {
-        command: SHOW_REFERENCES_FOR_STEP,
-        title: "Find Step References",
-        arguments: [uri, start, stepValueArgument(entry.aliases)],
-      });
-    });
+      for (const stepValue of normalizedStepValues(entry.aliases)) {
+        const count = this.referenceCountInDocuments(referenceDocuments, stepValue);
+        lenses.push(createCodeLens(this.vscode, range, {
+          command: SHOW_REFERENCES_FOR_STEP,
+          title: referenceTitle(count),
+          arguments: [uri, start, stepValue],
+        }));
+      }
+    }
+    return lenses;
   }
 
   provideCodeLenses(document) {

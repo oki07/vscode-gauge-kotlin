@@ -449,10 +449,21 @@ test("GaugeCodeLensProvider ignores documents outside Gauge projects", () => {
 
 test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"Alice\"",
+    "",
+  ].join("\n"));
   const provider = new GaugeCodeLensProvider({
     projectFactory: {
       getGaugeRootFromFilePath(filename) {
-        assert.equal(filename, "/workspace/tests/LoginSteps.kt");
+        assert.equal(filename.startsWith("/workspace/"), true);
         return "/workspace";
       },
       isGaugeProject(root) {
@@ -460,13 +471,12 @@ test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", as
         return true;
       },
     },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
   });
-  const document = createDocument([
-    "import com.thoughtworks.gauge.Step",
-    "",
-    "@Step(\"Log in as <user>\")",
-    "fun login(user: String) {}",
-  ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
 
   const lenses = await provider.provideCodeLenses(document);
 
@@ -480,12 +490,69 @@ test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", as
     {
       line: 3,
       character: 0,
-      title: "Find Step References",
+      title: "1 reference(s)",
       command: "gauge.showReferences",
       arguments: [
         "file:///workspace/tests/LoginSteps.kt",
         { line: 3, character: 0 },
-        "Log in as <user>",
+        "Log in as {}",
+      ],
+    },
+  ]);
+});
+
+test("GaugeCodeLensProvider adds separate reference lenses for Step aliases", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step([\"Create user <name>\", \"Delete user <name>\"])",
+    "fun updateUser(name: String) {}",
+  ].join("\n"), "/workspace/tests/UserSteps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Users",
+    "* Create user \"Alice\"",
+    "* Create user \"Bob\"",
+    "* Delete user \"Alice\"",
+    "",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 3,
+      character: 0,
+      title: "2 reference(s)",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/tests/UserSteps.kt",
+        { line: 3, character: 0 },
+        "Create user {}",
+      ],
+    },
+    {
+      line: 3,
+      character: 0,
+      title: "1 reference(s)",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/tests/UserSteps.kt",
+        { line: 3, character: 0 },
+        "Delete user {}",
       ],
     },
   ]);
@@ -545,18 +612,6 @@ test("GaugeCodeLensProvider skips unopened Step sources resolved to non-Gauge pr
 
 test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
-  const provider = new GaugeCodeLensProvider({
-    projectFactory: {
-      getGaugeRootFromFilePath(filename) {
-        assert.equal(filename, "/workspace/tests/LoginSteps.java");
-        return "/workspace";
-      },
-      isGaugeProject(root) {
-        assert.equal(root, "/workspace");
-        return true;
-      },
-    },
-  });
   const document = createDocument([
     "package steps;",
     "",
@@ -568,6 +623,29 @@ test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async 
     "  }",
     "}",
   ].join("\n"), "/workspace/tests/LoginSteps.java", "plaintext");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"Alice\"",
+    "* Log in as \"Bob\"",
+    "",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename.startsWith("/workspace/"), true);
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace");
+        return true;
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
 
   const lenses = await provider.provideCodeLenses(document);
 
@@ -581,12 +659,12 @@ test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async 
     {
       line: 6,
       character: 14,
-      title: "Find Step References",
+      title: "2 reference(s)",
       command: "gauge.showReferences",
       arguments: [
         "file:///workspace/tests/LoginSteps.java",
         { line: 6, character: 14 },
-        "Log in as <user>",
+        "Log in as {}",
       ],
     },
   ]);
