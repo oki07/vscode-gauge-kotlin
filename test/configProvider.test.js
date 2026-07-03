@@ -87,7 +87,7 @@ test("ConfigProvider applies Gauge file associations and recommended settings", 
       value: {
         "*.md": "markdown",
         "*.spec": "gauge",
-        "*.cpt": "gauge",
+        "*.cpt": "gauge-concept",
       },
       target: "workspace",
     },

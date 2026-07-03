@@ -64,7 +64,7 @@ class ConfigProvider {
     const associations = {
       ...(inspected.workspaceValue || {}),
       "*.spec": "gauge",
-      "*.cpt": "gauge",
+      "*.cpt": "gauge-concept",
     };
     return configuration.update(
       FILE_ASSOCIATIONS_KEY,

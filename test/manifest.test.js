@@ -504,6 +504,10 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       path: "./snippets/gauge.json",
     },
     {
+      language: "gauge-concept",
+      path: "./snippets/gauge.json",
+    },
+    {
       language: "markdown",
       path: "./snippets/gauge.json",
     },
@@ -514,7 +518,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     language.configuration,
     grammar.path,
     conceptGrammar.path,
-    manifest.contributes.snippets[0].path,
+    ...manifest.contributes.snippets.map((entry) => entry.path),
   ]) {
     assert.equal(fs.existsSync(path.join(root, relativePath)), true, relativePath);
   }

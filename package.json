@@ -561,6 +561,10 @@
         "path": "./snippets/gauge.json"
       },
       {
+        "language": "gauge-concept",
+        "path": "./snippets/gauge.json"
+      },
+      {
         "language": "markdown",
         "path": "./snippets/gauge.json"
       }
