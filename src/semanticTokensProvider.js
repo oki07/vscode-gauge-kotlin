@@ -187,7 +187,8 @@ function isTableBlockStartLine(line) {
 }
 
 function isStepLine(line) {
-  return line.startsWith("*");
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*";
 }
 
 function isTeardownIdentifierLine(line) {

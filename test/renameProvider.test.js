@@ -1731,7 +1731,7 @@ test("GaugeRenameProvider rejects implementation renames for aliased Kotlin Step
   );
 });
 
-test("GaugeRenameProvider ignores indented pseudo-step lines", async () => {
+test("GaugeRenameProvider prepares indented Gauge step lines", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1742,7 +1742,9 @@ test("GaugeRenameProvider ignores indented pseudo-step lines", async () => {
 
   const prepared = await provider.prepareRename(specDocument, new vscode.Position(1, 6));
 
-  assert.equal(prepared, undefined);
+  assert.equal(prepared.placeholder, "Pay with <amount>");
+  assert.deepEqual({ ...prepared.range.start }, { line: 1, character: 4 });
+  assert.deepEqual({ ...prepared.range.end }, { line: 1, character: 21 });
 });
 
 test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () => {

@@ -142,7 +142,13 @@ function isDocStringFenceLine(line) {
 }
 
 function isStepLine(line) {
-  return line.startsWith("*");
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*";
+}
+
+function stepMarkerIndex(line) {
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*" ? marker : -1;
 }
 
 function isGaugeStepSourceDocument(document) {
@@ -197,7 +203,8 @@ function stepTextCandidatesAt(document, position) {
   if (!isStepLine(line)) {
     return [];
   }
-  let stepText = line.slice(1).trim();
+  const marker = stepMarkerIndex(line);
+  let stepText = marker === -1 ? "" : line.slice(marker + 1).trim();
   if (!stepText) {
     return [];
   }

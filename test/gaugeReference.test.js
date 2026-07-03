@@ -461,7 +461,7 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
         "# Example",
         "",
         "## Scenario",
-        "* Say hello to \"alice\"",
+        "  * Say hello to \"alice\"",
       ].join("\n");
     },
   };
@@ -508,8 +508,8 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
           {
             uri: "file:///workspace/specs/example.spec",
             range: {
-              start: { line: 3, character: 0 },
-              end: { line: 3, character: 22 },
+              start: { line: 3, character: 2 },
+              end: { line: 3, character: 24 },
             },
             converted: "location",
           },
@@ -554,7 +554,7 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
         "# Example",
         "",
         "## Scenario",
-        "* Say hello to \"alice\"",
+        "  * Say hello to \"alice\"",
       ].join("\n");
     },
   };
@@ -597,8 +597,8 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
     {
       uri: "file:///workspace/specs/example.spec",
       range: {
-        start: { line: 3, character: 0 },
-        end: { line: 3, character: 22 },
+        start: { line: 3, character: 2 },
+        end: { line: 3, character: 24 },
       },
       converted: "location",
     },

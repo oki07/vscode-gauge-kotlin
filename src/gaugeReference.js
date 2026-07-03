@@ -428,11 +428,17 @@ function hasLocations(locations) {
 }
 
 function gaugeStepText(line) {
-  if (!line.startsWith("*")) {
+  const marker = String(line || "").search(/\S/);
+  if (marker === -1 || line[marker] !== "*") {
     return undefined;
   }
-  const stepText = line.slice(1).trim();
+  const stepText = line.slice(marker + 1).trim();
   return stepText || undefined;
+}
+
+function gaugeStepMarker(line) {
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*" ? marker : -1;
 }
 
 function isInlineTableLine(line) {
@@ -486,10 +492,11 @@ function localGaugeStepReferences(document, targetTemplate) {
     if (!stepText || normalizeStepTemplate(stepText) !== targetTemplate) {
       continue;
     }
+    const marker = gaugeStepMarker(lines[lineIndex]);
     locations.push({
       uri,
       range: {
-        start: { line: lineIndex, character: 0 },
+        start: { line: lineIndex, character: marker === -1 ? 0 : marker },
         end: { line: lineIndex, character: lines[lineIndex].length },
       },
     });

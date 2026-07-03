@@ -457,7 +457,7 @@ test("GaugeCodeLensProvider adds reference lenses for Kotlin Step functions", as
   ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
   const specDocument = createDocument([
     "# Login",
-    "* Log in as \"Alice\"",
+    "  * Log in as \"Alice\"",
     "",
   ].join("\n"));
   const provider = new GaugeCodeLensProvider({

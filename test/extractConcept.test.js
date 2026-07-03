@@ -152,7 +152,7 @@ function createClients(
   };
 }
 
-test("buildExtractSelection rejects indented step marker comments", () => {
+test("buildExtractSelection accepts indented Gauge steps", () => {
   const { buildExtractSelection } = require("../src/extractConcept");
   const document = createDocument([
     "# Checkout",
@@ -165,7 +165,17 @@ test("buildExtractSelection rejects indented step marker comments", () => {
     end: { line: 1, character: 38 },
   });
 
-  assert.equal(extraction, undefined);
+  assert.deepEqual(extraction, {
+    endLine: 1,
+    lines: ["* Commented setup \"draft\" <ignored>"],
+    startLine: 1,
+    steps: [
+      {
+        tableLines: [],
+        text: "* Commented setup \"draft\" <ignored>",
+      },
+    ],
+  });
 });
 
 test("ExtractConceptCommandProvider extracts selected steps from Markdown Gauge specs", async () => {

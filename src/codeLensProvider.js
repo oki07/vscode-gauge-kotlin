@@ -153,14 +153,16 @@ function isTableLine(line) {
 }
 
 function isStepLine(line) {
-  return String(line || "").startsWith("*");
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*";
 }
 
 function gaugeStepText(line) {
-  if (!isStepLine(line)) {
+  const marker = String(line || "").search(/\S/);
+  if (marker === -1 || line[marker] !== "*") {
     return undefined;
   }
-  const text = String(line).slice(1).trim();
+  const text = String(line).slice(marker + 1).trim();
   return text || undefined;
 }
 

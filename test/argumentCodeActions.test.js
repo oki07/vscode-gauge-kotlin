@@ -219,25 +219,30 @@ test("GaugeArgumentCodeActionProvider ignores indented concept hash heading argu
   );
 });
 
-test("GaugeArgumentCodeActionProvider ignores indented step marker arguments", () => {
+test("GaugeArgumentCodeActionProvider converts indented step marker arguments", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
   const line = "  * Commented setup \"draft\" <ignored>";
 
-  assert.deepEqual(
-    provider.provideCodeActions(
-      createDocument(line),
-      createRange(0, line.indexOf("draft")),
-    ),
-    [],
+  const staticActions = provider.provideCodeActions(
+    createDocument(line),
+    createRange(0, line.indexOf("draft")),
   );
-  assert.deepEqual(
-    provider.provideCodeActions(
-      createDocument(line),
-      createRange(0, line.indexOf("ignored")),
-    ),
-    [],
+  const dynamicActions = provider.provideCodeActions(
+    createDocument(line),
+    createRange(0, line.indexOf("ignored")),
   );
+
+  assert.equal(staticActions.length, 1);
+  assert.equal(staticActions[0].title, "Convert to Dynamic Parameter");
+  assert.deepEqual({ ...staticActions[0].edit.replacements[0].range.start }, { line: 0, character: 20 });
+  assert.deepEqual({ ...staticActions[0].edit.replacements[0].range.end }, { line: 0, character: 27 });
+  assert.equal(staticActions[0].edit.replacements[0].newText, "<draft>");
+  assert.equal(dynamicActions.length, 1);
+  assert.equal(dynamicActions[0].title, "Convert to Static Parameter");
+  assert.deepEqual({ ...dynamicActions[0].edit.replacements[0].range.start }, { line: 0, character: 28 });
+  assert.deepEqual({ ...dynamicActions[0].edit.replacements[0].range.end }, { line: 0, character: 37 });
+  assert.equal(dynamicActions[0].edit.replacements[0].newText, "\"ignored\"");
 });
 
 test("GaugeArgumentCodeActionProvider converts escaped dynamic arguments to static parameters", () => {

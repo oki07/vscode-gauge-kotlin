@@ -751,7 +751,7 @@ test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functi
     "# Login specification",
     "",
     "## Successful login",
-    "* Log in as \"alice\"",
+    "  * Log in as \"alice\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
   const kotlinDocument = createDocument([
     "package steps",
@@ -778,7 +778,7 @@ test("GaugeStepDefinitionProvider resolves unopened workspace Kotlin Step functi
     vscode,
   });
 
-  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 7 });
 
   assert.equal(definitions.length, 1);
   assert.equal(definitions[0].uri, kotlinDocument.uri);
