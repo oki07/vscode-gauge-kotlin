@@ -3579,6 +3579,16 @@ function findConceptHeadings(text) {
   return headings;
 }
 
+function isHashScenarioHeading(line) {
+  return /^##(?!#)/.test(String(line || "").replace(/\r$/, ""));
+}
+
+function findConceptDefinitionHeadings(text) {
+  const lines = text.split("\n");
+  return findConceptHeadings(text)
+    .filter((heading) => !isHashScenarioHeading(lines[heading.start.line]));
+}
+
 function findGaugeSteps(text) {
   const entries = [];
   const lines = text.split("\n");
@@ -3624,7 +3634,7 @@ function duplicateConceptDiagnostics(vscode, document, conceptDocuments) {
 
   const headingsByTemplate = new Map();
   for (const candidate of documents) {
-    for (const heading of findConceptHeadings(candidate.getText())) {
+    for (const heading of findConceptDefinitionHeadings(candidate.getText())) {
       if (!headingsByTemplate.has(heading.normalized)) {
         headingsByTemplate.set(heading.normalized, []);
       }
@@ -3676,7 +3686,7 @@ function conceptHasStep(lines, startLine, endLine) {
 function conceptWithoutStepDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
-  const headings = findConceptHeadings(text);
+  const headings = findConceptDefinitionHeadings(text);
   for (let index = 0; index < headings.length; index += 1) {
     const heading = headings[index];
     const nextLine = headings[index + 1] ? headings[index + 1].start.line : lines.length;
@@ -3694,7 +3704,7 @@ function conceptWithoutStepDiagnostics(vscode, text) {
 
 function stepsOutsideConceptDiagnostics(vscode, text) {
   const diagnostics = [];
-  const headings = findConceptHeadings(text);
+  const headings = findConceptDefinitionHeadings(text);
   const firstHeadingLine = headings.length > 0 ? headings[0].start.line : Infinity;
   for (const entry of findGaugeSteps(text)) {
     if (!entry.text || entry.start.line >= firstHeadingLine) {
@@ -3735,9 +3745,30 @@ function legacyScenarioHeadingDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function hashScenarioHeadingDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (!isHashScenarioHeading(rawLine)) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(
+        vscode,
+        { line, character: 0 },
+        { line, character: rawLine.trimEnd().length },
+      ),
+      SCENARIO_HEADING_IN_CONCEPT_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function conceptStaticParameterDiagnostics(vscode, text) {
   const diagnostics = [];
-  for (const heading of findConceptHeadings(text)) {
+  for (const heading of findConceptDefinitionHeadings(text)) {
     if (findStaticParameterStart(heading.text, 0) === -1) {
       continue;
     }
@@ -3816,7 +3847,7 @@ function conceptSections(document) {
   }
   const text = document.getText();
   const lines = text.split("\n");
-  const headings = findConceptHeadings(text);
+  const headings = findConceptDefinitionHeadings(text);
   const steps = findGaugeSteps(text).filter((step) => step.text);
   return headings.map((heading, index) => {
     const nextLine = headings[index + 1] ? headings[index + 1].start.line : lines.length;
@@ -6951,6 +6982,7 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...duplicateConceptDiagnostics(this.vscode, document, conceptDocuments));
         diagnostics.push(...conceptWithoutStepDiagnostics(this.vscode, text));
         diagnostics.push(...stepsOutsideConceptDiagnostics(this.vscode, text));
+        diagnostics.push(...hashScenarioHeadingDiagnostics(this.vscode, text));
         diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
         diagnostics.push(...conceptStaticParameterDiagnostics(this.vscode, text));
         diagnostics.push(...conceptTableDiagnostics(this.vscode, text));

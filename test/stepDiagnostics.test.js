@@ -4955,6 +4955,8 @@ test("GaugeStepDiagnosticsProvider rejects scenario headings in concept files", 
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const conceptDocument = createDocument([
+    "## Hash scenario",
+    "",
     "Scenario heading",
     "----------------",
   ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/scenario.cpt");
@@ -4967,10 +4969,13 @@ test("GaugeStepDiagnosticsProvider rejects scenario headings in concept files", 
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Scenario Heading is not allowed in concept file",
+      "Scenario Heading is not allowed in concept file",
     ],
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 16 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 2, character: 16 });
 });
 
 test("GaugeStepDiagnosticsProvider rejects static arguments in concept headings", () => {
