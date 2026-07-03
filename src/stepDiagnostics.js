@@ -11,6 +11,7 @@ const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
+const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
@@ -3712,6 +3713,43 @@ function conceptStaticParameterDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function isTopLevelTableLine(line) {
+  return String(line || "").startsWith("|");
+}
+
+function conceptTableDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let tableBelongsToStep = false;
+  let inInvalidTable = false;
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isTopLevelConceptStep(rawLine)) {
+      tableBelongsToStep = true;
+      inInvalidTable = false;
+      continue;
+    }
+    if (isTopLevelTableLine(rawLine)) {
+      if (!tableBelongsToStep && !inInvalidTable) {
+        diagnostics.push(createDiagnostic(
+          vscode,
+          createRange(
+            vscode,
+            { line, character: 0 },
+            { line, character: rawLine.length },
+          ),
+          TABLE_OUTSIDE_STEP_MESSAGE,
+        ));
+        inInvalidTable = true;
+      }
+      continue;
+    }
+    tableBelongsToStep = false;
+    inInvalidTable = false;
+  }
+  return diagnostics;
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6735,6 +6773,7 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...stepsOutsideConceptDiagnostics(this.vscode, text));
         diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
         diagnostics.push(...conceptStaticParameterDiagnostics(this.vscode, text));
+        diagnostics.push(...conceptTableDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }
