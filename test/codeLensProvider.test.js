@@ -363,16 +363,69 @@ test("GaugeCodeLensProvider adds run in parallel lens for specification data tab
   ]);
 });
 
-test("GaugeCodeLensProvider ignores concept documents", () => {
+test("GaugeCodeLensProvider adds reference lenses for concept headings", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
-  const provider = new GaugeCodeLensProvider();
   const document = createDocument([
-    "# Shared checkout",
-    "* Reuse checkout",
+    "# Reuse checkout <user>",
+    "* Prepare cart",
+    "",
+    "# Unused concept",
     "",
   ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Reuse checkout \"Alice\"",
+    "",
+  ].join("\n"));
+  const nestedConceptDocument = createDocument([
+    "# Cart setup",
+    "* Reuse checkout <buyer>",
+    "",
+  ].join("\n"), "/workspace/specs/concepts/cart.cpt");
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [
+          document,
+          specDocument,
+          nestedConceptDocument,
+        ],
+      },
+    }),
+  });
 
-  assert.deepEqual(provider.provideCodeLenses(document), []);
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 0,
+      character: 0,
+      title: "2 reference(s)",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/specs/concepts/shared.cpt",
+        { line: 0, character: 0 },
+        "Reuse checkout {}",
+      ],
+    },
+    {
+      line: 3,
+      character: 0,
+      title: "0 reference(s)",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/specs/concepts/shared.cpt",
+        { line: 3, character: 0 },
+        "Unused concept",
+      ],
+    },
+  ]);
 });
 
 test("GaugeCodeLensProvider ignores documents outside Gauge projects", () => {

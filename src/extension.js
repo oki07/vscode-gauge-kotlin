@@ -439,6 +439,7 @@ function registerCodeLensProvider(context, vscode, options) {
     [
       { language: "gauge" },
       SPEC_FILE_SELECTOR,
+      CONCEPT_FILE_SELECTOR,
       MARKDOWN_GAUGE_SPEC_SELECTOR,
       { language: KOTLIN_LANGUAGE },
       KOTLIN_IMPLEMENTATION_SELECTOR,

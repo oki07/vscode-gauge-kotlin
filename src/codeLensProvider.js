@@ -6,10 +6,12 @@ const {
 } = require("./gaugeHeadings");
 const {
   GaugeStepDiagnosticsProvider,
+  findConceptHeadings,
   findStepFunctionsForDocument,
   isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
+const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
@@ -21,6 +23,7 @@ const SPEC_FILE_EXTENSION = ".spec";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const REFERENCE_CONFIG = "reference";
+const GAUGE_REFERENCE_WORKSPACE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const RUN_CODELENS_FLAGS = {
   "hide-suggestion": true,
@@ -59,6 +62,20 @@ function sameDocument(left, right) {
 
 function isConceptDocument(document) {
   return documentPath(document).toLowerCase().endsWith(".cpt");
+}
+
+function isGaugeReferenceDocument(document) {
+  if (!document || typeof document.getText !== "function") {
+    return false;
+  }
+  const file = documentPath(document).toLowerCase();
+  if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  if (file.endsWith(SPEC_FILE_EXTENSION) || file.endsWith(".cpt")) {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE && file.endsWith(MARKDOWN_SPEC_EXTENSION);
 }
 
 function isMarkdownSpecDocument(document, file) {
@@ -137,6 +154,36 @@ function isTableLine(line) {
 
 function isStepLine(line) {
   return String(line || "").startsWith("*");
+}
+
+function gaugeStepText(line) {
+  if (!isStepLine(line)) {
+    return undefined;
+  }
+  const text = String(line).slice(1).trim();
+  return text || undefined;
+}
+
+function countStepReferences(document, normalizedStep) {
+  if (!normalizedStep || !document || typeof document.getText !== "function") {
+    return 0;
+  }
+  let count = 0;
+  const lines = document.getText().split(/\r?\n/);
+  for (let line = 0; line < lines.length; line += 1) {
+    let stepText = gaugeStepText(lines[line].replace(/\r$/, ""));
+    if (stepText && lines[line + 1] !== undefined && isTableLine(lines[line + 1])) {
+      stepText = `${stepText} <table>`;
+    }
+    if (stepText && normalizeStepTemplate(stepText) === normalizedStep) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function referenceTitle(count) {
+  return `${count} reference(s)`;
 }
 
 function hasHeadingText(line) {
@@ -260,6 +307,21 @@ class GaugeCodeLensProvider {
     return this.isGaugeProjectFile(documentPath(document));
   }
 
+  belongsFileToSourceGaugeProject(file, sourceRoot) {
+    if (
+      !file
+      || !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return true;
+    }
+    const root = this.diagnosticsProvider.rootForFile(file);
+    if (sourceRoot === undefined) {
+      return root !== undefined;
+    }
+    return root === sourceRoot;
+  }
+
   referenceCodeLensesEnabled() {
     const workspace = this.vscode.workspace || {};
     if (typeof workspace.getConfiguration !== "function") {
@@ -307,6 +369,120 @@ class GaugeCodeLensProvider {
       }
     }
     return documents;
+  }
+
+  async findWorkspaceGaugeReferenceDocuments(sourceRoot) {
+    const workspace = this.vscode.workspace || {};
+    if (
+      typeof workspace.findFiles !== "function"
+      || typeof workspace.openTextDocument !== "function"
+    ) {
+      return [];
+    }
+
+    const documents = [];
+    for (const pattern of GAUGE_REFERENCE_WORKSPACE_PATTERNS) {
+      let uris;
+      try {
+        uris = await workspace.findFiles(pattern);
+      } catch (_error) {
+        continue;
+      }
+
+      for (const uri of uris || []) {
+        const file = uriPath(uri);
+        if (!this.belongsFileToSourceGaugeProject(file, sourceRoot)) {
+          continue;
+        }
+
+        try {
+          documents.push(await workspace.openTextDocument(uri));
+        } catch (_error) {
+          // Ignore stale workspace files so CodeLens still works for the active document.
+        }
+      }
+    }
+    return documents;
+  }
+
+  async gaugeReferenceDocuments(sourceDocument) {
+    const workspace = this.vscode.workspace || {};
+    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
+    const documents = [];
+    const seenPaths = new Set();
+    const addDocument = (candidate) => {
+      if (
+        !candidate
+        || !isGaugeReferenceDocument(candidate)
+        || !this.diagnosticsProvider.belongsToSourceGaugeProject(candidate, sourceRoot)
+      ) {
+        return;
+      }
+      const file = documentPath(candidate);
+      if (file) {
+        if (seenPaths.has(file)) {
+          return;
+        }
+        seenPaths.add(file);
+      } else if (documents.includes(candidate)) {
+        return;
+      }
+      documents.push(candidate);
+    };
+
+    addDocument(sourceDocument);
+    for (const candidate of workspace.textDocuments || []) {
+      addDocument(candidate);
+    }
+    for (const candidate of await this.findWorkspaceGaugeReferenceDocuments(sourceRoot)) {
+      addDocument(candidate);
+    }
+    return documents;
+  }
+
+  conceptReferenceCount(referenceDocuments, normalizedStep) {
+    let count = 0;
+    for (const candidate of referenceDocuments) {
+      count += countStepReferences(candidate, normalizedStep);
+    }
+    return count;
+  }
+
+  async provideConceptReferenceCodeLenses(document) {
+    if (
+      !this.referenceCodeLensesEnabled()
+      || !this.isGaugeProjectDocument(document)
+      || typeof document.getText !== "function"
+    ) {
+      return [];
+    }
+
+    const uri = documentUri(document);
+    if (!uri) {
+      return [];
+    }
+
+    const lenses = [];
+    const lines = document.getText().split(/\r?\n/);
+    const referenceDocuments = await this.gaugeReferenceDocuments(document);
+    for (const heading of findConceptHeadings(document.getText())) {
+      const line = lines[heading.start.line] || "";
+      const marker = firstNonWhitespace(line);
+      const range = createRange(
+        this.vscode,
+        heading.start.line,
+        marker,
+        Math.max(marker, heading.end.character),
+      );
+      const position = createPosition(this.vscode, heading.start.line, marker);
+      const count = this.conceptReferenceCount(referenceDocuments, heading.normalized);
+      lenses.push(createCodeLens(this.vscode, range, {
+        command: SHOW_REFERENCES_FOR_STEP,
+        title: referenceTitle(count),
+        arguments: [uri, position, heading.normalized],
+      }));
+    }
+    return lenses;
   }
 
   async stepImplementationDocuments(sourceDocument) {
@@ -378,12 +554,15 @@ class GaugeCodeLensProvider {
   }
 
   provideCodeLenses(document) {
-    if (!document || isConceptDocument(document)) {
+    if (!document) {
       return [];
     }
     const file = documentPath(document);
     if (!file) {
       return [];
+    }
+    if (isConceptDocument(document)) {
+      return this.provideConceptReferenceCodeLenses(document);
     }
     if (isStepImplementationDocument(document)) {
       return this.provideStepReferenceCodeLenses(document);
