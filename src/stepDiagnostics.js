@@ -8,6 +8,7 @@ const BLANK_STEP_MESSAGE = "Step should not be blank";
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
+const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
@@ -3651,6 +3652,23 @@ function conceptWithoutStepDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function stepsOutsideConceptDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const headings = findConceptHeadings(text);
+  const firstHeadingLine = headings.length > 0 ? headings[0].start.line : Infinity;
+  for (const entry of findGaugeSteps(text)) {
+    if (entry.marker !== 0 || !entry.text || entry.start.line >= firstHeadingLine) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(vscode, entry.start, entry.end),
+      STEP_OUTSIDE_CONCEPT_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function findDocStringStepTemplates(text) {
   const templates = new Set();
   const lines = text.split("\n");
@@ -6671,6 +6689,7 @@ class GaugeStepDiagnosticsProvider {
       if (isConceptDocument(document)) {
         diagnostics.push(...duplicateConceptDiagnostics(this.vscode, text));
         diagnostics.push(...conceptWithoutStepDiagnostics(this.vscode, text));
+        diagnostics.push(...stepsOutsideConceptDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }
