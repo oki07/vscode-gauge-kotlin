@@ -134,6 +134,23 @@ test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table he
   ]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests spec dynamic step arguments inside dynamic arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Seed <customer>",
+    "",
+    "## Successful checkout",
+    "* Login as <cu>",
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
+
+  assert.deepEqual(labels(items), ["customer"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -241,8 +258,8 @@ test("GaugeDynamicArgumentCompletionProvider suggests scenario data table header
   const successfulItems = provider.provideCompletionItems(document, new vscode.Position(6, 13));
   const failedItems = provider.provideCompletionItems(document, new vscode.Position(12, 10));
 
-  assert.deepEqual(labels(successfulItems), ["user", "role"]);
-  assert.deepEqual(labels(failedItems), ["error"]);
+  assert.deepEqual(labels(successfulItems), ["user", "role", "e"]);
+  assert.deepEqual(labels(failedItems), ["error", "u"]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers without separators", () => {

@@ -631,6 +631,22 @@ function conceptDynamicArguments(text) {
   return unique(values);
 }
 
+function specDynamicArguments(text, currentLineNumber) {
+  const values = [];
+  const lines = text.split(/\r?\n/);
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    if (lineNumber === currentLineNumber) {
+      continue;
+    }
+    const line = lines[lineNumber];
+    if (!isStepLine(line)) {
+      continue;
+    }
+    values.push(...dynamicArgumentsInLine(line));
+  }
+  return unique(values);
+}
+
 function staticArguments(text, options = {}) {
   const values = [];
   const lines = text.split(/\r?\n/);
@@ -1048,6 +1064,7 @@ class GaugeDynamicArgumentCompletionProvider {
                 pathModule: this.pathModule,
               }),
               ...scenarioDataTableHeaders(document.getText(), position.line),
+              ...specDynamicArguments(document.getText(), position.line),
             ])
         )
         : staticArguments(document.getText(), {
