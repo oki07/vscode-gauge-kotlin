@@ -1,7 +1,5 @@
 "use strict";
 
-const { GaugeStepCodeActionProvider } = require("./stepCodeActions");
-
 const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
 const SELECT_ARGUMENT_RANGE_COMMAND = "gauge.selectArgumentRange";
@@ -184,26 +182,20 @@ class GaugeArgumentCodeActionProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
-    this.stepCodeActionProvider = options.stepCodeActionProvider
-      || new GaugeStepCodeActionProvider({
-        projectFactory: this.projectFactory,
-        vscode: this.vscode,
-      });
   }
 
-  provideCodeActions(document, range, context) {
+  provideCodeActions(document, range) {
     if (!isGaugeProjectDocument(document, this.projectFactory)) {
       return [];
     }
-    const stepActions = this.stepCodeActionProvider.provideCodeActions(document, range, context);
     const line = document.lineAt(range.start.line).text;
     if (!isGaugeStepOrConceptHeading(line, document)) {
-      return stepActions;
+      return [];
     }
 
     const argument = findArgumentAt(line, range);
     if (!argument) {
-      return stepActions;
+      return [];
     }
 
     const paramText = argument.text.substring(1, argument.text.length - 1);
@@ -223,7 +215,7 @@ class GaugeArgumentCodeActionProvider {
       title: SELECT_ARGUMENT_RANGE_TITLE,
       arguments: [document.uri, selectionRange],
     };
-    return stepActions.concat([createCodeAction(this.vscode, title, edit, command)]);
+    return [createCodeAction(this.vscode, title, edit, command)];
   }
 }
 

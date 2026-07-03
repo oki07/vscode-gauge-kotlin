@@ -324,7 +324,7 @@ test("GaugeArgumentCodeActionProvider converts static concept heading arguments 
   assert.deepEqual({ ...actions[0].command.arguments[1].end }, { line: 0, character: 14 });
 });
 
-test("GaugeArgumentCodeActionProvider exposes create step implementation fixes", () => {
+test("GaugeArgumentCodeActionProvider does not duplicate undefined-step fixes", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const { UNDEFINED_STEP_MESSAGE } = require("../src/stepCodeActions");
   const vscode = createFakeVscode();
@@ -349,11 +349,7 @@ test("GaugeArgumentCodeActionProvider exposes create step implementation fixes",
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range: diagnosticRange }],
   });
 
-  assert.equal(actions.length, 2);
-  assert.equal(actions[0].title, "Create step implementation");
-  assert.equal(actions[0].command.command, "gauge.generate.step");
-  assert.equal(actions[1].title, "Create concept");
-  assert.equal(actions[1].command.command, "gauge.generate.concept");
+  assert.equal(actions.length, 0);
 });
 
 test("selectArgumentRange selects the converted Gauge argument body", () => {
