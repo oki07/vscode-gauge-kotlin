@@ -4742,10 +4742,16 @@ test("GaugeStepDiagnosticsProvider reports blank Gauge steps", () => {
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Step should not be blank",
+      "Step should not be blank",
+      "Step should not be blank",
     ],
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 5, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 5, character: 3 });
+  assert.deepEqual({ ...diagnostics[2].range.start }, { line: 6, character: 2 });
+  assert.deepEqual({ ...diagnostics[2].range.end }, { line: 6, character: 6 });
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
@@ -4754,6 +4760,7 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   const specDocument = createDocument([
     "# Checkout",
     "* Pay with <amount>",
+    "  * Ship order",
     "* Confirm order",
     "* Reuse payment concept",
     "*",
@@ -4777,11 +4784,14 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Undefined Step",
+      "Undefined Step",
       "Step should not be blank",
     ],
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 2, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 2, character: 14 });
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined concept steps by extension", () => {
@@ -4808,6 +4818,7 @@ test("GaugeStepDiagnosticsProvider reports undefined concept steps by extension"
     diagnostics.map((diagnostic) => diagnostic.message),
     [
       "Undefined Step",
+      "Step should not be blank",
       "Step should not be blank",
     ],
   );

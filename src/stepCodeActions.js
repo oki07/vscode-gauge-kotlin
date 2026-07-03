@@ -184,7 +184,7 @@ function conceptInfo(stepText) {
 function gaugeStepAt(document, lineNumber) {
   const line = documentLine(document, lineNumber);
   const marker = line.search(/\S/);
-  if (marker !== 0 || line[marker] !== "*") {
+  if (marker === -1 || line[marker] !== "*") {
     return undefined;
   }
   const text = line.slice(marker + 1).trim();

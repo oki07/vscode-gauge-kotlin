@@ -526,7 +526,7 @@ test("GaugeDynamicArgumentCompletionProvider ignores context step inline tables"
   assert.deepEqual(labels(items), []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider treats indented step markers as comments", () => {
+test("GaugeDynamicArgumentCompletionProvider completes indented Gauge step arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -555,9 +555,9 @@ test("GaugeDynamicArgumentCompletionProvider treats indented step markers as com
     new vscode.Position(8, 12),
   );
 
-  assert.deepEqual(indentedItems, []);
-  assert.deepEqual(labels(dynamicItems), ["user", "role"]);
-  assert.deepEqual(labels(staticItems), ["a"]);
+  assert.deepEqual(labels(indentedItems), ["u"]);
+  assert.deepEqual(labels(dynamicItems), ["ignored"]);
+  assert.deepEqual(labels(staticItems), ["draft", "a"]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider ignores indented top-level table markers", () => {
@@ -1473,7 +1473,7 @@ test("GaugeDynamicArgumentCompletionProvider keeps filled dynamic args in Kotlin
   assert.equal(items[0].filterText, "Say <file:test.txt> to <gauge>");
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores indented step lines for Kotlin Step aliases", async () => {
+test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on indented Gauge step lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const specDocument = createDocument([
@@ -1499,7 +1499,8 @@ test("GaugeDynamicArgumentCompletionProvider ignores indented step lines for Kot
 
   const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 7));
 
-  assert.deepEqual(items, []);
+  assert.deepEqual(labels(items), ["Log in as <user>"]);
+  assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
 });
 
 test("GaugeDynamicArgumentCompletionProvider ignores Markdown files outside Gauge projects", () => {

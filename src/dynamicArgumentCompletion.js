@@ -174,7 +174,7 @@ function isScenarioHeading(line) {
 }
 
 function isStepLine(line) {
-  return line.startsWith("*");
+  return String(line || "").trimStart().startsWith("*");
 }
 
 function isConceptHeading(line) {
@@ -289,10 +289,11 @@ function isThenable(value) {
 }
 
 function stepCompletionRange(line, position) {
-  if (!line.startsWith("*") || position.character === 0) {
+  const markerStart = String(line || "").search(/\S/);
+  if (markerStart === -1 || line[markerStart] !== "*" || position.character <= markerStart) {
     return undefined;
   }
-  const marker = /^\*[ \t]*/.exec(line);
+  const marker = /^[ \t]*\*[ \t]*/.exec(line);
   if (!marker) {
     return undefined;
   }
@@ -929,7 +930,8 @@ function usedStepEntriesFromDocument(document, options = {}) {
     if (lineNumber === options.currentLine && !options.includeCurrentLine) {
       continue;
     }
-    const text = line.slice(1).trim();
+    const marker = String(line || "").search(/\S/);
+    const text = marker === -1 ? "" : line.slice(marker + 1).trim();
     if (!text) {
       continue;
     }

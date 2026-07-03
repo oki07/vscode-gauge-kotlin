@@ -3622,10 +3622,12 @@ function duplicateConceptDiagnostics(vscode, text) {
 }
 
 function isTopLevelConceptStep(line) {
-  if (!String(line || "").startsWith("*")) {
+  const text = String(line || "");
+  const marker = text.search(/\S/);
+  if (marker === -1 || text[marker] !== "*") {
     return false;
   }
-  return Boolean(String(line).slice(1).trim());
+  return Boolean(text.slice(marker + 1).trim());
 }
 
 function conceptHasStep(lines, startLine, endLine) {
@@ -3661,7 +3663,7 @@ function stepsOutsideConceptDiagnostics(vscode, text) {
   const headings = findConceptHeadings(text);
   const firstHeadingLine = headings.length > 0 ? headings[0].start.line : Infinity;
   for (const entry of findGaugeSteps(text)) {
-    if (entry.marker !== 0 || !entry.text || entry.start.line >= firstHeadingLine) {
+    if (!entry.text || entry.start.line >= firstHeadingLine) {
       continue;
     }
     diagnostics.push(createDiagnostic(
@@ -3781,7 +3783,7 @@ function conceptSections(document) {
   const text = document.getText();
   const lines = text.split("\n");
   const headings = findConceptHeadings(text);
-  const steps = findGaugeSteps(text).filter((step) => step.marker === 0 && step.text);
+  const steps = findGaugeSteps(text).filter((step) => step.text);
   return headings.map((heading, index) => {
     const nextLine = headings[index + 1] ? headings[index + 1].start.line : lines.length;
     return {
@@ -3900,8 +3902,7 @@ function findDocStringStepTemplates(text) {
   const lines = text.split("\n");
   for (const entry of findGaugeSteps(text)) {
     if (
-      entry.marker === 0
-      && entry.text
+      entry.text
       && isDocStringFenceLine(lines[entry.start.line + 1])
     ) {
       templates.add(entry.normalized);
@@ -6893,15 +6894,14 @@ class GaugeStepDiagnosticsProvider {
       const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
       for (const entry of findGaugeSteps(text)) {
         const range = createRange(this.vscode, entry.start, entry.end);
-        if (!entry.text && entry.marker === 0) {
+        if (!entry.text) {
           diagnostics.push(createDiagnostic(
             this.vscode,
             range,
             BLANK_STEP_MESSAGE,
           ));
         } else if (
-          entry.marker === 0
-          && implementedSteps
+          implementedSteps
           && !implementedSteps.has(entry.normalized)
         ) {
           diagnostics.push(createDiagnostic(

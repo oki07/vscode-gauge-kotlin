@@ -391,8 +391,10 @@ test("GaugeStepCodeActionProvider includes docstring arguments in step stubs", (
   });
 });
 
-test("GaugeStepCodeActionProvider ignores indented step markers", () => {
+test("GaugeStepCodeActionProvider creates fixes for indented Gauge steps", () => {
   const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
     GaugeStepCodeActionProvider,
     UNDEFINED_STEP_MESSAGE,
   } = require("../src/stepCodeActions");
@@ -411,7 +413,14 @@ test("GaugeStepCodeActionProvider ignores indented step markers", () => {
     diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
   });
 
-  assert.deepEqual(actions, []);
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Draft pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
 });
 
 test("GaugeStepCodeActionProvider creates fixes for markdown Gauge specs", () => {
