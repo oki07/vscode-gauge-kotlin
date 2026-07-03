@@ -191,6 +191,9 @@ test("GaugeDocumentSymbolProvider lists matching workspace symbols", async () =>
       if (pattern === "**/*.md") {
         return [];
       }
+      if (pattern === "**/*.cpt") {
+        return [];
+      }
       throw new Error(`Unexpected workspace symbol pattern: ${pattern}`);
     },
     async openTextDocument(uri) {
@@ -215,6 +218,67 @@ test("GaugeDocumentSymbolProvider lists matching workspace symbols", async () =>
       range: {
         start: { line: 0, character: 0 },
         end: { line: 0, character: 23 },
+      },
+    },
+  ]);
+});
+
+test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Reuse checkout",
+    "",
+    "## Shared payment",
+    "* Reuse payment",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "gauge");
+  const documents = new Map([
+    [conceptDocument.uri.fsPath, conceptDocument],
+  ]);
+  const vscode = createFakeVscode();
+  const searchedPatterns = [];
+  vscode.workspace = {
+    async findFiles(pattern) {
+      searchedPatterns.push(pattern);
+      if (pattern === "**/*.spec" || pattern === "**/*.md") {
+        return [];
+      }
+      if (pattern === "**/*.cpt") {
+        return [conceptDocument.uri];
+      }
+      throw new Error(`Unexpected workspace symbol pattern: ${pattern}`);
+    },
+    async openTextDocument(uri) {
+      return documents.get(uri.fsPath);
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ vscode });
+
+  const symbols = await provider.provideWorkspaceSymbols("Shared");
+
+  assert.deepEqual(searchedPatterns, ["**/*.spec", "**/*.md", "**/*.cpt"]);
+  assert.deepEqual(symbols.map((symbol) => ({
+    name: symbol.name,
+    uri: symbol.location.uri,
+    range: {
+      start: { ...symbol.location.range.start },
+      end: { ...symbol.location.range.end },
+    },
+  })), [
+    {
+      name: "# Shared checkout",
+      uri: conceptDocument.uri,
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 17 },
+      },
+    },
+    {
+      name: "## Shared payment",
+      uri: conceptDocument.uri,
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 17 },
       },
     },
   ]);
@@ -257,6 +321,9 @@ test("GaugeDocumentSymbolProvider groups and sorts workspace spec and scenario s
         return [leftDocument.uri, rightDocument.uri];
       }
       if (pattern === "**/*.md") {
+        return [];
+      }
+      if (pattern === "**/*.cpt") {
         return [];
       }
       throw new Error(`Unexpected workspace symbol pattern: ${pattern}`);

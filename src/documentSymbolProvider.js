@@ -13,6 +13,7 @@ const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SYMBOL_KIND_NAMESPACE = 3;
 const SPEC_WORKSPACE_PATTERN = "**/*.spec";
 const MARKDOWN_WORKSPACE_PATTERN = "**/*.md";
+const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -251,7 +252,11 @@ class GaugeDocumentSymbolProvider {
     }
 
     const urisByKey = new Map();
-    for (const pattern of [SPEC_WORKSPACE_PATTERN, MARKDOWN_WORKSPACE_PATTERN]) {
+    for (const pattern of [
+      SPEC_WORKSPACE_PATTERN,
+      MARKDOWN_WORKSPACE_PATTERN,
+      CONCEPT_WORKSPACE_PATTERN,
+    ]) {
       const uris = await workspace.findFiles(pattern);
       for (const uri of uris || []) {
         urisByKey.set(uriKey(uri), uri);
