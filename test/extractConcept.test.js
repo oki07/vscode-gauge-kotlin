@@ -178,6 +178,49 @@ test("buildExtractSelection accepts indented Gauge steps", () => {
   });
 });
 
+test("buildExtractSelection includes docstring blocks after selected Gauge steps", () => {
+  const { buildExtractSelection } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "## Success",
+    "* Send payload",
+    "\"\"\"",
+    "hello world",
+    "from multiline",
+    "\"\"\"",
+    "* Continue",
+  ].join("\n"));
+
+  const extraction = buildExtractSelection(document, {
+    start: { line: 2, character: 0 },
+    end: { line: 2, character: 14 },
+  });
+
+  assert.deepEqual(extraction, {
+    endLine: 6,
+    lines: [
+      "* Send payload",
+      "\"\"\"",
+      "hello world",
+      "from multiline",
+      "\"\"\"",
+    ],
+    startLine: 2,
+    steps: [
+      {
+        docStringLines: [
+          "\"\"\"",
+          "hello world",
+          "from multiline",
+          "\"\"\"",
+        ],
+        tableLines: [],
+        text: "* Send payload",
+      },
+    ],
+  });
+});
+
 test("ExtractConceptCommandProvider extracts selected steps from Markdown Gauge specs", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
@@ -377,6 +420,80 @@ test("ExtractConceptCommandProvider extracts selected Gauge steps into an existi
       "# Shared checkout <user>",
       "* Login as <user>",
       "* Buy item",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("ExtractConceptCommandProvider extracts docstring blocks with selected Gauge steps", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Send payload",
+    "\"\"\"",
+    "hello world",
+    "from multiline",
+    "\"\"\"",
+    "* Continue",
+    "",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "# Existing\n* setup\n",
+    },
+    document,
+    inputResponses: ["Shared payload"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 14 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.equal(appliedEdits.length, 1);
+  assert.equal(appliedEdits[0].replacements.length, 2);
+
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/example.spec",
+  );
+  assert.deepEqual({ ...sourceReplacement.range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...sourceReplacement.range.end }, { line: 8, character: 0 });
+  assert.equal(sourceReplacement.newText, "* Shared payload\n");
+
+  const conceptReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
+  );
+  assert.equal(
+    conceptReplacement.newText,
+    [
+      "# Existing",
+      "* setup",
+      "",
+      "# Shared payload",
+      "* Send payload",
+      "\"\"\"",
+      "hello world",
+      "from multiline",
+      "\"\"\"",
       "",
     ].join("\n"),
   );

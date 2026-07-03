@@ -110,6 +110,30 @@ function isTableStartLine(text) {
   return isTableLine(text);
 }
 
+function isDocStringFenceLine(text) {
+  return String(text || "").trim() === "\"\"\"";
+}
+
+function collectDocStringLines(document, startLine) {
+  if (startLine >= document.lineCount || !isDocStringFenceLine(lineText(document, startLine))) {
+    return undefined;
+  }
+
+  const lines = [lineText(document, startLine).trim()];
+  for (let line = startLine + 1; line < document.lineCount; line += 1) {
+    const text = lineText(document, line);
+    if (isDocStringFenceLine(text)) {
+      lines.push(text.trim());
+      return {
+        endLine: line,
+        lines,
+      };
+    }
+    lines.push(text);
+  }
+  return undefined;
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -163,10 +187,13 @@ function buildExtractSelection(document, selection) {
     }
 
     const stepText = text.trim();
+    const docString = collectDocStringLines(document, line + 1);
     const tableLines = [];
     const block = [stepText];
-    let nextLine = line + 1;
-    if (nextLine < document.lineCount && isTableStartLine(lineText(document, nextLine))) {
+    let nextLine = docString ? docString.endLine + 1 : line + 1;
+    if (docString) {
+      block.push(...docString.lines);
+    } else if (nextLine < document.lineCount && isTableStartLine(lineText(document, nextLine))) {
       while (nextLine < document.lineCount && isTableLine(lineText(document, nextLine))) {
         const tableLine = lineText(document, nextLine).trim();
         tableLines.push(tableLine);
@@ -176,7 +203,11 @@ function buildExtractSelection(document, selection) {
     }
 
     blocks.push(block);
-    steps.push({ tableLines, text: stepText });
+    const step = { tableLines, text: stepText };
+    if (docString) {
+      step.docStringLines = docString.lines;
+    }
+    steps.push(step);
     expandedEndLine = Math.max(expandedEndLine, nextLine - 1);
     line = nextLine;
   }
@@ -576,9 +607,12 @@ function buildParameterizedExtraction(extraction, conceptName, eol) {
 
   for (const step of extraction.steps || []) {
     const conceptStep = applyStaticArgumentParameters(step.text, staticParameters);
+    const conceptStepBlock = step.docStringLines && step.docStringLines.length > 0
+      ? [conceptStep, ...step.docStringLines]
+      : [conceptStep];
     appendUniqueParameters(stepDynamicParameters, dynamicParametersInLines([step.text]));
     if (!step.tableLines || step.tableLines.length === 0) {
-      conceptLines.push(conceptStep);
+      conceptLines.push(...conceptStepBlock);
       continue;
     }
 
