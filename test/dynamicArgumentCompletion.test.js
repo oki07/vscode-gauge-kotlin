@@ -1615,6 +1615,90 @@ test("GaugeDynamicArgumentCompletionProvider suggests unopened workspace Java St
   assert.equal(items[0].insertText.value, "Pay with \"${0:card}\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests unopened Markdown used steps", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const openedFiles = [];
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Reu",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const markdownDocument = createDocument([
+    "# Shared flows",
+    "",
+    "* Reused checkout",
+  ].join("\n"), "/workspace/gauge/specs/shared.md", "markdown");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+        async findFiles(pattern) {
+          if (pattern === "**/*.md") {
+            return [markdownDocument.uri];
+          }
+          return [];
+        },
+        async openTextDocument(uri) {
+          openedFiles.push(uri.fsPath);
+          assert.equal(uri, markdownDocument.uri);
+          return markdownDocument;
+        },
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Reused checkout"]);
+  assert.deepEqual(openedFiles, ["/workspace/gauge/specs/shared.md"]);
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests unopened Markdown tags", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const openedFiles = [];
+  const specDocument = createDocument([
+    "# Checkout",
+    "tags: ",
+    "",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const markdownDocument = createDocument([
+    "# Shared flows",
+    "tags: smoke, web",
+    "",
+    "* Reused checkout",
+  ].join("\n"), "/workspace/gauge/specs/shared.md", "markdown");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument],
+        async findFiles(pattern) {
+          if (pattern === "**/*.md") {
+            return [markdownDocument.uri];
+          }
+          return [];
+        },
+        async openTextDocument(uri) {
+          openedFiles.push(uri.fsPath);
+          assert.equal(uri, markdownDocument.uri);
+          return markdownDocument;
+        },
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(1, 6));
+
+  assert.deepEqual(labels(items), ["smoke", "web"]);
+  assert.deepEqual(openedFiles, ["/workspace/gauge/specs/shared.md"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests package wildcard const Step aliases", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

@@ -6617,6 +6617,7 @@ const JAVA_WORKSPACE_PATTERN = "**/*.java";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 const SPEC_WORKSPACE_PATTERN = "**/*.spec";
+const MARKDOWN_SPEC_WORKSPACE_PATTERN = "**/*.md";
 
 function markWorkspaceStepImplementationScanComplete(documents) {
   Object.defineProperty(documents, WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE, {
@@ -7205,6 +7206,10 @@ class GaugeStepDiagnosticsProvider {
         {
           matches: isGaugeSpecDocument,
           pattern: SPEC_WORKSPACE_PATTERN,
+        },
+        {
+          matches: isGaugeSpecDocument,
+          pattern: MARKDOWN_SPEC_WORKSPACE_PATTERN,
         },
       ];
       for (const { matches, pattern } of documentPatterns) {
