@@ -519,7 +519,7 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
   ]);
 });
 
-test("ReferenceProvider preserves empty LSP reference results without local fallback", async () => {
+test("ReferenceProvider falls back to local references when LSP returns an empty list", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
   const { GaugeProject } = require("../src/project/gaugeProject");
@@ -596,7 +596,16 @@ test("ReferenceProvider preserves empty LSP reference results without local fall
       args: [
         { fsPath: "/workspace/tests/Steps.kt", uri: "file:///workspace/tests/Steps.kt" },
         { line: 3, character: 5, converted: "position" },
-        [],
+        [
+          {
+            uri: "file:///workspace/specs/example.spec",
+            range: {
+              start: { line: 3, character: 2 },
+              end: { line: 3, character: 24 },
+            },
+            converted: "location",
+          },
+        ],
       ],
     },
   ]);

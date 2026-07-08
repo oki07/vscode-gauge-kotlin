@@ -640,7 +640,11 @@ class ReferenceProvider {
       );
     }
     if (Array.isArray(locations)) {
-      return locations;
+      if (locations.length > 0) {
+        return locations;
+      }
+      const localLocations = await this.localStepReferences(stepValue, options);
+      return hasLocations(localLocations) ? localLocations : locations;
     }
     return hasLocations(locations) ? locations : this.localStepReferences(stepValue, options);
   }
