@@ -65,8 +65,13 @@ class CLI {
   static instance(options = {}) {
     const vscode = options.vscode;
     const settings = options.settings || readGaugeExtensionSettings(vscode);
+    const versionEnv = envWithGaugeHome(options.env || process.env, { settings, vscode });
     const gaugeCommand = settings.executablePath
-      ? this.getConfiguredCommand(settings.executablePath, [GAUGE_VERSION_ARG])
+      ? this.getConfiguredCommand(
+        settings.executablePath,
+        [GAUGE_VERSION_ARG],
+        { env: versionEnv },
+      )
       : this.getCommand(GAUGE_COMMAND);
     const mavenCommand = this.getCommand(MAVEN_COMMAND, [MAVEN_VERSION_ARG]);
     const gradleCommand = this.getGradleCommand();
@@ -74,7 +79,6 @@ class CLI {
       return new CLI(undefined, {}, mavenCommand, gradleCommand);
     }
 
-    const versionEnv = envWithGaugeHome(options.env || process.env, { settings, vscode });
     const versionResult = gaugeCommand.spawnSync(
       [GAUGE_VERSION_ARG, MACHINE_READABLE_ARG],
       { env: versionEnv },
@@ -166,19 +170,20 @@ class CLI {
     return [new Command(command)];
   }
 
-  static isSpawnable(command, testArgs = []) {
-    const result = command.spawnSync(testArgs);
+  static isSpawnable(command, testArgs = [], options = {}) {
+    const result = command.spawnSync(testArgs, options);
     return result.status === 0 && !result.error;
   }
 
-  static getCommand(command, testArgs = []) {
-    return this.getCommandCandidates(command).find((candidate) => this.isSpawnable(candidate, testArgs));
+  static getCommand(command, testArgs = [], options = {}) {
+    return this.getCommandCandidates(command)
+      .find((candidate) => this.isSpawnable(candidate, testArgs, options));
   }
 
-  static getConfiguredCommand(command, testArgs = []) {
+  static getConfiguredCommand(command, testArgs = [], options = {}) {
     const shellMode = process.platform === "win32" && /\.(?:bat|cmd)$/i.test(command);
     const candidate = new Command(command, "", shellMode);
-    return this.isSpawnable(candidate, testArgs) ? candidate : undefined;
+    return this.isSpawnable(candidate, testArgs, options) ? candidate : undefined;
   }
 
   static getGradleCommand() {

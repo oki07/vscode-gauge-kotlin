@@ -204,6 +204,78 @@ test("CLI uses the configured Gauge executable path before PATH lookup", () => {
   ]);
 });
 
+test("CLI validates configured executable with configured GAUGE_HOME", () => {
+  const { CLI, Command } = require("../src/cli");
+  const lookupCalls = [];
+  const configuredGaugeCommand = {
+    spawnSync(args, options) {
+      assert.deepEqual(args, ["--version", "--machine-readable"]);
+      assert.deepEqual(options, {
+        env: {
+          PATH: "/usr/bin",
+          GAUGE_HOME: "/tools/gauge-home",
+        },
+      });
+      return {
+        stdout: Buffer.from(JSON.stringify({
+          version: "1.2.3",
+          plugins: [{ name: "kotlin", version: "0.9.0" }],
+        })),
+      };
+    },
+  };
+
+  class TestCLI extends CLI {
+    static getConfiguredCommand(command, testArgs, options) {
+      lookupCalls.push({ command, options, testArgs });
+      return configuredGaugeCommand;
+    }
+
+    static getCommand(command) {
+      if (command === "mvn") {
+        return new Command("mvn");
+      }
+      return undefined;
+    }
+  }
+
+  const cli = TestCLI.instance({
+    env: { PATH: "/usr/bin" },
+    vscode: {
+      workspace: {
+        getConfiguration(section) {
+          assert.equal(section, "gauge");
+          return {
+            get(key) {
+              if (key === "executablePath") {
+                return "/tools/gauge/bin/gauge";
+              }
+              return key === "home" ? "/tools/gauge-home" : "";
+            },
+          };
+        },
+      },
+      window: {
+        showErrorMessage() {},
+      },
+    },
+  });
+
+  assert.equal(cli.isGaugeInstalled(), true);
+  assert.deepEqual(lookupCalls, [
+    {
+      command: "/tools/gauge/bin/gauge",
+      options: {
+        env: {
+          PATH: "/usr/bin",
+          GAUGE_HOME: "/tools/gauge-home",
+        },
+      },
+      testArgs: ["--version"],
+    },
+  ]);
+});
+
 test("CLI passes configured GAUGE_HOME to the Gauge version probe", () => {
   const { CLI, Command } = require("../src/cli");
   const versionProbeCalls = [];
