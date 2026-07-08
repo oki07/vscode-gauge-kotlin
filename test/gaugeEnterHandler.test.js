@@ -184,6 +184,43 @@ test("GaugeEnterHandler ignores Markdown files when the resolved root is not a G
   assert.deepEqual(saves, []);
 });
 
+test("GaugeEnterHandler ignores Gauge files when project root is unresolved", () => {
+  const { GaugeEnterHandler } = require("../src/gaugeEnterHandler");
+  const listeners = [];
+  const vscode = {
+    workspace: {
+      onDidChangeTextDocument(listener) {
+        listeners.push(listener);
+        return { dispose() {} };
+      },
+    },
+  };
+  const saves = [];
+  const handler = new GaugeEnterHandler({
+    vscode,
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/notes/example.spec");
+        return undefined;
+      },
+    },
+  });
+  handler.register();
+
+  listeners[0]({
+    document: {
+      languageId: "plaintext",
+      uri: { fsPath: "/workspace/notes/example.spec" },
+      save() {
+        saves.push("saved");
+      },
+    },
+    contentChanges: [{ text: "\n" }],
+  });
+
+  assert.deepEqual(saves, []);
+});
+
 test("GaugeEnterHandler ignores non-Gauge documents and non-newline edits", () => {
   const { GaugeEnterHandler } = require("../src/gaugeEnterHandler");
   const listeners = [];

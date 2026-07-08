@@ -238,6 +238,9 @@ function isGaugeProjectFile(document, projectFactory) {
   }
   try {
     const root = projectFactory.getGaugeRootFromFilePath(file);
+    if (!root) {
+      return false;
+    }
     if (typeof projectFactory.isGaugeProject === "function") {
       return projectFactory.isGaugeProject(root) !== false;
     }
@@ -278,8 +281,7 @@ function hasActiveImplementationGaugeDocument(vscode, projectFactory) {
     return false;
   }
   try {
-    projectFactory.getGaugeRootFromFilePath(editor.document.uri.fsPath);
-    return true;
+    return Boolean(projectFactory.getGaugeRootFromFilePath(editor.document.uri.fsPath));
   } catch (_error) {
     return false;
   }

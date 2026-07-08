@@ -61,6 +61,9 @@ class GaugeEnterHandler {
     }
     try {
       const root = this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
+      if (!root) {
+        return false;
+      }
       if (typeof this.projectFactory.isGaugeProject === "function") {
         return this.projectFactory.isGaugeProject(root) !== false;
       }

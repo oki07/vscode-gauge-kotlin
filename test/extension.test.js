@@ -877,6 +877,52 @@ test("activation ignores Gauge files by extension outside Gauge projects", () =>
   }
 });
 
+test("activation ignores Gauge files by extension when project root is unresolved", () => {
+  const extension = require("../src/extension");
+
+  let createCliCalls = 0;
+  let createdWorkspace = false;
+  const context = { subscriptions: [] };
+  const { debugProviders, fakeVscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "plaintext",
+        uri: { fsPath: "/notes/specs/draft.spec" },
+        fileName: "/notes/specs/draft.spec",
+      },
+    },
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      createCliCalls += 1;
+      throw new Error("createCli should not be called");
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      constructor() {
+        createdWorkspace = true;
+      }
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filePath) {
+        assert.equal(filePath, "/notes/specs/draft.spec");
+        return undefined;
+      },
+      findGaugeProjectRoots() {
+        return [];
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(createCliCalls, 0);
+  assert.equal(createdWorkspace, false);
+  assert.deepEqual(debugProviders, []);
+});
+
 test("create specification command delegates to the specification creator", () => {
   const extension = require("../src/extension");
 
@@ -2579,6 +2625,52 @@ test("activation starts Gauge workspace services for an active Kotlin implementa
   assert.equal(created.workspace.options.clientsMap, created.clientsMap);
   assert.equal(created.workspace.options.vscode, fakeVscode);
   assert.equal(context.subscriptions.includes(created.workspace), true);
+});
+
+test("activation ignores active Kotlin implementation documents when project root is unresolved", () => {
+  const extension = require("../src/extension");
+
+  let createCliCalls = 0;
+  let createdWorkspace = false;
+  const context = { subscriptions: [] };
+  const { debugProviders, fakeVscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "kotlin",
+        uri: { fsPath: "/workspace/notes/src/test/kotlin/Steps.kt" },
+      },
+    },
+    workspaceFolders: [],
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      createCliCalls += 1;
+      throw new Error("createCli should not be called");
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      constructor() {
+        createdWorkspace = true;
+      }
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/src/test/kotlin/Steps.kt");
+        return undefined;
+      },
+      isGaugeProject() {
+        throw new Error("isGaugeProject should not be called");
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(createCliCalls, 0);
+  assert.equal(createdWorkspace, false);
+  assert.deepEqual(debugProviders, []);
 });
 
 test("activation starts Gauge workspace services for an active Java implementation document", () => {
