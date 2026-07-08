@@ -284,6 +284,39 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   ]);
 });
 
+test("GaugeWorkspace disposes active clients when the workspace is disposed", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+  });
+  const { vscode } = createFakeVscode();
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+
+  await workspace.dispose();
+
+  assert.equal(entry.client.stopped, true);
+  assert.equal(clients.get("/workspace/gauge/specs/example.spec"), undefined);
+  assert.deepEqual([...workspace.getClientLanguageMap().keys()], []);
+});
+
 test("GaugeWorkspace exposes the project client before runner installation completes", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

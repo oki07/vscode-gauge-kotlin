@@ -237,6 +237,18 @@ class GaugeWorkspace {
         disposable.dispose();
       }
     }
+    const stopPromises = [];
+    for (const [projectRoot, projectClient] of this.clientsMap.entries()) {
+      this.clientsMap.delete(projectRoot);
+      this.clientLanguageMap.delete(projectRoot);
+      if (projectClient.client && typeof projectClient.client.stop === "function") {
+        stopPromises.push(Promise.resolve(projectClient.client.stop()).catch(() => undefined));
+      }
+    }
+    if (this.outputChannel && typeof this.outputChannel.dispose === "function") {
+      this.outputChannel.dispose();
+    }
+    return Promise.all(stopPromises).then(() => undefined);
   }
 
   async startWorkspaceProjects() {
