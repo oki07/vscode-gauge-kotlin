@@ -639,6 +639,9 @@ class ReferenceProvider {
         createCancellationToken(this.vscode),
       );
     }
+    if (Array.isArray(locations)) {
+      return locations;
+    }
     return hasLocations(locations) ? locations : this.localStepReferences(stepValue, options);
   }
 
@@ -654,13 +657,16 @@ class ReferenceProvider {
     }
 
     const locations = [];
+    let hasEmptyLocationList = false;
     for (const value of stepValues) {
       const valueLocations = await this.referenceLocationsForStep(languageClient, value, options);
       if (hasLocations(valueLocations)) {
         locations.push(...valueLocations);
+      } else if (Array.isArray(valueLocations)) {
+        hasEmptyLocationList = true;
       }
     }
-    return locations.length > 0 ? uniqueLocations(locations) : undefined;
+    return locations.length > 0 ? uniqueLocations(locations) : hasEmptyLocationList ? [] : undefined;
   }
 
   convertLocations(locations, languageClient) {

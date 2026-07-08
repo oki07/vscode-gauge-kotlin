@@ -519,6 +519,89 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
   ]);
 });
 
+test("ReferenceProvider preserves empty LSP reference results without local fallback", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/example.spec",
+      toString() {
+        return "file:///workspace/specs/example.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Example",
+        "",
+        "## Scenario",
+        "  * Say hello to \"alice\"",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.spec" || pattern === "**/*.cpt" || pattern === "**/*.md") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [activeDocument, specDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({ "gauge/stepReferences": [] }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferences(
+    "file:///workspace/tests/Steps.kt",
+    { line: 3, character: 5 },
+    "Say hello to <name>",
+  );
+
+  assert.equal(result, true);
+  assert.deepEqual(requestCalls.map((entry) => entry.method), ["gauge/stepReferences"]);
+  assert.deepEqual(calls.information, []);
+  assert.deepEqual(calls.commands, [
+    {
+      command: "editor.action.showReferences",
+      args: [
+        { fsPath: "/workspace/tests/Steps.kt", uri: "file:///workspace/tests/Steps.kt" },
+        { line: 3, character: 5, converted: "position" },
+        [],
+      ],
+    },
+  ]);
+});
+
 test("ReferenceProvider provides local references for Kotlin Step aliases", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
