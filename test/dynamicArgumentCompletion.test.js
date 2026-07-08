@@ -284,7 +284,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers wi
   assert.deepEqual(labels(items), ["user", "role"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider keeps spec data table headers after markdown subheadings", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests scenario table headers after triple-hash headings", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });

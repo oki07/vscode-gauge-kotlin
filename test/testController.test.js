@@ -427,7 +427,7 @@ test("GaugeTestController ignores open Gauge documents outside Gauge projects", 
   assert.deepEqual(controller.items.values(), []);
 });
 
-test("GaugeTestController ignores markdown subheadings in open Gauge documents", () => {
+test("GaugeTestController discovers triple-hash scenario headings in open Gauge documents", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([
     "# Checkout",
@@ -443,8 +443,10 @@ test("GaugeTestController ignores markdown subheadings in open Gauge documents",
 
   const spec = controller.items.get("/workspace/specs/example.spec");
   assert.equal(spec.label, "Checkout");
-  assert.deepEqual(spec.children.values(), []);
-  assert.equal(controller.items.get("/workspace/specs/example.spec:3"), undefined);
+  const scenarios = spec.children.values();
+  assert.equal(scenarios.length, 1);
+  assert.equal(scenarios[0].id, "/workspace/specs/example.spec:3");
+  assert.equal(scenarios[0].label, "Notes");
 });
 
 test("GaugeTestController resolves unopened workspace specs from Gauge LSP", async () => {

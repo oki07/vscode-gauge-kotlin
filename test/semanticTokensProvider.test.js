@@ -233,7 +233,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
-test("GaugeSemanticTokensProvider ignores non-Gauge markdown subheadings", () => {
+test("GaugeSemanticTokensProvider treats triple-hash headings as scenarios", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -256,7 +256,7 @@ test("GaugeSemanticTokensProvider ignores non-Gauge markdown subheadings", () =>
 
   assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
     [0, "specification"],
-    [1, "gaugeComment"],
+    [1, "scenario"],
   ]);
 });
 
