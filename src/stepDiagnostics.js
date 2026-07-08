@@ -6083,6 +6083,68 @@ function isJavaStepAnnotationAllowed(annotationName, stepImports) {
     );
 }
 
+function readJavaUnicodeEscape(text, slashIndex) {
+  let index = slashIndex + 1;
+  if (text[index] !== "u") {
+    return undefined;
+  }
+  while (text[index] === "u") {
+    index += 1;
+  }
+  const hex = text.slice(index, index + 4);
+  if (!/^[0-9A-Fa-f]{4}$/.test(hex)) {
+    return undefined;
+  }
+  return {
+    index: index + 3,
+    value: String.fromCharCode(Number.parseInt(hex, 16)),
+  };
+}
+
+function readJavaOctalEscape(text, slashIndex) {
+  const first = text[slashIndex + 1];
+  if (!/^[0-7]$/.test(first || "")) {
+    return undefined;
+  }
+  const maxLength = /^[0-3]$/.test(first) ? 3 : 2;
+  let octal = first;
+  let index = slashIndex + 2;
+  while (octal.length < maxLength && /^[0-7]$/.test(text[index] || "")) {
+    octal += text[index];
+    index += 1;
+  }
+  return {
+    index: slashIndex + octal.length,
+    value: String.fromCharCode(Number.parseInt(octal, 8)),
+  };
+}
+
+function readJavaEscape(text, slashIndex) {
+  const unicode = readJavaUnicodeEscape(text, slashIndex);
+  if (unicode) {
+    return unicode;
+  }
+  const octal = readJavaOctalEscape(text, slashIndex);
+  if (octal) {
+    return octal;
+  }
+  const escaped = text[slashIndex + 1];
+  const values = {
+    b: "\b",
+    f: "\f",
+    n: "\n",
+    r: "\r",
+    s: " ",
+    t: "\t",
+  };
+  return {
+    index: slashIndex + 1,
+    value: Object.prototype.hasOwnProperty.call(values, escaped)
+      ? values[escaped]
+      : escaped,
+  };
+}
+
 function readJavaStringLiteral(text, startIndex) {
   if (text[startIndex] !== "\"") {
     return undefined;
@@ -6094,21 +6156,9 @@ function readJavaStringLiteral(text, startIndex) {
       if (index + 1 >= text.length) {
         return undefined;
       }
-      const escaped = text[index + 1];
-      if (escaped === "n") {
-        value += "\n";
-      } else if (escaped === "r") {
-        value += "\r";
-      } else if (escaped === "t") {
-        value += "\t";
-      } else if (escaped === "b") {
-        value += "\b";
-      } else if (escaped === "f") {
-        value += "\f";
-      } else {
-        value += escaped;
-      }
-      index += 1;
+      const escaped = readJavaEscape(text, index);
+      value += escaped.value;
+      index = escaped.index;
       continue;
     }
     if (char === "\"") {

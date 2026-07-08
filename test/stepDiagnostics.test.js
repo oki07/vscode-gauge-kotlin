@@ -5396,6 +5396,41 @@ test("GaugeStepDiagnosticsProvider uses Java constants in Java Step annotations"
   );
 });
 
+test("GaugeStepDiagnosticsProvider decodes Java unicode and octal escapes in Step annotations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with \"card\"",
+    "* Ship with \"ground\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const stepDocument = createDocument([
+    "package fixtures.impl;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class PaymentSteps {",
+    "  @Step(\"Pay \\u0077ith <method>\")",
+    "  public void pay(String method) {",
+    "  }",
+    "",
+    "  @Step(\"Ship \\167ith <method>\")",
+    "  public void ship(String method) {",
+    "  }",
+    "}",
+  ].join("\n"), "java", "/workspace/gauge/src/test/java/fixtures/impl/PaymentSteps.java");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports Java constant Step parameter mismatches", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
