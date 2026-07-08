@@ -500,6 +500,111 @@ test("GaugeValidateDiagnosticsProvider does not open unopened files outside Gaug
   assert.deepEqual(spawnCalls, []);
 });
 
+test("GaugeValidateDiagnosticsProvider registers validation refresh listeners", async () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+  const document = createDocument([
+    "# Example",
+    "",
+    "* malformed",
+  ].join("\n"));
+  const opened = [];
+  const saved = [];
+  const closed = [];
+  const sets = [];
+  const deletes = [];
+  const disposals = [];
+  const spawnCalls = [];
+  const fakeVscode = {
+    ...createFakeVscode(),
+    languages: {
+      createDiagnosticCollection(name) {
+        return {
+          name,
+          set(uri, diagnostics) {
+            sets.push({ diagnostics, uri });
+          },
+          delete(uri) {
+            deletes.push(uri);
+          },
+          dispose() {
+            disposals.push(name);
+          },
+        };
+      },
+    },
+    workspace: {
+      textDocuments: [document],
+      findFiles(pattern) {
+        assert.equal(pattern, "**/*.{spec,md,cpt}");
+        return Promise.resolve([]);
+      },
+      onDidOpenTextDocument(listener) {
+        opened.push(listener);
+        return { dispose() { disposals.push("open"); } };
+      },
+      onDidSaveTextDocument(listener) {
+        saved.push(listener);
+        return { dispose() { disposals.push("save"); } };
+      },
+      onDidCloseTextDocument(listener) {
+        closed.push(listener);
+        return { dispose() { disposals.push("close"); } };
+      },
+    },
+  };
+  const command = {
+    spawnSync(args, options) {
+      spawnCalls.push({ args, options });
+      return {
+        stdout: Buffer.from("ParseError /workspace/gauge/specs/example.spec:3: Step is malformed"),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return command;
+      },
+    },
+    env: { PATH: "/bin" },
+    projectFactory: {
+      getProjectByFilepath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return {
+          root() {
+            return "/workspace/gauge";
+          },
+        };
+      },
+    },
+    vscode: fakeVscode,
+  });
+
+  const disposable = provider.register();
+  await new Promise((resolve) => setImmediate(resolve));
+  await saved[0]();
+  closed[0](document);
+  await new Promise((resolve) => setImmediate(resolve));
+  disposable.dispose();
+
+  assert.equal(opened.length, 1);
+  assert.equal(saved.length, 1);
+  assert.equal(closed.length, 1);
+  assert.equal(spawnCalls.length, 3);
+  assert.equal(sets.length, 3);
+  assert.deepEqual(
+    sets.map((entry) => entry.diagnostics[0].message),
+    [
+      "ParseError line number: 3, Step is malformed",
+      "ParseError line number: 3, Step is malformed",
+      "ParseError line number: 3, Step is malformed",
+    ],
+  );
+  assert.deepEqual(deletes, [document.uri]);
+  assert.deepEqual(disposals, ["gauge-validate", "open", "save", "close"]);
+});
+
 test("parseGaugeValidateErrors accepts optional colon separators", () => {
   const { parseGaugeValidateErrors } = require("../src/validateDiagnostics");
 
