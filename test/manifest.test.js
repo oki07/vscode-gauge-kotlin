@@ -93,6 +93,24 @@ function firstMatchingTopLevelPattern(grammar, text) {
   return undefined;
 }
 
+function legacyTableSnippetBody(columnCount) {
+  const headerLine = Array.from({ length: columnCount }, (_, index) => `\${${index + 1}:HEADER}`)
+    .join("|");
+  const firstValueLine = Array.from({ length: columnCount }, (_, index) => (
+    `\${${columnCount + index + 1}:value}`
+  )).join("|");
+  const secondValueLine = Array.from({ length: columnCount }, (_, index) => {
+    const placeholder = `\${${columnCount * 2 + index + 1}:value}`;
+    return index === columnCount - 1 ? `${placeholder}$0` : placeholder;
+  }).join("|");
+  return [
+    "",
+    `    |${headerLine}|`,
+    `    |${firstValueLine}|`,
+    `    |${secondValueLine}|`,
+  ];
+}
+
 test("extension manifest exposes the core Gauge VS Code surface for Kotlin projects", () => {
   const manifest = readPackageJson();
 
@@ -601,16 +619,16 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
     "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
   ]);
-  assert.deepEqual(snippets["Legacy Table with two columns"].body, [
-    "|${1:HEADER}|${2:HEADER}|",
-    "|${3:value}|${4:value}|",
-    "|${5:value}|${6:value}$0|",
-  ]);
-  assert.deepEqual(snippets["Legacy Table with six columns"].body, [
-    "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|${6:HEADER}|",
-    "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
-    "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|",
-  ]);
+  for (const [columns, name] of [
+    [1, "Legacy Table with one column"],
+    [2, "Legacy Table with two columns"],
+    [3, "Legacy Table with three columns"],
+    [4, "Legacy Table with four columns"],
+    [5, "Legacy Table with five columns"],
+    [6, "Legacy Table with six columns"],
+  ]) {
+    assert.deepEqual(snippets[name].body, legacyTableSnippetBody(columns));
+  }
 });
 
 test("extension manifest contributes a Gauge TextMate grammar", () => {

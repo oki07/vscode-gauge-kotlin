@@ -104,54 +104,60 @@
   "Legacy Table with one column": {
     "prefix": "table:1",
     "body": [
-      "|${1:HEADER}|",
-      "|${2:value}|",
-      "|${3:value}$0|"
+      "",
+      "    |${1:HEADER}|",
+      "    |${2:value}|",
+      "    |${3:value}$0|"
     ],
     "description": "table of 1 column"
   },
   "Legacy Table with two columns": {
     "prefix": "table:2",
     "body": [
-      "|${1:HEADER}|${2:HEADER}|",
-      "|${3:value}|${4:value}|",
-      "|${5:value}|${6:value}$0|"
+      "",
+      "    |${1:HEADER}|${2:HEADER}|",
+      "    |${3:value}|${4:value}|",
+      "    |${5:value}|${6:value}$0|"
     ],
     "description": "table of 2 columns"
   },
   "Legacy Table with three columns": {
     "prefix": "table:3",
     "body": [
-      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|",
-      "|${4:value}|${5:value}|${6:value}|",
-      "|${7:value}|${8:value}|${9:value}$0|"
+      "",
+      "    |${1:HEADER}|${2:HEADER}|${3:HEADER}|",
+      "    |${4:value}|${5:value}|${6:value}|",
+      "    |${7:value}|${8:value}|${9:value}$0|"
     ],
     "description": "table of 3 columns"
   },
   "Legacy Table with four columns": {
     "prefix": "table:4",
     "body": [
-      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|",
-      "|${5:value}|${6:value}|${7:value}|${8:value}|",
-      "|${9:value}|${10:value}|${11:value}|${12:value}$0|"
+      "",
+      "    |${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|",
+      "    |${5:value}|${6:value}|${7:value}|${8:value}|",
+      "    |${9:value}|${10:value}|${11:value}|${12:value}$0|"
     ],
     "description": "table of 4 columns"
   },
   "Legacy Table with five columns": {
     "prefix": "table:5",
     "body": [
-      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|",
-      "|${6:value}|${7:value}|${8:value}|${9:value}|${10:value}|",
-      "|${11:value}|${12:value}|${13:value}|${14:value}|${15:value}$0|"
+      "",
+      "    |${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|",
+      "    |${6:value}|${7:value}|${8:value}|${9:value}|${10:value}|",
+      "    |${11:value}|${12:value}|${13:value}|${14:value}|${15:value}$0|"
     ],
     "description": "table of 5 columns"
   },
   "Legacy Table with six columns": {
     "prefix": "table:6",
     "body": [
-      "|${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|${6:HEADER}|",
-      "|${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
-      "|${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|"
+      "",
+      "    |${1:HEADER}|${2:HEADER}|${3:HEADER}|${4:HEADER}|${5:HEADER}|${6:HEADER}|",
+      "    |${7:value}|${8:value}|${9:value}|${10:value}|${11:value}|${12:value}|",
+      "    |${13:value}|${14:value}|${15:value}|${16:value}|${17:value}|${18:value}$0|"
     ],
     "description": "table of 6 columns"
   }
