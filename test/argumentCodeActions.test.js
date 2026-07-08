@@ -369,3 +369,46 @@ test("selectArgumentRange selects the converted Gauge argument body", () => {
   assert.deepEqual({ ...activeTextEditor.selection.start }, { line: 0, character: 8 });
   assert.deepEqual({ ...activeTextEditor.selection.end }, { line: 0, character: 12 });
 });
+
+test("registerArgumentSelectionCommand selects through the registered command handler", () => {
+  const {
+    SELECT_ARGUMENT_RANGE_COMMAND,
+    registerArgumentSelectionCommand,
+  } = require("../src/argumentCodeActions");
+  const vscode = createFakeVscode();
+  const registeredCommands = [];
+  const activeTextEditor = {
+    document: { uri: { fsPath: "/workspace/specs/example.spec" } },
+    selection: undefined,
+  };
+  vscode.Selection = class Selection {
+    constructor(start, end) {
+      this.start = start;
+      this.end = end;
+    }
+  };
+  vscode.commands = {
+    registerCommand(command, handler) {
+      registeredCommands.push({ command, handler });
+      return { dispose() {} };
+    },
+  };
+  vscode.window = { activeTextEditor };
+
+  const disposable = registerArgumentSelectionCommand(vscode);
+  const range = {
+    start: new vscode.Position(0, 8),
+    end: new vscode.Position(0, 12),
+  };
+  const selection = registeredCommands[0].handler(
+    { fsPath: "/workspace/specs/example.spec" },
+    range,
+  );
+
+  assert.equal(typeof disposable.dispose, "function");
+  assert.equal(registeredCommands[0].command, SELECT_ARGUMENT_RANGE_COMMAND);
+  assert.deepEqual({ ...selection.start }, { line: 0, character: 8 });
+  assert.deepEqual({ ...selection.end }, { line: 0, character: 12 });
+  assert.deepEqual({ ...activeTextEditor.selection.start }, { line: 0, character: 8 });
+  assert.deepEqual({ ...activeTextEditor.selection.end }, { line: 0, character: 12 });
+});
