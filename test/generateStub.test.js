@@ -603,6 +603,9 @@ test("GenerateStubCommandProvider defaults new step files to Java paths for Java
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const requests = [];
   const appliedEdits = [];
+  const events = [];
+  const existing = new Set();
+  const writes = [];
   const {
     commands,
     inputBoxes,
@@ -636,6 +639,7 @@ test("GenerateStubCommandProvider defaults new step files to Java paths for Java
         return Promise.resolve([]);
       }
       if (method === "gauge/putStubImpl") {
+        events.push("request");
         return Promise.resolve({ changes: [] });
       }
       throw new Error(`Unexpected ${method}`);
@@ -647,8 +651,24 @@ test("GenerateStubCommandProvider defaults new step files to Java paths for Java
       return { project, client };
     },
   };
+  const fileSystem = {
+    existsSync(candidate) {
+      return existing.has(candidate);
+    },
+    mkdirSync(directory, options) {
+      events.push("mkdir");
+      existing.add(directory);
+      writes.push({ directory, options });
+    },
+    writeFileSync(candidate, content, options) {
+      events.push("write");
+      existing.add(candidate);
+      writes.push({ content, filename: candidate, options });
+    },
+  };
 
   new GenerateStubCommandProvider(clients, {
+    fileSystem,
     pathModule: path.posix,
     vscode,
     workspaceEditorFactory(edit) {
@@ -692,5 +712,17 @@ test("GenerateStubCommandProvider defaults new step files to Java paths for Java
       ].join("\n")],
     },
   });
+  assert.deepEqual(writes, [
+    {
+      directory: "/workspace/src/test/java",
+      options: { recursive: true },
+    },
+    {
+      content: "",
+      filename: "/workspace/src/test/java/NewSteps.java",
+      options: { encoding: "utf8" },
+    },
+  ]);
+  assert.deepEqual(events, ["mkdir", "write", "request"]);
   assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
 });

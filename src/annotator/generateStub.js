@@ -1,5 +1,6 @@
 "use strict";
 
+const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { WorkspaceEditor } = require("../refactor/workspaceEditor");
 const {
@@ -117,7 +118,7 @@ class GenerateStubCommandProvider {
     this.clients = clients;
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
-    this.fileSystem = options.fileSystem;
+    this.fileSystem = options.fileSystem || nodeFs;
     this.workspaceEditorFactory = options.workspaceEditorFactory
       || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit, {
         fileSystem: this.fileSystem,
@@ -167,6 +168,9 @@ class GenerateStubCommandProvider {
         );
         if (!implementationFilePath) {
           return undefined;
+        }
+        if (selected.value === NEW_FILE) {
+          this.ensureNewImplementationFile(implementationFilePath);
         }
         const selectedCode = this.stepCodeForImplementationFile(code, implementationFilePath);
         return this.generateInFile(
@@ -226,6 +230,30 @@ class GenerateStubCommandProvider {
       return this.pathModule.normalize(trimmed);
     }
     return this.pathModule.join(projectRoot, trimmed);
+  }
+
+  ensureNewImplementationFile(implementationFilePath) {
+    if (
+      !implementationFilePath
+      || !String(implementationFilePath).toLowerCase().endsWith(".java")
+      || !this.fileSystem
+      || typeof this.fileSystem.existsSync !== "function"
+      || typeof this.fileSystem.writeFileSync !== "function"
+    ) {
+      return;
+    }
+    if (this.fileSystem.existsSync(implementationFilePath)) {
+      return;
+    }
+    const directory = this.pathModule.dirname(implementationFilePath);
+    if (
+      directory
+      && typeof this.fileSystem.mkdirSync === "function"
+      && !this.fileSystem.existsSync(directory)
+    ) {
+      this.fileSystem.mkdirSync(directory, { recursive: true });
+    }
+    this.fileSystem.writeFileSync(implementationFilePath, "", { encoding: "utf8" });
   }
 
   implementationFileText(implementationFilePath) {
