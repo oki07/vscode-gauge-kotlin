@@ -38,6 +38,29 @@ test("GaugeConfig resolves Windows plugin path from GAUGE_HOME", () => {
   assert.equal(config.pluginsPath(), "/custom/gauge/plugins");
 });
 
+test("GaugeConfig resolves plugin path from configured gauge.home before GAUGE_HOME", () => {
+  const { GaugeConfig } = require("../src/config/gaugeConfig");
+
+  const config = new GaugeConfig("darwin", {
+    env: { GAUGE_HOME: "/env/gauge" },
+    pathModule: path.posix,
+    vscode: {
+      workspace: {
+        getConfiguration(section) {
+          assert.equal(section, "gauge");
+          return {
+            get(key) {
+              return key === "home" ? "/configured/gauge" : "";
+            },
+          };
+        },
+      },
+    },
+  });
+
+  assert.equal(config.pluginsPath(), "/configured/gauge/plugins");
+});
+
 test("GaugeConfig resolves non-Windows plugin path from the user home", () => {
   const { GaugeConfig } = require("../src/config/gaugeConfig");
 
