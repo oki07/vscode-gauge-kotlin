@@ -185,8 +185,8 @@ function isTableLine(line) {
   return line.trimStart().startsWith("|");
 }
 
-function isTableBlockStartLine(line) {
-  return line.startsWith("|");
+function isTableBlockStartLine(line, options = {}) {
+  return options.allowIndented ? isTableLine(line) : line.startsWith("|");
 }
 
 function isStepLine(line) {
@@ -210,7 +210,7 @@ function isHashHeadingLine(line, conceptDocument) {
   return conceptDocument ? isConceptHashHeading(line) : isGaugeHashHeading(line);
 }
 
-function tableBlockStartLine(lines, lineNumber) {
+function tableBlockStartLine(lines, lineNumber, options = {}) {
   if (!isTableLine(lines[lineNumber] || "")) {
     return -1;
   }
@@ -219,15 +219,35 @@ function tableBlockStartLine(lines, lineNumber) {
   while (startLine > 0 && isTableLine(lines[startLine - 1] || "")) {
     startLine -= 1;
   }
-  return isTableBlockStartLine(lines[startLine] || "") ? startLine : -1;
+  return isTableBlockStartLine(lines[startLine] || "", options) ? startLine : -1;
+}
+
+function indentedInlineTableBlockStartLine(lines, lineNumber) {
+  const startLine = tableBlockStartLine(lines, lineNumber, { allowIndented: true });
+  if (startLine <= 0) {
+    return -1;
+  }
+  const startText = lines[startLine] || "";
+  return (
+    isTableLine(startText)
+    && !startText.startsWith("|")
+    && isStepLine(lines[startLine - 1] || "")
+  )
+    ? startLine
+    : -1;
+}
+
+function semanticTableBlockStartLine(lines, lineNumber) {
+  const startLine = tableBlockStartLine(lines, lineNumber);
+  return startLine !== -1 ? startLine : indentedInlineTableBlockStartLine(lines, lineNumber);
 }
 
 function isFirstTableLine(lines, lineNumber) {
-  return tableBlockStartLine(lines, lineNumber) === lineNumber;
+  return semanticTableBlockStartLine(lines, lineNumber) === lineNumber;
 }
 
 function isTableBlockLine(lines, lineNumber) {
-  return tableBlockStartLine(lines, lineNumber) !== -1;
+  return semanticTableBlockStartLine(lines, lineNumber) !== -1;
 }
 
 class GaugeSemanticTokensProvider {
@@ -374,7 +394,7 @@ class GaugeSemanticTokensProvider {
         index += 1;
       } else if (isTableBlockLine(lines, index)) {
         inTagContinuation = false;
-        const tableStartLine = tableBlockStartLine(lines, index);
+        const tableStartLine = semanticTableBlockStartLine(lines, index);
         if (index === tableStartLine + 1 && tableHeaderSeparatorRegex.test(trimmedLine)) {
           for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
             const char = line[charIndex];

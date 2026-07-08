@@ -885,6 +885,47 @@ test("GaugeSemanticTokensProvider treats indented top-level table markers as com
   ]);
 });
 
+test("GaugeSemanticTokensProvider tokenizes indented inline tables after steps", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const tableArgumentLine = "    | <third> |Project|";
+  const document = {
+    getText() {
+      return [
+        "* Step that takes a table",
+        "    |Product|Description|",
+        "    |-------|-----------|",
+        "    |Gauge  |BDD style  |",
+        tableArgumentLine,
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+  ]);
+  assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tableHeader"), true);
+  assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tableBorder"), true);
+  assert.equal(tokens.some((entry) => entry.line === 2 && entry.type === "tableHeaderSeparator"), true);
+  assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "table"), true);
+  assert.equal(tokens.some((entry) => (
+    entry.line === 4
+    && entry.type === "dynamicArgument"
+    && entry.start === tableArgumentLine.indexOf("<third>")
+    && entry.length === "<third>".length
+  )), true);
+  assert.equal(tokens.some((entry) => entry.line > 0 && entry.type === "gaugeComment"), false);
+});
+
 test("GaugeSemanticTokensProvider keeps escaped table pipes in cell tokens", () => {
   const {
     GaugeSemanticTokensProvider,
