@@ -984,6 +984,10 @@ test("GaugeWorkspace starts and stops clients as workspace folders change", asyn
   });
 
   assert.equal(clients.get("/workspace/two").client.started, true);
+  assert.deepEqual([...workspace.getClientLanguageMap().keys()].sort(), [
+    "/workspace/one",
+    "/workspace/two",
+  ]);
 
   await workspaceFolderListeners[0]({
     added: [],
@@ -993,6 +997,7 @@ test("GaugeWorkspace starts and stops clients as workspace folders change", asyn
   assert.equal(clients.get("/workspace/one"), undefined);
   assert.equal(firstClient.stopped, true);
   assert.equal(clients.get("/workspace/two").client.stopped, false);
+  assert.deepEqual([...workspace.getClientLanguageMap().keys()], ["/workspace/two"]);
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:multipleProjects?", value: false },
     { command: "setContext", key: "gauge:multipleProjects?", value: true },

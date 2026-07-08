@@ -504,7 +504,9 @@ class GaugeWorkspace {
     if (!projectClient) {
       return;
     }
-    this.clientsMap.delete(projectClient.project.root());
+    const projectRoot = projectClient.project.root();
+    this.clientsMap.delete(projectRoot);
+    this.clientLanguageMap.delete(projectRoot);
     if (projectClient.client && typeof projectClient.client.stop === "function") {
       await projectClient.client.stop();
     }
