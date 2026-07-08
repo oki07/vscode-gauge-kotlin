@@ -277,3 +277,28 @@ test("toggleGaugeLineComment delegates Markdown files when the resolved root is 
   assert.deepEqual(appliedEdits, []);
   assert.deepEqual(commandCalls, [DEFAULT_COMMENT_COMMAND]);
 });
+
+test("toggleGaugeLineComment delegates Gauge files when project root is unresolved", async () => {
+  const { DEFAULT_COMMENT_COMMAND, toggleGaugeLineComment } = require("../src/commentCommand");
+  const document = createDocument(
+    "* Draft step",
+    "plaintext",
+    "/workspace/notes/example.spec",
+  );
+  const { appliedEdits, commandCalls, vscode } = createFakeVscode(
+    document,
+    createSelection(0, 0, 0, 0),
+  );
+
+  await toggleGaugeLineComment(vscode, {
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.spec");
+        return undefined;
+      },
+    },
+  });
+
+  assert.deepEqual(appliedEdits, []);
+  assert.deepEqual(commandCalls, [DEFAULT_COMMENT_COMMAND]);
+});

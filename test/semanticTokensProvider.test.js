@@ -363,6 +363,31 @@ test("GaugeSemanticTokensProvider ignores Gauge files by extension outside Gauge
   ]);
 });
 
+test("GaugeSemanticTokensProvider ignores Gauge files when project root is unresolved", () => {
+  const { GaugeSemanticTokensProvider } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.spec");
+        return undefined;
+      },
+    },
+  });
+  const document = {
+    languageId: "plaintext",
+    uri: { fsPath: "/workspace/notes/example.spec" },
+    getText() {
+      return [
+        "# Notes",
+        "* Draft",
+      ].join("\n");
+    },
+  };
+
+  assert.deepEqual(provider.provideDocumentSemanticTokens(document), []);
+});
+
 test("GaugeSemanticTokensProvider keeps quoted concept heading text plain", () => {
   const {
     GaugeSemanticTokensProvider,

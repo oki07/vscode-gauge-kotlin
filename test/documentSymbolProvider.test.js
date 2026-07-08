@@ -135,6 +135,27 @@ test("GaugeDocumentSymbolProvider lists concept symbols by extension", () => {
   assert.deepEqual({ ...symbols[1].location.range.start }, { line: 3, character: 0 });
 });
 
+test("GaugeDocumentSymbolProvider ignores Gauge files when project root is unresolved", () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDocumentSymbolProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/notes/example.spec");
+        return undefined;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Notes",
+    "",
+    "## Draft",
+  ].join("\n"), "/workspace/notes/example.spec", "plaintext");
+
+  assert.deepEqual(provider.provideDocumentSymbols(document), []);
+});
+
 test("GaugeDocumentSymbolProvider prefixes legacy underline symbols like Gauge LSP", () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();

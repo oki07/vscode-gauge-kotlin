@@ -51,6 +51,9 @@ function isGaugeProjectDocument(document, projectFactory) {
   }
   try {
     const root = projectFactory.getGaugeRootFromFilePath(documentPath(document));
+    if (!root) {
+      return false;
+    }
     if (typeof projectFactory.isGaugeProject === "function") {
       return projectFactory.isGaugeProject(root) !== false;
     }
