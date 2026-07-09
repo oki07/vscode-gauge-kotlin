@@ -136,8 +136,7 @@ test("GaugeFoldingRangeProvider folds only hash headings accepted by the Gauge l
 
   assert.deepEqual(provider.provideFoldingRanges(document), [
     { start: 0, end: 1 },
-    { start: 3, end: 4 },
-    { start: 6, end: 7 },
+    { start: 3, end: 7 },
   ]);
 });
 

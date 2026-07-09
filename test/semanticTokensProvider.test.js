@@ -360,7 +360,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats triple-hash headings as scenarios", () => {
+test("GaugeSemanticTokensProvider treats triple-hash headings as comments", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -383,7 +383,7 @@ test("GaugeSemanticTokensProvider treats triple-hash headings as scenarios", () 
 
   assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
     [0, "specification"],
-    [1, "scenario"],
+    [1, "gaugeComment"],
   ]);
 });
 

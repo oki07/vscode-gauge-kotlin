@@ -410,12 +410,13 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers wi
   assert.deepEqual(labels(items), ["user", "role"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider suggests scenario table headers after triple-hash headings", () => {
+test("GaugeDynamicArgumentCompletionProvider ignores scenario table headers after triple-hash comments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
   const document = createDocument([
     "# Checkout",
+    "* Open cart",
     "### Notes",
     "| user | role |",
     "| ---- | ---- |",
@@ -424,9 +425,9 @@ test("GaugeDynamicArgumentCompletionProvider suggests scenario table headers aft
     "* Login as <u>",
   ].join("\n"));
 
-  const items = provider.provideCompletionItems(document, new vscode.Position(6, 13));
+  const items = provider.provideCompletionItems(document, new vscode.Position(7, 13));
 
-  assert.deepEqual(labels(items), ["user", "role"]);
+  assert.deepEqual(labels(items), []);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests headers inside escaped dynamic arguments", () => {

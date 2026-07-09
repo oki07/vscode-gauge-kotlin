@@ -279,7 +279,7 @@ test("GaugeCodeLensProvider ignores Markdown files outside Gauge projects", () =
   assert.deepEqual(provider.provideCodeLenses(document), []);
 });
 
-test("GaugeCodeLensProvider treats triple-hash headings as scenarios", () => {
+test("GaugeCodeLensProvider treats triple-hash headings as comments", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
   const document = createDocument([
@@ -298,16 +298,6 @@ test("GaugeCodeLensProvider treats triple-hash headings as scenarios", () => {
     title: lens.command.title,
     argument: lens.command.arguments[0],
   })), [
-    {
-      line: 3,
-      title: "Run Scenario",
-      argument: "/workspace/specs/example.spec:4",
-    },
-    {
-      line: 3,
-      title: "Debug Scenario",
-      argument: "/workspace/specs/example.spec:4",
-    },
     {
       line: 0,
       title: "Run Spec",

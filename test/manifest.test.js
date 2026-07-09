@@ -670,7 +670,6 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
       "#tableKeyword",
       "#specHeading",
       "#scenarioHeading",
-      "#conceptHeading",
       "#step",
       "#teardown",
       "#table",
@@ -762,7 +761,8 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
 
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title", "#");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "##Scenario");
-  assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes");
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "### Notes").include, "#fallbackComment");
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 1), "=", "=");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 1), "-", "-");
 

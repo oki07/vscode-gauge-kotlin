@@ -27,9 +27,6 @@
       "include": "#scenarioHeading"
     },
     {
-      "include": "#conceptHeading"
-    },
-    {
       "include": "#step"
     },
     {
@@ -133,7 +130,7 @@
       "patterns": [
         {
           "name": "markup.heading.scenario.gauge",
-          "match": "^\\s*##.*$"
+          "match": "^\\s*##(?!#).*$"
         },
         {
           "name": "punctuation.definition.heading.scenario.gauge",
