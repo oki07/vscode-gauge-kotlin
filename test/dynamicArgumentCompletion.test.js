@@ -188,6 +188,10 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
         encoding: "utf8",
         filename: "/workspace/gauge/env/default/default.properties",
       },
+      {
+        encoding: "utf8",
+        filename: "/workspace/gauge/env/default/default.properties",
+      },
     ]);
   } finally {
     if (originalDelimiter === undefined) {
@@ -241,6 +245,56 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec dynamic step argument
   const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
 
   assert.deepEqual(labels(items), ["customer"]);
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests multiline spec dynamic arguments when project allows them", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Seed",
+    "<customer>",
+    "",
+    "## Successful checkout",
+    "* Login as <cu>",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+  try {
+    const items = provider.provideCompletionItems(document, new vscode.Position(5, 13));
+
+    assert.deepEqual(labels(items), ["customer"]);
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag lines", async () => {

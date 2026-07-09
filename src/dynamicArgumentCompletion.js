@@ -21,6 +21,7 @@ const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const CSV_DELIMITER_PROPERTY = "csv_delimiter";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
@@ -632,7 +633,7 @@ function propertiesValue(content, key) {
   return undefined;
 }
 
-function projectCsvDelimiter(options = {}) {
+function projectDefaultProperty(options = {}, key) {
   const fileSystem = options.fileSystem;
   if (!fileSystem || typeof fileSystem.readFileSync !== "function" || !options.projectRoot) {
     return undefined;
@@ -640,15 +641,39 @@ function projectCsvDelimiter(options = {}) {
   const pathModule = options.pathModule || nodePath;
   try {
     const filename = pathModule.join(options.projectRoot, ...DEFAULT_ENV_PROPERTIES);
-    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), CSV_DELIMITER_PROPERTY);
+    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), key);
   } catch (_error) {
     return undefined;
   }
 }
 
+function projectCsvDelimiter(options = {}) {
+  return projectDefaultProperty(options, CSV_DELIMITER_PROPERTY);
+}
+
 function csvDelimiter(options = {}) {
   const delimiter = process.env.csv_delimiter || projectCsvDelimiter(options);
   return delimiter ? delimiter[0] : ",";
+}
+
+function boolProperty(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+  if (normalized === "false") {
+    return false;
+  }
+  return undefined;
+}
+
+function allowMultilineStep(options = {}) {
+  const envValue = boolProperty(process.env.allow_multiline_step);
+  if (envValue !== undefined) {
+    return envValue;
+  }
+  const projectValue = boolProperty(projectDefaultProperty(options, ALLOW_MULTILINE_STEP_PROPERTY));
+  return projectValue === true;
 }
 
 function csvHeaderCells(content, options = {}) {
@@ -747,6 +772,25 @@ function isTableSeparatorLine(line) {
   return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
 }
 
+function isDocStringFenceLine(line) {
+  return String(line || "").trim() === "\"\"\"";
+}
+
+function isGaugeSyntaxBoundary(line) {
+  const text = String(line || "").trim();
+  return !text
+    || text.startsWith("*")
+    || text.startsWith("#")
+    || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
+    || text.toLowerCase().startsWith("table:")
+    || text.toLowerCase().startsWith("table :")
+    || isTableLine(text)
+    || isDocStringFenceLine(text)
+    || /^={3,}\s*$/.test(text)
+    || /^-{3,}\s*$/.test(text);
+}
+
 function dynamicArgumentsInLine(line, options = {}) {
   const values = [];
   let openIndex = line.indexOf("<");
@@ -805,9 +849,27 @@ function conceptDynamicArguments(text) {
   return unique(values);
 }
 
-function specDynamicArguments(text, currentLineNumber) {
+function multilineStepText(lines, lineNumber) {
+  const line = lines[lineNumber] || "";
+  const marker = String(line).search(/\S/);
+  if (marker === -1 || line[marker] !== "*") {
+    return line;
+  }
+  const stepLines = [line.slice(marker + 1).trim()];
+  for (let nextLine = lineNumber + 1; nextLine < lines.length; nextLine += 1) {
+    const nextText = lines[nextLine] || "";
+    if (isGaugeSyntaxBoundary(nextText)) {
+      break;
+    }
+    stepLines.push(nextText.trim());
+  }
+  return stepLines.join(" ");
+}
+
+function specDynamicArguments(text, currentLineNumber, options = {}) {
   const values = [];
   const lines = text.split(/\r?\n/);
+  const multiline = Boolean(options.allowMultilineStep);
   for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
     if (lineNumber === currentLineNumber) {
       continue;
@@ -816,7 +878,7 @@ function specDynamicArguments(text, currentLineNumber) {
     if (!isStepLine(line)) {
       continue;
     }
-    values.push(...dynamicArgumentsInLine(line));
+    values.push(...dynamicArgumentsInLine(multiline ? multilineStepText(lines, lineNumber) : line));
   }
   return unique(values);
 }
@@ -1357,7 +1419,13 @@ class GaugeDynamicArgumentCompletionProvider {
                 projectRoot: this.gaugeProjectRoot(document),
               }),
               ...scenarioDataTableHeaders(document.getText(), position.line),
-              ...specDynamicArguments(document.getText(), position.line),
+              ...specDynamicArguments(document.getText(), position.line, {
+                allowMultilineStep: allowMultilineStep({
+                  fileSystem: this.fileSystem,
+                  pathModule: this.pathModule,
+                  projectRoot: this.gaugeProjectRoot(document),
+                }),
+              }),
             ])
         )
         : staticArguments(document.getText(), {
