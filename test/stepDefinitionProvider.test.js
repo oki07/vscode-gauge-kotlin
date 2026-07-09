@@ -1268,12 +1268,16 @@ test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
     "",
     "## Successful login",
     "* Log in as \"alice\"",
+    "** Bold comment",
   ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
   const kotlinDocument = createDocument([
     "import com.thoughtworks.gauge.Step",
     "",
     "@Step(\"Log in as <user>\")",
     "fun login(user: String) {}",
+    "",
+    "@Step(\"* Bold comment\")",
+    "fun bold() {}",
   ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt");
   const vscode = createFakeVscode([specDocument, kotlinDocument]);
   const provider = new GaugeStepDefinitionProvider({
@@ -1283,6 +1287,10 @@ test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
 
   assert.deepEqual(
     await provider.provideDefinition(specDocument, { line: 0, character: 2 }),
+    [],
+  );
+  assert.deepEqual(
+    await provider.provideDefinition(specDocument, { line: 4, character: 3 }),
     [],
   );
 });

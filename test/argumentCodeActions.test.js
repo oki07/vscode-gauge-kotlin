@@ -287,6 +287,10 @@ test("GaugeArgumentCodeActionProvider ignores non-step text", () => {
     provider.provideCodeActions(createDocument('Note "cart"'), createRange(0, 7)),
     [],
   );
+  assert.deepEqual(
+    provider.provideCodeActions(createDocument('** Bold "cart"'), createRange(0, 10)),
+    [],
+  );
 });
 
 test("GaugeArgumentCodeActionProvider ignores specification and scenario headings", () => {

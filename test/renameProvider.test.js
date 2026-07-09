@@ -1586,6 +1586,26 @@ test("GaugeRenameProvider does not open unopened files outside Gauge projects du
   ]);
 });
 
+test("GaugeRenameProvider ignores double-star comment lines", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "** Bold comment",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"* Bold comment\")",
+    "fun bold() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const prepared = await provider.prepareRename(specDocument, new vscode.Position(1, 3));
+
+  assert.equal(prepared, undefined);
+});
+
 test("GaugeRenameProvider preserves inline table step identity when renaming", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

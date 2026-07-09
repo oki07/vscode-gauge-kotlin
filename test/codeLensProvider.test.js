@@ -608,6 +608,33 @@ test("GaugeCodeLensProvider adds separate reference lenses for Step aliases", as
   ]);
 });
 
+test("GaugeCodeLensProvider ignores double-star lines in reference counts", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"* Bold comment\")",
+    "fun bold() {}",
+  ].join("\n"), "/workspace/tests/BoldSteps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Notes",
+    "** Bold comment",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.command.title), [
+    "0 reference(s)",
+  ]);
+});
+
 test("GaugeCodeLensProvider skips unopened Step sources resolved to non-Gauge projects", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const openedFiles = [];

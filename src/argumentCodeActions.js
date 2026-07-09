@@ -103,7 +103,7 @@ function uriPath(uri) {
 
 function isGaugeStepOrConceptHeading(line, document) {
   const marker = String(line || "").search(/\S/);
-  if (marker !== -1 && line[marker] === "*") {
+  if (marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*") {
     return true;
   }
   return isConceptHeadingLine(line, document);

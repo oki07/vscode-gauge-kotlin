@@ -4764,6 +4764,7 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     "* Confirm order",
     "* Reuse payment concept",
     "*",
+    "** Markdown bullet",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const kotlinDocument = createDocument([
     "@Step(\"Confirm order\")",

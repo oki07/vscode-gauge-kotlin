@@ -387,6 +387,29 @@ test("GaugeSemanticTokensProvider treats triple-hash headings as comments", () =
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats double-star lines as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return "** Bold comment";
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
+    [0, "gaugeComment"],
+  ]);
+});
+
 test("GaugeSemanticTokensProvider ignores Markdown outside Gauge projects", () => {
   const { GaugeSemanticTokensProvider } = require("../src/semanticTokensProvider");
   const provider = new GaugeSemanticTokensProvider({

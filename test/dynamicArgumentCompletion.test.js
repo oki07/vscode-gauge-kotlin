@@ -1257,6 +1257,35 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Mar
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores double-star comment lines", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "** Log",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"* Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/CheckoutSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 6));
+
+  assert.deepEqual(labels(items), []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests Step aliases in spec files by extension", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

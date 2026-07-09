@@ -177,7 +177,8 @@ function isScenarioHeading(line) {
 }
 
 function isStepLine(line) {
-  return String(line || "").trimStart().startsWith("*");
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*";
 }
 
 function isConceptHeading(line) {
@@ -293,7 +294,12 @@ function isThenable(value) {
 
 function stepCompletionRange(line, position) {
   const markerStart = String(line || "").search(/\S/);
-  if (markerStart === -1 || line[markerStart] !== "*" || position.character <= markerStart) {
+  if (
+    markerStart === -1
+    || line[markerStart] !== "*"
+    || line[markerStart + 1] === "*"
+    || position.character <= markerStart
+  ) {
     return undefined;
   }
   const marker = /^[ \t]*\*[ \t]*/.exec(line);
