@@ -5227,6 +5227,69 @@ test("GaugeStepDiagnosticsProvider warns when multiple Gauge external data table
   assert.deepEqual({ ...diagnostics[1].range.end }, { line: 7, character: 17 });
 });
 
+test("GaugeStepDiagnosticsProvider warns when duplicate external tables appear after Gauge steps", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        return [
+          "/workspace/gauge/users.csv",
+          "/workspace/gauge/phones.csv",
+          "/workspace/gauge/names.csv",
+          "/workspace/gauge/emails.csv",
+        ].includes(filename);
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table: users.csv",
+    "* Prepare checkout",
+    "Table: phones.csv",
+    "## Scenario",
+    "Table: names.csv",
+    "* Confirm order",
+    "Table: emails.csv",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Prepare checkout\")",
+    "fun prepare() {}",
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Multiple data table present, ignoring table",
+      "Multiple data table present, ignoring table",
+    ],
+  );
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.severity),
+    ["warning", "warning"],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 17 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 7, character: 0 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 7, character: 17 });
+});
+
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge dynamic step parameters without data tables", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

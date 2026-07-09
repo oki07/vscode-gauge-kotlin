@@ -4409,7 +4409,7 @@ function multipleDataTableDiagnostics(vscode, text, options = {}) {
 
     const externalLocation = externalDataTableLocation(rawLine);
     if (externalLocation !== undefined) {
-      if (externalLocation && externalTableExists(externalLocation, options) && !sectionHasStep) {
+      if (externalLocation && externalTableExists(externalLocation, options)) {
         if (inScenario) {
           if (scenarioHasDataTable) {
             diagnostics.push(createDiagnostic(
