@@ -28,6 +28,7 @@ const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const DATA_TABLE_WITHOUT_ROW_MESSAGE = "Data table should have at least 1 data row";
 const MULTIPLE_DATA_TABLE_MESSAGE = "Multiple data table present, ignoring table";
+const DATA_TABLE_NOT_ASSOCIATED_MESSAGE = "Data table not associated with spec or scenario";
 const TABLE_LOCATION_MISSING_MESSAGE = "Table location not specified";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
 const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
@@ -4088,6 +4089,60 @@ function resolveExternalTablePath(location, options = {}) {
     return undefined;
   }
   return pathModule.join(options.projectRoot, location);
+}
+
+function externalTableExists(location, options = {}) {
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.existsSync !== "function") {
+    return true;
+  }
+  const filename = resolveExternalTablePath(location, options);
+  return filename === undefined || fileSystem.existsSync(filename);
+}
+
+function externalDataTableScopeDiagnostics(vscode, text, options = {}) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  let hasSpecHeading = false;
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      hasSpecHeading = true;
+      continue;
+    }
+
+    const match = /^\s*table\s*:\s*(.*)$/i.exec(rawLine);
+    if (!match) {
+      continue;
+    }
+    const location = match[1].trim();
+    if (hasSpecHeading || !location || !externalTableExists(location, options)) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      lineContentRange(vscode, rawLine, line),
+      DATA_TABLE_NOT_ASSOCIATED_MESSAGE,
+      { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+    ));
+  }
+
+  return diagnostics;
 }
 
 function tableLocationDiagnostics(vscode, text, options = {}) {
@@ -8251,6 +8306,11 @@ class GaugeStepDiagnosticsProvider {
       diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
       if (isGaugeSpecDocument(document)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
+        diagnostics.push(...externalDataTableScopeDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
         diagnostics.push(...tableLocationDiagnostics(this.vscode, text, {
           fileSystem: this.fileSystem,
           pathModule: this.pathModule,

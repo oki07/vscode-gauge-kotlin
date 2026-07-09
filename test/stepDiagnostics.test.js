@@ -4921,6 +4921,53 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge external table files
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 23 });
 });
 
+test("GaugeStepDiagnosticsProvider warns when Gauge external tables are outside specs and scenarios", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/users.csv");
+        return true;
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "Table: users.csv",
+    "# Checkout",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Data table not associated with spec or scenario",
+    ],
+  );
+  assert.equal(diagnostics[0].severity, "warning");
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 16 });
+});
+
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge inline table file parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({
