@@ -1,5 +1,8 @@
 "use strict";
 
+const nodeFs = require("node:fs");
+const nodePath = require("node:path");
+
 const {
   isScenarioHashHeading,
   isSpecHashHeading,
@@ -26,6 +29,8 @@ const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const REFERENCE_CONFIG = "reference";
 const GAUGE_REFERENCE_WORKSPACE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
+const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
+const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
 function getVscode(vscode) {
   return vscode || {};
@@ -164,22 +169,171 @@ function gaugeStepText(line) {
   return text || undefined;
 }
 
-function countStepReferences(document, normalizedStep) {
+function isDocStringFenceLine(line) {
+  return String(line || "").trim() === "\"\"\"";
+}
+
+function isGaugeSyntaxBoundary(line) {
+  const text = String(line || "").trim();
+  return !text
+    || text.startsWith("*")
+    || text.startsWith("#")
+    || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
+    || text.toLowerCase().startsWith("table:")
+    || text.toLowerCase().startsWith("table :")
+    || isTableLine(text)
+    || isDocStringFenceLine(text)
+    || /^={3,}\s*$/.test(text)
+    || /^-{3,}\s*$/.test(text);
+}
+
+function multilineGaugeStepText(lines, lineNumber) {
+  const line = lines[lineNumber] || "";
+  const stepText = gaugeStepText(line);
+  if (!stepText) {
+    return undefined;
+  }
+  const stepLines = [stepText];
+  for (let nextLine = lineNumber + 1; nextLine < lines.length; nextLine += 1) {
+    const nextText = lines[nextLine] || "";
+    if (isGaugeSyntaxBoundary(nextText)) {
+      break;
+    }
+    stepLines.push(nextText.trim());
+  }
+  return stepLines.join(" ").trim();
+}
+
+function countStepReferences(document, normalizedStep, options = {}) {
   if (!normalizedStep || !document || typeof document.getText !== "function") {
     return 0;
   }
   let count = 0;
   const lines = document.getText().split(/\r?\n/);
+  const multiline = Boolean(options.allowMultilineStep);
   for (let line = 0; line < lines.length; line += 1) {
-    let stepText = gaugeStepText(lines[line].replace(/\r$/, ""));
-    if (stepText && lines[line + 1] !== undefined && isTableLine(lines[line + 1])) {
+    let stepText = multiline
+      ? multilineGaugeStepText(lines, line)
+      : gaugeStepText(lines[line].replace(/\r$/, ""));
+    let stepEndLine = line;
+    if (multiline && stepText) {
+      for (let nextLine = line + 1; nextLine < lines.length; nextLine += 1) {
+        if (isGaugeSyntaxBoundary(lines[nextLine])) {
+          break;
+        }
+        stepEndLine = nextLine;
+      }
+    }
+    if (stepText && lines[stepEndLine + 1] !== undefined && isTableLine(lines[stepEndLine + 1])) {
       stepText = `${stepText} <table>`;
     }
     if (stepText && normalizeStepTemplate(stepText) === normalizedStep) {
       count += 1;
     }
+    line = stepEndLine;
   }
   return count;
+}
+
+function isEscapedCharacter(line, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function firstUnescapedIndex(line, characters) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (characters.has(line[index]) && !isEscapedCharacter(line, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function firstWhitespaceIndex(line) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (/\s/.test(line[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function unescapePropertyValue(value) {
+  return String(value || "")
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
+      if (character === "t") {
+        return "\t";
+      }
+      if (character === "n") {
+        return "\n";
+      }
+      if (character === "r") {
+        return "\r";
+      }
+      if (character === "f") {
+        return "\f";
+      }
+      return character;
+    });
+}
+
+function propertiesValue(content, key) {
+  const separators = new Set(["=", ":"]);
+  for (const rawLine of String(content || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) {
+      continue;
+    }
+    const explicitSeparator = firstUnescapedIndex(line, separators);
+    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
+    if (separator === -1) {
+      continue;
+    }
+    if (line.slice(0, separator).trim() !== key) {
+      continue;
+    }
+    return unescapePropertyValue(line.slice(separator + 1).trim());
+  }
+  return undefined;
+}
+
+function boolProperty(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+  if (normalized === "false") {
+    return false;
+  }
+  return undefined;
+}
+
+function projectDefaultProperty(options = {}, key) {
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.readFileSync !== "function" || !options.projectRoot) {
+    return undefined;
+  }
+  const pathModule = options.pathModule || nodePath;
+  try {
+    const filename = pathModule.join(options.projectRoot, ...DEFAULT_ENV_PROPERTIES);
+    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), key);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function allowMultilineStep(options = {}) {
+  const envValue = boolProperty(process.env.allow_multiline_step);
+  if (envValue !== undefined) {
+    return envValue;
+  }
+  const projectValue = boolProperty(projectDefaultProperty(options, ALLOW_MULTILINE_STEP_PROPERTY));
+  return projectValue === true;
 }
 
 function referenceTitle(count) {
@@ -292,9 +446,13 @@ function normalizedStepValues(aliases) {
 
 class GaugeCodeLensProvider {
   constructor(options = {}) {
+    this.fileSystem = options.fileSystem || nodeFs;
+    this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
@@ -461,7 +619,13 @@ class GaugeCodeLensProvider {
   referenceCountInDocuments(referenceDocuments, normalizedStep) {
     let count = 0;
     for (const candidate of referenceDocuments) {
-      count += countStepReferences(candidate, normalizedStep);
+      count += countStepReferences(candidate, normalizedStep, {
+        allowMultilineStep: allowMultilineStep({
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.diagnosticsProvider.rootForFile(documentPath(candidate)),
+        }),
+      });
     }
     return count;
   }

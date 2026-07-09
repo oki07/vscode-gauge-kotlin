@@ -671,6 +671,63 @@ test("GaugeCodeLensProvider counts double-star lines as step references", async 
   ]);
 });
 
+test("GaugeCodeLensProvider counts multiline step references when project allows them", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with card\")",
+    "fun pay() {}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/PaymentSteps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Payment",
+    "* Pay with",
+    "card",
+  ].join("\n"), "/workspace/gauge/specs/payment.spec", "gauge");
+  const provider = new GaugeCodeLensProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  try {
+    const lenses = await provider.provideCodeLenses(document);
+
+    assert.deepEqual(lenses.map((lens) => lens.command.title), [
+      "1 reference(s)",
+    ]);
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
+});
+
 test("GaugeCodeLensProvider counts table references without closing pipes", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
