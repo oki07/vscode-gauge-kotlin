@@ -1042,29 +1042,6 @@ class GaugeDynamicArgumentCompletionProvider {
     for (const candidate of workspaceDocuments || []) {
       if (
         !candidate
-        || typeof candidate.getText !== "function"
-        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
-      ) {
-        continue;
-      }
-      if (!isStepImplementationDocument(candidate)) {
-        continue;
-      }
-      const externalConstants = isStepImplementationDocument(candidate)
-        ? this.diagnosticsProvider.collectWorkspaceConstants(
-          candidate,
-          workspaceDocuments,
-        )
-        : undefined;
-      for (const entry of findStepFunctionsForDocument(candidate, externalConstants)) {
-        for (const alias of entry.aliases) {
-          addEntry(alias, "step");
-        }
-      }
-    }
-    for (const candidate of workspaceDocuments || []) {
-      if (
-        !candidate
         || !isConceptDocument(candidate)
         || typeof candidate.getText !== "function"
         || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
@@ -1073,6 +1050,27 @@ class GaugeDynamicArgumentCompletionProvider {
       }
       for (const heading of findConceptHeadings(candidate.getText())) {
         addEntry(heading.text, "concept");
+      }
+    }
+    for (const candidate of workspaceDocuments || []) {
+      if (
+        !candidate
+        || typeof candidate.getText !== "function"
+        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
+      ) {
+        continue;
+      }
+      if (!isStepImplementationDocument(candidate)) {
+        continue;
+      }
+      const externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
+        candidate,
+        workspaceDocuments,
+      );
+      for (const entry of findStepFunctionsForDocument(candidate, externalConstants)) {
+        for (const alias of entry.aliases) {
+          addEntry(alias, "step");
+        }
       }
     }
     const documents = [];

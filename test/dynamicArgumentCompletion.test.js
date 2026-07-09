@@ -1315,6 +1315,48 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept headings on step l
   assert.equal(items[0].insertText.value, "Reuse payment \"${0:method}\"");
 });
 
+test("GaugeDynamicArgumentCompletionProvider prefers concept headings over Step aliases", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const conceptDocument = createDocument([
+    "# Pay with <method>",
+    "* Enter payment method <method>",
+  ].join("\n"), "/workspace/gauge/specs/concepts/payment.cpt", "gauge");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class PaymentSteps {",
+    "  @Step(\"Pay with <method>\")",
+    "  fun pay(method: String) {}",
+    "}",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/steps/PaymentSteps.kt", "kotlin");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, conceptDocument, kotlinDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items).slice(0, 2), [
+    "Pay with <method>",
+    "Enter payment method <method>",
+  ]);
+  const payItem = items.find((item) => item.label === "Pay with <method>");
+  assert.equal(payItem.detail, "concept");
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests used Gauge steps without implementations", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
