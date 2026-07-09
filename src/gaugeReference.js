@@ -636,7 +636,7 @@ class ReferenceProvider {
     if (languageClient && typeof languageClient.sendRequest === "function") {
       locations = await languageClient.sendRequest(
         STEP_REFERENCES_REQUEST,
-        stepValue == null ? stepValue : [stepValue],
+        stepValue,
         createCancellationToken(this.vscode),
       );
     }

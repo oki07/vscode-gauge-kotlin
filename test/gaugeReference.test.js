@@ -117,7 +117,7 @@ test("ReferenceProvider shows references for the step at the active cursor", asy
     textDocument: { uri: "file:///workspace/tests/Steps.kt" },
     position: { line: 4, character: 2 },
   });
-  assert.deepEqual(requestCalls[1].params, ["Say hello"]);
+  assert.equal(requestCalls[1].params, "Say hello");
   assert.deepEqual(calls.commands, [
     {
       command: "editor.action.showReferences",
@@ -222,7 +222,7 @@ test("ReferenceProvider falls back to Kotlin Step aliases at the active cursor",
     "gauge/stepValueAt",
     "gauge/stepReferences",
   ]);
-  assert.deepEqual(requestCalls[1].params, ["Say hello to <name>"]);
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
@@ -258,7 +258,7 @@ test("ReferenceProvider uses the Kotlin Step alias under the active cursor", asy
 
   assert.equal(result, true);
   assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.deepEqual(requestCalls[1].params, ["Second alias <name>"]);
+  assert.equal(requestCalls[1].params, "Second alias <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
@@ -332,7 +332,7 @@ test("ReferenceProvider falls back to unopened workspace Kotlin constants", asyn
 
   assert.equal(result, true);
   assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.deepEqual(requestCalls[1].params, ["Log in as <user>"]);
+  assert.equal(requestCalls[1].params, "Log in as <user>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
@@ -421,7 +421,7 @@ test("ReferenceProvider skips unopened Step sources resolved to non-Gauge projec
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.deepEqual(requestCalls[1].params, ["Say hello to <name>"]);
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
   assert.deepEqual(openedFiles, []);
 });
@@ -496,7 +496,7 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
 
   assert.equal(result, true);
   assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.deepEqual(requestCalls[1].params, ["Say hello to <name>"]);
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.deepEqual(calls.commands, [
     {
@@ -684,7 +684,7 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
   assert.deepEqual(requestCalls.map((entry) => entry.method), [
     "gauge/stepReferences",
   ]);
-  assert.deepEqual(requestCalls[0].params, ["Say hello to <name>"]);
+  assert.equal(requestCalls[0].params, "Say hello to <name>");
   assert.deepEqual(result, [
     {
       uri: "file:///workspace/specs/example.spec",
@@ -1152,7 +1152,7 @@ test("ReferenceProvider accepts plaintext .kt documents for local Kotlin Step re
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.deepEqual(requestCalls[1].params, ["Say hello to <name>"]);
+  assert.equal(requestCalls[1].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/example.spec");
 });
@@ -1484,7 +1484,7 @@ test("ReferenceProvider resolves package wildcard const Step aliases for local r
 
   assert.equal(result, true);
   assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.deepEqual(requestCalls[1].params, ["Log in as <user>"]);
+  assert.equal(requestCalls[1].params, "Log in as <user>");
   assert.deepEqual(calls.information, []);
   assert.deepEqual(calls.commands, [
     {
@@ -1636,7 +1636,7 @@ test("ReferenceProvider resolves grouped and accessor Kotlin Step aliases for lo
 
     assert.equal(result, true);
     assert.equal(requestCalls[1].method, "gauge/stepReferences");
-    assert.deepEqual(requestCalls[1].params, [entry.alias]);
+    assert.equal(requestCalls[1].params, entry.alias);
     assert.equal(calls.commands[0].command, "editor.action.showReferences");
     assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/gauge/specs/login.spec");
     assert.deepEqual(calls.information, []);
@@ -1714,7 +1714,7 @@ test("ReferenceProvider matches local Gauge inline table references for Kotlin S
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.deepEqual(requestCalls[1].params, ["Compare <table>"]);
+  assert.equal(requestCalls[1].params, "Compare <table>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/table.spec");
   assert.deepEqual(calls.commands[0].args[2][0].range, {
@@ -1793,7 +1793,7 @@ test("ReferenceProvider keeps plain Gauge references before unterminated table-l
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.deepEqual(requestCalls[1].params, ["Compare"]);
+  assert.equal(requestCalls[1].params, "Compare");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/table.spec");
   assert.deepEqual(calls.commands[0].args[2][0].range, {
