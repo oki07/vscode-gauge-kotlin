@@ -697,6 +697,96 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
   ]);
 });
 
+test("ReferenceProvider matches multiline local Gauge references for Kotlin Step aliases", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/gauge/tests/PaymentSteps.kt",
+      toString() {
+        return "file:///workspace/gauge/tests/PaymentSteps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Pay with card\")",
+        "fun pay() {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/gauge/specs/payment.spec",
+      toString() {
+        return "file:///workspace/gauge/specs/payment.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Payment",
+        "* Pay with",
+        "card",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [activeDocument, specDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), {
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+
+  try {
+    const result = await provider.provideReferences(
+      activeDocument,
+      { line: 3, character: 5 },
+    );
+
+    assert.deepEqual(result, [
+      {
+        uri: "file:///workspace/gauge/specs/payment.spec",
+        range: {
+          start: { line: 1, character: 0 },
+          end: { line: 2, character: 4 },
+        },
+      },
+    ]);
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
+});
+
 test("ReferenceProvider provides local references for Java Step aliases", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
@@ -1011,6 +1101,101 @@ test("ReferenceProvider provides local references from Gauge step cursor without
       },
     },
   ]);
+});
+
+test("ReferenceProvider provides local references from multiline Gauge step cursor without LSP", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/gauge/specs/payment.spec",
+      toString() {
+        return "file:///workspace/gauge/specs/payment.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Payment",
+        "* Pay with",
+        "card",
+      ].join("\n");
+    },
+  };
+  const otherSpecDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/gauge/specs/other.spec",
+      toString() {
+        return "file:///workspace/gauge/specs/other.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Other",
+        "* Pay with card",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [specDocument, otherSpecDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), {
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+
+  try {
+    const result = await provider.provideReferences(
+      specDocument,
+      { line: 2, character: 2 },
+    );
+
+    assert.deepEqual(result, [
+      {
+        uri: "file:///workspace/gauge/specs/payment.spec",
+        range: {
+          start: { line: 1, character: 0 },
+          end: { line: 2, character: 4 },
+        },
+      },
+      {
+        uri: "file:///workspace/gauge/specs/other.spec",
+        range: {
+          start: { line: 1, character: 0 },
+          end: { line: 1, character: 15 },
+        },
+      },
+    ]);
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
 });
 
 test("ReferenceProvider accepts plaintext .spec documents for local references", async () => {

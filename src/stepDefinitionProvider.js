@@ -140,6 +140,16 @@ function documentLine(document, line) {
   return document.getText().split(/\r?\n/)[line] || "";
 }
 
+function documentLineCount(document) {
+  if (typeof document.lineCount === "number") {
+    return document.lineCount;
+  }
+  if (typeof document.getText === "function") {
+    return document.getText().split(/\r?\n/).length;
+  }
+  return 0;
+}
+
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
   return text.startsWith("|");
@@ -229,7 +239,7 @@ function multilineStepText(document, lineNumber) {
     return "";
   }
   const lines = [line.slice(marker + 1).trim()];
-  for (let nextLine = lineNumber + 1; nextLine < document.lineCount; nextLine += 1) {
+  for (let nextLine = lineNumber + 1; nextLine < documentLineCount(document); nextLine += 1) {
     const nextText = documentLine(document, nextLine);
     if (isGaugeSyntaxBoundary(nextText)) {
       break;
@@ -365,8 +375,8 @@ function stepTextCandidatesAt(document, position, options = {}) {
   return [normalizeStepTemplate(stepText)];
 }
 
-function stepTextAt(document, position) {
-  return stepTextCandidatesAt(document, position)[0];
+function stepTextAt(document, position, options = {}) {
+  return stepTextCandidatesAt(document, position, options)[0];
 }
 
 function sameDocument(left, right) {
