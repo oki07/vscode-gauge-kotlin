@@ -4100,6 +4100,11 @@ function externalTableExists(location, options = {}) {
   return filename === undefined || fileSystem.existsSync(filename);
 }
 
+function externalDataTableLocation(line) {
+  const match = /^\s*table\s*:\s*(.*)$/i.exec(String(line || ""));
+  return match ? match[1].trim() : undefined;
+}
+
 function externalDataTableScopeDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
@@ -4126,11 +4131,10 @@ function externalDataTableScopeDiagnostics(vscode, text, options = {}) {
       continue;
     }
 
-    const match = /^\s*table\s*:\s*(.*)$/i.exec(rawLine);
-    if (!match) {
+    const location = externalDataTableLocation(rawLine);
+    if (location === undefined) {
       continue;
     }
-    const location = match[1].trim();
     if (hasSpecHeading || !location || !externalTableExists(location, options)) {
       continue;
     }
@@ -4159,11 +4163,10 @@ function tableLocationDiagnostics(vscode, text, options = {}) {
       continue;
     }
 
-    const match = /^\s*table\s*:\s*(.*)$/i.exec(rawLine);
-    if (!match) {
+    const location = externalDataTableLocation(rawLine);
+    if (location === undefined) {
       continue;
     }
-    const location = match[1].trim();
     const range = lineContentRange(vscode, rawLine, line);
     if (!location) {
       diagnostics.push(createDiagnostic(
@@ -4359,7 +4362,7 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
   return diagnostics;
 }
 
-function multipleDataTableDiagnostics(vscode, text) {
+function multipleDataTableDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
   let inDocString = false;
@@ -4400,6 +4403,35 @@ function multipleDataTableDiagnostics(vscode, text) {
       inScenario = true;
       sectionHasStep = false;
       scenarioHasDataTable = false;
+      inTableBlock = false;
+      continue;
+    }
+
+    const externalLocation = externalDataTableLocation(rawLine);
+    if (externalLocation !== undefined) {
+      if (externalLocation && externalTableExists(externalLocation, options) && !sectionHasStep) {
+        if (inScenario) {
+          if (scenarioHasDataTable) {
+            diagnostics.push(createDiagnostic(
+              vscode,
+              lineContentRange(vscode, rawLine, line),
+              MULTIPLE_DATA_TABLE_MESSAGE,
+              { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+            ));
+          }
+          scenarioHasDataTable = true;
+        } else {
+          if (specHasDataTable) {
+            diagnostics.push(createDiagnostic(
+              vscode,
+              lineContentRange(vscode, rawLine, line),
+              MULTIPLE_DATA_TABLE_MESSAGE,
+              { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+            ));
+          }
+          specHasDataTable = true;
+        }
+      }
       inTableBlock = false;
       continue;
     }
@@ -8322,7 +8354,11 @@ class GaugeStepDiagnosticsProvider {
           projectRoot: this.gaugeProjectRoot(document),
         }));
         diagnostics.push(...tableRowDynamicParameterDiagnostics(this.vscode, text));
-        diagnostics.push(...multipleDataTableDiagnostics(this.vscode, text));
+        diagnostics.push(...multipleDataTableDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
         diagnostics.push(...unknownSpecialStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
