@@ -18,6 +18,7 @@ const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const SCENARIO_WITHOUT_STEP_MESSAGE = "Scenario should have at least one step";
+const SPEC_HEADING_EMPTY_MESSAGE = "Spec heading should have at least one character";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
@@ -3748,6 +3749,10 @@ function hashHeadingValue(line, markerLength) {
   return String(line || "").trim().slice(markerLength).trim();
 }
 
+function isEmptySpecHeading(line) {
+  return isSpecHashHeading(line) && !hashHeadingValue(line, 1);
+}
+
 function isSpecLegacyUnderline(line) {
   return /^=+\s*$/.test(String(line || "").trim());
 }
@@ -3795,6 +3800,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   let inDocString = false;
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
+  let hasEmptySpecHeading = false;
   let firstSpecHeadingRange;
   let currentScenario;
   for (let line = 0; line < lines.length; line += 1) {
@@ -3823,6 +3829,14 @@ function duplicateScenarioDiagnostics(vscode, text) {
         ));
       } else {
         firstSpecHeadingRange = lineContentRange(vscode, rawLine, line);
+      }
+      if (isEmptySpecHeading(rawLine)) {
+        hasEmptySpecHeading = true;
+        diagnostics.push(createDiagnostic(
+          vscode,
+          lineContentRange(vscode, rawLine, line),
+          SPEC_HEADING_EMPTY_MESSAGE,
+        ));
       }
       hasSpecHeading = true;
       continue;
@@ -3871,7 +3885,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
   }
   pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
-  if (firstSpecHeadingRange && !hasScenarioHeading) {
+  if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading) {
     diagnostics.push(createDiagnostic(
       vscode,
       firstSpecHeadingRange,
