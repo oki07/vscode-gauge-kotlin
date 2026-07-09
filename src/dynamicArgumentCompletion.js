@@ -353,8 +353,16 @@ function isDisabledCommentLine(line) {
   return String(line || "").trimStart().startsWith("//");
 }
 
-function isTagContinuationBoundaryLine(line) {
+function isLegacyUnderlineHeadingStartLine(lines, lineNumber) {
+  const line = lines[lineNumber] || "";
+  const nextLine = lines[lineNumber + 1] || "";
+  return Boolean(line.trim()) && (/^[=]+$/.test(nextLine) || /^[-]+$/.test(nextLine));
+}
+
+function isTagContinuationBoundaryLine(lines, lineNumber) {
+  const line = lines[lineNumber] || "";
   return isGaugeHashHeading(line)
+    || isLegacyUnderlineHeadingStartLine(lines, lineNumber)
     || isStepLine(line)
     || isTableKeywordLine(line)
     || isTableLine(line)
@@ -369,7 +377,7 @@ function isTagsContext(lines, lineNumber) {
   if (isTagLine(lines[lineNumber])) {
     return true;
   }
-  if (isTagContinuationBoundaryLine(lines[lineNumber])) {
+  if (isTagContinuationBoundaryLine(lines, lineNumber)) {
     return false;
   }
   return lineNumber > 0

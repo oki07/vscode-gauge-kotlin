@@ -218,6 +218,49 @@ test("GaugeSemanticTokensProvider stops tag continuations before Gauge syntax st
   }
 });
 
+test("GaugeSemanticTokensProvider stops tag continuations before legacy underline headings", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const cases = [
+    {
+      heading: "Checkout flow",
+      underline: "=============",
+      expectedType: "specification",
+    },
+    {
+      heading: "Successful checkout",
+      underline: "-------------------",
+      expectedType: "scenario",
+    },
+  ];
+
+  for (const entry of cases) {
+    const document = {
+      uri: { fsPath: "/workspace/specs/example.spec" },
+      getText() {
+        return [
+          "tags: smoke,",
+          entry.heading,
+          entry.underline,
+        ].join("\n");
+      },
+    };
+    const tokens = provider.provideDocumentSemanticTokens(document)
+      .map((token) => ({ ...token, type: tokenTypes[token.tokenType] }));
+    const headingTypes = tokens.filter((token) => token.line === 1).map((token) => token.type);
+    const underlineTypes = tokens.filter((token) => token.line === 2).map((token) => token.type);
+
+    assert.deepEqual(headingTypes, [entry.expectedType]);
+    assert.deepEqual(underlineTypes, [entry.expectedType]);
+    assert.equal(headingTypes.includes("tagValue"), false);
+  }
+});
+
 test("GaugeSemanticTokensProvider tokenizes teardown separators", () => {
   const {
     GaugeSemanticTokensProvider,

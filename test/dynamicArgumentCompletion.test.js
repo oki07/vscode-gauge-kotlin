@@ -308,6 +308,34 @@ test("GaugeDynamicArgumentCompletionProvider stops tag continuations before Gaug
   }
 });
 
+test("GaugeDynamicArgumentCompletionProvider stops tag continuations before legacy underline headings", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+  const cases = [
+    ["Checkout flow", "============="],
+    ["Successful checkout", "-------------------"],
+  ];
+
+  for (const [heading, underline] of cases) {
+    const document = createDocument([
+      "# Checkout",
+      "tags: smoke,",
+      heading,
+      underline,
+    ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+    const items = await provider.provideCompletionItems(
+      document,
+      new vscode.Position(2, Math.min(3, heading.length)),
+    );
+
+    assert.deepEqual(items.filter((item) => item.detail === "Tag"), []);
+  }
+});
+
 test("GaugeDynamicArgumentCompletionProvider preserves tag separators when editing in the middle", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

@@ -202,6 +202,19 @@ function isConceptLegacyUnderlineHeadingText(line) {
   return line.trim().length > 0 && !/[#*|]/.test(line);
 }
 
+function isLegacyUnderlineHeadingStartLine(lines, lineNumber, conceptDocument) {
+  const line = lines[lineNumber] || "";
+  const nextLine = lines[lineNumber + 1] || "";
+  if (!line.trim()) {
+    return false;
+  }
+  if (/^[=]+$/.test(nextLine)) {
+    return !conceptDocument
+      || (isConceptLegacyUnderlineHeadingText(line) && hasFollowingLine(lines, lineNumber + 1));
+  }
+  return !conceptDocument && /^[-]+$/.test(nextLine);
+}
+
 function hasFollowingLine(lines, lineNumber) {
   return lineNumber + 1 < lines.length;
 }
@@ -214,8 +227,10 @@ function isDisabledCommentLine(line) {
   return String(line || "").trimStart().startsWith("//");
 }
 
-function isTagContinuationBoundaryLine(line, conceptDocument) {
+function isTagContinuationBoundaryLine(lines, lineNumber, conceptDocument) {
+  const line = lines[lineNumber] || "";
   return isHashHeadingLine(line, conceptDocument)
+    || isLegacyUnderlineHeadingStartLine(lines, lineNumber, conceptDocument)
     || isStepLine(line)
     || Boolean(keywordLinePrefix(line, "table"))
     || Boolean(keywordLinePrefix(line, "tags"))
@@ -304,7 +319,7 @@ class GaugeSemanticTokensProvider {
         !conceptDocument
         && inTagContinuation
         && trimmedLine.length > 0
-        && !isTagContinuationBoundaryLine(line, conceptDocument)
+        && !isTagContinuationBoundaryLine(lines, index, conceptDocument)
       ) {
         pushTagContinuationLine(builder, index, line);
         inTagContinuation = lineEndsWithComma(line);
