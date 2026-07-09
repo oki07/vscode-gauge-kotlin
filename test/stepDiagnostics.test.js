@@ -4874,6 +4874,52 @@ test("GaugeStepDiagnosticsProvider reports Gauge external tables without locatio
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 6 });
 });
 
+test("GaugeStepDiagnosticsProvider reports unresolved Gauge external table files", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/inputinvalid.csv");
+        return false;
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table: inputinvalid.csv",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Could not resolve table. File inputinvalid.csv doesn't exist.",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 23 });
+});
+
 test("GaugeStepDiagnosticsProvider reports short Gauge teardown markers", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

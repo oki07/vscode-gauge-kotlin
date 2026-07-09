@@ -4060,7 +4060,22 @@ function isGaugeTagLine(line) {
   return /^tags\s*:/i.test(String(line || "").trim());
 }
 
-function tableLocationDiagnostics(vscode, text) {
+function missingTableFileMessage(location) {
+  return `Could not resolve table. File ${location} doesn't exist.`;
+}
+
+function resolveExternalTablePath(location, options = {}) {
+  const pathModule = options.pathModule || nodePath;
+  if (typeof pathModule.isAbsolute === "function" && pathModule.isAbsolute(location)) {
+    return location;
+  }
+  if (!options.projectRoot) {
+    return undefined;
+  }
+  return pathModule.join(options.projectRoot, location);
+}
+
+function tableLocationDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
   let inDocString = false;
@@ -4075,15 +4090,32 @@ function tableLocationDiagnostics(vscode, text) {
     }
 
     const match = /^\s*table\s*:\s*(.*)$/i.exec(rawLine);
-    if (!match || match[1].trim()) {
+    if (!match) {
+      continue;
+    }
+    const location = match[1].trim();
+    const range = lineContentRange(vscode, rawLine, line);
+    if (!location) {
+      diagnostics.push(createDiagnostic(
+        vscode,
+        range,
+        TABLE_LOCATION_MISSING_MESSAGE,
+      ));
       continue;
     }
 
-    diagnostics.push(createDiagnostic(
-      vscode,
-      lineContentRange(vscode, rawLine, line),
-      TABLE_LOCATION_MISSING_MESSAGE,
-    ));
+    const fileSystem = options.fileSystem;
+    if (!fileSystem || typeof fileSystem.existsSync !== "function") {
+      continue;
+    }
+    const filename = resolveExternalTablePath(location, options);
+    if (filename !== undefined && !fileSystem.existsSync(filename)) {
+      diagnostics.push(createDiagnostic(
+        vscode,
+        range,
+        missingTableFileMessage(location),
+      ));
+    }
   }
   return diagnostics;
 }
@@ -7783,7 +7815,11 @@ class GaugeStepDiagnosticsProvider {
       diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
       if (isGaugeSpecDocument(document)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
-        diagnostics.push(...tableLocationDiagnostics(this.vscode, text));
+        diagnostics.push(...tableLocationDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
       }
