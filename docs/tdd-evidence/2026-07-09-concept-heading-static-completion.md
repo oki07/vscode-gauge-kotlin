@@ -1,10 +1,11 @@
 # Concept Heading Static Completion
 
-## Reference behavior
+## Scope
 
-- IntelliJ registers `ConceptStaticArgCompletionProvider` for concept `ARG` tokens.
-- `ConceptStaticArgCompletionProvider` collects static arguments from the whole concept file.
-- The target provider only allowed quoted static argument completion on step lines, so concept headings could not complete static arguments.
+- Reference source: `references/intellij-gauge-plugin/src/concept.bnf`
+- Reference source: `references/gauge/parser/conceptParser.go`
+- Target source: `src/dynamicArgumentCompletion.js`
+- Test source: `test/dynamicArgumentCompletion.test.js`
 
 ## RED
 
@@ -16,8 +17,12 @@ node --test test/dynamicArgumentCompletion.test.js
 
 Result:
 
-- Failed 1 test:
-  - `GaugeDynamicArgumentCompletionProvider suggests concept heading static arguments`
+- Failed 1 test.
+- `GaugeDynamicArgumentCompletionProvider ignores concept heading static arguments`
+
+Reason:
+
+- Concept heading quote ranges still offered static argument completions and concept heading quoted values were collected as static completion candidates.
 
 ## GREEN
 
@@ -31,30 +36,6 @@ Result:
 
 - Passed 66 tests.
 
-Related command:
+Implementation:
 
-```sh
-node --test test/dynamicArgumentCompletion.test.js test/extension.test.js
-```
-
-Result:
-
-- Passed 103 tests.
-
-Broad check:
-
-```sh
-npm run check
-```
-
-Result:
-
-- Passed typecheck, lint, unit tests, LSP tests, VS Code tests, and package.
-- Unit tests: 908 passed.
-- LSP tests: 33 passed.
-- VS Code tests: 51 passed.
-
-## Implementation
-
-- Allowed static argument completion inside concept headings.
-- Included concept heading quoted arguments in concept static argument completion candidates.
+- Limited static argument completion and static argument candidate collection to step lines.

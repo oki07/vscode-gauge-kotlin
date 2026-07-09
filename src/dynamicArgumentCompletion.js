@@ -724,11 +724,8 @@ function specDynamicArguments(text, currentLineNumber) {
   return unique(values);
 }
 
-function isStaticArgumentSourceLine(line, options = {}) {
-  if (isStepLine(line)) {
-    return true;
-  }
-  return Boolean(options.includeConceptHeadings) && isConceptHeading(line);
+function isStaticArgumentSourceLine(line) {
+  return isStepLine(line);
 }
 
 function staticArguments(text, options = {}) {
@@ -766,8 +763,8 @@ function allowsDynamicArgumentCompletion(line, document, lineNumber) {
   return isStepLine(line) || isCompletionTableBlockLine(lines, lineNumber);
 }
 
-function allowsStaticArgumentCompletion(line, document) {
-  return isStepLine(line) || (isConceptDocument(document) && isConceptHeading(line));
+function allowsStaticArgumentCompletion(line) {
+  return isStepLine(line);
 }
 
 function completionItem(vscode, label, range, options = {}) {
