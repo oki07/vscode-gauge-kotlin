@@ -746,6 +746,13 @@ test("extension manifest contributes a Concept TextMate grammar", () => {
   );
   assert.equal(Object.hasOwn(grammarJson.repository, "tags"), false);
   assert.equal(Object.hasOwn(grammarJson.repository, "tableKeyword"), false);
+  assert.ok(
+    grammarJson.repository.markdown.patterns.some((entry) => entry.include === "#markdownTypeScriptFencedCode"),
+    "Concept grammar should preserve broad Markdown fenced-code injections",
+  );
+  assertPatternMatches(grammarJson.repository.markdownTypeScriptFencedCode, "```ts", "```ts");
+  assert.equal(grammarJson.repository.markdownTypeScriptFencedCode.contentName, "meta.embedded.block.typescript");
+  assert.deepEqual(grammarJson.repository.markdownTypeScriptFencedCode.patterns, [{ include: "source.ts" }]);
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "tags: smoke").include, "#fallbackComment");
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "table: users.csv").include, "#fallbackComment");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
@@ -853,17 +860,28 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
   const markdownBlockquote = repositoryPattern(grammarJson, "markdownBlockquote");
   const markdownAutoLink = repositoryPattern(grammarJson, "markdownAutoLink");
+  const markdownBasicFence = grammarJson.repository.markdownBasicFencedCode;
+  const markdownCSharpFence = grammarJson.repository.markdownCSharpFencedCode;
+  const markdownCssFence = grammarJson.repository.markdownCssFencedCode;
+  const markdownDockerfileFence = grammarJson.repository.markdownDockerfileFencedCode;
   const markdownFence = repositoryPattern(grammarJson, "markdownFencedCode");
+  const markdownGoFence = grammarJson.repository.markdownGoFencedCode;
   const markdownHtmlBlock = grammarJson.repository.markdownHtmlBlock;
   const markdownImage = repositoryPattern(grammarJson, "markdownImage");
   const markdownJavaFence = grammarJson.repository.markdownJavaFencedCode;
   const markdownJavaScriptFence = grammarJson.repository.markdownJavaScriptFencedCode;
   const markdownJsonFence = grammarJson.repository.markdownJsonFencedCode;
   const markdownKotlinFence = grammarJson.repository.markdownKotlinFencedCode;
+  const markdownPhpFence = grammarJson.repository.markdownPhpFencedCode;
   const markdownPythonFence = grammarJson.repository.markdownPythonFencedCode;
   const markdownReferenceImage = repositoryPattern(grammarJson, "markdownReferenceImage");
   const markdownReferenceLink = repositoryPattern(grammarJson, "markdownReferenceLink");
+  const markdownRustFence = grammarJson.repository.markdownRustFencedCode;
   const markdownShellFence = grammarJson.repository.markdownShellFencedCode;
+  const markdownSqlFence = grammarJson.repository.markdownSqlFencedCode;
+  const markdownTsxFence = grammarJson.repository.markdownTsxFencedCode;
+  const markdownTypeScriptFence = grammarJson.repository.markdownTypeScriptFencedCode;
+  const markdownXmlFence = grammarJson.repository.markdownXmlFencedCode;
   const markdownYamlFence = grammarJson.repository.markdownYamlFencedCode;
   const frontMatter = grammarJson.repository.frontMatter;
   const markdownLinkDefinition = repositoryPattern(grammarJson, "markdownLinkDefinition");
@@ -875,18 +893,64 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
     "#markdownBlockquote",
     "#markdownSeparator",
     "#markdownKotlinFencedCode",
+    "#markdownCssFencedCode",
+    "#markdownBasicFencedCode",
+    "#markdownIniFencedCode",
     "#markdownJavaFencedCode",
-    "#markdownJavaScriptFencedCode",
-    "#markdownJsonFencedCode",
-    "#markdownPythonFencedCode",
-    "#markdownShellFencedCode",
+    "#markdownLuaFencedCode",
+    "#markdownMakefileFencedCode",
+    "#markdownPerlFencedCode",
+    "#markdownRFencedCode",
+    "#markdownRubyFencedCode",
+    "#markdownPhpFencedCode",
+    "#markdownSqlFencedCode",
+    "#markdownVsNetFencedCode",
+    "#markdownXmlFencedCode",
+    "#markdownXslFencedCode",
     "#markdownYamlFencedCode",
+    "#markdownDosbatchFencedCode",
+    "#markdownClojureFencedCode",
+    "#markdownCoffeeFencedCode",
+    "#markdownCFencedCode",
+    "#markdownCppFencedCode",
+    "#markdownDiffFencedCode",
+    "#markdownDockerfileFencedCode",
+    "#markdownGitCommitFencedCode",
+    "#markdownGitRebaseFencedCode",
+    "#markdownGoFencedCode",
+    "#markdownGroovyFencedCode",
+    "#markdownJadeFencedCode",
+    "#markdownJavaScriptFencedCode",
+    "#markdownJsRegexpFencedCode",
+    "#markdownJsonFencedCode",
+    "#markdownLessFencedCode",
+    "#markdownObjcFencedCode",
+    "#markdownScssFencedCode",
+    "#markdownPerl6FencedCode",
+    "#markdownPowershellFencedCode",
+    "#markdownPythonFencedCode",
+    "#markdownRegexpPythonFencedCode",
+    "#markdownRustFencedCode",
+    "#markdownScalaFencedCode",
+    "#markdownShellFencedCode",
+    "#markdownTypeScriptFencedCode",
+    "#markdownTsxFencedCode",
+    "#markdownCSharpFencedCode",
+    "#markdownFSharpFencedCode",
     "#markdownFencedCode",
     "#markdownLinkDefinition",
     "#markdownHtmlBlock",
     "#markdownList",
     "#markdownInline",
   ]);
+  assertPatternMatches(markdownCssFence, "```css", "```css");
+  assertPatternMatches(markdownCssFence, "~~~css.erb", "~~~css.erb");
+  assert.equal(markdownCssFence.contentName, "meta.embedded.block.css");
+  assert.deepEqual(markdownCssFence.patterns, [{ include: "source.css" }]);
+  assertPatternMatches(markdownBasicFence, "```html", "```html");
+  assertPatternMatches(markdownBasicFence, "~~~xhtml", "~~~xhtml");
+  assert.equal(markdownBasicFence.contentName, "meta.embedded.block.html");
+  assert.deepEqual(markdownBasicFence.patterns, [{ include: "text.html.basic" }]);
   assertPatternMatches(markdownJavaFence, "```java", "```java");
   assertPatternMatches(markdownJavaFence, "~~~bsh", "~~~bsh");
   assert.equal(markdownJavaFence.contentName, "meta.embedded.block.java");
@@ -898,19 +962,52 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assert.deepEqual(markdownKotlinFence.patterns, [{ include: "source.kotlin" }]);
   assertPatternMatches(markdownJavaScriptFence, "```js", "```js");
   assertPatternMatches(markdownJavaScriptFence, "~~~javascript", "~~~javascript");
+  assertPatternMatches(markdownJavaScriptFence, "```jsx", "```jsx");
   assert.equal(markdownJavaScriptFence.contentName, "meta.embedded.block.javascript");
   assert.deepEqual(markdownJavaScriptFence.patterns, [{ include: "source.js" }]);
   assertPatternMatches(markdownJsonFence, "```json", "```json");
+  assertPatternMatches(markdownJsonFence, "~~~sublime-settings", "~~~sublime-settings");
   assert.equal(markdownJsonFence.contentName, "meta.embedded.block.json");
   assert.deepEqual(markdownJsonFence.patterns, [{ include: "source.json" }]);
+  assertPatternMatches(markdownPhpFence, "```php", "```php");
+  assert.equal(markdownPhpFence.contentName, "meta.embedded.block.php");
+  assert.deepEqual(markdownPhpFence.patterns, [{ include: "text.html.php#language" }]);
   assertPatternMatches(markdownPythonFence, "```python", "```python");
   assertPatternMatches(markdownPythonFence, "~~~py", "~~~py");
+  assertPatternMatches(markdownPythonFence, "```gypi", "```gypi");
   assert.equal(markdownPythonFence.contentName, "meta.embedded.block.python");
   assert.deepEqual(markdownPythonFence.patterns, [{ include: "source.python" }]);
+  assertPatternMatches(markdownSqlFence, "```ddl", "```ddl");
+  assert.equal(markdownSqlFence.contentName, "meta.embedded.block.sql");
+  assert.deepEqual(markdownSqlFence.patterns, [{ include: "source.sql" }]);
+  assertPatternMatches(markdownXmlFence, "```xml", "```xml");
+  assertPatternMatches(markdownXmlFence, "~~~cpt", "~~~cpt");
+  assert.equal(markdownXmlFence.contentName, "meta.embedded.block.xml");
+  assert.deepEqual(markdownXmlFence.patterns, [{ include: "text.xml" }]);
+  assertPatternMatches(markdownDockerfileFence, "```Dockerfile", "```Dockerfile");
+  assert.equal(markdownDockerfileFence.contentName, "meta.embedded.block.dockerfile");
+  assert.deepEqual(markdownDockerfileFence.patterns, [{ include: "source.dockerfile" }]);
+  assertPatternMatches(markdownGoFence, "```golang", "```golang");
+  assert.equal(markdownGoFence.contentName, "meta.embedded.block.go");
+  assert.deepEqual(markdownGoFence.patterns, [{ include: "source.go" }]);
+  assertPatternMatches(markdownRustFence, "```rs", "```rs");
+  assert.equal(markdownRustFence.contentName, "meta.embedded.block.rust");
+  assert.deepEqual(markdownRustFence.patterns, [{ include: "source.rust" }]);
   assertPatternMatches(markdownShellFence, "```bash", "```bash");
   assertPatternMatches(markdownShellFence, "~~~zsh", "~~~zsh");
-  assert.equal(markdownShellFence.contentName, "meta.embedded.block.shell");
+  assertPatternMatches(markdownShellFence, "```bash_profile", "```bash_profile");
+  assert.equal(markdownShellFence.contentName, "meta.embedded.block.shellscript");
   assert.deepEqual(markdownShellFence.patterns, [{ include: "source.shell" }]);
+  assertPatternMatches(markdownTypeScriptFence, "```typescript", "```typescript");
+  assertPatternMatches(markdownTypeScriptFence, "~~~ts", "~~~ts");
+  assert.equal(markdownTypeScriptFence.contentName, "meta.embedded.block.typescript");
+  assert.deepEqual(markdownTypeScriptFence.patterns, [{ include: "source.ts" }]);
+  assertPatternMatches(markdownTsxFence, "```tsx", "```tsx");
+  assert.equal(markdownTsxFence.contentName, "meta.embedded.block.typescriptreact");
+  assert.deepEqual(markdownTsxFence.patterns, [{ include: "source.tsx" }]);
+  assertPatternMatches(markdownCSharpFence, "```c#", "```c#");
+  assert.equal(markdownCSharpFence.contentName, "meta.embedded.block.csharp");
+  assert.deepEqual(markdownCSharpFence.patterns, [{ include: "source.cs" }]);
   assertPatternMatches(markdownYamlFence, "```yaml", "```yaml");
   assertPatternMatches(markdownYamlFence, "~~~yml", "~~~yml");
   assert.equal(markdownYamlFence.contentName, "meta.embedded.block.yaml");

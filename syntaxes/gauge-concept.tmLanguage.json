@@ -218,22 +218,136 @@
           "include": "#markdownKotlinFencedCode"
         },
         {
+          "include": "#markdownCssFencedCode"
+        },
+        {
+          "include": "#markdownBasicFencedCode"
+        },
+        {
+          "include": "#markdownIniFencedCode"
+        },
+        {
           "include": "#markdownJavaFencedCode"
+        },
+        {
+          "include": "#markdownLuaFencedCode"
+        },
+        {
+          "include": "#markdownMakefileFencedCode"
+        },
+        {
+          "include": "#markdownPerlFencedCode"
+        },
+        {
+          "include": "#markdownRFencedCode"
+        },
+        {
+          "include": "#markdownRubyFencedCode"
+        },
+        {
+          "include": "#markdownPhpFencedCode"
+        },
+        {
+          "include": "#markdownSqlFencedCode"
+        },
+        {
+          "include": "#markdownVsNetFencedCode"
+        },
+        {
+          "include": "#markdownXmlFencedCode"
+        },
+        {
+          "include": "#markdownXslFencedCode"
+        },
+        {
+          "include": "#markdownYamlFencedCode"
+        },
+        {
+          "include": "#markdownDosbatchFencedCode"
+        },
+        {
+          "include": "#markdownClojureFencedCode"
+        },
+        {
+          "include": "#markdownCoffeeFencedCode"
+        },
+        {
+          "include": "#markdownCFencedCode"
+        },
+        {
+          "include": "#markdownCppFencedCode"
+        },
+        {
+          "include": "#markdownDiffFencedCode"
+        },
+        {
+          "include": "#markdownDockerfileFencedCode"
+        },
+        {
+          "include": "#markdownGitCommitFencedCode"
+        },
+        {
+          "include": "#markdownGitRebaseFencedCode"
+        },
+        {
+          "include": "#markdownGoFencedCode"
+        },
+        {
+          "include": "#markdownGroovyFencedCode"
+        },
+        {
+          "include": "#markdownJadeFencedCode"
         },
         {
           "include": "#markdownJavaScriptFencedCode"
         },
         {
+          "include": "#markdownJsRegexpFencedCode"
+        },
+        {
           "include": "#markdownJsonFencedCode"
+        },
+        {
+          "include": "#markdownLessFencedCode"
+        },
+        {
+          "include": "#markdownObjcFencedCode"
+        },
+        {
+          "include": "#markdownScssFencedCode"
+        },
+        {
+          "include": "#markdownPerl6FencedCode"
+        },
+        {
+          "include": "#markdownPowershellFencedCode"
         },
         {
           "include": "#markdownPythonFencedCode"
         },
         {
+          "include": "#markdownRegexpPythonFencedCode"
+        },
+        {
+          "include": "#markdownRustFencedCode"
+        },
+        {
+          "include": "#markdownScalaFencedCode"
+        },
+        {
           "include": "#markdownShellFencedCode"
         },
         {
-          "include": "#markdownYamlFencedCode"
+          "include": "#markdownTypeScriptFencedCode"
+        },
+        {
+          "include": "#markdownTsxFencedCode"
+        },
+        {
+          "include": "#markdownCSharpFencedCode"
+        },
+        {
+          "include": "#markdownFSharpFencedCode"
         },
         {
           "include": "#markdownFencedCode"
@@ -283,7 +397,7 @@
     },
     "markdownJavaFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Aa][Vv][Aa]|[Bb][Ss][Hh])(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:java|bsh)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
@@ -299,7 +413,7 @@
     },
     "markdownJavaScriptFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Aa][Vv][Aa][Ss][Cc][Rr][Ii][Pp][Tt]|[Jj][Ss])(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:js|jsx|javascript|es6|mjs)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
@@ -315,7 +429,7 @@
     },
     "markdownJsonFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Jj][Ss][Oo][Nn])(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:json|sublime-settings|sublime-menu|sublime-keymap|sublime-mousemap|sublime-theme|sublime-build|sublime-project|sublime-completions)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
@@ -331,7 +445,7 @@
     },
     "markdownPythonFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Pp][Yy][Tt][Hh][Oo][Nn]|[Pp][Yy])(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:python|py|py3|rpy|pyw|cpy|SConstruct|Sconstruct|sconstruct|SConscript|gyp|gypi)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
@@ -347,14 +461,14 @@
     },
     "markdownShellFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Ss][Hh][Ee][Ll][Ll]|[Ss][Hh]|[Bb][Aa][Ss][Hh]|[Zz][Ss][Hh])(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:shell|sh|bash|zsh|bashrc|bash_profile|bash_login|profile|bash_logout|.textmate_init)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.shell",
+      "contentName": "meta.embedded.block.shellscript",
       "patterns": [
         {
           "include": "source.shell"
@@ -363,7 +477,7 @@
     },
     "markdownYamlFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((?:`{3,}|~{3,})\\s*(?:[Yy][Aa][Mm][Ll]|[Yy][Mm][Ll])(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:yaml|yml)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
@@ -464,6 +578,614 @@
     "fallbackComment": {
       "name": "comment.line.gauge",
       "match": "^\\s*\\S.*$"
+    },
+    "markdownCssFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:css|css.erb)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.css",
+      "patterns": [
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "markdownBasicFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:html|htm|shtml|xhtml|inc|tmpl|tpl)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.html",
+      "patterns": [
+        {
+          "include": "text.html.basic"
+        }
+      ]
+    },
+    "markdownIniFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:ini|conf)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.ini",
+      "patterns": [
+        {
+          "include": "source.ini"
+        }
+      ]
+    },
+    "markdownLuaFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:lua)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.lua",
+      "patterns": [
+        {
+          "include": "source.lua"
+        }
+      ]
+    },
+    "markdownMakefileFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:Makefile|makefile|GNUmakefile|OCamlMakefile)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.makefile",
+      "patterns": [
+        {
+          "include": "source.makefile"
+        }
+      ]
+    },
+    "markdownPerlFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:perl|pl|pm|pod|t|PL|psgi|vcl)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.perl",
+      "patterns": [
+        {
+          "include": "source.perl"
+        }
+      ]
+    },
+    "markdownRFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:R|r|s|S|Rprofile)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.r",
+      "patterns": [
+        {
+          "include": "source.r"
+        }
+      ]
+    },
+    "markdownRubyFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:ruby|rb|rbx|rjs|Rakefile|rake|cgi|fcgi|gemspec|irbrc|Capfile|ru|prawn|Cheffile|Gemfile|Guardfile|Hobofile|Vagrantfile|Appraisals|Rantfile|Berksfile|Berksfile.lock|Thorfile|Puppetfile)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.ruby",
+      "patterns": [
+        {
+          "include": "source.ruby"
+        }
+      ]
+    },
+    "markdownPhpFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:php|php3|php4|php5|phpt|phtml|aw|ctp)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.php",
+      "patterns": [
+        {
+          "include": "text.html.php#language"
+        }
+      ]
+    },
+    "markdownSqlFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:sql|ddl|dml)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.sql",
+      "patterns": [
+        {
+          "include": "source.sql"
+        }
+      ]
+    },
+    "markdownVsNetFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:vb)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.vs_net",
+      "patterns": [
+        {
+          "include": "source.asp.vb.net"
+        }
+      ]
+    },
+    "markdownXmlFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:xml|xsd|tld|jsp|pt|cpt|dtml|rss|opml)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.xml",
+      "patterns": [
+        {
+          "include": "text.xml"
+        }
+      ]
+    },
+    "markdownXslFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:xsl|xslt)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.xsl",
+      "patterns": [
+        {
+          "include": "text.xml.xsl"
+        }
+      ]
+    },
+    "markdownDosbatchFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:bat|batch)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.dosbatch",
+      "patterns": [
+        {
+          "include": "source.dosbatch"
+        }
+      ]
+    },
+    "markdownClojureFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:clj|cljs|clojure)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.clojure",
+      "patterns": [
+        {
+          "include": "source.clojure"
+        }
+      ]
+    },
+    "markdownCoffeeFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:coffee|Cakefile|coffee.erb)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.coffee",
+      "patterns": [
+        {
+          "include": "source.coffee"
+        }
+      ]
+    },
+    "markdownCFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:c|h)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.c",
+      "patterns": [
+        {
+          "include": "source.c"
+        }
+      ]
+    },
+    "markdownCppFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:cpp|c\\+\\+|cxx)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.cpp",
+      "patterns": [
+        {
+          "include": "source.cpp"
+        }
+      ]
+    },
+    "markdownDiffFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:patch|diff|rej)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.diff",
+      "patterns": [
+        {
+          "include": "source.diff"
+        }
+      ]
+    },
+    "markdownDockerfileFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:dockerfile|Dockerfile)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.dockerfile",
+      "patterns": [
+        {
+          "include": "source.dockerfile"
+        }
+      ]
+    },
+    "markdownGitCommitFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:COMMIT_EDITMSG|MERGE_MSG)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.git_commit",
+      "patterns": [
+        {
+          "include": "text.git-commit"
+        }
+      ]
+    },
+    "markdownGitRebaseFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:git-rebase-todo)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.git_rebase",
+      "patterns": [
+        {
+          "include": "text.git-rebase"
+        }
+      ]
+    },
+    "markdownGoFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:go|golang)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.go",
+      "patterns": [
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "markdownGroovyFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:groovy|gvy)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.groovy",
+      "patterns": [
+        {
+          "include": "source.groovy"
+        }
+      ]
+    },
+    "markdownJadeFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:jade|pug)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.jade",
+      "patterns": [
+        {
+          "include": "text.jade"
+        }
+      ]
+    },
+    "markdownJsRegexpFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:regexp)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.js_regexp",
+      "patterns": [
+        {
+          "include": "source.js.regexp"
+        }
+      ]
+    },
+    "markdownLessFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:less)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.less",
+      "patterns": [
+        {
+          "include": "source.css.less"
+        }
+      ]
+    },
+    "markdownObjcFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:objectivec|objective-c|mm|objc|obj-c|m|h)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.objc",
+      "patterns": [
+        {
+          "include": "source.objc"
+        }
+      ]
+    },
+    "markdownScssFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:scss)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.scss",
+      "patterns": [
+        {
+          "include": "source.css.scss"
+        }
+      ]
+    },
+    "markdownPerl6FencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:perl6|p6|pl6|pm6|nqp)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.perl6",
+      "patterns": [
+        {
+          "include": "source.perl.6"
+        }
+      ]
+    },
+    "markdownPowershellFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:powershell|ps1|psm1|psd1)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.powershell",
+      "patterns": [
+        {
+          "include": "source.powershell"
+        }
+      ]
+    },
+    "markdownRegexpPythonFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:re)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.regexp_python",
+      "patterns": [
+        {
+          "include": "source.regexp.python"
+        }
+      ]
+    },
+    "markdownRustFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:rust|rs)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.rust",
+      "patterns": [
+        {
+          "include": "source.rust"
+        }
+      ]
+    },
+    "markdownScalaFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:scala|sbt)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.scala",
+      "patterns": [
+        {
+          "include": "source.scala"
+        }
+      ]
+    },
+    "markdownTypeScriptFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:typescript|ts)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.typescript",
+      "patterns": [
+        {
+          "include": "source.ts"
+        }
+      ]
+    },
+    "markdownTsxFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:tsx)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.typescriptreact",
+      "patterns": [
+        {
+          "include": "source.tsx"
+        }
+      ]
+    },
+    "markdownCSharpFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:cs|csharp|c#)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.csharp",
+      "patterns": [
+        {
+          "include": "source.cs"
+        }
+      ]
+    },
+    "markdownFSharpFencedCode": {
+      "name": "markup.fenced_code.block.markdown.gauge",
+      "begin": "(?i)^((?:`{3,}|~{3,})\\s*(?:fs|fsharp|f#)(?:\\s+[^`~]*)?\\s*)$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown.gauge"
+        }
+      },
+      "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
+      "contentName": "meta.embedded.block.fsharp",
+      "patterns": [
+        {
+          "include": "source.fsharp"
+        }
+      ]
     }
   }
 }
