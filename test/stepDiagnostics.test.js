@@ -4848,6 +4848,34 @@ test("GaugeStepDiagnosticsProvider reports duplicate Gauge scenario headings", (
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 22 });
 });
 
+test("GaugeStepDiagnosticsProvider reports multiple Gauge spec headings", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Successful checkout",
+    "* Confirm order",
+    "# Duplicate checkout",
+    "## Guest checkout",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Multiple spec headings found in same file",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 20 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

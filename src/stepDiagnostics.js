@@ -13,6 +13,7 @@ const CONCEPT_STATIC_PARAMETER_MESSAGE = "Concept heading can have only Dynamic 
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const DUPLICATE_SCENARIO_PREFIX = "Duplicate scenario definition";
+const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same file";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
@@ -3788,10 +3789,16 @@ function duplicateScenarioDiagnostics(vscode, text) {
     const nextLine = lines[line + 1] === undefined
       ? ""
       : lines[line + 1].replace(/\r$/, "");
-    if (
-      isSpecHashHeading(rawLine)
-      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine))
-    ) {
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      if (hasSpecHeading) {
+        diagnostics.push(createDiagnostic(
+          vscode,
+          lineContentRange(vscode, rawLine, line),
+          MULTIPLE_SPEC_HEADINGS_MESSAGE,
+        ));
+      }
       hasSpecHeading = true;
       continue;
     }
