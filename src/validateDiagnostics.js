@@ -55,8 +55,17 @@ function createRange(vscode, start, end) {
     : { start: startPosition, end: endPosition };
 }
 
-function createDiagnostic(vscode, range, message) {
-  const severity = vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Error;
+function diagnosticSeverity(vscode, error) {
+  const severities = vscode.DiagnosticSeverity || {};
+  const type = String((error && error.type) || "").replace(/^\[|\]$/g, "").toLowerCase();
+  if (type === "parsewarning" && severities.Warning !== undefined) {
+    return severities.Warning;
+  }
+  return severities.Error;
+}
+
+function createDiagnostic(vscode, range, message, error) {
+  const severity = diagnosticSeverity(vscode, error);
   const diagnostic = typeof vscode.Diagnostic === "function"
     ? new vscode.Diagnostic(range, message, severity)
     : { range, message, severity };
@@ -316,6 +325,7 @@ class GaugeValidateDiagnosticsProvider {
         this.vscode,
         diagnosticRange(this.vscode, document, error.lineNumber),
         validationMessage(error),
+        error,
       ));
   }
 

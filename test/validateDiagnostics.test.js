@@ -12,6 +12,7 @@ function createFakeVscode(options = {}) {
     },
     DiagnosticSeverity: {
       Error: "error",
+      Warning: "warning",
     },
     Position: class Position {
       constructor(line, character) {
@@ -120,6 +121,48 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for the curren
   assert.equal(diagnostics[0].code, "gauge.validate");
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 11 });
+});
+
+test("GaugeValidateDiagnosticsProvider maps parse warnings to warning diagnostics", () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const command = {
+    spawnSync() {
+      return {
+        stdout: Buffer.from(
+          "[ParseWarning] /workspace/gauge/specs/example.spec:2: Dynamic param <name> could not be resolved",
+        ),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return command;
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Example",
+    "* Use <name>",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.equal(diagnostics.length, 1);
+  assert.equal(
+    diagnostics[0].message,
+    "[ParseWarning] line number: 2, Dynamic param <name> could not be resolved",
+  );
+  assert.equal(diagnostics[0].severity, "warning");
 });
 
 test("GaugeValidateDiagnosticsProvider maps gauge validate output for markdown specs", () => {
