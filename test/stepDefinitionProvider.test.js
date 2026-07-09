@@ -485,7 +485,7 @@ test("GaugeStepDefinitionProvider resolves spec steps to indented hash concept h
   );
 });
 
-test("GaugeStepDefinitionProvider prefers concept headings over Step functions", async () => {
+test("GaugeStepDefinitionProvider prefers Gauge project Step functions over concept headings", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -516,7 +516,15 @@ test("GaugeStepDefinitionProvider prefers concept headings over Step functions",
   const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
 
   assert.equal(definitions.length, 1);
-  assert.equal(definitions[0].uri, conceptDocument.uri);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+  assert.deepEqual(
+    { ...definitions[0].range.end },
+    { line: 6, character: 26 },
+  );
 });
 
 test("GaugeStepDefinitionProvider resolves indented legacy concept headings", async () => {

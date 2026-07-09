@@ -710,13 +710,6 @@ class GaugeStepDefinitionProvider {
       return [];
     }
 
-    const conceptDefinitions = this.conceptDefinitionsForDocuments(
-      wantedSteps,
-      await this.conceptDocuments(document),
-    );
-    if (conceptDefinitions.length > 0) {
-      return conceptDefinitions;
-    }
     const {
       externalDocuments,
       projectDocuments,
@@ -728,6 +721,13 @@ class GaugeStepDefinitionProvider {
     );
     if (projectDefinitions.length > 0) {
       return projectDefinitions;
+    }
+    const conceptDefinitions = this.conceptDefinitionsForDocuments(
+      wantedSteps,
+      await this.conceptDocuments(document),
+    );
+    if (conceptDefinitions.length > 0) {
+      return conceptDefinitions;
     }
     return this.definitionsForDocuments(
       wantedSteps,
