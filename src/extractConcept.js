@@ -759,18 +759,19 @@ function canExtractConceptFromDocument(document, projectClient) {
   if (!document) {
     return false;
   }
+  const hasProjectClient = Boolean(projectClient && projectClient.client && projectClient.project);
   if (document.languageId === "gauge") {
-    return true;
+    return hasProjectClient;
   }
   if (SPEC_FILE_PATTERN.test(documentPath(document))) {
-    return Boolean(projectClient && projectClient.client && projectClient.project);
+    return hasProjectClient;
   }
   if (CONCEPT_FILE_PATTERN.test(documentPath(document))) {
-    return Boolean(projectClient && projectClient.client && projectClient.project);
+    return hasProjectClient;
   }
   return document.languageId === MARKDOWN_LANGUAGE
     && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
-    && Boolean(projectClient && projectClient.client && projectClient.project);
+    && hasProjectClient;
 }
 
 class ExtractConceptCommandProvider {

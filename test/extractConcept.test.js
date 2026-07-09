@@ -331,6 +331,49 @@ test("ExtractConceptCommandProvider extracts selected steps from spec files by e
   assert.equal(sourceReplacement.newText, "* Shared checkout <user>\n");
 });
 
+test("ExtractConceptCommandProvider rejects Gauge documents without a project before prompting", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"), "/outside/specs/example.spec", "gauge");
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    inputs,
+    quickPicks,
+    vscode,
+  } = createFakeVscode({
+    document,
+    inputResponses: ["Shared login"],
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider({
+    get(fsPath) {
+      assert.equal(fsPath, "/outside/specs/example.spec");
+      return undefined;
+    },
+  }, {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(errors, ["Cannot find Gauge document for extract to concept."]);
+  assert.deepEqual(inputs, []);
+  assert.deepEqual(quickPicks, []);
+  assert.deepEqual(appliedEdits, []);
+});
+
 test("buildExtractSelection expands inline table selections to their owning Gauge step", () => {
   const { buildExtractSelection } = require("../src/extractConcept");
   const document = createDocument([
