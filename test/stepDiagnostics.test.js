@@ -4920,6 +4920,102 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge external table files
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 23 });
 });
 
+test("GaugeStepDiagnosticsProvider reports unresolved Gauge inline table file parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/notFound.txt");
+        return false;
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Confirm order",
+    "| name | id |",
+    "| --- | --- |",
+    "| james | <file:notFound.txt> |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order <table>\")",
+    "fun confirm(table: Table) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Dynamic param <file:notFound.txt> could not be resolved, Missing file: notFound.txt",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 5, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 5, character: 31 });
+});
+
+test("GaugeStepDiagnosticsProvider reports unresolved Gauge data table file parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/notFound.txt");
+        return false;
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "| name | id |",
+    "| --- | --- |",
+    "| james | <file:notFound.txt> |",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Dynamic param <file:notFound.txt> could not be resolved, Missing file: notFound.txt",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 31 });
+});
+
 test("GaugeStepDiagnosticsProvider reports short Gauge teardown markers", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

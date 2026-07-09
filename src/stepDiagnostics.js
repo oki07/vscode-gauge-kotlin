@@ -4064,6 +4064,10 @@ function missingTableFileMessage(location) {
   return `Could not resolve table. File ${location} doesn't exist.`;
 }
 
+function missingTableFileParameterMessage(parameter, file) {
+  return `Dynamic param <${parameter}> could not be resolved, Missing file: ${file}`;
+}
+
 function resolveExternalTablePath(location, options = {}) {
   const pathModule = options.pathModule || nodePath;
   if (typeof pathModule.isAbsolute === "function" && pathModule.isAbsolute(location)) {
@@ -4116,6 +4120,67 @@ function tableLocationDiagnostics(vscode, text, options = {}) {
         missingTableFileMessage(location),
       ));
     }
+  }
+  return diagnostics;
+}
+
+function specialFileTableCell(cell) {
+  const match = /^<\s*(file\s*:\s*.*?)\s*>$/i.exec(String(cell || "").trim());
+  if (!match) {
+    return undefined;
+  }
+  const file = match[1].replace(/\s*:\s*/, ":");
+  const location = file.slice("file:".length).trim();
+  if (!location) {
+    return undefined;
+  }
+  return { file, location };
+}
+
+function tableFileParameterDiagnostics(vscode, text, options = {}) {
+  const diagnostics = [];
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.existsSync !== "function") {
+    return diagnostics;
+  }
+
+  const lines = text.split("\n");
+  let inDocString = false;
+  let inTableBlock = false;
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      inTableBlock = false;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+    if (!isGaugeTableRow(rawLine)) {
+      inTableBlock = false;
+      continue;
+    }
+    if (!inTableBlock || isGaugeTableSeparatorRow(rawLine)) {
+      inTableBlock = true;
+      continue;
+    }
+
+    for (const cell of gaugeTableCells(rawLine)) {
+      const specialFile = specialFileTableCell(cell);
+      if (!specialFile) {
+        continue;
+      }
+      const filename = resolveExternalTablePath(specialFile.location, options);
+      if (filename !== undefined && !fileSystem.existsSync(filename)) {
+        diagnostics.push(createDiagnostic(
+          vscode,
+          lineContentRange(vscode, rawLine, line),
+          missingTableFileParameterMessage(specialFile.file, specialFile.location),
+        ));
+      }
+    }
+    inTableBlock = true;
   }
   return diagnostics;
 }
@@ -7816,6 +7881,11 @@ class GaugeStepDiagnosticsProvider {
       if (isGaugeSpecDocument(document)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
         diagnostics.push(...tableLocationDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
+        diagnostics.push(...tableFileParameterDiagnostics(this.vscode, text, {
           fileSystem: this.fileSystem,
           pathModule: this.pathModule,
           projectRoot: this.gaugeProjectRoot(document),
