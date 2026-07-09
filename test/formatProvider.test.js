@@ -56,7 +56,13 @@ function createFakeVscode(options = {}) {
         assert.equal(section, "gauge");
         return {
           get(key) {
-            return key === "home" ? options.gaugeHome : "";
+            if (key === "home") {
+              return options.gaugeHome;
+            }
+            if (key === "formatting.skipEmptyLineInsertions") {
+              return Boolean(options.skipEmptyLineInsertions);
+            }
+            return "";
           },
         };
       },
@@ -293,6 +299,52 @@ test("GaugeFormatProvider formats spec files by extension", async () => {
   ]);
   assert.deepEqual(edits.map((edit) => edit.newText), [
     "# Example\n\n* formatted\n",
+  ]);
+});
+
+test("GaugeFormatProvider passes skip empty line insertion option to gauge format", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  const spawned = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawned.push({ args, options });
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          process.nextTick(() => child.emit("exit", 0));
+          return child;
+        },
+      };
+    },
+  };
+  const provider = new GaugeFormatProvider({
+    cli,
+    fileSystem: {
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return Buffer.from("# Example\n");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode({ skipEmptyLineInsertions: true }),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(createDocument("# Example\n"));
+
+  assert.deepEqual(edits, []);
+  assert.deepEqual(spawned, [
+    {
+      args: ["format", "--skip-empty-line-insertions", "/workspace/gauge/specs/example.spec"],
+      options: { cwd: "/workspace/gauge" },
+    },
   ]);
 });
 

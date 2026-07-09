@@ -123,6 +123,17 @@ function hasEnvironment(env) {
   return Boolean(env && Object.keys(env).length > 0);
 }
 
+function skipEmptyLineInsertions(vscode) {
+  if (!vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
+    return false;
+  }
+  const configuration = vscode.workspace.getConfiguration("gauge");
+  if (!configuration || typeof configuration.get !== "function") {
+    return false;
+  }
+  return Boolean(configuration.get("formatting.skipEmptyLineInsertions"));
+}
+
 function showError(vscode, message) {
   if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
     return vscode.window.showErrorMessage(message);
@@ -301,7 +312,13 @@ class GaugeFormatProvider {
       };
     }
 
-    const result = await waitForProcess(command, [FORMAT_COMMAND, filePath], processOptions);
+    const formatArgs = [FORMAT_COMMAND];
+    if (skipEmptyLineInsertions(this.vscode)) {
+      formatArgs.push("--skip-empty-line-insertions");
+    }
+    formatArgs.push(filePath);
+
+    const result = await waitForProcess(command, formatArgs, processOptions);
     if (result.code !== 0) {
       showError(this.vscode, formatFailureMessage(result));
       return [];
