@@ -28,6 +28,9 @@ const RERUN_FLAG_KEYS = [
   "dir",
   "log-level",
 ];
+const explicitFalseBooleanFlags = new Set([
+  "install-plugins",
+]);
 
 function withoutCommonLaunchAttributes(input) {
   return Object.entries(input)
@@ -97,6 +100,9 @@ function flag(key) {
 
 function flagTokens(key, value) {
   if (typeof value === "boolean") {
+    if (!value && explicitFalseBooleanFlags.has(key)) {
+      return [`${flag(key)}=false`];
+    }
     return value ? [flag(key)] : [];
   }
   if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {

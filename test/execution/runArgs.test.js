@@ -163,6 +163,21 @@ test("buildRunArgs.forGauge allows default flags to be unset", () => {
   );
 });
 
+test("buildRunArgs.forGauge preserves explicit install plugin false option", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec", { "install-plugins": false }),
+    [
+      "run",
+      "--hide-suggestion",
+      "--simple-console",
+      "--install-plugins=false",
+      "my.spec",
+    ],
+  );
+});
+
 test("buildRunArgs.forGradle ignores other args when failed flag is set", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -289,6 +304,15 @@ test("buildRunArgs.forGradle allows default flags to be unset", () => {
   );
 });
 
+test("buildRunArgs.forGradle preserves explicit install plugin false option", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec", { "install-plugins": false }).join(" "),
+    "clean gauge -PadditionalFlags=--hide-suggestion --simple-console --install-plugins=false -PspecsDir=my.spec",
+  );
+});
+
 test("buildRunArgs.forMaven ignores other args when failed flag is set", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -412,6 +436,15 @@ test("buildRunArgs.forMaven allows default flags to be unset", () => {
   assert.equal(
     buildRunArgs.forMaven(null, { "hide-suggestion": false, "simple-console": false }).join(" "),
     "-q clean compile test-compile gauge:execute",
+  );
+});
+
+test("buildRunArgs.forMaven preserves explicit install plugin false option", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec", { "install-plugins": false }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--hide-suggestion,--simple-console,--install-plugins=false -DspecsDir=my.spec",
   );
 });
 
