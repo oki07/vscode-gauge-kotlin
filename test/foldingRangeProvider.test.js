@@ -153,7 +153,7 @@ test("GaugeFoldingRangeProvider ignores concept hyphen underline headings", () =
   assert.deepEqual(provider.provideFoldingRanges(document), []);
 });
 
-test("GaugeFoldingRangeProvider ignores indented concept hash headings", () => {
+test("GaugeFoldingRangeProvider folds indented concept hash headings", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();
   const document = createDocument([
@@ -162,7 +162,9 @@ test("GaugeFoldingRangeProvider ignores indented concept hash headings", () => {
     "",
   ].join("\n"), "/workspace/specs/concepts/shared.cpt");
 
-  assert.deepEqual(provider.provideFoldingRanges(document), []);
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 1 },
+  ]);
 });
 
 test("GaugeFoldingRangeProvider ignores concept equals underlines after identifiers", () => {

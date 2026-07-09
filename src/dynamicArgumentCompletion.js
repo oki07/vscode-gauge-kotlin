@@ -182,7 +182,7 @@ function isStepLine(line) {
 }
 
 function isConceptHeading(line) {
-  return line.startsWith("#");
+  return String(line || "").trimStart().startsWith("#");
 }
 
 function isTableLine(line) {

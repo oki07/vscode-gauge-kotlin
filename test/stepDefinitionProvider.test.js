@@ -402,6 +402,38 @@ test("GaugeStepDefinitionProvider resolves spec steps to concept headings", asyn
   );
 });
 
+test("GaugeStepDefinitionProvider resolves spec steps to indented hash concept headings", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Reuses a concept",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "  # Pay with <method>",
+    "* Enter payment method <method>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
+  const vscode = createFakeVscode([specDocument, conceptDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, conceptDocument.uri);
+  assert.deepEqual(
+    { ...definitions[0].range.start },
+    { line: 0, character: 4 },
+  );
+  assert.deepEqual(
+    { ...definitions[0].range.end },
+    { line: 0, character: 21 },
+  );
+});
+
 test("GaugeStepDefinitionProvider prefers concept headings over Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

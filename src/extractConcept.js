@@ -291,7 +291,7 @@ function extractConceptHeadings(text) {
   const headings = [];
   const lines = (text || "").split(/\r\n|\n/);
   for (let index = 0; index < lines.length; index += 1) {
-    const hashHeading = /^#+\s*(.+?)\s*$/.exec(lines[index]);
+    const hashHeading = /^[ \t]*#+\s*(.+?)\s*$/.exec(lines[index]);
     if (hashHeading) {
       headings.push(normalizeConceptHeading(hashHeading[1]));
       continue;

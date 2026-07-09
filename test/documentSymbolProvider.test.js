@@ -119,7 +119,7 @@ test("GaugeDocumentSymbolProvider lists concept symbols by extension", () => {
   const vscode = createFakeVscode();
   const provider = new GaugeDocumentSymbolProvider({ vscode });
   const document = createDocument([
-    "# Shared checkout",
+    "  # Shared checkout",
     "* Reuse",
     "",
     "## Shared payment",
@@ -132,6 +132,7 @@ test("GaugeDocumentSymbolProvider lists concept symbols by extension", () => {
     "# Shared checkout",
     "## Shared payment",
   ]);
+  assert.deepEqual({ ...symbols[0].location.range.start }, { line: 0, character: 2 });
   assert.deepEqual({ ...symbols[1].location.range.start }, { line: 3, character: 0 });
 });
 

@@ -441,7 +441,7 @@ test("GaugeCodeLensProvider ignores unterminated table-like rows for parallel ru
 test("GaugeCodeLensProvider adds reference lenses for concept headings", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
-    "# Reuse checkout <user>",
+    "  # Reuse checkout <user>",
     "* Prepare cart",
     "",
     "# Unused concept",
@@ -480,12 +480,12 @@ test("GaugeCodeLensProvider adds reference lenses for concept headings", async (
   })), [
     {
       line: 0,
-      character: 0,
+      character: 2,
       title: "2 reference(s)",
       command: "gauge.showReferences",
       arguments: [
         "file:///workspace/specs/concepts/shared.cpt",
-        { line: 0, character: 0 },
+        { line: 0, character: 2 },
         "Reuse checkout {}",
       ],
     },

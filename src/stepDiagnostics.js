@@ -3523,11 +3523,11 @@ function isDocStringFenceLine(line) {
 }
 
 function conceptHashHeading(rawLine, lineNumber) {
-  const match = /^(#+)([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
+  const match = /^([ \t]*)(#+)([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
   if (!match) {
     return undefined;
   }
-  const textStart = match[1].length + match[2].length;
+  const textStart = match[1].length + match[2].length + match[3].length;
   const text = rawLine.slice(textStart).trimEnd();
   if (!text) {
     return undefined;

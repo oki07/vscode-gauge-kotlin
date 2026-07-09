@@ -19,7 +19,7 @@ function isGaugeHashHeading(line) {
 }
 
 function isConceptHashHeading(line) {
-  return String(line || "").startsWith("#");
+  return trimmedHashText(line).startsWith("#");
 }
 
 module.exports = {

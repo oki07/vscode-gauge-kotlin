@@ -590,7 +590,7 @@ test("GaugeSemanticTokensProvider treats concept double-hash headings as concept
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats indented concept hash headings as comments", () => {
+test("GaugeSemanticTokensProvider tokenizes indented concept hash headings", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -612,8 +612,10 @@ test("GaugeSemanticTokensProvider treats indented concept hash headings as comme
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
   assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
-    "gaugeComment",
+    "specification",
+    "dynamicArgument",
   ]);
+  assert.deepEqual({ line: tokens[0].line, start: tokens[0].start }, { line: 0, start: 2 });
 });
 
 test("GaugeSemanticTokensProvider tokenizes indented step markers", () => {

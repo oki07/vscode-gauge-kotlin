@@ -1596,7 +1596,7 @@ test("ExtractConceptCommandProvider rejects duplicate concept names", async () =
   assert.deepEqual(appliedEdits, []);
 });
 
-test("ExtractConceptCommandProvider ignores indented concept hash lines when checking duplicates", async () => {
+test("ExtractConceptCommandProvider rejects indented duplicate concept hash lines", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
   const document = createDocument([
@@ -1635,23 +1635,10 @@ test("ExtractConceptCommandProvider ignores indented concept hash lines when che
   const command = commands.find((entry) => entry.command === "gauge.extract.concept");
   await command.handler();
 
-  assert.deepEqual(errors, []);
-  assert.equal(appliedEdits.length, 1);
-
-  const conceptReplacement = appliedEdits[0].replacements.find(
-    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
-  );
-  assert.equal(
-    conceptReplacement.newText,
-    [
-      "  # Shared login",
-      "* Setup",
-      "",
-      "# Shared login",
-      "* Login",
-      "",
-    ].join("\n"),
-  );
+  assert.deepEqual(errors, [
+    "Concept `Shared login` already present",
+  ]);
+  assert.deepEqual(appliedEdits, []);
 });
 
 test("ExtractConceptCommandProvider rejects duplicate legacy underline concept names", async () => {

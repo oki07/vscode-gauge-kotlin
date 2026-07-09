@@ -1204,7 +1204,7 @@ test("ReferenceProvider includes concept headings in local Step references", asy
     },
     getText() {
       return [
-        "# Log in as <user>",
+        "  # Log in as <user>",
         "* Enter username",
       ].join("\n");
     },
@@ -1232,8 +1232,8 @@ test("ReferenceProvider includes concept headings in local Step references", asy
     {
       uri: "file:///workspace/concepts/login.cpt",
       range: {
-        start: { line: 0, character: 2 },
-        end: { line: 0, character: 18 },
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 20 },
       },
     },
   ]);
@@ -1252,7 +1252,7 @@ test("ReferenceProvider provides local references from concept heading cursor wi
     },
     getText() {
       return [
-        "# Shared checkout <item>",
+        "  # Shared checkout <item>",
         "* Prepare cart",
       ].join("\n");
     },
@@ -1307,15 +1307,15 @@ test("ReferenceProvider provides local references from concept heading cursor wi
 
   const references = await provider.provideReferences(
     conceptDocument,
-    { line: 0, character: 12 },
+    { line: 0, character: 14 },
   );
 
   assert.deepEqual(references, [
     {
       uri: "file:///workspace/specs/concepts/shared.cpt",
       range: {
-        start: { line: 0, character: 2 },
-        end: { line: 0, character: 24 },
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 26 },
       },
     },
     {

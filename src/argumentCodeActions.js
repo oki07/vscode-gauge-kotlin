@@ -94,7 +94,7 @@ function isGaugeProjectDocument(document, projectFactory) {
 }
 
 function isConceptHeadingLine(line, document) {
-  return isConceptDocument(document) && line.startsWith("#");
+  return isConceptDocument(document) && String(line || "").trimStart().startsWith("#");
 }
 
 function uriPath(uri) {

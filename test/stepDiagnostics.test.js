@@ -4835,7 +4835,7 @@ test("GaugeStepDiagnosticsProvider reports duplicate concept definitions", () =>
     "# Shared checkout",
     "* Confirm order",
     "",
-    "# Shared checkout",
+    "  # Shared checkout",
     "* Confirm order",
   ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
   const kotlinDocument = createDocument([
@@ -4857,8 +4857,8 @@ test("GaugeStepDiagnosticsProvider reports duplicate concept definitions", () =>
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 2 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 17 });
-  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 3, character: 2 });
-  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 3, character: 17 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 3, character: 4 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 3, character: 19 });
 });
 
 test("GaugeStepDiagnosticsProvider reports cross-file duplicate concept definitions", () => {
@@ -4933,6 +4933,22 @@ test("findConceptHeadings ignores unterminated legacy underline concept headings
   ].join("\n")), []);
 });
 
+test("findConceptHeadings includes indented hash concept headings", () => {
+  const { findConceptHeadings } = require("../src/stepDiagnostics");
+
+  assert.deepEqual(findConceptHeadings([
+    "  # Shared checkout <item>",
+    "* Confirm order",
+  ].join("\n")), [
+    {
+      end: { line: 0, character: 26 },
+      normalized: "Shared checkout {}",
+      start: { line: 0, character: 4 },
+      text: "Shared checkout <item>",
+    },
+  ]);
+});
+
 test("GaugeStepDiagnosticsProvider reports steps outside concept headings", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -4993,7 +5009,7 @@ test("GaugeStepDiagnosticsProvider rejects static arguments in concept headings"
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const conceptDocument = createDocument([
-    "# Shared checkout \"user\"",
+    "  # Shared checkout \"user\"",
     "* Confirm order",
   ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
   const kotlinDocument = createDocument([
@@ -5012,8 +5028,8 @@ test("GaugeStepDiagnosticsProvider rejects static arguments in concept headings"
       "Concept heading can have only Dynamic Parameters",
     ],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 2 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 24 });
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 4 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 26 });
 });
 
 test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => {
