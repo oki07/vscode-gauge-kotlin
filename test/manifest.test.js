@@ -756,7 +756,7 @@ test("extension manifest contributes a Concept TextMate grammar", () => {
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "tags: smoke").include, "#fallbackComment");
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "table: users.csv").include, "#fallbackComment");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
-  assertPatternDoesNotMatch(grammarJson.repository.tableRow, "| name");
+  assertPatternMatches(grammarJson.repository.tableRow, "| name", "|");
 });
 
 test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () => {
@@ -781,7 +781,7 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(grammarJson.repository.teardown, "___  ", "___  ");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
   assertPatternMatches(grammarJson.repository.tableRow, "  | table cell |", "  |");
-  assertPatternDoesNotMatch(grammarJson.repository.tableRow, "| name");
+  assertPatternMatches(grammarJson.repository.tableRow, "| name", "|");
   assertPatternMatches(grammarJson.repository.tableSeparator, "  |---|", "  |");
 });
 

@@ -204,7 +204,7 @@
     },
     "tableRow": {
       "name": "meta.table.row.gauge",
-      "begin": "^(\\s*\\|)(?=.*\\|\\s*$|\\s*$)",
+      "begin": "^(\\s*\\|)",
       "beginCaptures": {
         "1": {
           "name": "punctuation.separator.table.gauge"

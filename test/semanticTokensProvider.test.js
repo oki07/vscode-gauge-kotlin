@@ -1038,7 +1038,7 @@ test("GaugeSemanticTokensProvider treats indented top-level table markers as com
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats unterminated table rows as comments", () => {
+test("GaugeSemanticTokensProvider tokenizes table rows without closing pipes", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -1059,7 +1059,8 @@ test("GaugeSemanticTokensProvider treats unterminated table rows as comments", (
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
   assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
-    "gaugeComment",
+    "tableBorder",
+    "tableHeader",
   ]);
   assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
     "stepMarker",

@@ -183,7 +183,7 @@ function pushTagContinuationLine(builder, lineNumber, line) {
 
 function isTableLine(line) {
   const text = String(line || "").trim();
-  return text.startsWith("|") && text.endsWith("|");
+  return text.startsWith("|");
 }
 
 function isTableBlockStartLine(line, options = {}) {
