@@ -12,6 +12,7 @@ const CIRCULAR_CONCEPT_MESSAGE = "Circular reference found in concept.";
 const CONCEPT_STATIC_PARAMETER_MESSAGE = "Concept heading can have only Dynamic Parameters";
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
+const DUPLICATE_SCENARIO_PREFIX = "Duplicate scenario definition";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
@@ -3731,6 +3732,95 @@ function lineContentRange(vscode, rawLine, line) {
   );
 }
 
+function isSpecHashHeading(line) {
+  return /^#(?!#)/.test(String(line || "").trim());
+}
+
+function isScenarioHashHeadingLine(line) {
+  return /^##(?!#)/.test(String(line || "").trim());
+}
+
+function hashHeadingValue(line, markerLength) {
+  return String(line || "").trim().slice(markerLength).trim();
+}
+
+function isSpecLegacyUnderline(line) {
+  return /^=+\s*$/.test(String(line || "").trim());
+}
+
+function isScenarioLegacyUnderline(line) {
+  return /^-+\s*$/.test(String(line || "").trim());
+}
+
+function isLegacyHeadingText(line) {
+  const text = String(line || "").trim();
+  return Boolean(text)
+    && !text.startsWith("*")
+    && !text.startsWith("|")
+    && !/^tags\s*:/i.test(text)
+    && !/^table\s*:/i.test(text);
+}
+
+function legacyHeadingValue(line) {
+  return String(line || "").trim();
+}
+
+function duplicateScenarioMessage(heading) {
+  return `${DUPLICATE_SCENARIO_PREFIX} '${heading}' found in the same specification`;
+}
+
+function duplicateScenarioDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const seen = new Map();
+  const lines = text.split("\n");
+  let inDocString = false;
+  let hasSpecHeading = false;
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    if (
+      isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine))
+    ) {
+      hasSpecHeading = true;
+      continue;
+    }
+
+    let heading;
+    if (isScenarioHashHeadingLine(rawLine)) {
+      heading = hashHeadingValue(rawLine, 2);
+    } else if (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine)) {
+      heading = legacyHeadingValue(rawLine);
+    }
+    if (heading === undefined || !hasSpecHeading) {
+      continue;
+    }
+
+    const key = heading.toLowerCase();
+    const previous = seen.get(key);
+    if (previous !== undefined) {
+      diagnostics.push(createDiagnostic(
+        vscode,
+        lineContentRange(vscode, rawLine, line),
+        duplicateScenarioMessage(previous),
+      ));
+    } else {
+      seen.set(key, heading);
+    }
+  }
+  return diagnostics;
+}
+
 function tableHeaderMessages(cells) {
   const messages = [];
   const seen = new Set();
@@ -7386,6 +7476,8 @@ class GaugeStepDiagnosticsProvider {
           document,
           conceptDocuments,
         ));
+      } else {
+        diagnostics.push(...duplicateScenarioDiagnostics(this.vscode, text));
       }
       return diagnostics;
     }
