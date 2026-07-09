@@ -757,6 +757,7 @@ class GaugeStepDefinitionProvider {
 
 module.exports = {
   GaugeStepDefinitionProvider,
+  allowMultilineStep,
   normalizeStepTemplate,
   stepTextAt,
 };

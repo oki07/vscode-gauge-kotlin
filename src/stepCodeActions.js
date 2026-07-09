@@ -1,6 +1,10 @@
 "use strict";
 
+const nodeFs = require("node:fs");
+const nodePath = require("node:path");
+
 const { countStepParameters, UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
+const { allowMultilineStep } = require("./stepDefinitionProvider");
 
 const CREATE_CONCEPT_TITLE = "Create concept";
 const CREATE_STEP_IMPLEMENTATION_TITLE = "Create step implementation";
@@ -23,6 +27,12 @@ function createCodeAction(vscode, title) {
 }
 
 function documentLine(document, line) {
+  if (line < 0) {
+    return "";
+  }
+  if (typeof document.lineCount === "number" && line >= document.lineCount) {
+    return "";
+  }
   if (typeof document.lineAt === "function") {
     try {
       return document.lineAt(line).text;
@@ -34,6 +44,16 @@ function documentLine(document, line) {
     return document.getText().split(/\r?\n/)[line] || "";
   }
   return "";
+}
+
+function documentLineCount(document) {
+  if (typeof document.lineCount === "number") {
+    return document.lineCount;
+  }
+  if (typeof document.getText === "function") {
+    return document.getText().split(/\r?\n/).length;
+  }
+  return 0;
 }
 
 function documentPath(document) {
@@ -115,6 +135,44 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
+function isGaugeSyntaxBoundary(line) {
+  const text = String(line || "").trim();
+  return !text
+    || text.startsWith("*")
+    || text.startsWith("#")
+    || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
+    || text.toLowerCase().startsWith("table:")
+    || text.toLowerCase().startsWith("table :")
+    || isInlineTableLine(text)
+    || isDocStringFenceLine(text)
+    || /^={3,}\s*$/.test(text)
+    || /^-{3,}\s*$/.test(text);
+}
+
+function isStepLine(line) {
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*";
+}
+
+function stepMarkerIndex(line) {
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*" ? marker : -1;
+}
+
+function multilineStepLineAt(document, lineNumber) {
+  for (let currentLine = lineNumber; currentLine >= 0; currentLine -= 1) {
+    const line = documentLine(document, currentLine);
+    if (isStepLine(line)) {
+      return currentLine;
+    }
+    if (isGaugeSyntaxBoundary(line)) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function isEscapedAt(text, index) {
   let backslashCount = 0;
   for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
@@ -183,17 +241,40 @@ function conceptInfo(stepText) {
   };
 }
 
-function gaugeStepAt(document, lineNumber) {
-  const line = documentLine(document, lineNumber);
-  const marker = line.search(/\S/);
-  if (marker === -1 || line[marker] !== "*") {
+function gaugeStepAt(document, lineNumber, options = {}) {
+  let stepLineNumber = lineNumber;
+  let line = documentLine(document, stepLineNumber);
+  if (!isStepLine(line)) {
+    stepLineNumber = options.allowMultilineStep
+      ? multilineStepLineAt(document, lineNumber)
+      : undefined;
+    if (stepLineNumber === undefined) {
+      return undefined;
+    }
+    line = documentLine(document, stepLineNumber);
+  }
+
+  const marker = stepMarkerIndex(line);
+  if (marker === -1) {
     return undefined;
   }
-  const text = line.slice(marker + 1).trim();
+  const lines = [line.slice(marker + 1).trim()];
+  let endLineNumber = stepLineNumber;
+  if (options.allowMultilineStep) {
+    for (let nextLine = stepLineNumber + 1; nextLine < documentLineCount(document); nextLine += 1) {
+      const nextText = documentLine(document, nextLine);
+      if (isGaugeSyntaxBoundary(nextText)) {
+        break;
+      }
+      lines.push(nextText.trim());
+      endLineNumber = nextLine;
+    }
+  }
+  const text = lines.join(" ").trim();
   if (!text) {
     return undefined;
   }
-  const nextLine = documentLine(document, lineNumber + 1);
+  const nextLine = documentLine(document, endLineNumber + 1);
   return {
     implicitParameterCount: isDocStringFenceLine(nextLine) ? 1 : 0,
     text: isInlineTableLine(nextLine) ? `${text} <table>` : text,
@@ -310,8 +391,42 @@ function undefinedStepDiagnostics(context) {
 
 class GaugeStepCodeActionProvider {
   constructor(options = {}) {
+    this.fileSystem = options.fileSystem || nodeFs;
+    this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+  }
+
+  gaugeProjectRoot(document) {
+    if (
+      !this.projectFactory
+      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+    ) {
+      return undefined;
+    }
+    try {
+      const root = this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
+      if (!root) {
+        return undefined;
+      }
+      if (
+        typeof this.projectFactory.isGaugeProject === "function"
+        && this.projectFactory.isGaugeProject(root) === false
+      ) {
+        return undefined;
+      }
+      return root;
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  allowsMultilineStep(document) {
+    return allowMultilineStep({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot: this.gaugeProjectRoot(document),
+    });
   }
 
   provideCodeActions(document, range, context = {}) {
@@ -328,7 +443,9 @@ class GaugeStepCodeActionProvider {
       return [];
     }
 
-    const step = gaugeStepAt(document, range.start.line);
+    const step = gaugeStepAt(document, range.start.line, {
+      allowMultilineStep: this.allowsMultilineStep(document),
+    });
     const suppliedCode = diagnostics.map(diagnosticStubCode).find((code) => code !== undefined);
     if (!step && suppliedCode === undefined) {
       return [];

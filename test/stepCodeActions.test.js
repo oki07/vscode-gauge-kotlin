@@ -30,7 +30,11 @@ function createFakeVscode() {
 function createDocument(lines, languageId = "gauge", fsPath = "/workspace/gauge/specs/checkout.spec") {
   return {
     languageId,
+    lineCount: lines.length,
     uri: { fsPath },
+    getText() {
+      return lines.join("\n");
+    },
     lineAt(line) {
       return { text: lines[line] };
     },
@@ -72,6 +76,82 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
       "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
     ],
   });
+});
+
+test("GaugeStepCodeActionProvider creates fixes for multiline Gauge steps when project allows them", () => {
+  const {
+    CREATE_CONCEPT_TITLE,
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_CONCEPT_STUB,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/gauge/specs/checkout.spec");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with",
+    "card <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(2, 13),
+  );
+
+  try {
+    const actions = provider.provideCodeActions(document, range, {
+      diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+    });
+
+    assert.equal(actions.length, 2);
+    assert.deepEqual(actions[0].command, {
+      command: GENERATE_STEP_STUB,
+      title: CREATE_STEP_IMPLEMENTATION_TITLE,
+      arguments: [
+        "@com.thoughtworks.gauge.Step(\"Pay with card <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      ],
+    });
+    assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
+    assert.deepEqual(actions[1].command, {
+      command: GENERATE_CONCEPT_STUB,
+      title: CREATE_CONCEPT_TITLE,
+      arguments: [
+        {
+          conceptName: "# Pay with card <arg0>\n* ",
+          conceptFile: "",
+          dir: "",
+        },
+      ],
+    });
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
 });
 
 test("GaugeStepCodeActionProvider uses diagnostic code as the step implementation stub", () => {
