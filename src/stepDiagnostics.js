@@ -3515,7 +3515,7 @@ function normalizeStepTemplate(text) {
 
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.startsWith("|") && text.endsWith("|");
+  return text.startsWith("|");
 }
 
 function isDocStringFenceLine(line) {

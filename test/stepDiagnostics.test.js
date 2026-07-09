@@ -4787,6 +4787,7 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     [
       "Undefined Step",
       "Undefined Step",
+      "Undefined Step",
       "Step should not be blank",
       "Undefined Step",
     ],
@@ -4795,8 +4796,10 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
   assert.deepEqual({ ...diagnostics[1].range.start }, { line: 2, character: 2 });
   assert.deepEqual({ ...diagnostics[1].range.end }, { line: 2, character: 14 });
-  assert.deepEqual({ ...diagnostics[3].range.start }, { line: 7, character: 0 });
-  assert.deepEqual({ ...diagnostics[3].range.end }, { line: 7, character: 18 });
+  assert.deepEqual({ ...diagnostics[2].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...diagnostics[2].range.end }, { line: 3, character: 15 });
+  assert.deepEqual({ ...diagnostics[4].range.start }, { line: 7, character: 0 });
+  assert.deepEqual({ ...diagnostics[4].range.end }, { line: 7, character: 18 });
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined concept steps by extension", () => {
@@ -5066,7 +5069,7 @@ test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => 
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 7 });
 });
 
-test("GaugeStepDiagnosticsProvider ignores unterminated concept table-like rows outside steps", () => {
+test("GaugeStepDiagnosticsProvider reports concept tables without closing pipes outside steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const conceptDocument = createDocument([
@@ -5086,7 +5089,14 @@ test("GaugeStepDiagnosticsProvider ignores unterminated concept table-like rows 
     kotlinDocument,
   ]);
 
-  assert.deepEqual(diagnostics, []);
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Table doesn't belong to any step",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 6 });
 });
 
 test("GaugeStepDiagnosticsProvider reports circular concept references", () => {
