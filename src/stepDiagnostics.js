@@ -4074,6 +4074,10 @@ function unresolvedTableDynamicParameterWarningMessage(parameter) {
   return `Dynamic param <${parameter}> could not be resolved, Treating it as static param`;
 }
 
+function unknownSpecialParameterWarningMessage(parameter) {
+  return `Could not resolve special param type <${parameter}>. Treating it as dynamic param.`;
+}
+
 function resolveExternalTablePath(location, options = {}) {
   const pathModule = options.pathModule || nodePath;
   if (typeof pathModule.isAbsolute === "function" && pathModule.isAbsolute(location)) {
@@ -4314,6 +4318,40 @@ function dynamicStepParameters(text) {
     openIndex = findDynamicParameterStart(text, closeIndex + 1);
   }
   return parameters;
+}
+
+function isUnknownSpecialParameter(parameter) {
+  return /:/.test(parameter) && !/^(?:file|table)\s*:/i.test(parameter);
+}
+
+function unknownSpecialStepParameterDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      continue;
+    }
+    if (inDocString || !isGaugeStepLine(rawLine)) {
+      continue;
+    }
+    for (const parameter of dynamicStepParameters(rawLine)) {
+      if (!isUnknownSpecialParameter(parameter)) {
+        continue;
+      }
+      diagnostics.push(createDiagnostic(
+        vscode,
+        lineContentRange(vscode, rawLine, line),
+        unknownSpecialParameterWarningMessage(parameter),
+        { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+      ));
+    }
+  }
+
+  return diagnostics;
 }
 
 function addTableHeaders(target, rawLine) {
@@ -8141,6 +8179,7 @@ class GaugeStepDiagnosticsProvider {
           projectRoot: this.gaugeProjectRoot(document),
         }));
         diagnostics.push(...tableRowDynamicParameterDiagnostics(this.vscode, text));
+        diagnostics.push(...unknownSpecialStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));

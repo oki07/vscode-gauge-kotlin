@@ -5048,6 +5048,34 @@ test("GaugeStepDiagnosticsProvider warns on unresolved Gauge table row dynamic p
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 6, character: 17 });
 });
 
+test("GaugeStepDiagnosticsProvider warns when unknown special step parameters fall back to dynamic", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| unknown:foo | description |",
+    "| 123 | Admin |",
+    "## Scenario",
+    "* Example <unknown:foo> step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Example <unknown:foo> step\")",
+    "fun example(foo: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Could not resolve special param type <unknown:foo>. Treating it as dynamic param.",
+    ],
+  );
+  assert.equal(diagnostics[0].severity, "warning");
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 4, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 4, character: 28 });
+});
+
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge dynamic step parameters without data tables", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
