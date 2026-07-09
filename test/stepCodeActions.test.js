@@ -160,6 +160,45 @@ test("GaugeStepCodeActionProvider ignores local undefined-step diagnostic code i
   });
 });
 
+test("GaugeStepCodeActionProvider creates fixes for gauge validate missing implementation diagnostics", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+  const diagnostic = {
+    message: "[ValidationError] line number: 2, Step implementation not found => 'Pay with <amount>'",
+    range,
+    code: "gauge.validate",
+    source: "gauge",
+  };
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [diagnostic],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].diagnostics, [diagnostic]);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider creates a diagnostic code step fix outside step lines", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,

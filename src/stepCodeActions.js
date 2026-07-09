@@ -9,6 +9,7 @@ const GENERATE_STEP_STUB = "gauge.generate.step";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const JAVA_LANGUAGE = "java";
+const VALIDATE_MISSING_IMPLEMENTATION_MESSAGE = "Step implementation not found";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -288,12 +289,19 @@ function diagnosticStubCode(diagnostic) {
   return undefined;
 }
 
+function isMissingImplementationDiagnostic(diagnostic) {
+  return String((diagnostic && diagnostic.message) || "").includes(
+    VALIDATE_MISSING_IMPLEMENTATION_MESSAGE,
+  );
+}
+
 function undefinedStepDiagnostics(context) {
   return (context && Array.isArray(context.diagnostics) ? context.diagnostics : [])
     .filter((diagnostic) => (
       diagnostic
       && (
         diagnostic.message === UNDEFINED_STEP_MESSAGE
+        || isMissingImplementationDiagnostic(diagnostic)
         || diagnosticStubCode(diagnostic) !== undefined
       )
     ));
