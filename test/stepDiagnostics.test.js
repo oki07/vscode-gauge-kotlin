@@ -4874,6 +4874,35 @@ test("GaugeStepDiagnosticsProvider reports Gauge external tables without locatio
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 6 });
 });
 
+test("GaugeStepDiagnosticsProvider reports short Gauge teardown markers", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Confirm order",
+    "__",
+    "* Cleanup order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+    "@Step(\"Cleanup order\")",
+    "fun cleanup() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Teardown should have at least three underscore characters",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 2 });
+});
+
 test("GaugeStepDiagnosticsProvider reports repeated Gauge specification tag definitions", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

@@ -31,6 +31,7 @@ const TABLE_LOCATION_MISSING_MESSAGE = "Table location not specified";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
 const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
+const TEARDOWN_UNDERSCORE_MESSAGE = "Teardown should have at least three underscore characters";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
 const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminated";
@@ -4087,6 +4088,34 @@ function tableLocationDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function teardownMarkerDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const textLine = rawLine.trim();
+    if (!/^_+$/.test(textLine) || textLine.length >= 3) {
+      continue;
+    }
+
+    diagnostics.push(createDiagnostic(
+      vscode,
+      lineContentRange(vscode, rawLine, line),
+      TEARDOWN_UNDERSCORE_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function repeatedTagDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
@@ -7755,6 +7784,7 @@ class GaugeStepDiagnosticsProvider {
       if (isGaugeSpecDocument(document)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
         diagnostics.push(...tableLocationDiagnostics(this.vscode, text));
+        diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
       }
       if (isConceptDocument(document)) {
