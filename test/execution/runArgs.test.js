@@ -94,6 +94,19 @@ test("buildRunArgs.forGauge formats standard run options", () => {
   );
 });
 
+test("buildRunArgs.forGauge preserves boolean sort launch compatibility", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge(null, { sort: true }),
+    ["run", "--hide-suggestion", "--simple-console", "--sort"],
+  );
+  assert.deepEqual(
+    buildRunArgs.forGauge(null, { sort: "random", "random-seed": 4 }),
+    ["run", "--hide-suggestion", "--simple-console", "--sort", "random", "--random-seed", "4"],
+  );
+});
+
 test("buildRunArgs.forGauge appends launch args before the spec target", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 

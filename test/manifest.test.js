@@ -448,13 +448,20 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
         default: false,
       },
       sort: {
-        description: "[Gauge] Set the order of spec execution. Possible options are: alpha,random",
-        type: "string",
-        enum: [
-          "alpha",
-          "random",
+        description: "[Gauge] Run specs in alphabetical order, or set the order of spec execution to alpha or random",
+        anyOf: [
+          {
+            type: "boolean",
+          },
+          {
+            type: "string",
+            enum: [
+              "alpha",
+              "random",
+            ],
+          },
         ],
-        default: "",
+        default: false,
       },
       "random-seed": {
         description: "[Gauge] Random seed for reproducible random execution. Used only when --sort=random",
