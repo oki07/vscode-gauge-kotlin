@@ -4876,6 +4876,33 @@ test("GaugeStepDiagnosticsProvider reports multiple Gauge spec headings", () => 
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 20 });
 });
 
+test("GaugeStepDiagnosticsProvider reports scenarios before Gauge spec heading", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "## Guest checkout",
+    "* Confirm order",
+    "# Checkout",
+    "## Successful checkout",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Scenario should be defined after the spec heading",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 17 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

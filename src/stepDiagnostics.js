@@ -15,6 +15,7 @@ const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const DUPLICATE_SCENARIO_PREFIX = "Duplicate scenario definition";
 const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same file";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
+const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
@@ -3809,7 +3810,15 @@ function duplicateScenarioDiagnostics(vscode, text) {
     } else if (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine)) {
       heading = legacyHeadingValue(rawLine);
     }
-    if (heading === undefined || !hasSpecHeading) {
+    if (heading === undefined) {
+      continue;
+    }
+    if (!hasSpecHeading) {
+      diagnostics.push(createDiagnostic(
+        vscode,
+        lineContentRange(vscode, rawLine, line),
+        SCENARIO_BEFORE_SPEC_MESSAGE,
+      ));
       continue;
     }
 
