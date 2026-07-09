@@ -523,7 +523,7 @@ function snippetString(vscode, value) {
 }
 
 function externalDataTablePath(line) {
-  const match = /^\s*table\s*:\s*(.+?)\s*$/i.exec(String(line || ""));
+  const match = /^\s*table[ \t\f]?:\s*(.+?)\s*$/i.exec(String(line || ""));
   return match ? match[1].trim() : undefined;
 }
 

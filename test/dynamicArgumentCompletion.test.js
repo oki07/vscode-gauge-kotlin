@@ -134,6 +134,34 @@ test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table he
   ]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider requires Gauge table keyword spacing for external CSV headers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const reads = [];
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        reads.push({ encoding, filename });
+        return "one,two\n1,2\n";
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table   : ./csv.csv",
+    "",
+    "## Successful checkout",
+    "* Login as <o>",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
+
+  assert.deepEqual(labels(items), []);
+  assert.deepEqual(reads, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec dynamic step arguments inside dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
