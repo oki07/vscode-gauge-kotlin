@@ -828,13 +828,17 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
   const dynamicArgument = repositoryPattern(grammarJson, "arguments", 0);
+  const staticArgument = repositoryPattern(grammarJson, "arguments", 1);
   const tableDynamicArgument = repositoryPattern(grammarJson, "tableArguments", 0);
   const tableSeparatorPipe = repositoryPattern(grammarJson, "tableRow", 0);
   const fallbackComment = grammarJson.repository.fallbackComment;
 
   assertPatternMatches(dynamicArgument, "<name \\> suffix>", "<name \\> suffix>");
   assertPatternMatches(dynamicArgument, "<>", "<>");
+  assertPatternDoesNotMatch(dynamicArgument, "\\<escaped>");
+  assertPatternDoesNotMatch(staticArgument, "\\\"escaped");
   assertPatternMatches(tableDynamicArgument, "<user>", "<user>");
+  assertPatternDoesNotMatch(tableDynamicArgument, "\\<user>");
   assertPatternDoesNotMatch(tableDynamicArgument, "<user | admin>");
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
@@ -853,7 +857,19 @@ test("Gauge TextMate grammar keeps only dynamic arguments reachable in hash conc
   assert.ok(firstMatch, "hash heading should match a top-level pattern");
   assert.deepEqual(firstMatch.pattern.patterns, [{ include: "#dynamicArguments" }]);
   assertPatternMatches(repositoryPattern(grammarJson, "dynamicArguments", 0), "<item>");
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "dynamicArguments", 0), "\\<item>");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "dynamicArguments", 0), "\"card\"");
+});
+
+test("Gauge Concept TextMate grammar ignores escaped argument starts", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge-concept");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "dynamicArguments", 0), "\\<item>");
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "arguments", 0), "\\<item>");
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "arguments", 1), "\\\"item");
+  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "tableArguments", 0), "\\<item>");
 });
 
 test("Gauge TextMate grammar preserves common Markdown constructs", () => {

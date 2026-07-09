@@ -233,7 +233,7 @@
       "patterns": [
         {
           "name": "variable.parameter.dynamic.gauge",
-          "match": "(<)((?:\\\\[<>]|[^>\\n])*)(>)",
+          "match": "(?<!\\\\)(<)((?:\\\\[<>]|[^>\\n])*)(>)",
           "captures": {
             "1": {
               "name": "punctuation.definition.variable.begin.gauge"
@@ -249,7 +249,7 @@
       "patterns": [
         {
           "name": "variable.parameter.dynamic.gauge",
-          "match": "(<)((?:\\\\[<>]|[^>\\n])*)(>)",
+          "match": "(?<!\\\\)(<)((?:\\\\[<>]|[^>\\n])*)(>)",
           "captures": {
             "1": {
               "name": "punctuation.definition.variable.begin.gauge"
@@ -261,7 +261,7 @@
         },
         {
           "name": "string.quoted.double.argument.gauge",
-          "begin": "\"",
+          "begin": "(?<!\\\\)\"",
           "beginCaptures": {
             "0": {
               "name": "punctuation.definition.string.begin.gauge"
@@ -286,7 +286,7 @@
       "patterns": [
         {
           "name": "variable.parameter.dynamic.gauge",
-          "match": "(<)((?:\\\\[<>|]|[^>|\\n])*)(>)",
+          "match": "(?<!\\\\)(<)((?:\\\\[<>|]|[^>|\\n])*)(>)",
           "captures": {
             "1": {
               "name": "punctuation.definition.variable.begin.gauge"
