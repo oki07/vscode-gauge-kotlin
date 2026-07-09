@@ -3540,7 +3540,7 @@ function conceptHashHeading(rawLine, lineNumber) {
 }
 
 function conceptLegacyHeading(lines, lineNumber) {
-  if (lineNumber >= lines.length - 1) {
+  if (lineNumber >= lines.length - 2) {
     return undefined;
   }
   const rawLine = lines[lineNumber].replace(/\r$/, "");

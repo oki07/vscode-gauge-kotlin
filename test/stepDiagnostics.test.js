@@ -4922,6 +4922,15 @@ test("GaugeStepDiagnosticsProvider reports concepts without steps", () => {
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 15 });
 });
 
+test("findConceptHeadings ignores unterminated legacy underline concept headings", () => {
+  const { findConceptHeadings } = require("../src/stepDiagnostics");
+
+  assert.deepEqual(findConceptHeadings([
+    "Shared login",
+    "============",
+  ].join("\n")), []);
+});
+
 test("GaugeStepDiagnosticsProvider reports steps outside concept headings", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
