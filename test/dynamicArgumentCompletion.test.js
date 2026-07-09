@@ -736,7 +736,7 @@ test("GaugeDynamicArgumentCompletionProvider completes indented Gauge step argum
   assert.deepEqual(labels(staticItems), ["draft", "a"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores indented top-level table markers", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests indented top-level table headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -753,20 +753,16 @@ test("GaugeDynamicArgumentCompletionProvider ignores indented top-level table ma
     new vscode.Position(4, 13),
   );
 
-  assert.deepEqual(labels(items), []);
+  assert.deepEqual(labels(items), ["user", "role"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores standalone indented table body arguments", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests standalone indented table body arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
   const specBody = "  | <u>  | admin |";
   const specDocument = createDocument([
     "# Checkout",
-    "| user | role |",
-    "| ---- | ---- |",
-    "| Bob  | admin |",
-    "",
     "  | name | role |",
     "  | ---- | ---- |",
     specBody,
@@ -783,15 +779,15 @@ test("GaugeDynamicArgumentCompletionProvider ignores standalone indented table b
 
   const specItems = provider.provideCompletionItems(
     specDocument,
-    new vscode.Position(7, specBody.indexOf("u") + 1),
+    new vscode.Position(3, specBody.indexOf("u") + 1),
   );
   const conceptItems = provider.provideCompletionItems(
     conceptDocument,
     new vscode.Position(3, conceptBody.indexOf("i") + 1),
   );
 
-  assert.deepEqual(specItems, []);
-  assert.deepEqual(conceptItems, []);
+  assert.deepEqual(labels(specItems), ["name", "role", "u"]);
+  assert.deepEqual(labels(conceptItems), ["item", "i", "user"]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider ignores non-step spec arguments", () => {

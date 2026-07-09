@@ -248,17 +248,8 @@ function isTableBlockLine(lines, lineNumber, options = {}) {
   return tableBlockStartLine(lines, lineNumber, options) !== -1;
 }
 
-function isIndentedInlineTableBlockLine(lines, lineNumber) {
-  const startLine = tableBlockStartLine(lines, lineNumber, { allowIndented: true });
-  if (startLine <= 0) {
-    return false;
-  }
-  const startText = lines[startLine] || "";
-  return isTableLine(startText) && !startText.startsWith("|") && isStepLine(lines[startLine - 1] || "");
-}
-
 function isCompletionTableBlockLine(lines, lineNumber) {
-  return isTableBlockLine(lines, lineNumber) || isIndentedInlineTableBlockLine(lines, lineNumber);
+  return isTableBlockLine(lines, lineNumber, { allowIndented: true });
 }
 
 function isTableHeaderLine(document, lineNumber, options = {}) {
@@ -641,7 +632,7 @@ function specDataTableHeaders(text, options = {}) {
     if (dataTablePath) {
       return externalDataTableHeaders(dataTablePath, options);
     }
-    if (isFirstTableLine(lines, index)) {
+    if (isFirstTableLine(lines, index, { allowIndented: true })) {
       return unique(tableCells(line));
     }
   }
@@ -666,7 +657,7 @@ function scenarioDataTableHeaders(text, lineNumber) {
     if (isScenarioHeadingAt(lines, index) || isStepLine(line)) {
       return [];
     }
-    if (isFirstTableLine(lines, index)) {
+    if (isFirstTableLine(lines, index, { allowIndented: true })) {
       return unique(tableCells(line));
     }
   }

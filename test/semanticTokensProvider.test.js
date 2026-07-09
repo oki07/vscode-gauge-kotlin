@@ -1006,7 +1006,7 @@ test("GaugeSemanticTokensProvider keeps contiguous table rows as body rows befor
   assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "tableHeaderSeparator"), false);
 });
 
-test("GaugeSemanticTokensProvider treats indented top-level table markers as comments", () => {
+test("GaugeSemanticTokensProvider tokenizes indented top-level table markers", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -1027,10 +1027,11 @@ test("GaugeSemanticTokensProvider treats indented top-level table markers as com
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
-  assert.deepEqual(tokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
-    "gaugeComment",
-    "gaugeComment",
-  ]);
+  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "tableHeader"), true);
+  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "tableBorder"), true);
+  assert.equal(tokens.some((entry) => entry.line === 0 && entry.type === "dynamicArgument"), false);
+  assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tableHeaderSeparator"), true);
+  assert.equal(tokens.some((entry) => entry.line < 2 && entry.type === "gaugeComment"), false);
   assert.deepEqual(tokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
     "stepMarker",
     "step",

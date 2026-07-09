@@ -225,24 +225,8 @@ function tableBlockStartLine(lines, lineNumber, options = {}) {
   return isTableBlockStartLine(lines[startLine] || "", options) ? startLine : -1;
 }
 
-function indentedInlineTableBlockStartLine(lines, lineNumber) {
-  const startLine = tableBlockStartLine(lines, lineNumber, { allowIndented: true });
-  if (startLine <= 0) {
-    return -1;
-  }
-  const startText = lines[startLine] || "";
-  return (
-    isTableLine(startText)
-    && !startText.startsWith("|")
-    && isStepLine(lines[startLine - 1] || "")
-  )
-    ? startLine
-    : -1;
-}
-
 function semanticTableBlockStartLine(lines, lineNumber) {
-  const startLine = tableBlockStartLine(lines, lineNumber);
-  return startLine !== -1 ? startLine : indentedInlineTableBlockStartLine(lines, lineNumber);
+  return tableBlockStartLine(lines, lineNumber, { allowIndented: true });
 }
 
 function isFirstTableLine(lines, lineNumber) {
