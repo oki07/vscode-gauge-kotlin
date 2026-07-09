@@ -11,9 +11,6 @@ const {
   positionAt,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
-const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
-const { GradleProject } = require("./project/gradleProject");
-const { MavenProject } = require("./project/mavenProject");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -24,10 +21,8 @@ const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const JAVA_FILE_PATTERN = "**/*.java";
 const KOTLIN_FILE_PATTERN = "**/*.kt";
-const IMPLEMENTATION_DIAGNOSTIC_FILE_PATTERN = /\.(?:java|kts?)$/i;
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
-const REFACTOR_PREFLIGHT_ERROR = "Please fix all errors before refactoring.";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -379,69 +374,6 @@ function isGaugeDocument(document) {
   }
   return document.languageId === MARKDOWN_LANGUAGE
     && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
-}
-
-function isImplementationDiagnosticFile(file) {
-  return typeof file === "string" && IMPLEMENTATION_DIAGNOSTIC_FILE_PATTERN.test(file);
-}
-
-function diagnosticSeverityIsError(vscode, diagnostic) {
-  const severity = vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Error !== undefined
-    ? vscode.DiagnosticSeverity.Error
-    : 0;
-  return diagnostic && diagnostic.severity === severity;
-}
-
-function compileArgsForProject(project) {
-  if (project instanceof MavenProject) {
-    return ["-q", "compile", "test-compile"];
-  }
-  if (project instanceof GradleProject) {
-    return ["clean", "testClasses"];
-  }
-  return undefined;
-}
-
-function compileFailed(result) {
-  return !result
-    || result.error
-    || (typeof result.status === "number" && result.status !== 0)
-    || (result.status === null && result.signal);
-}
-
-function diagnosticEntries(vscode) {
-  const getDiagnostics = vscode.languages && vscode.languages.getDiagnostics;
-  if (typeof getDiagnostics !== "function") {
-    return [];
-  }
-
-  const entries = [];
-  const seen = new Set();
-  const addEntry = (uri, diagnostics) => {
-    const file = uriPath(uri);
-    if (!file || seen.has(file)) {
-      return;
-    }
-    seen.add(file);
-    entries.push([uri, Array.isArray(diagnostics) ? diagnostics : []]);
-  };
-
-  const allDiagnostics = getDiagnostics();
-  if (Array.isArray(allDiagnostics)) {
-    for (const entry of allDiagnostics) {
-      if (Array.isArray(entry)) {
-        addEntry(entry[0], entry[1]);
-      }
-    }
-  }
-
-  const documents = (vscode.workspace && vscode.workspace.textDocuments) || [];
-  for (const document of documents) {
-    if (document && document.uri) {
-      addEntry(document.uri, getDiagnostics(document.uri));
-    }
-  }
-  return entries;
 }
 
 function readQuotedLiteral(text, start, limit) {
@@ -1121,22 +1053,12 @@ function editHasReplacement(edit, uri, range) {
 class GaugeRenameProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
-    this.cli = options.cli;
     this.clientsMap = options.clientsMap;
     this.projectFactory = options.projectFactory;
-    this.compilePreflightProvider = options.compilePreflightProvider;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
-    this.validateDiagnosticsProvider = options.validateDiagnosticsProvider
-      || new GaugeValidateDiagnosticsProvider({
-        cli: options.cli,
-        env: options.env,
-        pathModule: options.pathModule,
-        projectFactory: this.projectFactory,
-        vscode: this.vscode,
-      });
   }
 
   isGaugeProjectDocument(document) {
@@ -1390,78 +1312,6 @@ class GaugeRenameProvider {
     if (this.vscode.workspace && typeof this.vscode.workspace.saveAll === "function") {
       await this.vscode.workspace.saveAll();
     }
-    await this.compileProjectForRename(document);
-    if (this.hasImplementationDiagnosticErrors(document)) {
-      throw new Error(REFACTOR_PREFLIGHT_ERROR);
-    }
-    if (
-      !this.validateDiagnosticsProvider
-      || typeof this.validateDiagnosticsProvider.validateErrorsForDocument !== "function"
-    ) {
-      return;
-    }
-    const { errors } = this.validateDiagnosticsProvider.validateErrorsForDocument(document, new Map());
-    if (Array.isArray(errors) && errors.length > 0) {
-      throw new Error(REFACTOR_PREFLIGHT_ERROR);
-    }
-  }
-
-  async compileProjectForRename(document) {
-    if (typeof this.compilePreflightProvider === "function") {
-      const result = await this.compilePreflightProvider(document);
-      if (result === false) {
-        throw new Error(REFACTOR_PREFLIGHT_ERROR);
-      }
-      return;
-    }
-    if (
-      !this.cli
-      || !this.projectFactory
-      || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
-      || typeof this.projectFactory.get !== "function"
-    ) {
-      return;
-    }
-
-    let project;
-    try {
-      const root = this.projectFactory.getGaugeRootFromFilePath(documentPath(document));
-      project = this.projectFactory.get(root);
-    } catch (_error) {
-      return;
-    }
-    const args = compileArgsForProject(project);
-    if (!args || typeof project.getExecutionCommand !== "function") {
-      return;
-    }
-    const command = project.getExecutionCommand(this.cli);
-    if (!command || typeof command.spawnSync !== "function") {
-      return;
-    }
-    const result = command.spawnSync(args, { cwd: project.root() });
-    if (compileFailed(result)) {
-      throw new Error(REFACTOR_PREFLIGHT_ERROR);
-    }
-  }
-
-  hasImplementationDiagnosticErrors(document) {
-    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(document);
-    for (const [uri, diagnostics] of diagnosticEntries(this.vscode)) {
-      const file = uriPath(uri);
-      if (!isImplementationDiagnosticFile(file)) {
-        continue;
-      }
-      if (sourceRoot !== undefined && this.diagnosticsProvider.rootForFile(file) !== sourceRoot) {
-        continue;
-      }
-      if (sourceRoot === undefined && this.projectFactory && !this.diagnosticsProvider.rootForFile(file)) {
-        continue;
-      }
-      if ((diagnostics || []).some((diagnostic) => diagnosticSeverityIsError(this.vscode, diagnostic))) {
-        return true;
-      }
-    }
-    return false;
   }
 
   addGaugeRenames(edit, document, template, newName) {
