@@ -4759,6 +4759,7 @@ test("GaugeStepDiagnosticsProvider reports Gauge step parser errors", () => {
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const document = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay \"card",
     "* Pay <card",
     "* Pay {card}",
@@ -4781,10 +4782,10 @@ test("GaugeStepDiagnosticsProvider reports Gauge step parser errors", () => {
       "'}' is a reserved character and should be escaped",
     ],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 11 });
-  assert.deepEqual({ ...diagnostics[3].range.start }, { line: 4, character: 0 });
-  assert.deepEqual({ ...diagnostics[3].range.end }, { line: 4, character: 11 });
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 11 });
+  assert.deepEqual({ ...diagnostics[3].range.start }, { line: 5, character: 0 });
+  assert.deepEqual({ ...diagnostics[3].range.end }, { line: 5, character: 11 });
 });
 
 test("GaugeStepDiagnosticsProvider reports Gauge table header parser errors", () => {
@@ -4903,11 +4904,37 @@ test("GaugeStepDiagnosticsProvider reports scenarios before Gauge spec heading",
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 17 });
 });
 
+test("GaugeStepDiagnosticsProvider reports Gauge specs without scenarios", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "* Context setup",
+    "tags: smoke",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Context setup\")",
+    "fun context() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Spec should have at least one scenario",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 10 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with <amount>",
     "  * Ship order",
     "* Confirm order",
@@ -4941,14 +4968,14 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
       "Undefined Step",
     ],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
-  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 2, character: 2 });
-  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 2, character: 14 });
-  assert.deepEqual({ ...diagnostics[2].range.start }, { line: 3, character: 0 });
-  assert.deepEqual({ ...diagnostics[2].range.end }, { line: 3, character: 15 });
-  assert.deepEqual({ ...diagnostics[4].range.start }, { line: 7, character: 0 });
-  assert.deepEqual({ ...diagnostics[4].range.end }, { line: 7, character: 18 });
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 19 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 3, character: 2 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 3, character: 14 });
+  assert.deepEqual({ ...diagnostics[2].range.start }, { line: 4, character: 0 });
+  assert.deepEqual({ ...diagnostics[2].range.end }, { line: 4, character: 15 });
+  assert.deepEqual({ ...diagnostics[4].range.start }, { line: 8, character: 0 });
+  assert.deepEqual({ ...diagnostics[4].range.end }, { line: 8, character: 18 });
 });
 
 test("GaugeStepDiagnosticsProvider resolves multiline Gauge steps when project allows them", () => {
@@ -4979,6 +5006,7 @@ test("GaugeStepDiagnosticsProvider resolves multiline Gauge steps when project a
   });
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with",
     "card",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
@@ -5359,6 +5387,7 @@ test("GaugeStepDiagnosticsProvider reports undefined steps implemented only in a
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Shared checkout",
   ].join("\n"), "gauge", "/workspace/project-a/specs/checkout.spec");
   const otherProjectKotlinDocument = createDocument([
@@ -5402,6 +5431,7 @@ test("GaugeStepDiagnosticsProvider reports undefined steps defined only by conce
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Shared concept",
   ].join("\n"), "gauge", "/workspace/project-a/specs/checkout.spec");
   const otherProjectConceptDocument = createDocument([
@@ -5445,6 +5475,7 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps when no impleme
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with card",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const vscode = {
@@ -5471,14 +5502,15 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps when no impleme
     diagnostics.map((diagnostic) => diagnostic.message),
     ["Undefined Step"],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 15 });
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 15 });
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined markdown Gauge spec steps", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with card",
   ].join("\n"), "markdown", "/workspace/gauge/specs/checkout.md");
   const vscode = {
@@ -5505,8 +5537,8 @@ test("GaugeStepDiagnosticsProvider reports undefined markdown Gauge spec steps",
     diagnostics.map((diagnostic) => diagnostic.message),
     ["Undefined Step"],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 15 });
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 15 });
 });
 
 test("GaugeStepDiagnosticsProvider ignores Markdown when the resolved root is not a Gauge project", async () => {
@@ -5558,6 +5590,7 @@ test("GaugeStepDiagnosticsProvider uses unopened plaintext Kotlin files for Gaug
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with \"card\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const openedKotlinDocument = createDocument([
@@ -5605,6 +5638,7 @@ test("GaugeStepDiagnosticsProvider uses unopened Java Step files for Gauge undef
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with \"card\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const javaDocument = createDocument([
@@ -5652,6 +5686,7 @@ test("GaugeStepDiagnosticsProvider uses Java constants in Java Step annotations"
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with \"card\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const constantsDocument = createDocument([
@@ -5691,6 +5726,7 @@ test("GaugeStepDiagnosticsProvider decodes Java unicode and octal escapes in Ste
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with \"card\"",
     "* Ship with \"ground\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
@@ -5753,6 +5789,7 @@ test("GaugeStepDiagnosticsProvider uses Java constants in Kotlin Step annotation
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const specDocument = createDocument([
     "# Checkout",
+    "## Scenario",
     "* Pay with \"card\"",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const constantsDocument = createDocument([

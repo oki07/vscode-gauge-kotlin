@@ -17,6 +17,7 @@ const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same fil
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
+const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
 const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
@@ -3777,6 +3778,8 @@ function duplicateScenarioDiagnostics(vscode, text) {
   const lines = text.split("\n");
   let inDocString = false;
   let hasSpecHeading = false;
+  let hasScenarioHeading = false;
+  let firstSpecHeadingRange;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     if (isDocStringFenceLine(rawLine)) {
@@ -3799,6 +3802,8 @@ function duplicateScenarioDiagnostics(vscode, text) {
           lineContentRange(vscode, rawLine, line),
           MULTIPLE_SPEC_HEADINGS_MESSAGE,
         ));
+      } else {
+        firstSpecHeadingRange = lineContentRange(vscode, rawLine, line);
       }
       hasSpecHeading = true;
       continue;
@@ -3821,6 +3826,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
       ));
       continue;
     }
+    hasScenarioHeading = true;
 
     const key = heading.toLowerCase();
     const previous = seen.get(key);
@@ -3833,6 +3839,13 @@ function duplicateScenarioDiagnostics(vscode, text) {
     } else {
       seen.set(key, heading);
     }
+  }
+  if (firstSpecHeadingRange && !hasScenarioHeading) {
+    diagnostics.push(createDiagnostic(
+      vscode,
+      firstSpecHeadingRange,
+      SPEC_WITHOUT_SCENARIO_MESSAGE,
+    ));
   }
   return diagnostics;
 }
