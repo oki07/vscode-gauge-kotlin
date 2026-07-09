@@ -23,6 +23,10 @@ const SPEC_FILE_DELIMITER = "||";
 const RERUN_FLAG_KEYS = [
   "hide-suggestion",
   "machine-readable",
+  "verbose",
+  "simple-console",
+  "dir",
+  "log-level",
 ];
 
 function withoutCommonLaunchAttributes(input) {

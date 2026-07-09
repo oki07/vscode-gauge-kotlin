@@ -42,6 +42,41 @@ test("buildRunArgs.forGauge keeps Test UI flags for failed and repeat runs", () 
   );
 });
 
+test("buildRunArgs.forGauge keeps Gauge rerun override flags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec:123", {
+      failed: true,
+      verbose: true,
+      "simple-console": true,
+      dir: "envs/dev",
+      "log-level": "debug",
+      tags: "should be ignored",
+      parallel: true,
+    }),
+    [
+      "run",
+      "--failed",
+      "--verbose",
+      "--simple-console",
+      "--dir",
+      "envs/dev",
+      "--log-level",
+      "debug",
+    ],
+  );
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec:123", {
+      repeat: true,
+      verbose: true,
+      "log-level": "error",
+      tags: "should be ignored",
+    }),
+    ["run", "--repeat", "--verbose", "--log-level", "error"],
+  );
+});
+
 test("buildRunArgs.forGauge formats standard run options", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -156,6 +191,22 @@ test("buildRunArgs.forGradle keeps Test UI flags for failed and repeat runs", ()
   );
 });
 
+test("buildRunArgs.forGradle forwards Gauge rerun override flags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", {
+      failed: true,
+      verbose: true,
+      "simple-console": true,
+      dir: "envs/dev",
+      "log-level": "debug",
+      tags: "should be ignored",
+    }).join(" "),
+    "clean gauge -PadditionalFlags=--failed --verbose --simple-console --dir envs/dev --log-level debug",
+  );
+});
+
 test("buildRunArgs.forGradle formats standard run options", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -263,6 +314,22 @@ test("buildRunArgs.forMaven keeps Test UI flags for failed and repeat runs", () 
       tags: "should be ignored",
     }).join(" "),
     "-q clean compile test-compile gauge:execute -Dflags=--repeat,--hide-suggestion,--machine-readable",
+  );
+});
+
+test("buildRunArgs.forMaven forwards Gauge rerun override flags", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", {
+      repeat: true,
+      verbose: true,
+      "simple-console": true,
+      dir: "envs/dev",
+      "log-level": "debug",
+      tags: "should be ignored",
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -Dflags=--repeat,--verbose,--simple-console,--dir,envs/dev,--log-level,debug",
   );
 });
 
