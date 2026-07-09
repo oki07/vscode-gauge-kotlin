@@ -661,9 +661,18 @@
                 "default": false
               },
               "sort": {
-                "description": "[Gauge] Run specs in Alphabetical Order",
-                "type": "boolean",
-                "default": false
+                "description": "[Gauge] Set the order of spec execution. Possible options are: alpha,random",
+                "type": "string",
+                "enum": [
+                  "alpha",
+                  "random"
+                ],
+                "default": ""
+              },
+              "random-seed": {
+                "description": "[Gauge] Random seed for reproducible random execution. Used only when --sort=random",
+                "type": "number",
+                "default": 0
               },
               "strategy": {
                 "description": "[Gauge] Set the parallelization strategy for execution. Possible options are: eager,lazy (default \"lazy\")",
@@ -674,7 +683,7 @@
                 "default": "lazy"
               },
               "table-rows": {
-                "description": "[Gauge] Executes the specs and scenarios only for the selected rows. It can be specified by range as 2_4 or as list 2,4",
+                "description": "[Gauge] Executes the specs and scenarios only for the selected rows. It can be specified by range as 2-4 or as list 2,4",
                 "type": "string",
                 "default": ""
               },
