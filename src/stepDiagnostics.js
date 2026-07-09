@@ -4185,6 +4185,107 @@ function tableFileParameterDiagnostics(vscode, text, options = {}) {
   return diagnostics;
 }
 
+function dynamicStepParameters(text) {
+  const parameters = [];
+  let openIndex = findDynamicParameterStart(text, 0);
+  while (openIndex !== -1) {
+    const closeIndex = findDynamicParameterEnd(text, openIndex);
+    if (closeIndex === -1) {
+      return parameters;
+    }
+    const parameter = text.slice(openIndex + 1, closeIndex).trim();
+    if (parameter && !/^(?:file|table)\s*:/i.test(parameter)) {
+      parameters.push(parameter);
+    }
+    openIndex = findDynamicParameterStart(text, closeIndex + 1);
+  }
+  return parameters;
+}
+
+function addTableHeaders(target, rawLine) {
+  for (const cell of gaugeTableCells(rawLine)) {
+    if (cell) {
+      target.add(cell);
+    }
+  }
+}
+
+function dynamicStepParameterDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  const specHeaders = new Set();
+  let scenarioHeaders = new Set();
+  let inDocString = false;
+  let inScenario = false;
+  let scenarioHasStep = false;
+  let inTableBlock = false;
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      inTableBlock = false;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      inScenario = false;
+      scenarioHeaders = new Set();
+      scenarioHasStep = false;
+      inTableBlock = false;
+      continue;
+    }
+
+    const scenarioHeading = isScenarioHashHeadingLine(rawLine)
+      || (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine));
+    if (scenarioHeading) {
+      inScenario = true;
+      scenarioHeaders = new Set();
+      scenarioHasStep = false;
+      inTableBlock = false;
+      continue;
+    }
+
+    if (isGaugeTableRow(rawLine)) {
+      if (!inTableBlock) {
+        if (!inScenario) {
+          addTableHeaders(specHeaders, rawLine);
+        } else if (!scenarioHasStep) {
+          addTableHeaders(scenarioHeaders, rawLine);
+        }
+      }
+      inTableBlock = true;
+      continue;
+    }
+    inTableBlock = false;
+
+    if (!isGaugeStepLine(rawLine)) {
+      continue;
+    }
+    scenarioHasStep = scenarioHasStep || inScenario;
+    const availableParameters = new Set([...specHeaders, ...scenarioHeaders]);
+    for (const parameter of dynamicStepParameters(rawLine)) {
+      if (availableParameters.has(parameter)) {
+        continue;
+      }
+      diagnostics.push(createDiagnostic(
+        vscode,
+        lineContentRange(vscode, rawLine, line),
+        unresolvedDynamicParameterMessage(parameter),
+      ));
+    }
+  }
+  return diagnostics;
+}
+
 function teardownMarkerDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
@@ -7890,6 +7991,7 @@ class GaugeStepDiagnosticsProvider {
           pathModule: this.pathModule,
           projectRoot: this.gaugeProjectRoot(document),
         }));
+        diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
       }
