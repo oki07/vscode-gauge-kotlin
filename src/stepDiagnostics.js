@@ -19,6 +19,7 @@ const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec 
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const SCENARIO_HEADING_EMPTY_MESSAGE = "Scenario heading should have at least one character";
 const SCENARIO_WITHOUT_STEP_MESSAGE = "Scenario should have at least one step";
+const SPEC_EMPTY_MESSAGE = "Spec does not have any elements";
 const SPEC_HEADING_EMPTY_MESSAGE = "Spec heading should have at least one character";
 const SPEC_HEADING_NOT_FOUND_MESSAGE = "Spec heading not found";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
@@ -3906,6 +3907,13 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
   }
   pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
+  if (!hasSpecHeading && !firstContentRange) {
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(vscode, { line: 0, character: 0 }, { line: 0, character: 0 }),
+      SPEC_EMPTY_MESSAGE,
+    ));
+  }
   if (!hasSpecHeading && firstContentRange) {
     diagnostics.unshift(createDiagnostic(
       vscode,

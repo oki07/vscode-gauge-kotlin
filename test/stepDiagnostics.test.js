@@ -4929,6 +4929,23 @@ test("GaugeStepDiagnosticsProvider reports missing Gauge spec headings", () => {
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 17 });
 });
 
+test("GaugeStepDiagnosticsProvider reports empty Gauge specs", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument("", "gauge", "/workspace/gauge/specs/checkout.spec");
+
+  const diagnostics = provider.provideDiagnostics(document, [document]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Spec does not have any elements",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 0 });
+});
+
 test("GaugeStepDiagnosticsProvider reports Gauge specs without scenarios", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
