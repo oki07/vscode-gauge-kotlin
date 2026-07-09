@@ -122,7 +122,7 @@
         },
         {
           "name": "punctuation.definition.heading.spec.gauge",
-          "match": "^\\s*=+\\s*$"
+          "match": "^=+$"
         }
       ]
     },
@@ -134,7 +134,7 @@
         },
         {
           "name": "punctuation.definition.heading.scenario.gauge",
-          "match": "^\\s*-+\\s*$"
+          "match": "^-+$"
         }
       ]
     },
