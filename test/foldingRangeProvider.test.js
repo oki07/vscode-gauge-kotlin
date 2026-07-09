@@ -203,7 +203,7 @@ test("GaugeFoldingRangeProvider does not split concept folds on teardown markers
   ]);
 });
 
-test("GaugeFoldingRangeProvider ignores indented teardown markers", () => {
+test("GaugeFoldingRangeProvider folds indented teardown markers", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();
   const document = createDocument([
@@ -218,7 +218,8 @@ test("GaugeFoldingRangeProvider ignores indented teardown markers", () => {
   ].join("\n"));
 
   assert.deepEqual(provider.provideFoldingRanges(document), [
-    { start: 0, end: 3 },
+    { start: 0, end: 1 },
+    { start: 2, end: 3 },
     { start: 5, end: 6 },
   ]);
 });

@@ -788,6 +788,7 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(grammarJson.repository.step, "** bold step", "*");
   assertPatternMatches(grammarJson.repository.teardown, "___", "___");
   assertPatternMatches(grammarJson.repository.teardown, "___  ", "___  ");
+  assertPatternMatches(grammarJson.repository.teardown, "  ___", "  ___");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
   assertPatternMatches(grammarJson.repository.tableRow, "  | table cell |", "  |");
   assertPatternMatches(grammarJson.repository.tableRow, "| name", "|");
@@ -853,6 +854,7 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain <arg>").include, "#fallbackComment");
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "___").include, "#teardown");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "  ___").include, "#teardown");
   assert.notEqual(firstMatchingTopLevelPattern(grammarJson, "___").include, "#markdown");
 });
 

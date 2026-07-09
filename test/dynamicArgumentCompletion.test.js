@@ -1095,7 +1095,7 @@ test("GaugeDynamicArgumentCompletionProvider excludes teardown static arguments"
   assert.deepEqual(labels(items), ["c"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider keeps static arguments after indented teardown markers", () => {
+test("GaugeDynamicArgumentCompletionProvider excludes static arguments after indented teardown markers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -1109,7 +1109,7 @@ test("GaugeDynamicArgumentCompletionProvider keeps static arguments after indent
 
   const items = provider.provideCompletionItems(document, new vscode.Position(2, 12));
 
-  assert.deepEqual(labels(items), ["c", "temp"]);
+  assert.deepEqual(labels(items), ["c"]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests escaped spec static arguments inside quotes", () => {

@@ -185,7 +185,7 @@ function isStepLine(line) {
 }
 
 function isTeardownIdentifierLine(line) {
-  return /^_{3,}[ \t\f]*$/.test(line);
+  return /^_{3,}[ \t\f]*$/.test(String(line || "").trimStart());
 }
 
 function isConceptLegacyUnderlineHeadingText(line) {

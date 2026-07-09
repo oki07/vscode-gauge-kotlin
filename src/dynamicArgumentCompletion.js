@@ -225,7 +225,7 @@ function isTableBlockStartLine(line, options = {}) {
 }
 
 function isTeardownLine(line) {
-  return /^___+\s*$/.test(line);
+  return /^___+\s*$/.test(String(line || "").trimStart());
 }
 
 function tableBlockStartLine(lines, lineNumber, options = {}) {

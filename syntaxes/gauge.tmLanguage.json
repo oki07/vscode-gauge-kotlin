@@ -167,7 +167,7 @@
     },
     "teardown": {
       "name": "keyword.control.teardown.gauge",
-      "match": "^___+[ \\t\\f]*$"
+      "match": "^[ \\t\\f]*___+[ \\t\\f]*$"
     },
     "table": {
       "patterns": [

@@ -275,6 +275,7 @@ test("GaugeSemanticTokensProvider tokenizes teardown separators", () => {
       return [
         "___",
         "___  ",
+        "  ___",
       ].join("\n");
     },
   };
@@ -284,6 +285,7 @@ test("GaugeSemanticTokensProvider tokenizes teardown separators", () => {
 
   assert.equal(tokenTypes.includes("teardownIdentifier"), true);
   assert.deepEqual(tokens.map((entry) => entry.type), [
+    "teardownIdentifier",
     "teardownIdentifier",
     "teardownIdentifier",
   ]);
