@@ -334,16 +334,12 @@ function isInsideEscapedArgument(line, position) {
   return false;
 }
 
-function normalizedTagLinePrefix(line) {
-  return String(line || "").trim().split(/\s+/).join("").toLowerCase();
-}
-
 function lineEndsWithComma(line) {
   return String(line || "").trim().endsWith(",");
 }
 
 function isTagLine(line) {
-  return normalizedTagLinePrefix(line).startsWith("tags:");
+  return /^\s*tags[ \t\f]?:/i.test(String(line || ""));
 }
 
 function isTagsContext(lines, lineNumber) {

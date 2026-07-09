@@ -214,6 +214,27 @@ test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag lines", 
   assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 6 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider requires Gauge tag keyword spacing", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "tags: smoke",
+    "",
+    "## Pay",
+    "ta gs: ",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const items = await provider.provideCompletionItems(document, new vscode.Position(4, 7));
+
+  assert.deepEqual(labels(items), []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on continuation lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
