@@ -691,6 +691,71 @@ test("previewGaugeDocument installs Spectacle when the missing plugin action is 
   ]);
 });
 
+test("previewGaugeDocument does not start duplicate Spectacle installs", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { information, vscode } = createFakeVscode({
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      fileName: "/workspace/gauge/specs/example.spec",
+      getText() {
+        return "# Checkout\n";
+      },
+    },
+    informationSelection: "Install Spectacle",
+  });
+  let finishInstall;
+  let assertionError;
+  const installPromise = new Promise((resolve) => {
+    finishInstall = resolve;
+  });
+  const installs = [];
+  const cli = {
+    isPluginInstalled(pluginName) {
+      assert.equal(pluginName, "spectacle");
+      return false;
+    },
+    installGaugeRunner(pluginName) {
+      installs.push(pluginName);
+      return installPromise;
+    },
+  };
+  const options = {
+    cli,
+    fileSystem: {
+      mkdirSync() {},
+      writeFileSync() {},
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  };
+
+  const firstPreview = previewGaugeDocument(options);
+  await Promise.resolve();
+  const secondPreview = previewGaugeDocument(options);
+  await Promise.resolve();
+
+  try {
+    assert.deepEqual(installs, ["spectacle"]);
+    assert.equal(information.includes("Installation in progress..."), true);
+  } catch (error) {
+    assertionError = error;
+  }
+  finishInstall("installed");
+  await Promise.all([firstPreview, secondPreview]);
+  if (assertionError) {
+    throw assertionError;
+  }
+});
+
 test("previewGaugeDocument requires an active Gauge document", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errors, opened, vscode } = createFakeVscode({

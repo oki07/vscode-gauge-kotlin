@@ -15,6 +15,8 @@ const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept 
 const SPECTACLE_PLUGIN_NAME = "spectacle";
 const INSTALL_SPECTACLE_ACTION = "Install Spectacle";
 const MISSING_SPECTACLE_MESSAGE = "Missing plugin: Spectacle. To install, run `gauge install spectacle` or click below.";
+const SPECTACLE_INSTALL_IN_PROGRESS_MESSAGE = "Installation in progress...";
+let spectacleInstallPromise;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -209,6 +211,19 @@ function isSpectacleInstalled(cli) {
   return cli.isPluginInstalled(SPECTACLE_PLUGIN_NAME);
 }
 
+async function installSpectacle(vscode, cli) {
+  if (spectacleInstallPromise) {
+    await showInformation(vscode, SPECTACLE_INSTALL_IN_PROGRESS_MESSAGE);
+    return spectacleInstallPromise;
+  }
+  spectacleInstallPromise = Promise.resolve().then(() => cli.installGaugeRunner(SPECTACLE_PLUGIN_NAME));
+  try {
+    return await spectacleInstallPromise;
+  } finally {
+    spectacleInstallPromise = undefined;
+  }
+}
+
 async function promptToInstallSpectacle(vscode, cli) {
   const selection = await showInformation(
     vscode,
@@ -220,7 +235,7 @@ async function promptToInstallSpectacle(vscode, cli) {
     && cli
     && typeof cli.installGaugeRunner === "function"
   ) {
-    return cli.installGaugeRunner(SPECTACLE_PLUGIN_NAME);
+    return installSpectacle(vscode, cli);
   }
   return undefined;
 }
