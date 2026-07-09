@@ -5754,6 +5754,36 @@ test("GaugeStepDiagnosticsProvider reports unresolved special concept heading pa
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 35 });
 });
 
+test("GaugeStepDiagnosticsProvider reports unresolved concept step dynamic parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout <item>",
+    "* Use <item>",
+    "* Confirm <missing>",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Use <item>\")",
+    "fun use(item: String) {}",
+    "@Step(\"Confirm <missing>\")",
+    "fun confirm(missing: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Dynamic parameter <missing> could not be resolved",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 19 });
+});
+
 test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
