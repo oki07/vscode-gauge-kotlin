@@ -75,7 +75,7 @@
           "name": "punctuation.separator.key-value.gauge"
         }
       },
-      "end": "(?<![,\\s])\\s*$",
+      "end": "(?i)^(?=\\s*(?:#|\\*|//|\\|)|\\s*___+[ \\t\\f]*$|\\s*(?:tags|table)[ \\t\\f]?:)|(?<![,\\s])\\s*$",
       "patterns": [
         {
           "match": "[^,\\s][^,]*",

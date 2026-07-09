@@ -69,6 +69,15 @@ function assertPatternMatches(pattern, text, expectedText = text) {
   assert.equal(match[0], expectedText);
 }
 
+function assertPatternMatchesAt(pattern, text, expectedIndex, expectedText = "") {
+  const source = pattern.match || pattern.begin;
+  assert.ok(source, "pattern must have match or begin");
+  const match = grammarRegex(source).exec(text);
+  assert.ok(match, `${source} should match ${text}`);
+  assert.equal(match.index, expectedIndex);
+  assert.equal(match[0], expectedText);
+}
+
 function assertPatternDoesNotMatch(pattern, text) {
   const source = pattern.match || pattern.begin;
   assert.ok(source, "pattern must have match or begin");
@@ -770,6 +779,27 @@ test("Gauge TextMate grammar keeps trailing-comma tag continuations as tag value
   assertPatternDoesNotMatch(tagEnd, "smoke,");
   assertPatternDoesNotMatch(tagEnd, "smoke,   ");
   assertPatternMatches(tagEnd, "fast", "");
+});
+
+test("Gauge TextMate grammar stops trailing-comma tag continuations before Gauge syntax starts", () => {
+  const manifest = readPackageJson();
+  const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
+  const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
+  const tagEnd = { match: grammarJson.repository.tags.end };
+
+  for (const line of [
+    "# Next specification",
+    "## Next scenario",
+    "* Pay",
+    "table: users.csv",
+    "tags: fast",
+    "| name |",
+    "___",
+    "// disabled",
+  ]) {
+    assertPatternMatchesAt(tagEnd, line, 0);
+  }
+  assertPatternMatchesAt(tagEnd, "fast", "fast".length);
 });
 
 test("Gauge TextMate grammar handles table and argument lexer edge cases", () => {
