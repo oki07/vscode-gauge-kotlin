@@ -17,6 +17,8 @@ const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in 
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
+const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
+const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminated";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
@@ -3526,6 +3528,43 @@ function normalizeStepTemplate(text) {
   return result.trim().normalize("NFC");
 }
 
+function reservedCharacterMessage(character) {
+  return `'${character}' is a reserved character and should be escaped`;
+}
+
+function stepParserError(text) {
+  let index = 0;
+  while (index < text.length) {
+    const dynamicStart = findDynamicParameterStart(text, index);
+    const staticStart = findStaticParameterStart(text, index);
+    const parameter = findNextStepParameter(dynamicStart, staticStart);
+    const literalEnd = parameter ? parameter.openIndex : text.length;
+    const literal = normalizeLiteralStepText(text.slice(index, literalEnd));
+    if (literal === undefined) {
+      for (let literalIndex = index; literalIndex < literalEnd; literalIndex += 1) {
+        const character = text[literalIndex];
+        if ((character === "{" || character === "}") && !isEscapedAt(text, literalIndex)) {
+          return reservedCharacterMessage(character);
+        }
+      }
+    }
+    if (!parameter) {
+      return undefined;
+    }
+
+    const closeIndex = parameter.type === "dynamic"
+      ? findDynamicParameterEnd(text, parameter.openIndex)
+      : findStaticParameterEnd(text, parameter.openIndex);
+    if (closeIndex === -1) {
+      return parameter.type === "dynamic"
+        ? DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE
+        : STRING_NOT_TERMINATED_MESSAGE;
+    }
+    index = closeIndex + 1;
+  }
+  return undefined;
+}
+
 function normalizeLiteralStepText(text) {
   let result = "";
   for (let index = 0; index < text.length; index += 1) {
@@ -3774,6 +3813,7 @@ function findGaugeSteps(text, options = {}) {
     entries.push({
       end: { line: endLine, character: endCharacter },
       marker,
+      parseError: stepText ? stepParserError(stepText) : undefined,
       normalized: stepText ? normalizeStepTemplate(stepText) : undefined,
       start: { line, character: marker },
       text: stepText,
@@ -7192,6 +7232,12 @@ class GaugeStepDiagnosticsProvider {
             this.vscode,
             range,
             BLANK_STEP_MESSAGE,
+          ));
+        } else if (entry.parseError) {
+          diagnostics.push(createDiagnostic(
+            this.vscode,
+            range,
+            entry.parseError,
           ));
         } else if (
           implementedSteps
