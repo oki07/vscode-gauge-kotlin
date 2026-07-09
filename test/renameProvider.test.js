@@ -1661,7 +1661,7 @@ test("GaugeRenameProvider preserves inline table step identity when renaming", a
   );
 });
 
-test("GaugeRenameProvider keeps plain step identity before unterminated table-like rows", async () => {
+test("GaugeRenameProvider keeps table step identity without closing pipes", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1671,8 +1671,8 @@ test("GaugeRenameProvider keeps plain step identity before unterminated table-li
   const kotlinDocument = createDocument([
     "import com.thoughtworks.gauge.Step",
     "",
-    "@Step(\"Pay with account\")",
-    "fun pay() {}",
+    "@Step(\"Pay with account <table>\")",
+    "fun pay(table: Any) {}",
   ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
   const vscode = createFakeVscode([specDocument, kotlinDocument]);
   const provider = new GaugeRenameProvider({ vscode });
@@ -1705,9 +1705,9 @@ test("GaugeRenameProvider keeps plain step identity before unterminated table-li
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
         range: {
           start: { line: 2, character: 7 },
-          end: { line: 2, character: 23 },
+          end: { line: 2, character: 31 },
         },
-        newText: "Pay with ledger",
+        newText: "Pay with ledger <table>",
       },
     ],
   );

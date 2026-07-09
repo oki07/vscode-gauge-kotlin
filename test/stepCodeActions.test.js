@@ -395,7 +395,7 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
   });
 });
 
-test("GaugeStepCodeActionProvider ignores unterminated table-like rows in step stubs", () => {
+test("GaugeStepCodeActionProvider includes table rows without closing pipes in step stubs", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
     GENERATE_STEP_STUB,
@@ -423,7 +423,7 @@ test("GaugeStepCodeActionProvider ignores unterminated table-like rows in step s
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with account\")\nfun implementation() {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with account <table>\")\nfun implementation(arg0: Any) {\n}\n",
     ],
   });
 });

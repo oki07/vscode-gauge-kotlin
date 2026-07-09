@@ -1723,7 +1723,7 @@ test("ReferenceProvider matches local Gauge inline table references for Kotlin S
   });
 });
 
-test("ReferenceProvider keeps plain Gauge references before unterminated table-like rows", async () => {
+test("ReferenceProvider keeps table Gauge references without closing pipes", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
   const { GaugeProject } = require("../src/project/gaugeProject");
@@ -1740,8 +1740,8 @@ test("ReferenceProvider keeps plain Gauge references before unterminated table-l
       return [
         "import com.thoughtworks.gauge.Step",
         "",
-        "@Step(\"Compare\")",
-        "fun compare() {}",
+        "@Step(\"Compare <table>\")",
+        "fun compare(table: Any) {}",
       ].join("\n");
     },
   };
@@ -1793,7 +1793,7 @@ test("ReferenceProvider keeps plain Gauge references before unterminated table-l
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].params, "Compare");
+  assert.equal(requestCalls[1].params, "Compare <table>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/table.spec");
   assert.deepEqual(calls.commands[0].args[2][0].range, {

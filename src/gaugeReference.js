@@ -510,7 +510,7 @@ function gaugeStepMarker(line) {
 
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.startsWith("|") && text.endsWith("|");
+  return text.startsWith("|");
 }
 
 function isConceptReferenceDocument(document) {

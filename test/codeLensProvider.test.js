@@ -423,7 +423,7 @@ test("GaugeCodeLensProvider adds run in parallel lens for specification data tab
   ]);
 });
 
-test("GaugeCodeLensProvider ignores unterminated table-like rows for parallel runs", () => {
+test("GaugeCodeLensProvider adds run in parallel lens for table rows without closing pipes", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
   const document = createDocument([
@@ -445,6 +445,7 @@ test("GaugeCodeLensProvider ignores unterminated table-like rows for parallel ru
     "Debug Scenario",
     "Run Spec",
     "Debug Spec",
+    "Run in parallel",
   ]);
 });
 
@@ -670,12 +671,12 @@ test("GaugeCodeLensProvider counts double-star lines as step references", async 
   ]);
 });
 
-test("GaugeCodeLensProvider keeps plain references before unterminated table-like rows", async () => {
+test("GaugeCodeLensProvider counts table references without closing pipes", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
     "import com.thoughtworks.gauge.Step",
     "",
-    "@Step(\"Compare\")",
+    "@Step(\"Compare <table>\")",
     "fun compare() {}",
   ].join("\n"), "/workspace/tests/CompareSteps.kt", "kotlin");
   const specDocument = createDocument([
