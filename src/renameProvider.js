@@ -328,6 +328,10 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
   }
   const textEnd = textStart + text.length;
   const hasInlineTable = isInlineTableLine(sourceLines[lineNumber + 1]);
+  const template = normalizeStepTemplate(hasInlineTable ? `${text} <table>` : text);
+  if (!template) {
+    return undefined;
+  }
   return {
     hasInlineTable,
     engineRename: true,
@@ -336,7 +340,7 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
       { line: lineNumber, character: textStart },
       { line: lineNumber, character: textEnd },
     ),
-    template: normalizeStepTemplate(hasInlineTable ? `${text} <table>` : text),
+    template,
     text,
   };
 }
@@ -348,6 +352,9 @@ function conceptHeadingOnLine(vscode, document, lineNumber) {
   for (const heading of findConceptHeadings(document.getText())) {
     if (heading.start.line !== lineNumber) {
       continue;
+    }
+    if (!heading.normalized) {
+      return undefined;
     }
     return {
       hasInlineTable: false,
@@ -995,7 +1002,13 @@ function kotlinFunctionParameterReplacement(text, entry, newName, hasInlineTable
 }
 
 function stepEntryHasTemplate(entry, template) {
-  return (entry.aliases || []).some((alias) => normalizeStepTemplate(alias) === template);
+  if (!template) {
+    return false;
+  }
+  return (entry.aliases || []).some((alias) => {
+    const normalized = normalizeStepTemplate(alias);
+    return normalized && normalized === template;
+  });
 }
 
 function uriKey(uri) {
@@ -1180,13 +1193,17 @@ class GaugeRenameProvider {
         continue;
       }
       const alias = entry.aliases[0];
+      const template = normalizeStepTemplate(alias);
+      if (!template) {
+        continue;
+      }
       const literal = literalAliasRange(text, entry, alias);
       if (literal) {
         return {
           hasInlineTable: /\s+<table>\s*$/.test(alias),
           engineRename: false,
           range: createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
-          template: normalizeStepTemplate(alias),
+          template,
           text: alias,
         };
       }
@@ -1200,7 +1217,7 @@ class GaugeRenameProvider {
               hasInlineTable: /\s+<table>\s*$/.test(alias),
               engineRename: false,
               range: createRangeFromOffsets(this.vscode, text, reference.start, reference.end),
-              template: normalizeStepTemplate(alias),
+              template,
               text: alias,
             };
           }
@@ -1325,7 +1342,7 @@ class GaugeRenameProvider {
     }
     if (isConceptDocument(document)) {
       for (const heading of findConceptHeadings(document.getText())) {
-        if (heading.normalized === template) {
+        if (heading.normalized && heading.normalized === template) {
           edit.replace(
             document.uri,
             createRange(this.vscode, heading.start, heading.end),
@@ -1396,7 +1413,10 @@ class GaugeRenameProvider {
       }
     }
     for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
-      if (entry.aliases.length !== 1 || normalizeStepTemplate(entry.aliases[0]) !== template) {
+      const entryTemplate = entry.aliases.length === 1
+        ? normalizeStepTemplate(entry.aliases[0])
+        : undefined;
+      if (!entryTemplate || entryTemplate !== template) {
         continue;
       }
       const literal = literalAliasRange(text, entry, entry.aliases[0]);

@@ -396,6 +396,32 @@ function valuesForStep(stepValue) {
   return Array.isArray(stepValue) ? uniqueValues(stepValue) : uniqueValues([stepValue]);
 }
 
+function isGaugeStepValueTemplate(value) {
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== "{" && text[index] !== "}") {
+      continue;
+    }
+    if (text[index] === "{" && text[index + 1] === "}") {
+      index += 1;
+      continue;
+    }
+    return false;
+  }
+  return text.includes("{}");
+}
+
+function normalizeReferenceStepValue(stepValue) {
+  const normalized = normalizeStepTemplate(stepValue);
+  if (normalized) {
+    return normalized;
+  }
+  if (isGaugeStepValueTemplate(stepValue)) {
+    return String(stepValue).trim().normalize("NFC");
+  }
+  return undefined;
+}
+
 function superStepAliasesForEntry(document, entry, implementationDocuments, diagnosticsProvider) {
   const text = document.getText();
   const methodName = stepEntryMethodName(document, text, entry);
@@ -695,7 +721,7 @@ function conceptHeadingTextAt(document, position) {
 
 function localGaugeStepReferences(document, targetTemplate, options = {}) {
   const uri = documentUri(document);
-  if (!uri || typeof document.getText !== "function") {
+  if (!targetTemplate || !uri || typeof document.getText !== "function") {
     return [];
   }
 
@@ -708,7 +734,8 @@ function localGaugeStepReferences(document, targetTemplate, options = {}) {
       continue;
     }
     lineIndex = entry.endLine;
-    if (!entry.stepText || normalizeStepTemplate(entry.stepText) !== targetTemplate) {
+    const normalized = entry.stepText ? normalizeStepTemplate(entry.stepText) : undefined;
+    if (!normalized || normalized !== targetTemplate) {
       continue;
     }
     locations.push({
@@ -1216,7 +1243,10 @@ class ReferenceProvider {
     if (!stepValue) {
       return undefined;
     }
-    const targetTemplate = normalizeStepTemplate(stepValue);
+    const targetTemplate = normalizeReferenceStepValue(stepValue);
+    if (!targetTemplate) {
+      return undefined;
+    }
     const sourceRoot = this.sourceGaugeProjectRoot(options);
     const locations = [];
     for (const document of await this.gaugeDocuments(sourceRoot)) {

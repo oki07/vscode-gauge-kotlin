@@ -3500,7 +3500,11 @@ function normalizeStepTemplate(text) {
     const staticStart = findStaticParameterStart(text, index);
     const parameter = findNextStepParameter(dynamicStart, staticStart);
     if (!parameter) {
-      result += text.slice(index);
+      const literal = normalizeLiteralStepText(text.slice(index));
+      if (literal === undefined) {
+        return undefined;
+      }
+      result += literal;
       break;
     }
 
@@ -3508,14 +3512,41 @@ function normalizeStepTemplate(text) {
       ? findDynamicParameterEnd(text, parameter.openIndex)
       : findStaticParameterEnd(text, parameter.openIndex);
     if (closeIndex === -1) {
-      result += text.slice(index);
-      break;
+      return undefined;
     }
 
-    result += `${text.slice(index, parameter.openIndex)}{}`;
+    const literal = normalizeLiteralStepText(text.slice(index, parameter.openIndex));
+    if (literal === undefined) {
+      return undefined;
+    }
+
+    result += `${literal}{}`;
     index = closeIndex + 1;
   }
   return result.trim().normalize("NFC");
+}
+
+function normalizeLiteralStepText(text) {
+  let result = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "\\") {
+      if (index + 1 >= text.length) {
+        continue;
+      }
+      const nextCharacter = text[index + 1];
+      result += nextCharacter === "{" || nextCharacter === "}"
+        ? nextCharacter
+        : `${character}${nextCharacter}`;
+      index += 1;
+      continue;
+    }
+    if (character === "{" || character === "}") {
+      return undefined;
+    }
+    result += character;
+  }
+  return result;
 }
 
 function isEscapedCharacter(line, index) {

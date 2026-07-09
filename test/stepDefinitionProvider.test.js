@@ -138,6 +138,49 @@ test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions",
   );
 });
 
+test("GaugeStepDefinitionProvider follows Gauge reserved brace parsing", async () => {
+  const { GaugeStepDefinitionProvider, normalizeStepTemplate } = require("../src/stepDefinitionProvider");
+  const validSpecDocument = createDocument([
+    "# Literal braces",
+    "",
+    "## Escaped braces",
+    "* Step with \\{braces\\}",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/escaped.spec");
+  const invalidSpecDocument = createDocument([
+    "# Literal braces",
+    "",
+    "## Unescaped braces",
+    "* Step with {braces}",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/unescaped.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class BraceSteps {",
+    "  @Step(\"Step with \\\\{braces\\\\}\")",
+    "  fun escaped() {}",
+    "",
+    "  @Step(\"Step with {braces}\")",
+    "  fun unescaped() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/BraceSteps.kt");
+  const vscode = createFakeVscode([validSpecDocument, invalidSpecDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const validDefinitions = await provider.provideDefinition(validSpecDocument, { line: 3, character: 5 });
+  const invalidDefinitions = await provider.provideDefinition(invalidSpecDocument, { line: 3, character: 5 });
+
+  assert.equal(normalizeStepTemplate("Step with \\{braces\\}"), "Step with {braces}");
+  assert.equal(normalizeStepTemplate("Step with {braces}"), undefined);
+  assert.equal(validDefinitions.length, 1);
+  assert.deepEqual({ ...validDefinitions[0].range.start }, { line: 6, character: 2 });
+  assert.deepEqual(invalidDefinitions, []);
+});
+
 test("GaugeStepDefinitionProvider does not resolve Kotlin step definitions from another Gauge project", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

@@ -648,6 +648,9 @@ class GaugeCodeLensProvider {
     const lines = document.getText().split(/\r?\n/);
     const referenceDocuments = await this.gaugeReferenceDocuments(document);
     for (const heading of findConceptHeadings(document.getText())) {
+      if (!heading.normalized) {
+        continue;
+      }
       const line = lines[heading.start.line] || "";
       const marker = firstNonWhitespace(line);
       const range = createRange(

@@ -1034,7 +1034,7 @@ function stepCompletionKey(item) {
   const label = typeof item === "string"
     ? item
     : item && (item.filterText || item.label);
-  return label ? normalizeStepTemplate(String(label)) : "";
+  return label ? (normalizeStepTemplate(String(label)) || "") : "";
 }
 
 function nextStepCompletionParameter(text, startIndex) {

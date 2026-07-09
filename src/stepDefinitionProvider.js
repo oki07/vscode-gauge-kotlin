@@ -95,21 +95,51 @@ function nextParameter(text, startIndex) {
   return { closeCharacter: "\"", start: staticIndex };
 }
 
+function normalizeLiteralStepText(text) {
+  let result = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "\\") {
+      if (index + 1 >= text.length) {
+        continue;
+      }
+      const nextCharacter = text[index + 1];
+      result += nextCharacter === "{" || nextCharacter === "}"
+        ? nextCharacter
+        : `${character}${nextCharacter}`;
+      index += 1;
+      continue;
+    }
+    if (character === "{" || character === "}") {
+      return undefined;
+    }
+    result += character;
+  }
+  return result;
+}
+
 function normalizeStepTemplate(text) {
   let result = "";
   let index = 0;
   while (index < text.length) {
     const parameter = nextParameter(text, index);
     if (!parameter) {
-      result += text.slice(index);
+      const literal = normalizeLiteralStepText(text.slice(index));
+      if (literal === undefined) {
+        return undefined;
+      }
+      result += literal;
       break;
     }
     const end = findParameterEnd(text, parameter.start, parameter.closeCharacter);
     if (end === -1) {
-      result += text.slice(index);
-      break;
+      return undefined;
     }
-    result += `${text.slice(index, parameter.start)}{}`;
+    const literal = normalizeLiteralStepText(text.slice(index, parameter.start));
+    if (literal === undefined) {
+      return undefined;
+    }
+    result += `${literal}{}`;
     index = end + 1;
   }
   // Normalize to NFC so a spec and a Kotlin @Step that render identically but
@@ -372,7 +402,8 @@ function stepTextCandidatesAt(document, position, options = {}) {
   if (isInlineTableLine(nextLine)) {
     stepText = `${stepText} <table>`;
   }
-  return [normalizeStepTemplate(stepText)];
+  const normalized = normalizeStepTemplate(stepText);
+  return normalized ? [normalized] : [];
 }
 
 function stepTextAt(document, position, options = {}) {
@@ -668,7 +699,9 @@ class GaugeStepDefinitionProvider {
       }
       const stepFunctions = findStepFunctionsForDocument(candidate, externalConstants);
       for (const entry of stepFunctions) {
-        const normalizedAliases = entry.aliases.map((alias) => normalizeStepTemplate(alias));
+        const normalizedAliases = entry.aliases
+          .map((alias) => normalizeStepTemplate(alias))
+          .filter(Boolean);
         if (!normalizedAliases.some((alias) => wantedStepSet.has(alias))) {
           continue;
         }
@@ -689,6 +722,9 @@ class GaugeStepDefinitionProvider {
     for (const candidate of documents) {
       const text = candidate.getText();
       for (const heading of findConceptHeadings(text)) {
+        if (!heading.normalized) {
+          continue;
+        }
         if (!wantedStepSet.has(heading.normalized)) {
           continue;
         }
