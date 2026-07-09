@@ -1,5 +1,8 @@
 "use strict";
 
+const nodeFs = require("node:fs");
+const nodePath = require("node:path");
+
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
@@ -19,6 +22,8 @@ const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const PROJECT_ROOT_GAUGE = "gauge";
 const PROJECT_ROOT_NON_GAUGE = "nonGauge";
 const PROJECT_ROOT_UNKNOWN = "unknown";
+const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
+const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -144,6 +149,21 @@ function isDocStringFenceLine(line) {
   return line.trim() === "\"\"\"";
 }
 
+function isGaugeSyntaxBoundary(line) {
+  const text = String(line || "").trim();
+  return !text
+    || text.startsWith("*")
+    || text.startsWith("#")
+    || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
+    || text.toLowerCase().startsWith("table:")
+    || text.toLowerCase().startsWith("table :")
+    || isInlineTableLine(text)
+    || isDocStringFenceLine(text)
+    || /^={3,}\s*$/.test(text)
+    || /^-{3,}\s*$/.test(text);
+}
+
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
   return marker !== -1 && line[marker] === "*";
@@ -189,7 +209,129 @@ function docStringStepLineAt(document, line) {
   return undefined;
 }
 
-function stepTextCandidatesAt(document, position) {
+function multilineStepLineAt(document, lineNumber) {
+  for (let currentLine = lineNumber; currentLine >= 0; currentLine -= 1) {
+    const line = documentLine(document, currentLine);
+    if (isStepLine(line)) {
+      return currentLine;
+    }
+    if (isGaugeSyntaxBoundary(line)) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function multilineStepText(document, lineNumber) {
+  const line = documentLine(document, lineNumber);
+  const marker = stepMarkerIndex(line);
+  if (marker === -1) {
+    return "";
+  }
+  const lines = [line.slice(marker + 1).trim()];
+  for (let nextLine = lineNumber + 1; nextLine < document.lineCount; nextLine += 1) {
+    const nextText = documentLine(document, nextLine);
+    if (isGaugeSyntaxBoundary(nextText)) {
+      break;
+    }
+    lines.push(nextText.trim());
+  }
+  return lines.join(" ").trim();
+}
+
+function firstUnescapedIndex(line, characters) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (characters.has(line[index]) && !isEscapedAt(line, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function firstWhitespaceIndex(line) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (/\s/.test(line[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function unescapePropertyValue(value) {
+  return String(value || "")
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
+      if (character === "t") {
+        return "\t";
+      }
+      if (character === "n") {
+        return "\n";
+      }
+      if (character === "r") {
+        return "\r";
+      }
+      if (character === "f") {
+        return "\f";
+      }
+      return character;
+    });
+}
+
+function propertiesValue(content, key) {
+  const separators = new Set(["=", ":"]);
+  for (const rawLine of String(content || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) {
+      continue;
+    }
+    const explicitSeparator = firstUnescapedIndex(line, separators);
+    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
+    if (separator === -1) {
+      continue;
+    }
+    if (line.slice(0, separator).trim() !== key) {
+      continue;
+    }
+    return unescapePropertyValue(line.slice(separator + 1).trim());
+  }
+  return undefined;
+}
+
+function boolProperty(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+  if (normalized === "false") {
+    return false;
+  }
+  return undefined;
+}
+
+function projectDefaultProperty(options = {}, key) {
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.readFileSync !== "function" || !options.projectRoot) {
+    return undefined;
+  }
+  const pathModule = options.pathModule || nodePath;
+  try {
+    const filename = pathModule.join(options.projectRoot, ...DEFAULT_ENV_PROPERTIES);
+    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), key);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function allowMultilineStep(options = {}) {
+  const envValue = boolProperty(process.env.allow_multiline_step);
+  if (envValue !== undefined) {
+    return envValue;
+  }
+  const projectValue = boolProperty(projectDefaultProperty(options, ALLOW_MULTILINE_STEP_PROPERTY));
+  return projectValue === true;
+}
+
+function stepTextCandidatesAt(document, position, options = {}) {
   if (!isGaugeStepSourceDocument(document) || !position) {
     return [];
   }
@@ -197,17 +339,22 @@ function stepTextCandidatesAt(document, position) {
   let line = documentLine(document, lineNumber);
   if (!isStepLine(line)) {
     const docStringStepLine = docStringStepLineAt(document, lineNumber);
-    if (docStringStepLine === undefined) {
+    const multilineStepLine = options.allowMultilineStep
+      ? multilineStepLineAt(document, lineNumber)
+      : undefined;
+    if (docStringStepLine === undefined && multilineStepLine === undefined) {
       return [];
     }
-    lineNumber = docStringStepLine;
+    lineNumber = docStringStepLine === undefined ? multilineStepLine : docStringStepLine;
     line = documentLine(document, lineNumber);
   }
   if (!isStepLine(line)) {
     return [];
   }
   const marker = stepMarkerIndex(line);
-  let stepText = marker === -1 ? "" : line.slice(marker + 1).trim();
+  let stepText = marker === -1
+    ? ""
+    : (options.allowMultilineStep ? multilineStepText(document, lineNumber) : line.slice(marker + 1).trim());
   if (!stepText) {
     return [];
   }
@@ -255,9 +402,13 @@ function targetRange(vscode, text, entry) {
 
 class GaugeStepDefinitionProvider {
   constructor(options = {}) {
+    this.fileSystem = options.fileSystem || nodeFs;
+    this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
@@ -288,6 +439,14 @@ class GaugeStepDefinitionProvider {
   gaugeProjectRoot(document) {
     const projectRootInfo = this.projectRootInfoForFile(documentPath(document));
     return projectRootInfo.type === PROJECT_ROOT_GAUGE ? projectRootInfo.root : undefined;
+  }
+
+  allowsMultilineStep(document) {
+    return allowMultilineStep({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot: this.gaugeProjectRoot(document),
+    });
   }
 
   belongsToSourceGaugeProject(candidate, sourceRoot) {
@@ -534,7 +693,9 @@ class GaugeStepDefinitionProvider {
   }
 
   async provideDefinition(document, position) {
-    const wantedSteps = stepTextCandidatesAt(document, position);
+    const wantedSteps = stepTextCandidatesAt(document, position, {
+      allowMultilineStep: this.allowsMultilineStep(document),
+    });
     if (wantedSteps.length === 0 || !this.isGaugeProjectDocument(document)) {
       return [];
     }

@@ -340,6 +340,57 @@ test("GaugeStepDefinitionProvider resolves docstring steps without annotation pl
   assert.equal(contentDefinitions[0].uri, kotlinDocument.uri);
 });
 
+test("GaugeStepDefinitionProvider resolves multiline Gauge steps when project allows them", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const specDocument = createDocument([
+    "# Payment specification",
+    "",
+    "## Pays with card",
+    "* Pay with",
+    "card",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/payment.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class PaymentSteps {",
+    "  @Step(\"Pay with card\")",
+    "  fun pay() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/PaymentSteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  try {
+    const firstLineDefinitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+    const continuationDefinitions = await provider.provideDefinition(specDocument, { line: 4, character: 1 });
+
+    assert.equal(firstLineDefinitions.length, 1);
+    assert.equal(firstLineDefinitions[0].uri, kotlinDocument.uri);
+    assert.equal(continuationDefinitions.length, 1);
+    assert.equal(continuationDefinitions[0].uri, kotlinDocument.uri);
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
+});
+
 test("GaugeStepDefinitionProvider resolves adjacent quoted spec arguments", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
