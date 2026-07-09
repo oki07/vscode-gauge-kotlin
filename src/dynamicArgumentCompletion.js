@@ -762,6 +762,13 @@ function specDynamicArguments(text, currentLineNumber) {
   return unique(values);
 }
 
+function isStaticArgumentSourceLine(line, options = {}) {
+  if (isStepLine(line)) {
+    return true;
+  }
+  return Boolean(options.includeConceptHeadings) && isConceptHeading(line);
+}
+
 function staticArguments(text, options = {}) {
   const values = [];
   const lines = text.split(/\r?\n/);
@@ -770,7 +777,7 @@ function staticArguments(text, options = {}) {
     if (excludeTeardown && isTeardownLine(line)) {
       break;
     }
-    if (!isStepLine(line)) {
+    if (!isStaticArgumentSourceLine(line, options)) {
       continue;
     }
     let openIndex = nextUnescapedCharacterIndex(line, "\"");
@@ -797,8 +804,8 @@ function allowsDynamicArgumentCompletion(line, document, lineNumber) {
   return isStepLine(line) || isCompletionTableBlockLine(lines, lineNumber);
 }
 
-function allowsStaticArgumentCompletion(line) {
-  return isStepLine(line);
+function allowsStaticArgumentCompletion(line, document) {
+  return isStepLine(line) || (isConceptDocument(document) && isConceptHeading(line));
 }
 
 function completionItem(vscode, label, range, options = {}) {
@@ -1298,6 +1305,7 @@ class GaugeDynamicArgumentCompletionProvider {
         )
         : staticArguments(document.getText(), {
           excludeTeardown: !isConceptDocument(document),
+          includeConceptHeadings: isConceptDocument(document),
         });
       const targetRange = argumentRange || quotedArgumentRange;
       const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);

@@ -1121,7 +1121,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept static arguments i
   assert.deepEqual(labels(items), ["cart", "c"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores concept heading static arguments", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests concept heading static arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -1142,8 +1142,10 @@ test("GaugeDynamicArgumentCompletionProvider ignores concept heading static argu
     new vscode.Position(2, step.indexOf("ca") + 2),
   );
 
-  assert.deepEqual(headingItems, []);
-  assert.deepEqual(labels(stepItems), ["card"]);
+  assert.deepEqual(labels(headingItems), ["cart", "ca", "card"]);
+  assert.deepEqual(labels(stepItems), ["cart", "ca", "card"]);
+  assert.deepEqual({ ...headingItems[0].range.start }, { line: 1, character: 19 });
+  assert.deepEqual({ ...headingItems[0].range.end }, { line: 1, character: 21 });
   assert.deepEqual({ ...stepItems[0].range.start }, { line: 2, character: 11 });
   assert.deepEqual({ ...stepItems[0].range.end }, { line: 2, character: 15 });
 });
