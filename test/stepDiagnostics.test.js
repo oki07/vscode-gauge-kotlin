@@ -12,6 +12,7 @@ function createFakeVscode() {
     },
     DiagnosticSeverity: {
       Error: "error",
+      Warning: "warning",
     },
     Position: class Position {
       constructor(line, character) {
@@ -5014,6 +5015,37 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge data table file para
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 31 });
+});
+
+test("GaugeStepDiagnosticsProvider warns on unresolved Gauge table row dynamic parameters", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| type1 | type2 |",
+    "| one | two |",
+    "## Scenario",
+    "* Step with inline table",
+    "| id | name |",
+    "| 1 | <invalid> |",
+    "| 2 | <type2> |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Step with inline table <table>\")",
+    "fun step(table: Table) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Dynamic param <invalid> could not be resolved, Treating it as static param",
+    ],
+  );
+  assert.equal(diagnostics[0].severity, "warning");
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 6, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 6, character: 17 });
 });
 
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge dynamic step parameters without data tables", () => {

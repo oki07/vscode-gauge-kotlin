@@ -96,7 +96,9 @@ function createRange(vscode, start, end) {
 }
 
 function createDiagnostic(vscode, range, message, options = {}) {
-  const severity = vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Error;
+  const severity = options.severity !== undefined
+    ? options.severity
+    : vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Error;
   const diagnostic = typeof vscode.Diagnostic === "function"
     ? new vscode.Diagnostic(range, message, severity)
     : { range, message, severity };
@@ -4068,6 +4070,10 @@ function missingTableFileParameterMessage(parameter, file) {
   return `Dynamic param <${parameter}> could not be resolved, Missing file: ${file}`;
 }
 
+function unresolvedTableDynamicParameterWarningMessage(parameter) {
+  return `Dynamic param <${parameter}> could not be resolved, Treating it as static param`;
+}
+
 function resolveExternalTablePath(location, options = {}) {
   const pathModule = options.pathModule || nodePath;
   if (typeof pathModule.isAbsolute === "function" && pathModule.isAbsolute(location)) {
@@ -4182,6 +4188,114 @@ function tableFileParameterDiagnostics(vscode, text, options = {}) {
     }
     inTableBlock = true;
   }
+  return diagnostics;
+}
+
+function tableHeaderSet(rawLine) {
+  const headers = new Set();
+  addTableHeaders(headers, rawLine);
+  return headers;
+}
+
+function dynamicTableCellParameter(cell) {
+  const match = /^<\s*(.*?)\s*>$/.exec(String(cell || "").trim());
+  if (!match) {
+    return undefined;
+  }
+  const parameter = match[1].trim();
+  if (!parameter || /^file\s*:/i.test(parameter)) {
+    return undefined;
+  }
+  return parameter;
+}
+
+function tableRowDynamicParameterDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let specHeaders = new Set();
+  let scenarioHeaders = new Set();
+  let inDocString = false;
+  let inScenario = false;
+  let sectionHasStep = false;
+  let tableBlock;
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      tableBlock = undefined;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      specHeaders = new Set();
+      scenarioHeaders = new Set();
+      inScenario = false;
+      sectionHasStep = false;
+      tableBlock = undefined;
+      continue;
+    }
+
+    const scenarioHeading = isScenarioHashHeadingLine(rawLine)
+      || (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine));
+    if (scenarioHeading) {
+      scenarioHeaders = new Set();
+      inScenario = true;
+      sectionHasStep = false;
+      tableBlock = undefined;
+      continue;
+    }
+
+    if (isGaugeTableRow(rawLine)) {
+      if (!tableBlock) {
+        const headers = tableHeaderSet(rawLine);
+        if (!sectionHasStep) {
+          if (inScenario) {
+            scenarioHeaders = headers;
+          } else {
+            specHeaders = headers;
+          }
+          tableBlock = { lookup: headers };
+        } else {
+          tableBlock = {
+            lookup: new Set([...specHeaders, ...scenarioHeaders]),
+          };
+        }
+        continue;
+      }
+
+      if (isGaugeTableSeparatorRow(rawLine)) {
+        continue;
+      }
+      for (const cell of gaugeTableCells(rawLine)) {
+        const parameter = dynamicTableCellParameter(cell);
+        if (!parameter || tableBlock.lookup.has(parameter)) {
+          continue;
+        }
+        diagnostics.push(createDiagnostic(
+          vscode,
+          lineContentRange(vscode, rawLine, line),
+          unresolvedTableDynamicParameterWarningMessage(parameter),
+          { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+        ));
+      }
+      continue;
+    }
+
+    tableBlock = undefined;
+    if (isGaugeStepLine(rawLine)) {
+      sectionHasStep = true;
+    }
+  }
+
   return diagnostics;
 }
 
@@ -8026,6 +8140,7 @@ class GaugeStepDiagnosticsProvider {
           pathModule: this.pathModule,
           projectRoot: this.gaugeProjectRoot(document),
         }));
+        diagnostics.push(...tableRowDynamicParameterDiagnostics(this.vscode, text));
         diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
