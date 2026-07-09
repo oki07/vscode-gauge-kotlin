@@ -27,6 +27,7 @@ const SPEC_TAGS_REPEATED_MESSAGE = "Tags can be defined only once per specificat
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const DATA_TABLE_WITHOUT_ROW_MESSAGE = "Data table should have at least 1 data row";
+const TABLE_LOCATION_MISSING_MESSAGE = "Table location not specified";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
 const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
@@ -4058,6 +4059,34 @@ function isGaugeTagLine(line) {
   return /^tags\s*:/i.test(String(line || "").trim());
 }
 
+function tableLocationDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const match = /^\s*table\s*:\s*(.*)$/i.exec(rawLine);
+    if (!match || match[1].trim()) {
+      continue;
+    }
+
+    diagnostics.push(createDiagnostic(
+      vscode,
+      lineContentRange(vscode, rawLine, line),
+      TABLE_LOCATION_MISSING_MESSAGE,
+    ));
+  }
+  return diagnostics;
+}
+
 function repeatedTagDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
@@ -7725,6 +7754,7 @@ class GaugeStepDiagnosticsProvider {
       diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
       if (isGaugeSpecDocument(document)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
+        diagnostics.push(...tableLocationDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
       }
       if (isConceptDocument(document)) {
