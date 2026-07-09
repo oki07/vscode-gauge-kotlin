@@ -4802,6 +4802,58 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   assert.deepEqual({ ...diagnostics[4].range.end }, { line: 7, character: 18 });
 });
 
+test("GaugeStepDiagnosticsProvider resolves multiline Gauge steps when project allows them", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalAllowMultiline = process.env.allow_multiline_step;
+  delete process.env.allow_multiline_step;
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with",
+    "card",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "@Step(\"Pay with card\")",
+    "fun pay() {}",
+  ].join("\n"));
+
+  try {
+    const diagnostics = provider.provideDiagnostics(specDocument, [
+      specDocument,
+      kotlinDocument,
+    ]);
+
+    assert.deepEqual(diagnostics, []);
+  } finally {
+    if (originalAllowMultiline === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultiline;
+    }
+  }
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined concept steps by extension", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
