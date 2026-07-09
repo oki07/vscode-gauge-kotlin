@@ -27,6 +27,7 @@ const SPEC_TAGS_REPEATED_MESSAGE = "Tags can be defined only once per specificat
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const DATA_TABLE_WITHOUT_ROW_MESSAGE = "Data table should have at least 1 data row";
+const MULTIPLE_DATA_TABLE_MESSAGE = "Multiple data table present, ignoring table";
 const TABLE_LOCATION_MISSING_MESSAGE = "Table location not specified";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
 const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
@@ -4303,6 +4304,88 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function multipleDataTableDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  let inScenario = false;
+  let sectionHasStep = false;
+  let specHasDataTable = false;
+  let scenarioHasDataTable = false;
+  let inTableBlock = false;
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      inTableBlock = false;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      inScenario = false;
+      sectionHasStep = false;
+      specHasDataTable = false;
+      scenarioHasDataTable = false;
+      inTableBlock = false;
+      continue;
+    }
+
+    const scenarioHeading = isScenarioHashHeadingLine(rawLine)
+      || (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine));
+    if (scenarioHeading) {
+      inScenario = true;
+      sectionHasStep = false;
+      scenarioHasDataTable = false;
+      inTableBlock = false;
+      continue;
+    }
+
+    if (isGaugeTableRow(rawLine)) {
+      if (!inTableBlock && !sectionHasStep) {
+        if (inScenario) {
+          if (scenarioHasDataTable) {
+            diagnostics.push(createDiagnostic(
+              vscode,
+              lineContentRange(vscode, rawLine, line),
+              MULTIPLE_DATA_TABLE_MESSAGE,
+              { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+            ));
+          }
+          scenarioHasDataTable = true;
+        } else {
+          if (specHasDataTable) {
+            diagnostics.push(createDiagnostic(
+              vscode,
+              lineContentRange(vscode, rawLine, line),
+              MULTIPLE_DATA_TABLE_MESSAGE,
+              { severity: vscode.DiagnosticSeverity && vscode.DiagnosticSeverity.Warning },
+            ));
+          }
+          specHasDataTable = true;
+        }
+      }
+      inTableBlock = true;
+      continue;
+    }
+
+    inTableBlock = false;
+    if (isGaugeStepLine(rawLine)) {
+      sectionHasStep = true;
+    }
+  }
+
+  return diagnostics;
+}
+
 function dynamicStepParameters(text) {
   const parameters = [];
   let openIndex = findDynamicParameterStart(text, 0);
@@ -8179,6 +8262,7 @@ class GaugeStepDiagnosticsProvider {
           projectRoot: this.gaugeProjectRoot(document),
         }));
         diagnostics.push(...tableRowDynamicParameterDiagnostics(this.vscode, text));
+        diagnostics.push(...multipleDataTableDiagnostics(this.vscode, text));
         diagnostics.push(...unknownSpecialStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));

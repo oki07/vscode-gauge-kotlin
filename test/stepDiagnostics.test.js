@@ -5076,6 +5076,48 @@ test("GaugeStepDiagnosticsProvider warns when unknown special step parameters fa
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 4, character: 28 });
 });
 
+test("GaugeStepDiagnosticsProvider warns when multiple Gauge data tables are present", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| id |",
+    "| 1 |",
+    "Comment before another data table",
+    "| phone |",
+    "| 555 |",
+    "## Scenario",
+    "| name |",
+    "| Bob |",
+    "Comment before another scenario data table",
+    "| email |",
+    "| bob@example.com |",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Multiple data table present, ignoring table",
+      "Multiple data table present, ignoring table",
+    ],
+  );
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.severity),
+    ["warning", "warning"],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 4, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 4, character: 9 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 10, character: 0 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 10, character: 9 });
+});
+
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge dynamic step parameters without data tables", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
