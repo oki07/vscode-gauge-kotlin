@@ -221,6 +221,36 @@ test("buildExtractSelection includes docstring blocks after selected Gauge steps
   });
 });
 
+test("buildExtractSelection accepts multiline Gauge steps when project allows them", () => {
+  const { buildExtractSelection } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "## Success",
+    "* Pay with",
+    "card <amount>",
+    "* Continue",
+  ].join("\n"));
+
+  const extraction = buildExtractSelection(document, {
+    start: { line: 2, character: 0 },
+    end: { line: 3, character: 13 },
+  }, { allowMultilineStep: true });
+
+  assert.deepEqual(extraction, {
+    endLine: 3,
+    lines: [
+      "* Pay with card <amount>",
+    ],
+    startLine: 2,
+    steps: [
+      {
+        tableLines: [],
+        text: "* Pay with card <amount>",
+      },
+    ],
+  });
+});
+
 test("ExtractConceptCommandProvider extracts selected steps from Markdown Gauge specs", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
@@ -496,6 +526,83 @@ test("ExtractConceptCommandProvider extracts selected Gauge steps into an existi
       "# Shared checkout <user>",
       "* Login as <user>",
       "* Buy item",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("ExtractConceptCommandProvider extracts multiline Gauge steps when project allows them", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Pay with",
+    "card <amount>",
+    "* Continue",
+    "",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    inputs,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "# Existing\n* setup\n",
+    },
+    document,
+    inputResponses: ["Shared checkout <amount>"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 4, character: 13 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "allow_multiline_step = true\n";
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(errors, []);
+  assert.equal(inputs[0].prompt, "Available parameters: <amount>");
+  assert.equal(appliedEdits.length, 1);
+
+  const sourceReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/example.spec",
+  );
+  assert.deepEqual({ ...sourceReplacement.range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...sourceReplacement.range.end }, { line: 5, character: 0 });
+  assert.equal(sourceReplacement.newText, "* Shared checkout <amount>\n");
+
+  const conceptReplacement = appliedEdits[0].replacements.find(
+    (entry) => entry.uri.fsPath === "/workspace/gauge/specs/concepts.cpt",
+  );
+  assert.equal(
+    conceptReplacement.newText,
+    [
+      "# Existing",
+      "* setup",
+      "",
+      "# Shared checkout <amount>",
+      "* Pay with card <amount>",
       "",
     ].join("\n"),
   );

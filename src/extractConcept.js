@@ -1,6 +1,8 @@
 "use strict";
 
+const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { allowMultilineStep } = require("./stepDefinitionProvider");
 
 const EXTRACT_CONCEPT_COMMAND = "gauge.extract.concept";
 const GET_CONCEPT_FILES_REQUEST = "gauge/getImplFiles";
@@ -149,6 +151,34 @@ function isDocStringFenceLine(text) {
   return String(text || "").trim() === "\"\"\"";
 }
 
+function isGaugeSyntaxBoundary(text) {
+  const line = String(text || "").trim();
+  return !line
+    || line.startsWith("*")
+    || line.startsWith("#")
+    || line.toLowerCase().startsWith("tags:")
+    || line.toLowerCase().startsWith("tags :")
+    || line.toLowerCase().startsWith("table:")
+    || line.toLowerCase().startsWith("table :")
+    || isTableLine(line)
+    || isDocStringFenceLine(line)
+    || /^={3,}\s*$/.test(line)
+    || /^-{3,}\s*$/.test(line);
+}
+
+function multilineStepLineAt(document, lineNumber) {
+  for (let currentLine = lineNumber; currentLine >= 0; currentLine -= 1) {
+    const text = lineText(document, currentLine);
+    if (isStepLine(text)) {
+      return currentLine;
+    }
+    if (isGaugeSyntaxBoundary(text)) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function collectDocStringLines(document, startLine) {
   if (startLine >= document.lineCount || !isDocStringFenceLine(lineText(document, startLine))) {
     return undefined;
@@ -195,7 +225,7 @@ function hasExtractableGaugeSyntax(document) {
     );
 }
 
-function buildExtractSelection(document, selection) {
+function buildExtractSelection(document, selection, options = {}) {
   const normalized = normalizedSelection(selection);
   if (!normalized || !hasExtractableGaugeSyntax(document) || document.lineCount < 1) {
     return undefined;
@@ -205,6 +235,13 @@ function buildExtractSelection(document, selection) {
   let endLine = selectedEndLine(document, normalized);
   if (endLine < startLine) {
     return undefined;
+  }
+
+  if (options.allowMultilineStep) {
+    const multilineStepLine = multilineStepLineAt(document, startLine);
+    if (multilineStepLine !== undefined) {
+      startLine = multilineStepLine;
+    }
   }
 
   const owningTable = owningStepTableBlock(document, startLine);
@@ -230,11 +267,23 @@ function buildExtractSelection(document, selection) {
       return undefined;
     }
 
-    const stepText = text.trim();
-    const docString = collectDocStringLines(document, line + 1);
+    const stepLines = [text.trim()];
+    let stepEndLine = line;
+    if (options.allowMultilineStep) {
+      for (let nextStepLine = line + 1; nextStepLine < document.lineCount; nextStepLine += 1) {
+        const nextText = lineText(document, nextStepLine);
+        if (isGaugeSyntaxBoundary(nextText)) {
+          break;
+        }
+        stepLines.push(nextText.trim());
+        stepEndLine = nextStepLine;
+      }
+    }
+    const stepText = stepLines.join(" ").trim();
+    const docString = collectDocStringLines(document, stepEndLine + 1);
     const tableLines = [];
     const block = [stepText];
-    let nextLine = docString ? docString.endLine + 1 : line + 1;
+    let nextLine = docString ? docString.endLine + 1 : stepEndLine + 1;
     if (docString) {
       block.push(...docString.lines);
     } else if (nextLine < document.lineCount && isTableStartLine(lineText(document, nextLine))) {
@@ -777,6 +826,7 @@ function canExtractConceptFromDocument(document, projectClient) {
 class ExtractConceptCommandProvider {
   constructor(clients, options = {}) {
     this.clients = clients;
+    this.fileSystem = options.fileSystem || nodeFs;
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
     this.workspaceEditorFactory = options.workspaceEditorFactory
@@ -808,7 +858,9 @@ class ExtractConceptCommandProvider {
         return this.showError("Cannot find Gauge document for extract to concept.");
       }
 
-      const extraction = buildExtractSelection(editor.document, editor.selection);
+      const extraction = buildExtractSelection(editor.document, editor.selection, {
+        allowMultilineStep: this.allowsMultilineStep(projectClient),
+      });
       if (!extraction) {
         return this.showError(INVALID_SELECTION_ERROR);
       }
@@ -840,6 +892,19 @@ class ExtractConceptCommandProvider {
     } catch (error) {
       return this.showError(error && error.message ? error.message : String(error));
     }
+  }
+
+  allowsMultilineStep(projectClient) {
+    const projectRoot = projectClient
+      && projectClient.project
+      && typeof projectClient.project.root === "function"
+        ? projectClient.project.root()
+        : undefined;
+    return allowMultilineStep({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot,
+    });
   }
 
   async selectConceptFile(projectClient, activePath) {
