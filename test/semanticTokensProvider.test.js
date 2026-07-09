@@ -134,6 +134,38 @@ test("GaugeSemanticTokensProvider tokenizes multiline tag continuations", () => 
   assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "tagValue"), false);
 });
 
+test("GaugeSemanticTokensProvider stops tag continuations before table keyword lines", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return [
+        "tags: smoke,",
+        "table: users.csv",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "tagKeyword",
+    "tagValue",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "tableKeyword",
+    "tableFileValue",
+  ]);
+  assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tagValue"), false);
+});
+
 test("GaugeSemanticTokensProvider tokenizes teardown separators", () => {
   const {
     GaugeSemanticTokensProvider,

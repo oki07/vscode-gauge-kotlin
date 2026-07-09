@@ -342,12 +342,19 @@ function isTagLine(line) {
   return /^\s*tags[ \t\f]?:/i.test(String(line || ""));
 }
 
+function isTableKeywordLine(line) {
+  return /^\s*table[ \t\f]?:/i.test(String(line || ""));
+}
+
 function isTagsContext(lines, lineNumber) {
   if (lineNumber < 0 || lineNumber >= lines.length) {
     return false;
   }
   if (isTagLine(lines[lineNumber])) {
     return true;
+  }
+  if (isTableKeywordLine(lines[lineNumber])) {
+    return false;
   }
   return lineNumber > 0
     && lineEndsWithComma(lines[lineNumber - 1])

@@ -292,6 +292,7 @@ class GaugeSemanticTokensProvider {
         && trimmedLine.length > 0
         && !isHashHeadingLine(line, conceptDocument)
         && !isStepLine(line)
+        && !keywordLinePrefix(line, "table")
       ) {
         pushTagContinuationLine(builder, index, line);
         inTagContinuation = lineEndsWithComma(line);
