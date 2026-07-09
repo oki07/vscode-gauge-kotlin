@@ -308,6 +308,73 @@ test("GaugeTestController does not pass a specification with a failed scenario",
   ]);
 });
 
+test("GaugeTestController keeps retry attempts distinct for repeated scenario ids", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({
+    type: "suiteStarted",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+  });
+  sink({
+    type: "testStarted",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Flaky checkout",
+  });
+  sink({
+    type: "testFailed",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Flaky checkout",
+    message: "First attempt failed",
+  });
+  sink({
+    type: "testFinished",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Flaky checkout",
+    duration: 4,
+  });
+  sink({
+    type: "testStarted",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Flaky checkout",
+  });
+  sink({
+    type: "testFinished",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Flaky checkout",
+    duration: 5,
+  });
+  sink({
+    type: "suiteFinished",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    duration: 20,
+  });
+
+  assert.deepEqual(calls.filter((entry) => [
+    "failed",
+    "passed",
+    "started",
+  ].includes(entry[0])), [
+    ["started", "/workspace/specs/example.spec"],
+    ["started", "/workspace/specs/example.spec:12"],
+    ["failed", "/workspace/specs/example.spec:12", "First attempt failed", 4],
+    ["started", "/workspace/specs/example.spec:12#attempt=2"],
+    ["passed", "/workspace/specs/example.spec:12#attempt=2", 5],
+    ["passed", "/workspace/specs/example.spec", 20],
+  ]);
+});
+
 test("GaugeTestController discovers specification and scenario test items from open Gauge documents", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([

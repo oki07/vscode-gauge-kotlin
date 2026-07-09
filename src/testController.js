@@ -17,6 +17,7 @@ const ROOT_PARENT_ID = "suite";
 const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPECS_REQUEST = "gauge/specs";
 const SPEC_WATCH_PATTERN = "**/*.{spec,md}";
+const ATTEMPT_ID_SEPARATOR = "#attempt=";
 const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
@@ -293,6 +294,54 @@ function testUiDebugFlags() {
   return { ...TEST_UI_RUN_FLAGS, debug: true };
 }
 
+function attemptItemId(id, attempt) {
+  return attempt > 1 ? `${id}${ATTEMPT_ID_SEPARATOR}${attempt}` : id;
+}
+
+function attemptNumberFromItemId(id) {
+  const match = new RegExp(`${ATTEMPT_ID_SEPARATOR}(\\d+)$`).exec(String(id || ""));
+  if (!match) {
+    return 1;
+  }
+  const attempt = Number.parseInt(match[1], 10);
+  return Number.isFinite(attempt) ? attempt : 1;
+}
+
+function attemptItemName(name, id, attempt) {
+  if (attempt <= 1) {
+    return name;
+  }
+  return `${name || id} (attempt ${attempt})`;
+}
+
+function summarizeChildResults(result) {
+  if (!result || !(result.children instanceof Map) || result.children.size === 0) {
+    return undefined;
+  }
+  const summary = {
+    failed: false,
+    message: undefined,
+    passed: false,
+    skipped: false,
+  };
+  for (const child of result.children.values()) {
+    if (child.status === "failed") {
+      summary.failed = true;
+      if (child.message && !summary.message) {
+        summary.message = child.message;
+      }
+    } else if (child.status === "skipped") {
+      summary.skipped = true;
+      if (child.message && !summary.message) {
+        summary.message = child.message;
+      }
+    } else {
+      summary.passed = true;
+    }
+  }
+  return summary;
+}
+
 function knownProjectRoots(clientsMap) {
   if (!clientsMap || typeof clientsMap.keys !== "function") {
     return [];
@@ -383,6 +432,8 @@ class GaugeTestController {
     this.items = new Map();
     this.pendingResults = new Map();
     this.childResults = new Map();
+    this.attemptCounts = new Map();
+    this.activeAttemptIds = new Map();
     this.workspaceDiscoveredIdsByClient = new Map();
   }
 
@@ -755,6 +806,8 @@ class GaugeTestController {
     this.currentRun = this.controller.createTestRun(request);
     this.pendingResults.clear();
     this.childResults.clear();
+    this.attemptCounts.clear();
+    this.activeAttemptIds.clear();
     return this.currentRun;
   }
 
@@ -922,6 +975,33 @@ class GaugeTestController {
     return this.currentRun;
   }
 
+  resolveAttemptEvent(event) {
+    if (!event || !event.id || !String(event.type || "").startsWith("test")) {
+      return event;
+    }
+    const logicalId = event.id;
+    if (event.type === "testStarted") {
+      const attempt = (this.attemptCounts.get(logicalId) || 0) + 1;
+      this.attemptCounts.set(logicalId, attempt);
+      const id = attemptItemId(logicalId, attempt);
+      this.activeAttemptIds.set(logicalId, id);
+      return {
+        ...event,
+        id,
+        logicalId,
+        name: attemptItemName(event.name, logicalId, attempt),
+      };
+    }
+    const id = this.activeAttemptIds.get(logicalId) || logicalId;
+    const attempt = attemptNumberFromItemId(id);
+    return {
+      ...event,
+      id,
+      logicalId,
+      name: attemptItemName(event.name, logicalId, attempt),
+    };
+  }
+
   ensureItem(event) {
     const id = event && event.id;
     if (!id || !this.controller) {
@@ -948,26 +1028,25 @@ class GaugeTestController {
     if (!parentId || parentId === ROOT_PARENT_ID) {
       return;
     }
-    const result = this.childResults.get(parentId) || {
-      failed: false,
-      message: undefined,
-      passed: false,
-      skipped: false,
-    };
-    if (status === "failed") {
-      result.failed = true;
-      if (message && !result.message) {
-        result.message = message;
-      }
-    } else if (status === "skipped") {
-      result.skipped = true;
-      if (message && !result.message) {
-        result.message = message;
-      }
-    } else {
-      result.passed = true;
+    const childId = event && (event.logicalId || event.id);
+    if (!childId) {
+      return;
     }
+    const result = this.childResults.get(parentId) || {
+      children: new Map(),
+    };
+    const child = {
+      message,
+      status,
+    };
+    result.children.set(childId, child);
     this.childResults.set(parentId, result);
+  }
+
+  forgetActiveAttempt(event) {
+    if (event && event.id) {
+      this.activeAttemptIds.delete(event.id);
+    }
   }
 
   finishItem(event) {
@@ -977,7 +1056,7 @@ class GaugeTestController {
       return;
     }
     const childResult = event.type === "suiteFinished"
-      ? this.childResults.get(event.id)
+      ? summarizeChildResults(this.childResults.get(event.id))
       : undefined;
     if (childResult) {
       this.childResults.delete(event.id);
@@ -1023,30 +1102,46 @@ class GaugeTestController {
     }
     const run = this.ensureRun();
     switch (event.type) {
-      case "suiteStarted":
-      case "testStarted": {
+      case "suiteStarted": {
         const item = this.ensureItem(event);
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
         break;
       }
+      case "testStarted": {
+        const attemptEvent = this.resolveAttemptEvent(event);
+        const item = this.ensureItem(attemptEvent);
+        if (run && item && typeof run.started === "function") {
+          run.started(item);
+        }
+        break;
+      }
       case "suiteFinished":
-      case "testFinished":
         this.finishItem(event);
         break;
-      case "testFailed":
-        this.pendingResults.set(event.id, {
-          message: event.message,
+      case "testFinished": {
+        const attemptEvent = this.resolveAttemptEvent(event);
+        this.finishItem(attemptEvent);
+        this.forgetActiveAttempt(event);
+        break;
+      }
+      case "testFailed": {
+        const attemptEvent = this.resolveAttemptEvent(event);
+        this.pendingResults.set(attemptEvent.id, {
+          message: attemptEvent.message,
           status: "failed",
         });
         break;
-      case "testIgnored":
-        this.pendingResults.set(event.id, {
-          message: event.message,
+      }
+      case "testIgnored": {
+        const attemptEvent = this.resolveAttemptEvent(event);
+        this.pendingResults.set(attemptEvent.id, {
+          message: attemptEvent.message,
           status: "skipped",
         });
         break;
+      }
       case "output":
         if (run && typeof run.appendOutput === "function") {
           run.appendOutput(event.message || "");
