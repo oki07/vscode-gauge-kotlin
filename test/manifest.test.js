@@ -848,6 +848,10 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assertPatternMatches(tableDynamicArgument, "<user>", "<user>");
   assertPatternDoesNotMatch(tableDynamicArgument, "\\<user>");
   assertPatternDoesNotMatch(tableDynamicArgument, "<user | admin>");
+  assert.equal(
+    grammarJson.repository.tableArguments.patterns.some((entry) => entry.include === "#arguments"),
+    false,
+  );
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
   assertPatternMatches(fallbackComment, "plain comment");
@@ -881,6 +885,10 @@ test("Gauge Concept TextMate grammar ignores escaped argument starts", () => {
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "arguments", 0), "\\<item>");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "arguments", 1), "\\\"item");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "tableArguments", 0), "\\<item>");
+  assert.equal(
+    grammarJson.repository.tableArguments.patterns.some((entry) => entry.include === "#arguments"),
+    false,
+  );
 });
 
 test("Gauge TextMate grammar preserves common Markdown constructs", () => {

@@ -197,9 +197,6 @@
               "name": "punctuation.definition.variable.end.gauge"
             }
           }
-        },
-        {
-          "include": "#arguments"
         }
       ]
     },
