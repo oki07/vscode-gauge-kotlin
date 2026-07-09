@@ -103,7 +103,7 @@ function isStepLine(text) {
 }
 
 function isTableLine(text) {
-  return /^\s*\|.*\|\s*$/.test(text);
+  return /^\s*\|.*$/.test(text);
 }
 
 function isTableStartLine(text) {
@@ -318,12 +318,12 @@ function tableKey(tableLines) {
 
 function tableCells(line) {
   const trimmed = (line || "").trim();
-  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+  if (!trimmed.startsWith("|")) {
     return undefined;
   }
   const cells = [];
   let cell = "";
-  const body = trimmed.slice(1, -1);
+  const body = trimmed.endsWith("|") ? trimmed.slice(1, -1) : trimmed.slice(1);
   for (let index = 0; index < body.length; index += 1) {
     const character = body[index];
     if (character === "|" && !isEscapedPipe(body, index)) {
