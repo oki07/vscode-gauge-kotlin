@@ -20,6 +20,7 @@ const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in 
 const SCENARIO_HEADING_EMPTY_MESSAGE = "Scenario heading should have at least one character";
 const SCENARIO_WITHOUT_STEP_MESSAGE = "Scenario should have at least one step";
 const SPEC_HEADING_EMPTY_MESSAGE = "Spec heading should have at least one character";
+const SPEC_HEADING_NOT_FOUND_MESSAGE = "Spec heading not found";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
@@ -3808,6 +3809,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   let hasEmptySpecHeading = false;
   let hasEmptyScenarioHeading = false;
   let firstSpecHeadingRange;
+  let firstContentRange;
   let currentScenario;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
@@ -3817,6 +3819,9 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
     if (inDocString) {
       continue;
+    }
+    if (!firstContentRange && rawLine.trim()) {
+      firstContentRange = lineContentRange(vscode, rawLine, line);
     }
 
     const nextLine = lines[line + 1] === undefined
@@ -3901,6 +3906,13 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
   }
   pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
+  if (!hasSpecHeading && firstContentRange) {
+    diagnostics.unshift(createDiagnostic(
+      vscode,
+      firstContentRange,
+      SPEC_HEADING_NOT_FOUND_MESSAGE,
+    ));
+  }
   if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading && !hasEmptyScenarioHeading) {
     diagnostics.push(createDiagnostic(
       vscode,
