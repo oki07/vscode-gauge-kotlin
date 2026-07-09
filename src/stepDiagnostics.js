@@ -3989,6 +3989,42 @@ function conceptStaticParameterDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function unresolvedDynamicParameterMessage(parameter) {
+  return `Dynamic parameter <${parameter}> could not be resolved`;
+}
+
+function specialConceptHeadingParameter(text) {
+  let openIndex = findDynamicParameterStart(text, 0);
+  while (openIndex !== -1) {
+    const closeIndex = findDynamicParameterEnd(text, openIndex);
+    if (closeIndex === -1) {
+      return undefined;
+    }
+    const parameter = text.slice(openIndex + 1, closeIndex).trim();
+    if (/^(?:file|table)\s*:/i.test(parameter)) {
+      return parameter;
+    }
+    openIndex = findDynamicParameterStart(text, closeIndex + 1);
+  }
+  return undefined;
+}
+
+function conceptSpecialParameterDiagnostics(vscode, text) {
+  const diagnostics = [];
+  for (const heading of findConceptDefinitionHeadings(text)) {
+    const parameter = specialConceptHeadingParameter(heading.text);
+    if (!parameter) {
+      continue;
+    }
+    diagnostics.push(createDiagnostic(
+      vscode,
+      createRange(vscode, heading.start, heading.end),
+      unresolvedDynamicParameterMessage(parameter),
+    ));
+  }
+  return diagnostics;
+}
+
 function isTopLevelTableLine(line) {
   return String(line || "").startsWith("|") && isInlineTableLine(line);
 }
@@ -7259,6 +7295,7 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...hashScenarioHeadingDiagnostics(this.vscode, text));
         diagnostics.push(...legacyScenarioHeadingDiagnostics(this.vscode, text));
         diagnostics.push(...conceptStaticParameterDiagnostics(this.vscode, text));
+        diagnostics.push(...conceptSpecialParameterDiagnostics(this.vscode, text));
         diagnostics.push(...conceptTableDiagnostics(this.vscode, text));
         diagnostics.push(...conceptCircularReferenceDiagnostics(
           this.vscode,
