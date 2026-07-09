@@ -36,9 +36,6 @@
       "include": "#table"
     },
     {
-      "include": "#arguments"
-    },
-    {
       "include": "#markdown"
     },
     {

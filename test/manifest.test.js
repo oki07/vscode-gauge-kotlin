@@ -673,7 +673,6 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
       "#step",
       "#teardown",
       "#table",
-      "#arguments",
       "#markdown",
       "#fallbackComment",
     ],
@@ -739,7 +738,6 @@ test("extension manifest contributes a Concept TextMate grammar", () => {
       "#conceptHeading",
       "#step",
       "#table",
-      "#arguments",
       "#markdown",
       "#fallbackComment",
     ],
@@ -755,6 +753,8 @@ test("extension manifest contributes a Concept TextMate grammar", () => {
   assert.deepEqual(grammarJson.repository.markdownTypeScriptFencedCode.patterns, [{ include: "source.ts" }]);
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "tags: smoke").include, "#fallbackComment");
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "table: users.csv").include, "#fallbackComment");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain <arg>").include, "#fallbackComment");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
   assertPatternMatches(grammarJson.repository.tableRow, "| name", "|");
 });
@@ -843,6 +843,8 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
   assertPatternMatches(fallbackComment, "plain comment");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain <arg>").include, "#fallbackComment");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
   assert.equal(firstMatchingTopLevelPattern(grammarJson, "___").include, "#teardown");
   assert.notEqual(firstMatchingTopLevelPattern(grammarJson, "___").include, "#markdown");
 });
