@@ -10,7 +10,10 @@ const {
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
-const { isScenarioHashHeading } = require("./gaugeHeadings");
+const {
+  isGaugeHashHeading,
+  isScenarioHashHeading,
+} = require("./gaugeHeadings");
 
 const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
 const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
@@ -346,6 +349,19 @@ function isTableKeywordLine(line) {
   return /^\s*table[ \t\f]?:/i.test(String(line || ""));
 }
 
+function isDisabledCommentLine(line) {
+  return String(line || "").trimStart().startsWith("//");
+}
+
+function isTagContinuationBoundaryLine(line) {
+  return isGaugeHashHeading(line)
+    || isStepLine(line)
+    || isTableKeywordLine(line)
+    || isTableLine(line)
+    || isTeardownLine(line)
+    || isDisabledCommentLine(line);
+}
+
 function isTagsContext(lines, lineNumber) {
   if (lineNumber < 0 || lineNumber >= lines.length) {
     return false;
@@ -353,7 +369,7 @@ function isTagsContext(lines, lineNumber) {
   if (isTagLine(lines[lineNumber])) {
     return true;
   }
-  if (isTableKeywordLine(lines[lineNumber])) {
+  if (isTagContinuationBoundaryLine(lines[lineNumber])) {
     return false;
   }
   return lineNumber > 0

@@ -166,6 +166,58 @@ test("GaugeSemanticTokensProvider stops tag continuations before table keyword l
   assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tagValue"), false);
 });
 
+test("GaugeSemanticTokensProvider stops tag continuations before Gauge syntax starts", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const cases = [
+    {
+      line: "tags: fast",
+      expected: ["tagKeyword", "tagValue"],
+    },
+    {
+      line: "___",
+      expected: ["teardownIdentifier"],
+    },
+    {
+      line: "| name |",
+      expectedIncludes: ["tableBorder", "tableHeader"],
+    },
+    {
+      line: "// disabled",
+      expected: ["disabledStep"],
+    },
+  ];
+
+  for (const entry of cases) {
+    const document = {
+      uri: { fsPath: "/workspace/specs/example.spec" },
+      getText() {
+        return [
+          "tags: smoke,",
+          entry.line,
+        ].join("\n");
+      },
+    };
+    const tokens = provider.provideDocumentSemanticTokens(document)
+      .map((token) => ({ ...token, type: tokenTypes[token.tokenType] }));
+    const lineTypes = tokens.filter((token) => token.line === 1).map((token) => token.type);
+
+    if (entry.expected) {
+      assert.deepEqual(lineTypes, entry.expected);
+    } else {
+      for (const expectedType of entry.expectedIncludes) {
+        assert.equal(lineTypes.includes(expectedType), true);
+      }
+    }
+    assert.equal(lineTypes.includes("tagValue"), Boolean(entry.expected && entry.expected.includes("tagValue")));
+  }
+});
+
 test("GaugeSemanticTokensProvider tokenizes teardown separators", () => {
   const {
     GaugeSemanticTokensProvider,

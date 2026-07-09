@@ -210,6 +210,20 @@ function isHashHeadingLine(line, conceptDocument) {
   return conceptDocument ? isConceptHashHeading(line) : isGaugeHashHeading(line);
 }
 
+function isDisabledCommentLine(line) {
+  return String(line || "").trimStart().startsWith("//");
+}
+
+function isTagContinuationBoundaryLine(line, conceptDocument) {
+  return isHashHeadingLine(line, conceptDocument)
+    || isStepLine(line)
+    || Boolean(keywordLinePrefix(line, "table"))
+    || Boolean(keywordLinePrefix(line, "tags"))
+    || isTeardownIdentifierLine(line)
+    || isTableLine(line)
+    || isDisabledCommentLine(line);
+}
+
 function tableBlockStartLine(lines, lineNumber, options = {}) {
   if (!isTableLine(lines[lineNumber] || "")) {
     return -1;
@@ -290,9 +304,7 @@ class GaugeSemanticTokensProvider {
         !conceptDocument
         && inTagContinuation
         && trimmedLine.length > 0
-        && !isHashHeadingLine(line, conceptDocument)
-        && !isStepLine(line)
-        && !keywordLinePrefix(line, "table")
+        && !isTagContinuationBoundaryLine(line, conceptDocument)
       ) {
         pushTagContinuationLine(builder, index, line);
         inTagContinuation = lineEndsWithComma(line);

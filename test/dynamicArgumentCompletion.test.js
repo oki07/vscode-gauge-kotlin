@@ -277,6 +277,37 @@ test("GaugeDynamicArgumentCompletionProvider stops tag continuations before tabl
   assert.deepEqual(labels(items), []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider stops tag continuations before Gauge syntax starts", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+  const cases = [
+    "# Next specification",
+    "## Next scenario",
+    "* Pay",
+    "___",
+    "| name |",
+    "// disabled",
+  ];
+
+  for (const line of cases) {
+    const document = createDocument([
+      "# Checkout",
+      "tags: smoke,",
+      line,
+    ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+    const items = await provider.provideCompletionItems(
+      document,
+      new vscode.Position(2, Math.min(3, line.length)),
+    );
+
+    assert.deepEqual(items.filter((item) => item.detail === "Tag"), []);
+  }
+});
+
 test("GaugeDynamicArgumentCompletionProvider preserves tag separators when editing in the middle", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
