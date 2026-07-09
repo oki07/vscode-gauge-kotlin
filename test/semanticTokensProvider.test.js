@@ -1035,6 +1035,35 @@ test("GaugeSemanticTokensProvider treats indented top-level table markers as com
   ]);
 });
 
+test("GaugeSemanticTokensProvider treats unterminated table rows as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    getText() {
+      return [
+        "| name",
+        "* Real step",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider tokenizes indented inline tables after steps", () => {
   const {
     GaugeSemanticTokensProvider,

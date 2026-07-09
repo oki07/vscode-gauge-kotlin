@@ -4762,6 +4762,7 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     "* Pay with <amount>",
     "  * Ship order",
     "* Confirm order",
+    "  | id",
     "* Reuse payment concept",
     "*",
     "** Markdown bullet",
@@ -5044,6 +5045,29 @@ test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => 
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 7 });
+});
+
+test("GaugeStepDiagnosticsProvider ignores unterminated concept table-like rows outside steps", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "",
+    "|table",
+    "",
+    "* Confirm order",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(diagnostics, []);
 });
 
 test("GaugeStepDiagnosticsProvider reports circular concept references", () => {

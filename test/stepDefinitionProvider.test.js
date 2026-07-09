@@ -275,6 +275,35 @@ test("GaugeStepDefinitionProvider resolves static and dynamic argument spec step
   assert.equal(dynamicDefinitions[0].uri, kotlinDocument.uri);
 });
 
+test("GaugeStepDefinitionProvider does not append table suffix for unterminated table-like rows", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Compare",
+    "* Compare",
+    "  | name",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/compare.spec");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class CompareSteps {",
+    "  @Step(\"Compare\")",
+    "  fun compare() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/CompareSteps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 1, character: 4 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+});
+
 test("GaugeStepDefinitionProvider resolves docstring steps without annotation placeholder", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

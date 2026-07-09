@@ -1723,6 +1723,85 @@ test("ReferenceProvider matches local Gauge inline table references for Kotlin S
   });
 });
 
+test("ReferenceProvider keeps plain Gauge references before unterminated table-like rows", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Compare\")",
+        "fun compare() {}",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/table.spec",
+      toString() {
+        return "file:///workspace/specs/table.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Compare",
+        "",
+        "## Scenario",
+        "* Compare",
+        "  | name",
+      ].join("\n");
+    },
+  };
+  const { calls, vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 3, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.kt" || pattern === "**/*.spec" || pattern === "**/*.cpt" || pattern === "**/*.md") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [activeDocument, specDocument],
+    },
+  });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepValueAt": null,
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, true);
+  assert.deepEqual(requestCalls[1].params, ["Compare"]);
+  assert.deepEqual(calls.information, []);
+  assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/table.spec");
+  assert.deepEqual(calls.commands[0].args[2][0].range, {
+    start: { line: 3, character: 0 },
+    end: { line: 3, character: 9 },
+  });
+});
+
 test("ReferenceProvider falls back to unopened local Gauge references for Kotlin Step aliases", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");

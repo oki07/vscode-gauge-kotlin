@@ -413,6 +413,31 @@ test("GaugeCodeLensProvider adds run in parallel lens for specification data tab
   ]);
 });
 
+test("GaugeCodeLensProvider ignores unterminated table-like rows for parallel runs", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "Checkout",
+    "========",
+    "",
+    "| user",
+    "",
+    "Successful checkout",
+    "-------------------",
+    "* Login as <user>",
+    "",
+  ].join("\n"));
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.command.title), [
+    "Run Scenario",
+    "Debug Scenario",
+    "Run Spec",
+    "Debug Spec",
+  ]);
+});
+
 test("GaugeCodeLensProvider adds reference lenses for concept headings", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
@@ -632,6 +657,34 @@ test("GaugeCodeLensProvider ignores double-star lines in reference counts", asyn
 
   assert.deepEqual(lenses.map((lens) => lens.command.title), [
     "0 reference(s)",
+  ]);
+});
+
+test("GaugeCodeLensProvider keeps plain references before unterminated table-like rows", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Compare\")",
+    "fun compare() {}",
+  ].join("\n"), "/workspace/tests/CompareSteps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Compare",
+    "* Compare",
+    "  | name",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.command.title), [
+    "1 reference(s)",
   ]);
 });
 

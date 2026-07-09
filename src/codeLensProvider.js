@@ -145,7 +145,8 @@ function isLegacyScenarioUnderline(line) {
 }
 
 function isTableLine(line) {
-  return String(line || "").trimStart().startsWith("|");
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
 }
 
 function isStepLine(line) {

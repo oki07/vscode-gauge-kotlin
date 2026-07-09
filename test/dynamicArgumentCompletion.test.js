@@ -540,6 +540,26 @@ test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at un
   assert.deepEqual(afterPipeItems, []);
 });
 
+test("GaugeDynamicArgumentCompletionProvider ignores unterminated table rows", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const tableRow = "| <u";
+  const document = createDocument([
+    "# Checkout",
+    "| user | role |",
+    "| ---- | ---- |",
+    tableRow,
+  ].join("\n"));
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(3, tableRow.indexOf("u") + 1),
+  );
+
+  assert.deepEqual(items, []);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests dynamic arguments inside inline table body cells", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

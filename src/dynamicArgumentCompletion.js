@@ -186,11 +186,12 @@ function isConceptHeading(line) {
 }
 
 function isTableLine(line) {
-  return line.trimStart().startsWith("|");
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
 }
 
 function isTableBlockStartLine(line, options = {}) {
-  return options.allowIndented ? isTableLine(line) : line.startsWith("|");
+  return options.allowIndented ? isTableLine(line) : String(line || "").startsWith("|") && isTableLine(line);
 }
 
 function isTeardownLine(line) {

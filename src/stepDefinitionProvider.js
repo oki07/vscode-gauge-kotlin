@@ -136,7 +136,8 @@ function documentLine(document, line) {
 }
 
 function isInlineTableLine(line) {
-  return line.trimStart().startsWith("|");
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
 }
 
 function isDocStringFenceLine(line) {

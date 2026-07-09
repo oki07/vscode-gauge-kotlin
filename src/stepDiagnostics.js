@@ -3514,7 +3514,8 @@ function normalizeStepTemplate(text) {
 }
 
 function isInlineTableLine(line) {
-  return line.trimStart().startsWith("|");
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
 }
 
 function isDocStringFenceLine(line) {
@@ -3782,7 +3783,7 @@ function conceptStaticParameterDiagnostics(vscode, text) {
 }
 
 function isTopLevelTableLine(line) {
-  return String(line || "").startsWith("|");
+  return String(line || "").startsWith("|") && isInlineTableLine(line);
 }
 
 function conceptTableDiagnostics(vscode, text) {

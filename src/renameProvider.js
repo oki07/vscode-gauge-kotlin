@@ -142,7 +142,8 @@ function documentLines(document) {
 }
 
 function isInlineTableLine(line) {
-  return String(line || "").trimStart().startsWith("|");
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
 }
 
 function removeInlineTableSuffix(value) {
