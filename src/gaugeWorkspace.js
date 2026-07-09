@@ -548,6 +548,8 @@ class GaugeWorkspace {
     if (project.language() === KOTLIN_RUNNER) {
       documentSelector.push({ scheme: "file", language: KOTLIN_RUNNER, pattern: `${project.root()}/**/*` });
       documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.kt` });
+      documentSelector.push({ scheme: "file", language: JAVA_RUNNER, pattern: `${project.root()}/**/*` });
+      documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.java` });
     }
     if (project.language() === JAVA_RUNNER) {
       documentSelector.push({ scheme: "file", language: JAVA_RUNNER, pattern: `${project.root()}/**/*` });

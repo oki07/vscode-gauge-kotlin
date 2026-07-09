@@ -273,6 +273,8 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
+    { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
   ]);
   assert.equal(entry.client.clientOptions.revealOutputChannelOn, 4);
   assert.equal(entry.client.clientOptions.workspaceFolder.uri.fsPath, "/workspace/gauge");
@@ -1236,6 +1238,8 @@ test("GaugeWorkspace starts a client for the active Markdown Gauge specification
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
     { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
+    { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
+    { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
   ]);
 });
 
