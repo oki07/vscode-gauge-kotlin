@@ -21,6 +21,8 @@ const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
+const CSV_DELIMITER_PROPERTY = "csv_delimiter";
+const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -572,12 +574,85 @@ function parseCsvRecord(line, delimiter) {
   return cells.filter(Boolean);
 }
 
-function csvDelimiter() {
-  const delimiter = process.env.csv_delimiter;
+function firstUnescapedIndex(line, characters) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (characters.has(line[index]) && !isEscapedCharacter(line, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function firstWhitespaceIndex(line) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (/\s/.test(line[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function unescapePropertyValue(value) {
+  return String(value || "")
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
+      if (character === "t") {
+        return "\t";
+      }
+      if (character === "n") {
+        return "\n";
+      }
+      if (character === "r") {
+        return "\r";
+      }
+      if (character === "f") {
+        return "\f";
+      }
+      return character;
+    });
+}
+
+function propertiesValue(content, key) {
+  const separators = new Set(["=", ":"]);
+  for (const rawLine of String(content || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) {
+      continue;
+    }
+    const explicitSeparator = firstUnescapedIndex(line, separators);
+    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
+    if (separator === -1) {
+      continue;
+    }
+    if (line.slice(0, separator).trim() !== key) {
+      continue;
+    }
+    return unescapePropertyValue(line.slice(separator + 1).trim());
+  }
+  return undefined;
+}
+
+function projectCsvDelimiter(options = {}) {
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.readFileSync !== "function" || !options.projectRoot) {
+    return undefined;
+  }
+  const pathModule = options.pathModule || nodePath;
+  try {
+    const filename = pathModule.join(options.projectRoot, ...DEFAULT_ENV_PROPERTIES);
+    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), CSV_DELIMITER_PROPERTY);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function csvDelimiter(options = {}) {
+  const delimiter = process.env.csv_delimiter || projectCsvDelimiter(options);
   return delimiter ? delimiter[0] : ",";
 }
 
-function csvHeaderCells(content, delimiter = csvDelimiter()) {
+function csvHeaderCells(content, options = {}) {
+  const delimiter = csvDelimiter(options);
   const lines = String(content || "").split(/\r?\n/);
   for (const line of lines) {
     if (!line || line.startsWith("#")) {
@@ -612,7 +687,7 @@ function externalDataTableHeaders(dataTablePath, options = {}) {
     return [];
   }
   try {
-    return csvHeaderCells(fileSystem.readFileSync(filename, "utf8"));
+    return csvHeaderCells(fileSystem.readFileSync(filename, "utf8"), options);
   } catch (_error) {
     return [];
   }
@@ -1279,6 +1354,7 @@ class GaugeDynamicArgumentCompletionProvider {
                 filePath: documentPath(document),
                 fileSystem: this.fileSystem,
                 pathModule: this.pathModule,
+                projectRoot: this.gaugeProjectRoot(document),
               }),
               ...scenarioDataTableHeaders(document.getText(), position.line),
               ...specDynamicArguments(document.getText(), position.line),

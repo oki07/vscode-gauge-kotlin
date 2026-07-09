@@ -134,6 +134,70 @@ test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table he
   ]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter for external headers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const originalDelimiter = process.env.csv_delimiter;
+  delete process.env.csv_delimiter;
+  const reads = [];
+  try {
+    const provider = new GaugeDynamicArgumentCompletionProvider({
+      fileSystem: {
+        readFileSync(filename, encoding) {
+          reads.push({ encoding, filename });
+          assert.equal(encoding, "utf8");
+          if (filename === "/workspace/gauge/specs/csv.csv") {
+            return "one;two\n1;2\n";
+          }
+          if (filename === "/workspace/gauge/env/default/default.properties") {
+            return "csv_delimiter = ;\n";
+          }
+          throw new Error(`unexpected read: ${filename}`);
+        },
+      },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath(filename) {
+          assert.equal(filename, "/workspace/gauge/specs/checkout.spec");
+          return "/workspace/gauge";
+        },
+        isGaugeProject(root) {
+          assert.equal(root, "/workspace/gauge");
+          return true;
+        },
+      },
+      vscode,
+    });
+    const document = createDocument([
+      "# Checkout",
+      "Table : ./csv.csv",
+      "",
+      "## Successful checkout",
+      "* Login as <o>",
+    ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+    const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
+
+    assert.deepEqual(labels(items), ["one", "two"]);
+    assert.deepEqual(reads, [
+      {
+        encoding: "utf8",
+        filename: "/workspace/gauge/specs/csv.csv",
+      },
+      {
+        encoding: "utf8",
+        filename: "/workspace/gauge/env/default/default.properties",
+      },
+    ]);
+  } finally {
+    if (originalDelimiter === undefined) {
+      delete process.env.csv_delimiter;
+    } else {
+      process.env.csv_delimiter = originalDelimiter;
+    }
+  }
+});
+
 test("GaugeDynamicArgumentCompletionProvider requires Gauge table keyword spacing for external CSV headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
