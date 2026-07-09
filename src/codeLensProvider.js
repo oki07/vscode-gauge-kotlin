@@ -11,6 +11,7 @@ const {
   isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
+const { superStepAliasesForEntry } = require("./gaugeReference");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
 const RUN_COMMAND = "gauge.execute";
@@ -552,10 +553,11 @@ class GaugeCodeLensProvider {
     }
 
     const text = document.getText();
+    const implementationDocuments = await this.stepImplementationDocuments(document);
     const externalConstants = isStepImplementationDocument(document)
       ? this.diagnosticsProvider.collectWorkspaceConstants(
         document,
-        await this.stepImplementationDocuments(document),
+        implementationDocuments,
       )
       : undefined;
     const lenses = [];
@@ -564,7 +566,16 @@ class GaugeCodeLensProvider {
       const start = positionAt(text, entry.declarationStart);
       const end = positionAt(text, entry.declarationEnd);
       const range = createRangeFromPositions(this.vscode, start, end);
-      for (const stepValue of normalizedStepValues(entry.aliases)) {
+      const aliases = [
+        ...entry.aliases,
+        ...superStepAliasesForEntry(
+          document,
+          entry,
+          [document, ...implementationDocuments],
+          this.diagnosticsProvider,
+        ),
+      ];
+      for (const stepValue of normalizedStepValues(aliases)) {
         const count = this.referenceCountInDocuments(referenceDocuments, stepValue);
         lenses.push(createCodeLens(this.vscode, range, {
           command: SHOW_REFERENCES_FOR_STEP,

@@ -810,6 +810,145 @@ test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async 
   ]);
 });
 
+test("GaugeCodeLensProvider includes Kotlin super Step aliases in implementation lenses", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "interface LoginContract {",
+    "  @Step(\"Log in as <user>\")",
+    "  fun login(user: String)",
+    "}",
+    "",
+    "class LoginSteps : LoginContract {",
+    "  @Step(\"Sign in as <user>\")",
+    "  override fun login(user: String) {}",
+    "}",
+  ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"Alice\"",
+    "* Sign in as \"Bob\"",
+    "",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename.startsWith("/workspace/"), true);
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace");
+        return true;
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    argument: lens.command.arguments[2],
+  })), [
+    {
+      line: 4,
+      character: 2,
+      title: "1 reference(s)",
+      argument: "Log in as {}",
+    },
+    {
+      line: 9,
+      character: 11,
+      title: "1 reference(s)",
+      argument: "Sign in as {}",
+    },
+    {
+      line: 9,
+      character: 11,
+      title: "1 reference(s)",
+      argument: "Log in as {}",
+    },
+  ]);
+});
+
+test("GaugeCodeLensProvider includes Java super Step aliases in implementation lenses", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "interface LoginContract {",
+    "  @Step(\"Log in as <user>\")",
+    "  void login(String user);",
+    "}",
+    "",
+    "public class LoginSteps implements LoginContract {",
+    "  @Step(\"Sign in as <user>\")",
+    "  public void login(String user) {",
+    "  }",
+    "}",
+  ].join("\n"), "/workspace/tests/LoginSteps.java", "java");
+  const specDocument = createDocument([
+    "# Login",
+    "* Log in as \"Alice\"",
+    "* Sign in as \"Bob\"",
+    "",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename.startsWith("/workspace/"), true);
+        return "/workspace";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace");
+        return true;
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    argument: lens.command.arguments[2],
+  })), [
+    {
+      line: 6,
+      character: 7,
+      title: "1 reference(s)",
+      argument: "Log in as {}",
+    },
+    {
+      line: 11,
+      character: 14,
+      title: "1 reference(s)",
+      argument: "Sign in as {}",
+    },
+    {
+      line: 11,
+      character: 14,
+      title: "1 reference(s)",
+      argument: "Log in as {}",
+    },
+  ]);
+});
+
 test("GaugeCodeLensProvider suppresses Kotlin reference lenses when disabled", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider({

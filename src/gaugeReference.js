@@ -391,6 +391,72 @@ function valuesForStep(stepValue) {
   return Array.isArray(stepValue) ? uniqueValues(stepValue) : uniqueValues([stepValue]);
 }
 
+function superStepAliasesForEntry(document, entry, implementationDocuments, diagnosticsProvider) {
+  const text = document.getText();
+  const methodName = stepEntryMethodName(document, text, entry);
+  if (!methodName) {
+    return [];
+  }
+  const declarationsByDocument = new Map();
+  const typesByName = new Map();
+  for (const candidate of implementationDocuments || []) {
+    if (!candidate || typeof candidate.getText !== "function") {
+      continue;
+    }
+    const declarations = collectTypeDeclarations(candidate);
+    declarationsByDocument.set(candidate, declarations);
+    for (const declaration of declarations) {
+      if (!typesByName.has(declaration.name)) {
+        typesByName.set(declaration.name, []);
+      }
+      typesByName.get(declaration.name).push(declaration);
+    }
+  }
+
+  const currentType = containingType(
+    declarationsByDocument.get(document) || [],
+    entry.declarationStart,
+  );
+  if (!currentType || currentType.superTypes.length === 0) {
+    return [];
+  }
+
+  const aliases = [];
+  const queued = currentType.superTypes.slice();
+  const visited = new Set();
+  while (queued.length > 0) {
+    const typeName = queued.shift();
+    if (!typeName || visited.has(typeName)) {
+      continue;
+    }
+    visited.add(typeName);
+    for (const superType of typesByName.get(typeName) || []) {
+      queued.push(...superType.superTypes);
+      const superText = superType.document.getText();
+      const externalConstants = (
+        isStepImplementationDocument(superType.document)
+        && diagnosticsProvider
+        && typeof diagnosticsProvider.collectWorkspaceConstants === "function"
+      )
+        ? diagnosticsProvider.collectWorkspaceConstants(
+          superType.document,
+          implementationDocuments.filter((candidate) => candidate !== superType.document),
+        )
+        : undefined;
+      for (const superEntry of findStepFunctionsForDocument(superType.document, externalConstants)) {
+        if (
+          containingType(declarationsByDocument.get(superType.document) || [], superEntry.declarationStart) !== superType
+          || stepEntryMethodName(superType.document, superText, superEntry) !== methodName
+        ) {
+          continue;
+        }
+        aliases.push(...superEntry.aliases);
+      }
+    }
+  }
+  return aliases;
+}
+
 function locationKey(location) {
   const uri = location && location.uri;
   const uriText = typeof uri === "string"
@@ -936,65 +1002,12 @@ class ReferenceProvider {
   }
 
   superStepAliasesForEntry(document, entry, implementationDocuments) {
-    const text = document.getText();
-    const methodName = stepEntryMethodName(document, text, entry);
-    if (!methodName) {
-      return [];
-    }
-    const declarationsByDocument = new Map();
-    const typesByName = new Map();
-    for (const candidate of implementationDocuments || []) {
-      if (!candidate || typeof candidate.getText !== "function") {
-        continue;
-      }
-      const declarations = collectTypeDeclarations(candidate);
-      declarationsByDocument.set(candidate, declarations);
-      for (const declaration of declarations) {
-        if (!typesByName.has(declaration.name)) {
-          typesByName.set(declaration.name, []);
-        }
-        typesByName.get(declaration.name).push(declaration);
-      }
-    }
-
-    const currentType = containingType(
-      declarationsByDocument.get(document) || [],
-      entry.declarationStart,
+    return superStepAliasesForEntry(
+      document,
+      entry,
+      implementationDocuments,
+      this.diagnosticsProvider,
     );
-    if (!currentType || currentType.superTypes.length === 0) {
-      return [];
-    }
-
-    const aliases = [];
-    const queued = currentType.superTypes.slice();
-    const visited = new Set();
-    while (queued.length > 0) {
-      const typeName = queued.shift();
-      if (!typeName || visited.has(typeName)) {
-        continue;
-      }
-      visited.add(typeName);
-      for (const superType of typesByName.get(typeName) || []) {
-        queued.push(...superType.superTypes);
-        const superText = superType.document.getText();
-        const externalConstants = isStepImplementationDocument(superType.document)
-          ? this.diagnosticsProvider.collectWorkspaceConstants(
-            superType.document,
-            implementationDocuments.filter((candidate) => candidate !== superType.document),
-          )
-          : undefined;
-        for (const superEntry of findStepFunctionsForDocument(superType.document, externalConstants)) {
-          if (
-            containingType(declarationsByDocument.get(superType.document) || [], superEntry.declarationStart) !== superType
-            || stepEntryMethodName(superType.document, superText, superEntry) !== methodName
-          ) {
-            continue;
-          }
-          aliases.push(...superEntry.aliases);
-        }
-      }
-    }
-    return aliases;
   }
 
   async gaugeDocuments(sourceRoot) {
@@ -1066,4 +1079,5 @@ class ReferenceProvider {
 
 module.exports = {
   ReferenceProvider,
+  superStepAliasesForEntry,
 };
