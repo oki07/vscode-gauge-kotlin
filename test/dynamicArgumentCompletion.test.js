@@ -540,7 +540,7 @@ test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at un
   assert.deepEqual(afterPipeItems, []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores unterminated table rows", () => {
+test("GaugeDynamicArgumentCompletionProvider suggests table headers without closing pipes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -557,7 +557,9 @@ test("GaugeDynamicArgumentCompletionProvider ignores unterminated table rows", (
     new vscode.Position(3, tableRow.indexOf("u") + 1),
   );
 
-  assert.deepEqual(items, []);
+  assert.deepEqual(labels(items), ["user", "role"]);
+  assert.deepEqual({ ...items[0].range.start }, { line: 3, character: tableRow.indexOf("<") + 1 });
+  assert.deepEqual({ ...items[0].range.end }, { line: 3, character: tableRow.indexOf("u") + 1 });
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests dynamic arguments inside inline table body cells", () => {
