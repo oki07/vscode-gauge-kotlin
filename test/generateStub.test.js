@@ -599,6 +599,94 @@ test("GenerateStubCommandProvider creates missing files before applying generate
   assert.deepEqual(appliedEdits[0].entries(), [[{ fsPath: filename }, textEdits]]);
 });
 
+test("GenerateStubCommandProvider creates missing Kotlin files before requesting generated edits", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const madeDirectories = [];
+  const writes = [];
+  const existing = new Set();
+  const filename = "/workspace/src/test/kotlin/NewSteps.kt";
+  const {
+    commands,
+    vscode,
+  } = createFakeVscode({
+    inputBoxValue: "src/test/kotlin/NewSteps.kt",
+    quickPickSelection: {
+      label: "New File",
+      description: "Create a new file",
+      value: "New File",
+    },
+  });
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const fileSystem = {
+    existsSync(candidate) {
+      return existing.has(candidate);
+    },
+    mkdirSync(directory, options) {
+      madeDirectories.push({ directory, options });
+      existing.add(directory);
+    },
+    writeFileSync(candidate, content, options) {
+      writes.push({ content, filename: candidate, options });
+      existing.add(candidate);
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method, params) {
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve([]);
+      }
+      if (method === "gauge/putStubImpl") {
+        assert.equal(params.implementationFilePath, filename);
+        assert.equal(existing.has(filename), true);
+        return Promise.resolve({ id: "raw-edit" });
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get(fsPath) {
+      assert.equal(fsPath, "/workspace/specs/example.spec");
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory() {
+      return {
+        applyChanges() {
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("fun generatedStep() {}");
+
+  assert.deepEqual(madeDirectories, [
+    { directory: "/workspace/src/test/kotlin", options: { recursive: true } },
+  ]);
+  assert.deepEqual(writes, [
+    {
+      content: "",
+      filename,
+      options: { encoding: "utf8" },
+    },
+  ]);
+});
+
 test("GenerateStubCommandProvider defaults new step files to Java paths for Java projects", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const requests = [];

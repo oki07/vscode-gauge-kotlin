@@ -233,9 +233,10 @@ class GenerateStubCommandProvider {
   }
 
   ensureNewImplementationFile(implementationFilePath) {
+    const lowerPath = String(implementationFilePath || "").toLowerCase();
     if (
       !implementationFilePath
-      || !String(implementationFilePath).toLowerCase().endsWith(".java")
+      || (!lowerPath.endsWith(".java") && !lowerPath.endsWith(".kt"))
       || !this.fileSystem
       || typeof this.fileSystem.existsSync !== "function"
       || typeof this.fileSystem.writeFileSync !== "function"
