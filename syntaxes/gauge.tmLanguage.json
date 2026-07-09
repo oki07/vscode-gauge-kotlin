@@ -72,7 +72,7 @@
           "name": "punctuation.separator.key-value.gauge"
         }
       },
-      "end": "(?i)^(?=\\s*(?:#|\\*|//|\\|)|\\s*___+[ \\t\\f]*$|\\s*(?:tags|table)[ \\t\\f]?:)|(?<![,\\s])\\s*$",
+      "end": "$",
       "patterns": [
         {
           "match": "[^,\\s][^,]*",

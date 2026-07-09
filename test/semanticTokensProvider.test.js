@@ -98,7 +98,7 @@ test("GaugeSemanticTokensProvider tokenizes keyword lines with space before colo
   ]);
 });
 
-test("GaugeSemanticTokensProvider tokenizes multiline tag continuations", () => {
+test("GaugeSemanticTokensProvider treats tag continuation-looking lines as comments", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -126,15 +126,15 @@ test("GaugeSemanticTokensProvider tokenizes multiline tag continuations", () => 
     "tagValue",
   ]);
   assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
-    "tagValue",
+    "gaugeComment",
   ]);
   assert.deepEqual(tokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
-    "tagValue",
+    "gaugeComment",
   ]);
   assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "tagValue"), false);
 });
 
-test("GaugeSemanticTokensProvider stops tag continuations before table keyword lines", () => {
+test("GaugeSemanticTokensProvider tokenizes table keyword lines after comma-ended tags", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -166,7 +166,7 @@ test("GaugeSemanticTokensProvider stops tag continuations before table keyword l
   assert.equal(tokens.some((entry) => entry.line === 1 && entry.type === "tagValue"), false);
 });
 
-test("GaugeSemanticTokensProvider stops tag continuations before Gauge syntax starts", () => {
+test("GaugeSemanticTokensProvider tokenizes Gauge syntax after comma-ended tags", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -218,7 +218,7 @@ test("GaugeSemanticTokensProvider stops tag continuations before Gauge syntax st
   }
 });
 
-test("GaugeSemanticTokensProvider stops tag continuations before legacy underline headings", () => {
+test("GaugeSemanticTokensProvider tokenizes legacy headings after comma-ended tags", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,

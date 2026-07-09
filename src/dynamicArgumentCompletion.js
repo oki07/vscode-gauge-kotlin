@@ -11,7 +11,6 @@ const {
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 const {
-  isGaugeHashHeading,
   isScenarioHashHeading,
 } = require("./gaugeHeadings");
 
@@ -343,52 +342,15 @@ function isInsideEscapedArgument(line, position) {
   return false;
 }
 
-function lineEndsWithComma(line) {
-  return String(line || "").trim().endsWith(",");
-}
-
 function isTagLine(line) {
   return /^\s*tags[ \t\f]?:/i.test(String(line || ""));
-}
-
-function isTableKeywordLine(line) {
-  return /^\s*table[ \t\f]?:/i.test(String(line || ""));
-}
-
-function isDisabledCommentLine(line) {
-  return String(line || "").trimStart().startsWith("//");
-}
-
-function isLegacyUnderlineHeadingStartLine(lines, lineNumber) {
-  const line = lines[lineNumber] || "";
-  const nextLine = lines[lineNumber + 1] || "";
-  return Boolean(line.trim()) && (/^[=]+$/.test(nextLine) || /^[-]+$/.test(nextLine));
-}
-
-function isTagContinuationBoundaryLine(lines, lineNumber) {
-  const line = lines[lineNumber] || "";
-  return isGaugeHashHeading(line)
-    || isLegacyUnderlineHeadingStartLine(lines, lineNumber)
-    || isStepLine(line)
-    || isTableKeywordLine(line)
-    || isTableLine(line)
-    || isTeardownLine(line)
-    || isDisabledCommentLine(line);
 }
 
 function isTagsContext(lines, lineNumber) {
   if (lineNumber < 0 || lineNumber >= lines.length) {
     return false;
   }
-  if (isTagLine(lines[lineNumber])) {
-    return true;
-  }
-  if (isTagContinuationBoundaryLine(lines, lineNumber)) {
-    return false;
-  }
-  return lineNumber > 0
-    && lineEndsWithComma(lines[lineNumber - 1])
-    && isTagsContext(lines, lineNumber - 1);
+  return isTagLine(lines[lineNumber]);
 }
 
 function tagCompletionRange(line, position) {

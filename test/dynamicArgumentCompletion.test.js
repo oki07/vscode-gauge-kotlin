@@ -235,7 +235,7 @@ test("GaugeDynamicArgumentCompletionProvider requires Gauge tag keyword spacing"
   assert.deepEqual(labels(items), []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on continuation lines", async () => {
+test("GaugeDynamicArgumentCompletionProvider ignores tag continuation-looking lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const document = createDocument([
@@ -254,12 +254,10 @@ test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on continuation
 
   const items = await provider.provideCompletionItems(document, new vscode.Position(2, 2));
 
-  assert.deepEqual(labels(items), ["smoke", "fast"]);
-  assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 0 });
-  assert.deepEqual({ ...items[0].range.end }, { line: 2, character: 2 });
+  assert.deepEqual(labels(items), []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider stops tag continuations before table keyword lines", async () => {
+test("GaugeDynamicArgumentCompletionProvider ignores tag completions on table keyword lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const document = createDocument([
@@ -277,7 +275,7 @@ test("GaugeDynamicArgumentCompletionProvider stops tag continuations before tabl
   assert.deepEqual(labels(items), []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider stops tag continuations before Gauge syntax starts", async () => {
+test("GaugeDynamicArgumentCompletionProvider ignores tag completions on Gauge syntax lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({
@@ -308,7 +306,7 @@ test("GaugeDynamicArgumentCompletionProvider stops tag continuations before Gaug
   }
 });
 
-test("GaugeDynamicArgumentCompletionProvider stops tag continuations before legacy underline headings", async () => {
+test("GaugeDynamicArgumentCompletionProvider ignores tag completions on legacy heading lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({

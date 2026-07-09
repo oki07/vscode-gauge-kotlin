@@ -787,7 +787,7 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(grammarJson.repository.tableSeparator, "  |---|", "  |");
 });
 
-test("Gauge TextMate grammar keeps trailing-comma tag continuations as tag values", () => {
+test("Gauge TextMate grammar ends tags at the current line", () => {
   const manifest = readPackageJson();
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
@@ -797,12 +797,12 @@ test("Gauge TextMate grammar keeps trailing-comma tag continuations as tag value
 
   assertPatternMatches(tags, "tags: smoke,", "tags: ");
   assertPatternMatches(tagValue, "smoke,", "smoke");
-  assertPatternDoesNotMatch(tagEnd, "smoke,");
-  assertPatternDoesNotMatch(tagEnd, "smoke,   ");
-  assertPatternMatches(tagEnd, "fast", "");
+  assertPatternMatchesAt(tagEnd, "smoke,", "smoke,".length);
+  assertPatternMatchesAt(tagEnd, "smoke,   ", "smoke,   ".length);
+  assertPatternMatchesAt(tagEnd, "fast", "fast".length);
 });
 
-test("Gauge TextMate grammar stops trailing-comma tag continuations before Gauge syntax starts", () => {
+test("Gauge TextMate grammar closes tag lines without continuation boundaries", () => {
   const manifest = readPackageJson();
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
@@ -818,7 +818,7 @@ test("Gauge TextMate grammar stops trailing-comma tag continuations before Gauge
     "___",
     "// disabled",
   ]) {
-    assertPatternMatchesAt(tagEnd, line, 0);
+    assertPatternMatchesAt(tagEnd, line, line.length);
   }
   assertPatternMatchesAt(tagEnd, "fast", "fast".length);
 });
