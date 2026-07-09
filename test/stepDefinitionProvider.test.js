@@ -373,6 +373,40 @@ test("GaugeStepDefinitionProvider resolves spec steps to concept headings", asyn
   );
 });
 
+test("GaugeStepDefinitionProvider prefers concept headings over Step functions", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Reuses a concept",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Pay with <method>",
+    "* Enter payment method <method>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
+  const kotlinDocument = createDocument([
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class PaymentSteps {",
+    "  @Step(\"Pay with <method>\")",
+    "  fun pay(method: String) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/PaymentSteps.kt");
+  const vscode = createFakeVscode([specDocument, conceptDocument, kotlinDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, conceptDocument.uri);
+});
+
 test("GaugeStepDefinitionProvider resolves indented legacy concept headings", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
