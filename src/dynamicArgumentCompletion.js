@@ -178,7 +178,7 @@ function isScenarioHeading(line) {
 
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*";
+  return marker !== -1 && line[marker] === "*";
 }
 
 function isConceptHeading(line) {
@@ -298,7 +298,6 @@ function stepCompletionRange(line, position) {
   if (
     markerStart === -1
     || line[markerStart] !== "*"
-    || line[markerStart + 1] === "*"
     || position.character <= markerStart
   ) {
     return undefined;

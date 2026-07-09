@@ -3581,7 +3581,7 @@ function findConceptHeadings(text) {
 }
 
 function isHashScenarioHeading(line) {
-  return /^##(?!#)/.test(String(line || "").replace(/\r$/, ""));
+  return /^##/.test(String(line || "").replace(/\r$/, ""));
 }
 
 function findConceptDefinitionHeadings(text) {
@@ -3596,7 +3596,7 @@ function findGaugeSteps(text) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     const marker = rawLine.search(/\S/);
-    if (marker === -1 || rawLine[marker] !== "*" || rawLine[marker + 1] === "*") {
+    if (marker === -1 || rawLine[marker] !== "*") {
       continue;
     }
 

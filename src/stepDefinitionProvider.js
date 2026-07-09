@@ -146,12 +146,12 @@ function isDocStringFenceLine(line) {
 
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*";
+  return marker !== -1 && line[marker] === "*";
 }
 
 function stepMarkerIndex(line) {
   const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*" ? marker : -1;
+  return marker !== -1 && line[marker] === "*" ? marker : -1;
 }
 
 function isGaugeStepSourceDocument(document) {

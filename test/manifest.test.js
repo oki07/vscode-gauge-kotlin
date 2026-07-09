@@ -762,14 +762,14 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
 
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title", "#");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "##Scenario");
-  assertPatternDoesNotMatch(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "### Notes").include, "#fallbackComment");
+  assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes", "### Notes");
+  assert.equal(firstMatchingTopLevelPattern(grammarJson, "### Notes").include, "#scenarioHeading");
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 1), "=", "=");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 1), "-", "-");
 
   assertPatternMatches(grammarJson.repository.step, "* do something", "* ");
   assertPatternMatches(grammarJson.repository.step, "  * do something", "  * ");
-  assertPatternDoesNotMatch(grammarJson.repository.step, "** bold comment");
+  assertPatternMatches(grammarJson.repository.step, "** bold step", "*");
   assertPatternMatches(grammarJson.repository.teardown, "___", "___");
   assertPatternMatches(grammarJson.repository.teardown, "___  ", "___  ");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");

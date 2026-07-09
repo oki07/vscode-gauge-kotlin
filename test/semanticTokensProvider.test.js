@@ -360,7 +360,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats triple-hash headings as comments", () => {
+test("GaugeSemanticTokensProvider treats triple-hash headings as scenarios", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -383,11 +383,11 @@ test("GaugeSemanticTokensProvider treats triple-hash headings as comments", () =
 
   assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
     [0, "specification"],
-    [1, "gaugeComment"],
+    [1, "scenario"],
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats double-star lines as comments", () => {
+test("GaugeSemanticTokensProvider treats double-star lines as steps", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -406,7 +406,8 @@ test("GaugeSemanticTokensProvider treats double-star lines as comments", () => {
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
   assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
-    [0, "gaugeComment"],
+    [0, "stepMarker"],
+    [0, "step"],
   ]);
 });
 

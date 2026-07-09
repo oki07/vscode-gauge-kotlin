@@ -1586,7 +1586,7 @@ test("GaugeRenameProvider does not open unopened files outside Gauge projects du
   ]);
 });
 
-test("GaugeRenameProvider ignores double-star comment lines", async () => {
+test("GaugeRenameProvider prepares rename on double-star step lines", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1603,7 +1603,8 @@ test("GaugeRenameProvider ignores double-star comment lines", async () => {
 
   const prepared = await provider.prepareRename(specDocument, new vscode.Position(1, 3));
 
-  assert.equal(prepared, undefined);
+  assert.deepEqual({ ...prepared.range.start }, { line: 1, character: 1 });
+  assert.deepEqual({ ...prepared.range.end }, { line: 1, character: 15 });
 });
 
 test("GaugeRenameProvider preserves inline table step identity when renaming", async () => {

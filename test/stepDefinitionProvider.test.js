@@ -1322,7 +1322,7 @@ test("GaugeStepDefinitionProvider skips unopened Step sources resolved to non-Ga
   assert.deepEqual(openedFiles, []);
 });
 
-test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
+test("GaugeStepDefinitionProvider ignores headings and resolves double-star step positions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Login specification",
@@ -1350,10 +1350,9 @@ test("GaugeStepDefinitionProvider ignores non-step positions", async () => {
     await provider.provideDefinition(specDocument, { line: 0, character: 2 }),
     [],
   );
-  assert.deepEqual(
-    await provider.provideDefinition(specDocument, { line: 4, character: 3 }),
-    [],
-  );
+  const doubleStarDefinitions = await provider.provideDefinition(specDocument, { line: 4, character: 3 });
+  assert.equal(doubleStarDefinitions.length, 1);
+  assert.equal(doubleStarDefinitions[0].uri, kotlinDocument.uri);
 });
 
 test("GaugeStepDefinitionProvider registers concept definition selectors", () => {

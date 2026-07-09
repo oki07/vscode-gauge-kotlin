@@ -494,7 +494,7 @@ test("GaugeTestController ignores open Gauge documents outside Gauge projects", 
   assert.deepEqual(controller.items.values(), []);
 });
 
-test("GaugeTestController treats triple-hash headings as comments", () => {
+test("GaugeTestController treats triple-hash headings as scenarios", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([
     "# Checkout",
@@ -511,7 +511,15 @@ test("GaugeTestController treats triple-hash headings as comments", () => {
   const spec = controller.items.get("/workspace/specs/example.spec");
   assert.equal(spec.label, "Checkout");
   const scenarios = spec.children.values();
-  assert.equal(scenarios.length, 0);
+  assert.deepEqual(scenarios.map((scenario) => ({
+    id: scenario.id,
+    label: scenario.label,
+  })), [
+    {
+      id: "/workspace/specs/example.spec:3",
+      label: "Notes",
+    },
+  ]);
 });
 
 test("GaugeTestController resolves unopened workspace specs from Gauge LSP", async () => {

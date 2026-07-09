@@ -410,7 +410,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers wi
   assert.deepEqual(labels(items), ["user", "role"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores scenario table headers after triple-hash comments", () => {
+test("GaugeDynamicArgumentCompletionProvider reads scenario table headers after triple-hash headings", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
@@ -427,7 +427,7 @@ test("GaugeDynamicArgumentCompletionProvider ignores scenario table headers afte
 
   const items = provider.provideCompletionItems(document, new vscode.Position(7, 13));
 
-  assert.deepEqual(labels(items), []);
+  assert.deepEqual(labels(items), ["user", "role"]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests headers inside escaped dynamic arguments", () => {
@@ -1277,7 +1277,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Mar
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores double-star comment lines", async () => {
+test("GaugeDynamicArgumentCompletionProvider completes double-star step lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const specDocument = createDocument([
@@ -1303,7 +1303,8 @@ test("GaugeDynamicArgumentCompletionProvider ignores double-star comment lines",
 
   const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 6));
 
-  assert.deepEqual(labels(items), []);
+  assert.deepEqual(labels(items), ["* Log in as <user>"]);
+  assert.equal(items[0].detail, "step");
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests Step aliases in spec files by extension", async () => {

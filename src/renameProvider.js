@@ -314,7 +314,7 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
     ? sourceLines[lineNumber]
     : documentLine(document, lineNumber)).replace(/\r$/, "");
   const marker = line.search(/\S/);
-  if (marker === -1 || line[marker] !== "*" || line[marker + 1] === "*") {
+  if (marker === -1 || line[marker] !== "*") {
     return undefined;
   }
 

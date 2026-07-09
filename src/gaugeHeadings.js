@@ -11,7 +11,7 @@ function isSpecHashHeading(line) {
 
 function isScenarioHashHeading(line) {
   const text = trimmedHashText(line);
-  return text === "##" || (text.startsWith("##") && text[2] !== "#");
+  return text.startsWith("##");
 }
 
 function isGaugeHashHeading(line) {

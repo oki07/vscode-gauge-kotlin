@@ -279,7 +279,7 @@ test("GaugeCodeLensProvider ignores Markdown files outside Gauge projects", () =
   assert.deepEqual(provider.provideCodeLenses(document), []);
 });
 
-test("GaugeCodeLensProvider treats triple-hash headings as comments", () => {
+test("GaugeCodeLensProvider treats triple-hash headings as scenarios", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
   const document = createDocument([
@@ -298,6 +298,16 @@ test("GaugeCodeLensProvider treats triple-hash headings as comments", () => {
     title: lens.command.title,
     argument: lens.command.arguments[0],
   })), [
+    {
+      line: 3,
+      title: "Run Scenario",
+      argument: "/workspace/specs/example.spec:4",
+    },
+    {
+      line: 3,
+      title: "Debug Scenario",
+      argument: "/workspace/specs/example.spec:4",
+    },
     {
       line: 0,
       title: "Run Spec",
@@ -633,7 +643,7 @@ test("GaugeCodeLensProvider adds separate reference lenses for Step aliases", as
   ]);
 });
 
-test("GaugeCodeLensProvider ignores double-star lines in reference counts", async () => {
+test("GaugeCodeLensProvider counts double-star lines as step references", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
     "import com.thoughtworks.gauge.Step",
@@ -656,7 +666,7 @@ test("GaugeCodeLensProvider ignores double-star lines in reference counts", asyn
   const lenses = await provider.provideCodeLenses(document);
 
   assert.deepEqual(lenses.map((lens) => lens.command.title), [
-    "0 reference(s)",
+    "1 reference(s)",
   ]);
 });
 

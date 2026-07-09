@@ -4788,12 +4788,15 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
       "Undefined Step",
       "Undefined Step",
       "Step should not be blank",
+      "Undefined Step",
     ],
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 19 });
   assert.deepEqual({ ...diagnostics[1].range.start }, { line: 2, character: 2 });
   assert.deepEqual({ ...diagnostics[1].range.end }, { line: 2, character: 14 });
+  assert.deepEqual({ ...diagnostics[3].range.start }, { line: 7, character: 0 });
+  assert.deepEqual({ ...diagnostics[3].range.end }, { line: 7, character: 18 });
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined concept steps by extension", () => {

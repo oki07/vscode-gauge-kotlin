@@ -103,6 +103,15 @@ test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () 
       },
     },
     {
+      name: "### Third scenario",
+      kind: 3,
+      uri: document.uri,
+      range: {
+        start: { line: 7, character: 0 },
+        end: { line: 7, character: 18 },
+      },
+    },
+    {
       name: "## Second scenario",
       kind: 3,
       uri: document.uri,

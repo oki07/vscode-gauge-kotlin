@@ -151,12 +151,12 @@ function isTableLine(line) {
 
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*";
+  return marker !== -1 && line[marker] === "*";
 }
 
 function gaugeStepText(line) {
   const marker = String(line || "").search(/\S/);
-  if (marker === -1 || line[marker] !== "*" || line[marker + 1] === "*") {
+  if (marker === -1 || line[marker] !== "*") {
     return undefined;
   }
   const text = String(line).slice(marker + 1).trim();

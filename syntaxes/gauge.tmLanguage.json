@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "markup.heading.scenario.gauge",
-          "match": "^\\s*##(?!#).*$"
+          "match": "^\\s*##.*$"
         },
         {
           "name": "punctuation.definition.heading.scenario.gauge",
@@ -155,7 +155,7 @@
     },
     "step": {
       "name": "meta.step.gauge",
-      "begin": "^(\\s*)(\\*)(?!\\*)(\\s*)",
+      "begin": "^(\\s*)(\\*)(\\s*)",
       "beginCaptures": {
         "2": {
           "name": "keyword.operator.step.gauge"

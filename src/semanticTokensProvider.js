@@ -192,7 +192,7 @@ function isTableBlockStartLine(line, options = {}) {
 
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*";
+  return marker !== -1 && line[marker] === "*";
 }
 
 function isTeardownIdentifierLine(line) {

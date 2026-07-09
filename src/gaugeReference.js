@@ -430,7 +430,7 @@ function hasLocations(locations) {
 
 function gaugeStepText(line) {
   const marker = String(line || "").search(/\S/);
-  if (marker === -1 || line[marker] !== "*" || line[marker + 1] === "*") {
+  if (marker === -1 || line[marker] !== "*") {
     return undefined;
   }
   const stepText = line.slice(marker + 1).trim();
@@ -439,7 +439,7 @@ function gaugeStepText(line) {
 
 function gaugeStepMarker(line) {
   const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" && line[marker + 1] !== "*" ? marker : -1;
+  return marker !== -1 && line[marker] === "*" ? marker : -1;
 }
 
 function isInlineTableLine(line) {
