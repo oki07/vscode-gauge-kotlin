@@ -24,6 +24,7 @@ const SPEC_HEADING_EMPTY_MESSAGE = "Spec heading should have at least one charac
 const SPEC_HEADING_NOT_FOUND_MESSAGE = "Spec heading not found";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
+const DATA_TABLE_WITHOUT_ROW_MESSAGE = "Data table should have at least 1 data row";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
 const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
@@ -3976,6 +3977,81 @@ function tableHeaderDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function isGaugeTableSeparatorRow(line) {
+  const cells = gaugeTableCells(line);
+  return cells.length > 0 && cells.every((cell) => /^-+$/.test(cell));
+}
+
+function dataTableWithoutRowDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  let hasSpecHeading = false;
+  let inScenario = false;
+  let pendingDataTable;
+  const flushPendingDataTable = () => {
+    if (pendingDataTable && !pendingDataTable.hasDataRow) {
+      diagnostics.push(createDiagnostic(
+        vscode,
+        pendingDataTable.range,
+        DATA_TABLE_WITHOUT_ROW_MESSAGE,
+      ));
+    }
+    pendingDataTable = undefined;
+  };
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      flushPendingDataTable();
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      flushPendingDataTable();
+      hasSpecHeading = true;
+      inScenario = false;
+      continue;
+    }
+
+    const scenarioHeading = isScenarioHashHeadingLine(rawLine)
+      || (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine));
+    if (scenarioHeading) {
+      flushPendingDataTable();
+      inScenario = true;
+      continue;
+    }
+
+    if (!hasSpecHeading || inScenario || !isGaugeTableRow(rawLine)) {
+      flushPendingDataTable();
+      continue;
+    }
+
+    if (!pendingDataTable) {
+      pendingDataTable = {
+        hasDataRow: false,
+        range: lineContentRange(vscode, rawLine, line),
+      };
+      continue;
+    }
+
+    if (!isGaugeTableSeparatorRow(rawLine)) {
+      pendingDataTable.hasDataRow = true;
+    }
+  }
+  flushPendingDataTable();
+  return diagnostics;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -7571,6 +7647,9 @@ class GaugeStepDiagnosticsProvider {
         }
       }
       diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
+      if (isGaugeSpecDocument(document)) {
+        diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
+      }
       if (isConceptDocument(document)) {
         const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
         diagnostics.push(...duplicateConceptDiagnostics(this.vscode, document, conceptDocuments));
