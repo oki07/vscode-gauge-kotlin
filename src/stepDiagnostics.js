@@ -17,6 +17,7 @@ const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same fil
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
+const SCENARIO_WITHOUT_STEP_MESSAGE = "Scenario should have at least one step";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
@@ -3772,6 +3773,21 @@ function duplicateScenarioMessage(heading) {
   return `${DUPLICATE_SCENARIO_PREFIX} '${heading}' found in the same specification`;
 }
 
+function isGaugeStepLine(line) {
+  const text = String(line || "").trim();
+  return text.startsWith("*") && !text.startsWith("**");
+}
+
+function pushScenarioWithoutStepDiagnostic(vscode, diagnostics, scenario) {
+  if (scenario && !scenario.hasStep) {
+    diagnostics.push(createDiagnostic(
+      vscode,
+      scenario.range,
+      SCENARIO_WITHOUT_STEP_MESSAGE,
+    ));
+  }
+}
+
 function duplicateScenarioDiagnostics(vscode, text) {
   const diagnostics = [];
   const seen = new Map();
@@ -3780,6 +3796,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
   let firstSpecHeadingRange;
+  let currentScenario;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     if (isDocStringFenceLine(rawLine)) {
@@ -3796,6 +3813,8 @@ function duplicateScenarioDiagnostics(vscode, text) {
     const specHeading = isSpecHashHeading(rawLine)
       || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
     if (specHeading) {
+      pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
+      currentScenario = undefined;
       if (hasSpecHeading) {
         diagnostics.push(createDiagnostic(
           vscode,
@@ -3806,6 +3825,11 @@ function duplicateScenarioDiagnostics(vscode, text) {
         firstSpecHeadingRange = lineContentRange(vscode, rawLine, line);
       }
       hasSpecHeading = true;
+      continue;
+    }
+
+    if (currentScenario && isGaugeStepLine(rawLine)) {
+      currentScenario.hasStep = true;
       continue;
     }
 
@@ -3826,7 +3850,8 @@ function duplicateScenarioDiagnostics(vscode, text) {
       ));
       continue;
     }
-    hasScenarioHeading = true;
+    pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
+    currentScenario = undefined;
 
     const key = heading.toLowerCase();
     const previous = seen.get(key);
@@ -3838,8 +3863,14 @@ function duplicateScenarioDiagnostics(vscode, text) {
       ));
     } else {
       seen.set(key, heading);
+      currentScenario = {
+        hasStep: false,
+        range: lineContentRange(vscode, rawLine, line),
+      };
+      hasScenarioHeading = true;
     }
   }
+  pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
   if (firstSpecHeadingRange && !hasScenarioHeading) {
     diagnostics.push(createDiagnostic(
       vscode,
