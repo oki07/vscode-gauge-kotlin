@@ -386,6 +386,35 @@ test("GaugeDynamicArgumentCompletionProvider suggests scenario data table header
   assert.deepEqual(labels(failedItems), ["error", "u"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests legacy scenario data table headers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "Successful checkout",
+    "-------------------",
+    "| user | role |",
+    "| ---- | ---- |",
+    "| Bob  | admin |",
+    "* Login as <u>",
+    "",
+    "Failed checkout",
+    "---------------",
+    "| error |",
+    "| ----- |",
+    "| empty |",
+    "* Report <e>",
+  ].join("\n"));
+
+  const successfulItems = provider.provideCompletionItems(document, new vscode.Position(7, 13));
+  const failedItems = provider.provideCompletionItems(document, new vscode.Position(14, 10));
+
+  assert.deepEqual(labels(successfulItems), ["user", "role", "e"]);
+  assert.deepEqual(labels(failedItems), ["error", "u"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers without separators", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -863,6 +892,25 @@ test("GaugeDynamicArgumentCompletionProvider suggests indented concept hash head
   ].join("\n"), "/workspace/specs/concepts/shared.cpt");
 
   const stepItems = provider.provideCompletionItems(document, new vscode.Position(1, step.indexOf("i") + 1));
+  const headingItems = provider.provideCompletionItems(document, new vscode.Position(0, heading.indexOf("item")));
+
+  assert.deepEqual(labels(stepItems), ["item", "i"]);
+  assert.deepEqual(labels(headingItems), ["item", "i"]);
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests legacy concept heading dynamic arguments", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const heading = "Shared checkout <item>";
+  const step = "* Select <i>";
+  const document = createDocument([
+    heading,
+    "======================",
+    step,
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const stepItems = provider.provideCompletionItems(document, new vscode.Position(2, step.indexOf("i") + 1));
   const headingItems = provider.provideCompletionItems(document, new vscode.Position(0, heading.indexOf("item")));
 
   assert.deepEqual(labels(stepItems), ["item", "i"]);

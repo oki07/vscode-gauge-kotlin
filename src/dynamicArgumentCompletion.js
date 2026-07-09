@@ -175,6 +175,37 @@ function isScenarioHeading(line) {
   return isScenarioHashHeading(line);
 }
 
+function hasLegacyHeadingText(line) {
+  return Boolean(String(line || "").trim());
+}
+
+function isConceptLegacyHeadingText(line) {
+  return hasLegacyHeadingText(line) && !/[#*|]/.test(line);
+}
+
+function hasFollowingLine(lines, lineNumber) {
+  return lineNumber + 1 < lines.length;
+}
+
+function isLegacyScenarioHeadingAt(lines, lineNumber) {
+  return hasLegacyHeadingText(lines[lineNumber])
+    && /^-+$/.test(lines[lineNumber + 1] || "");
+}
+
+function isLegacyConceptHeadingAt(lines, lineNumber) {
+  return isConceptLegacyHeadingText(lines[lineNumber])
+    && /^[=]+$/.test(lines[lineNumber + 1] || "")
+    && hasFollowingLine(lines, lineNumber + 1);
+}
+
+function isScenarioHeadingAt(lines, lineNumber) {
+  return isScenarioHeading(lines[lineNumber] || "") || isLegacyScenarioHeadingAt(lines, lineNumber);
+}
+
+function isConceptHeadingAt(lines, lineNumber) {
+  return isConceptHeading(lines[lineNumber] || "") || isLegacyConceptHeadingAt(lines, lineNumber);
+}
+
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
   return marker !== -1 && line[marker] === "*";
@@ -600,7 +631,7 @@ function specDataTableHeaders(text, options = {}) {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index];
-    if (isScenarioHeading(line)) {
+    if (isScenarioHeadingAt(lines, index)) {
       return [];
     }
     if (isStepLine(line)) {
@@ -621,7 +652,7 @@ function scenarioDataTableHeaders(text, lineNumber) {
   const lines = text.split(/\r?\n/);
   let scenarioLine = -1;
   for (let index = Math.min(lineNumber, lines.length - 1); index >= 0; index -= 1) {
-    if (isScenarioHeading(lines[index] || "")) {
+    if (isScenarioHeadingAt(lines, index)) {
       scenarioLine = index;
       break;
     }
@@ -632,7 +663,7 @@ function scenarioDataTableHeaders(text, lineNumber) {
 
   for (let index = scenarioLine + 1; index <= Math.min(lineNumber, lines.length - 1); index += 1) {
     const line = lines[index] || "";
-    if (isScenarioHeading(line) || isStepLine(line)) {
+    if (isScenarioHeadingAt(lines, index) || isStepLine(line)) {
       return [];
     }
     if (isFirstTableLine(lines, index)) {
@@ -681,7 +712,7 @@ function dynamicArgumentsInLine(line, options = {}) {
 
 function isConceptDynamicArgumentSourceLine(lines, lineNumber) {
   const line = lines[lineNumber] || "";
-  if (isConceptHeading(line) || isStepLine(line)) {
+  if (isConceptHeadingAt(lines, lineNumber) || isStepLine(line)) {
     return true;
   }
   if (!isCompletionTableBlockLine(lines, lineNumber)) {
@@ -756,10 +787,10 @@ function staticArguments(text, options = {}) {
 }
 
 function allowsDynamicArgumentCompletion(line, document, lineNumber) {
-  if (isConceptDocument(document) && isConceptHeading(line)) {
+  const lines = document.getText().split(/\r?\n/);
+  if (isConceptDocument(document) && isConceptHeadingAt(lines, lineNumber)) {
     return true;
   }
-  const lines = document.getText().split(/\r?\n/);
   return isStepLine(line) || isCompletionTableBlockLine(lines, lineNumber);
 }
 
