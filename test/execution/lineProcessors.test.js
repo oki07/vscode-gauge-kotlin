@@ -76,6 +76,35 @@ test("DebuggerAttachedEventProcessor sets process id and starts debugger", async
   assert.deepEqual(calls, [["pid", 23456], ["start"]]);
 });
 
+test("DebuggerAttachedEventProcessor reads process id from machine-readable output", async () => {
+  const { DebuggerAttachedEventProcessor } = require("../../src/execution/lineProcessors");
+  const calls = [];
+  const processor = new DebuggerAttachedEventProcessor({
+    cancel(aborted) {
+      calls.push(["cancel", aborted]);
+    },
+  });
+  const gaugeDebugger = {
+    addProcessId(pid) {
+      calls.push(["pid", pid]);
+    },
+    startDebugger() {
+      calls.push(["start"]);
+      return Promise.resolve(true);
+    },
+  };
+
+  const line = JSON.stringify({
+    type: "out",
+    message: "Runner Ready for Debugging at Process ID 23456",
+  });
+
+  assert.equal(processor.canProcess(line), true);
+  await processor.process(line, gaugeDebugger);
+
+  assert.deepEqual(calls, [["pid", 23456], ["start"]]);
+});
+
 test("DebuggerAttachedEventProcessor starts debugger even without process id", async () => {
   const { DebuggerAttachedEventProcessor } = require("../../src/execution/lineProcessors");
   const calls = [];

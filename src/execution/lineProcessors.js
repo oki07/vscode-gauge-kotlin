@@ -20,10 +20,7 @@ class ReportEventProcessor extends BaseProcessor {
     if (!this.canProcess(lineText)) {
       return;
     }
-    const event = parseMachineReadableEvent(lineText);
-    const text = event && String(event.type || "").toLowerCase() === "out"
-      ? event.message
-      : lineText;
+    const text = machineReadableOutputText(lineText);
     this.workspace.setReportPath(String(text || "").replace(this.eventPrefix, ""));
   }
 }
@@ -43,7 +40,8 @@ class DebuggerAttachedEventProcessor extends BaseProcessor {
       return Promise.resolve(undefined);
     }
 
-    gaugeDebugger.addProcessId(Number(lineText.replace(/^\D+/g, "")));
+    const text = machineReadableOutputText(lineText);
+    gaugeDebugger.addProcessId(Number(String(text || "").replace(/^\D+/g, "")));
     return gaugeDebugger.startDebugger().catch((error) => {
       if (this.vscode && this.vscode.window) {
         this.vscode.window.showErrorMessage(`Failed to start debugger: ${error.message}`);
@@ -87,6 +85,13 @@ function parseMachineReadableEvent(lineText) {
   } catch (_error) {
     return undefined;
   }
+}
+
+function machineReadableOutputText(lineText) {
+  const event = parseMachineReadableEvent(lineText);
+  return event && String(event.type || "").toLowerCase() === "out"
+    ? event.message
+    : lineText;
 }
 
 function eventLocation(event) {
