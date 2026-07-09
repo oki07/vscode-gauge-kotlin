@@ -15,6 +15,8 @@ const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
+const TABLE_HEADER_BLANK_MESSAGE = "Table header should not be blank";
+const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column values";
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
@@ -3693,6 +3695,87 @@ function isInlineTableLine(line) {
   return text.startsWith("|");
 }
 
+function isGaugeTableRow(line) {
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
+}
+
+function gaugeTableCells(line) {
+  const text = String(line || "").trim();
+  const cells = [];
+  let cell = "";
+  let escaped = false;
+  for (let index = 1; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) {
+      cell += character;
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  return cells;
+}
+
+function lineContentRange(vscode, rawLine, line) {
+  const start = rawLine.search(/\S/);
+  return createRange(
+    vscode,
+    { line, character: start === -1 ? 0 : start },
+    { line, character: rawLine.trimEnd().length },
+  );
+}
+
+function tableHeaderMessages(cells) {
+  const messages = [];
+  const seen = new Set();
+  for (const cell of cells) {
+    if (!cell) {
+      messages.push(TABLE_HEADER_BLANK_MESSAGE);
+    } else if (seen.has(cell)) {
+      messages.push(TABLE_HEADER_DUPLICATE_MESSAGE);
+    } else {
+      seen.add(cell);
+    }
+  }
+  return messages;
+}
+
+function tableHeaderDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  let inTableBlock = false;
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      inTableBlock = false;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+    if (!isGaugeTableRow(rawLine)) {
+      inTableBlock = false;
+      continue;
+    }
+    if (!inTableBlock) {
+      const range = lineContentRange(vscode, rawLine, line);
+      for (const message of tableHeaderMessages(gaugeTableCells(rawLine))) {
+        diagnostics.push(createDiagnostic(vscode, range, message));
+      }
+    }
+    inTableBlock = true;
+  }
+  return diagnostics;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -7287,6 +7370,7 @@ class GaugeStepDiagnosticsProvider {
           ));
         }
       }
+      diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
       if (isConceptDocument(document)) {
         const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
         diagnostics.push(...duplicateConceptDiagnostics(this.vscode, document, conceptDocuments));

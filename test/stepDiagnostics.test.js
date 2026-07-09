@@ -4787,6 +4787,40 @@ test("GaugeStepDiagnosticsProvider reports Gauge step parser errors", () => {
   assert.deepEqual({ ...diagnostics[3].range.end }, { line: 4, character: 11 });
 });
 
+test("GaugeStepDiagnosticsProvider reports Gauge table header parser errors", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| id | id |",
+    "|----|----|",
+    "| one | two |",
+    "",
+    "## Scenario",
+    "* Confirm order",
+    "| name | |",
+    "| John | Doe |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order <table>\")",
+    "fun confirm(table: Table) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Table header cannot have repeated column values",
+      "Table header should not be blank",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 11 });
+  assert.deepEqual({ ...diagnostics[1].range.start }, { line: 7, character: 0 });
+  assert.deepEqual({ ...diagnostics[1].range.end }, { line: 7, character: 10 });
+});
+
 test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
