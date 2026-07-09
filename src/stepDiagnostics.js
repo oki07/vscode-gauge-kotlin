@@ -17,6 +17,7 @@ const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same fil
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
+const SCENARIO_HEADING_EMPTY_MESSAGE = "Scenario heading should have at least one character";
 const SCENARIO_WITHOUT_STEP_MESSAGE = "Scenario should have at least one step";
 const SPEC_HEADING_EMPTY_MESSAGE = "Spec heading should have at least one character";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
@@ -3753,6 +3754,10 @@ function isEmptySpecHeading(line) {
   return isSpecHashHeading(line) && !hashHeadingValue(line, 1);
 }
 
+function isEmptyScenarioHeading(line) {
+  return isScenarioHashHeadingLine(line) && !hashHeadingValue(line, 2);
+}
+
 function isSpecLegacyUnderline(line) {
   return /^=+\s*$/.test(String(line || "").trim());
 }
@@ -3801,6 +3806,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
   let hasEmptySpecHeading = false;
+  let hasEmptyScenarioHeading = false;
   let firstSpecHeadingRange;
   let currentScenario;
   for (let line = 0; line < lines.length; line += 1) {
@@ -3867,6 +3873,16 @@ function duplicateScenarioDiagnostics(vscode, text) {
     pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
     currentScenario = undefined;
 
+    if (isEmptyScenarioHeading(rawLine)) {
+      hasEmptyScenarioHeading = true;
+      diagnostics.push(createDiagnostic(
+        vscode,
+        lineContentRange(vscode, rawLine, line),
+        SCENARIO_HEADING_EMPTY_MESSAGE,
+      ));
+      continue;
+    }
+
     const key = heading.toLowerCase();
     const previous = seen.get(key);
     if (previous !== undefined) {
@@ -3885,7 +3901,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
   }
   pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
-  if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading) {
+  if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading && !hasEmptyScenarioHeading) {
     diagnostics.push(createDiagnostic(
       vscode,
       firstSpecHeadingRange,
