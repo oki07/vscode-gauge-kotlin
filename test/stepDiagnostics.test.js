@@ -4848,6 +4848,63 @@ test("GaugeStepDiagnosticsProvider reports Gauge data tables without rows", () =
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 13 });
 });
 
+test("GaugeStepDiagnosticsProvider reports repeated Gauge specification tag definitions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "tags: smoke",
+    "* Context setup",
+    "tags: slow",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Context setup\")",
+    "fun context() {}",
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Tags can be defined only once per specification",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 10 });
+});
+
+test("GaugeStepDiagnosticsProvider reports repeated Gauge scenario tag definitions", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "tags: smoke",
+    "* Confirm order",
+    "tags: slow",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Tags can be defined only once per scenario",
+    ],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 4, character: 0 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 4, character: 10 });
+});
+
 test("GaugeStepDiagnosticsProvider reports duplicate Gauge scenario headings", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

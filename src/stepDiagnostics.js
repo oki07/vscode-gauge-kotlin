@@ -19,9 +19,11 @@ const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec 
 const SCENARIO_HEADING_IN_CONCEPT_MESSAGE = "Scenario Heading is not allowed in concept file";
 const SCENARIO_HEADING_EMPTY_MESSAGE = "Scenario heading should have at least one character";
 const SCENARIO_WITHOUT_STEP_MESSAGE = "Scenario should have at least one step";
+const SCENARIO_TAGS_REPEATED_MESSAGE = "Tags can be defined only once per scenario";
 const SPEC_EMPTY_MESSAGE = "Spec does not have any elements";
 const SPEC_HEADING_EMPTY_MESSAGE = "Spec heading should have at least one character";
 const SPEC_HEADING_NOT_FOUND_MESSAGE = "Spec heading not found";
+const SPEC_TAGS_REPEATED_MESSAGE = "Tags can be defined only once per specification";
 const SPEC_WITHOUT_SCENARIO_MESSAGE = "Spec should have at least one scenario";
 const STEP_OUTSIDE_CONCEPT_MESSAGE = "Step is not defined inside a concept heading";
 const DATA_TABLE_WITHOUT_ROW_MESSAGE = "Data table should have at least 1 data row";
@@ -4052,6 +4054,80 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+function isGaugeTagLine(line) {
+  return /^tags\s*:/i.test(String(line || "").trim());
+}
+
+function repeatedTagDiagnostics(vscode, text) {
+  const diagnostics = [];
+  const lines = text.split("\n");
+  let inDocString = false;
+  let inScenario = false;
+  let specTagsDefined = false;
+  let scenarioTagsDefined = false;
+  let previousWasTag = false;
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (isDocStringFenceLine(rawLine)) {
+      inDocString = !inDocString;
+      previousWasTag = false;
+      continue;
+    }
+    if (inDocString) {
+      continue;
+    }
+
+    const nextLine = lines[line + 1] === undefined
+      ? ""
+      : lines[line + 1].replace(/\r$/, "");
+    const specHeading = isSpecHashHeading(rawLine)
+      || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
+    if (specHeading) {
+      inScenario = false;
+      scenarioTagsDefined = false;
+      previousWasTag = false;
+      continue;
+    }
+
+    const scenarioHeading = isScenarioHashHeadingLine(rawLine)
+      || (isLegacyHeadingText(rawLine) && isScenarioLegacyUnderline(nextLine));
+    if (scenarioHeading) {
+      inScenario = true;
+      scenarioTagsDefined = false;
+      previousWasTag = false;
+      continue;
+    }
+
+    if (!isGaugeTagLine(rawLine)) {
+      previousWasTag = false;
+      continue;
+    }
+
+    if (inScenario) {
+      if (scenarioTagsDefined && !previousWasTag) {
+        diagnostics.push(createDiagnostic(
+          vscode,
+          lineContentRange(vscode, rawLine, line),
+          SCENARIO_TAGS_REPEATED_MESSAGE,
+        ));
+      }
+      scenarioTagsDefined = true;
+    } else {
+      if (specTagsDefined && !previousWasTag) {
+        diagnostics.push(createDiagnostic(
+          vscode,
+          lineContentRange(vscode, rawLine, line),
+          SPEC_TAGS_REPEATED_MESSAGE,
+        ));
+      }
+      specTagsDefined = true;
+    }
+    previousWasTag = true;
+  }
+  return diagnostics;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -7649,6 +7725,7 @@ class GaugeStepDiagnosticsProvider {
       diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
       if (isGaugeSpecDocument(document)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
+        diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
       }
       if (isConceptDocument(document)) {
         const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
