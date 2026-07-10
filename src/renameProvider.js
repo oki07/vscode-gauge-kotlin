@@ -10,7 +10,10 @@ const {
   isStepImplementationDocument,
   positionAt,
 } = require("./stepDiagnostics");
-const { normalizeStepTemplate } = require("./stepDefinitionProvider");
+const {
+  allowMultilineStep,
+  normalizeStepTemplate,
+} = require("./stepDefinitionProvider");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -144,6 +147,30 @@ function documentLines(document) {
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
   return text.startsWith("|");
+}
+
+function isDocStringFenceLine(line) {
+  return String(line || "").trim() === "\"\"\"";
+}
+
+function isStepLine(line) {
+  const marker = String(line || "").search(/\S/);
+  return marker !== -1 && line[marker] === "*";
+}
+
+function isGaugeSyntaxBoundary(line) {
+  const text = String(line || "").trim();
+  return !text
+    || text.startsWith("*")
+    || text.startsWith("#")
+    || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
+    || text.toLowerCase().startsWith("table:")
+    || text.toLowerCase().startsWith("table :")
+    || isInlineTableLine(text)
+    || isDocStringFenceLine(text)
+    || /^={3,}\s*$/.test(text)
+    || /^-{3,}\s*$/.test(text);
 }
 
 function removeInlineTableSuffix(value) {
@@ -308,11 +335,57 @@ function offsetAt(text, position) {
   return Math.min(offset + position.character, text.length);
 }
 
-function gaugeStepOnLine(vscode, document, lineNumber, lines) {
+function multilineStepStartLine(lines, lineNumber) {
+  for (let currentLine = lineNumber; currentLine >= 0; currentLine -= 1) {
+    const line = String(lines[currentLine] || "").replace(/\r$/, "");
+    if (isStepLine(line)) {
+      return currentLine;
+    }
+    if (isGaugeSyntaxBoundary(line)) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function logicalStepEndLine(lines, lineNumber, allowMultiline) {
+  if (!allowMultiline) {
+    return lineNumber;
+  }
+  let endLine = lineNumber;
+  for (let nextLine = lineNumber + 1; nextLine < lines.length; nextLine += 1) {
+    const nextText = String(lines[nextLine] || "").replace(/\r$/, "");
+    if (isGaugeSyntaxBoundary(nextText)) {
+      break;
+    }
+    endLine = nextLine;
+  }
+  return endLine;
+}
+
+function logicalStepText(lines, lineNumber, textStart, endLine) {
+  const parts = [String(lines[lineNumber] || "").replace(/\r$/, "").slice(textStart).trim()];
+  for (let currentLine = lineNumber + 1; currentLine <= endLine; currentLine += 1) {
+    parts.push(String(lines[currentLine] || "").replace(/\r$/, "").trim());
+  }
+  return parts.join(" ").trim();
+}
+
+function lineTrimEndLength(line) {
+  return String(line || "").replace(/\r$/, "").trimEnd().length;
+}
+
+function gaugeStepOnLine(vscode, document, lineNumber, lines, options = {}) {
   const sourceLines = lines || documentLines(document);
-  const line = (sourceLines[lineNumber] !== undefined
-    ? sourceLines[lineNumber]
-    : documentLine(document, lineNumber)).replace(/\r$/, "");
+  const startLine = options.allowMultilineStep && !isStepLine(sourceLines[lineNumber])
+    ? multilineStepStartLine(sourceLines, lineNumber)
+    : lineNumber;
+  if (startLine === undefined) {
+    return undefined;
+  }
+  const line = (sourceLines[startLine] !== undefined
+    ? sourceLines[startLine]
+    : documentLine(document, startLine)).replace(/\r$/, "");
   const marker = line.search(/\S/);
   if (marker === -1 || line[marker] !== "*") {
     return undefined;
@@ -326,9 +399,13 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
   if (!text) {
     return undefined;
   }
-  const textEnd = textStart + text.length;
-  const hasInlineTable = isInlineTableLine(sourceLines[lineNumber + 1]);
-  const template = normalizeStepTemplate(hasInlineTable ? `${text} <table>` : text);
+  const endLine = logicalStepEndLine(sourceLines, startLine, options.allowMultilineStep);
+  const stepText = endLine === startLine ? text : logicalStepText(sourceLines, startLine, textStart, endLine);
+  const textEnd = endLine === startLine
+    ? textStart + text.length
+    : lineTrimEndLength(sourceLines[endLine]);
+  const hasInlineTable = isInlineTableLine(sourceLines[endLine + 1]);
+  const template = normalizeStepTemplate(hasInlineTable ? `${stepText} <table>` : stepText);
   if (!template) {
     return undefined;
   }
@@ -337,11 +414,11 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines) {
     engineRename: true,
     range: createRange(
       vscode,
-      { line: lineNumber, character: textStart },
-      { line: lineNumber, character: textEnd },
+      { line: startLine, character: textStart },
+      { line: endLine, character: textEnd },
     ),
     template,
-    text,
+    text: stepText,
   };
 }
 
@@ -1089,6 +1166,14 @@ class GaugeRenameProvider {
     return this.diagnosticsProvider.rootForFile(file) !== undefined;
   }
 
+  allowsMultilineStep(document) {
+    return allowMultilineStep({
+      fileSystem: this.diagnosticsProvider.fileSystem,
+      pathModule: this.diagnosticsProvider.pathModule,
+      projectRoot: this.diagnosticsProvider.gaugeProjectRoot(document),
+    });
+  }
+
   async workspaceDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
     const documents = [];
@@ -1162,7 +1247,9 @@ class GaugeRenameProvider {
     if (!isGaugeDocument(document) || !position) {
       return undefined;
     }
-    return gaugeStepOnLine(this.vscode, document, position.line)
+    return gaugeStepOnLine(this.vscode, document, position.line, undefined, {
+      allowMultilineStep: this.allowsMultilineStep(document),
+    })
       || conceptHeadingOnLine(this.vscode, document, position.line);
   }
 
@@ -1334,10 +1421,16 @@ class GaugeRenameProvider {
 
   addGaugeRenames(edit, document, template, newName) {
     const lines = documentLines(document);
+    const allowMultiline = this.allowsMultilineStep(document);
     for (let line = 0; line < lines.length; line += 1) {
-      const step = gaugeStepOnLine(this.vscode, document, line, lines);
+      const step = gaugeStepOnLine(this.vscode, document, line, lines, {
+        allowMultilineStep: allowMultiline,
+      });
       if (step && step.template === template) {
         edit.replace(document.uri, step.range, gaugeReplacementName(newName, step.hasInlineTable));
+      }
+      if (step) {
+        line = Math.max(line, step.range.end.line);
       }
     }
     if (isConceptDocument(document)) {

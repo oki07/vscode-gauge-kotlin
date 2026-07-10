@@ -605,6 +605,90 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
   );
 });
 
+test("GaugeRenameProvider renames multiline Gauge steps and Kotlin Step annotations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const originalAllowMultilineStep = process.env.allow_multiline_step;
+  process.env.allow_multiline_step = "true";
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with",
+    "  <amount>",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const otherSpecDocument = createDocument([
+    "# Retry",
+    "* Pay with",
+    "  <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/retry.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, otherSpecDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  try {
+    const edit = await provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(2, 5),
+      "Pay with <value>",
+    );
+
+    assert.deepEqual(
+      edit.replacements.map((replacement) => ({
+        file: replacement.uri.fsPath,
+        range: {
+          start: { ...replacement.range.start },
+          end: { ...replacement.range.end },
+        },
+        newText: replacement.newText,
+      })),
+      [
+        {
+          file: "/workspace/gauge/specs/checkout.spec",
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 2, character: 10 },
+          },
+          newText: "Pay with <value>",
+        },
+        {
+          file: "/workspace/gauge/specs/retry.spec",
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 2, character: 10 },
+          },
+          newText: "Pay with <value>",
+        },
+        {
+          file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+          range: {
+            start: { line: 2, character: 7 },
+            end: { line: 2, character: 24 },
+          },
+          newText: "Pay with <value>",
+        },
+        {
+          file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+          range: {
+            start: { line: 3, character: 8 },
+            end: { line: 3, character: 22 },
+          },
+          newText: "argValue: Any",
+        },
+      ],
+    );
+  } finally {
+    if (originalAllowMultilineStep === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultilineStep;
+    }
+  }
+});
+
 test("GaugeRenameProvider updates Kotlin Step function parameters when rename adds a preceding parameter", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
