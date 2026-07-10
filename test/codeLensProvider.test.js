@@ -717,6 +717,37 @@ test("GaugeCodeLensProvider counts double-star lines as step references", async 
   ]);
 });
 
+test("GaugeCodeLensProvider excludes starred docstring payloads from step references", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Not a Gauge step\")",
+    "fun wrong() {}",
+  ].join("\n"), "/workspace/tests/Steps.kt", "kotlin");
+  const specDocument = createDocument([
+    "# Execution",
+    "## Runs content",
+    "* Execute content",
+    "\"\"\"",
+    "* Not a Gauge step",
+    "\"\"\"",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, specDocument],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.command.title), [
+    "0 reference(s)",
+  ]);
+});
+
 test("GaugeCodeLensProvider counts multiline step references when project allows them", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const originalAllowMultiline = process.env.allow_multiline_step;

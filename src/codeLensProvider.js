@@ -175,6 +175,34 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
+function closedDocStringLines(lines) {
+  const result = new Set();
+  for (let stepLine = 0; stepLine < lines.length; stepLine += 1) {
+    if (!isStepLine(lines[stepLine])) {
+      continue;
+    }
+    const openLine = stepLine + 1;
+    if (!isDocStringFenceLine(lines[openLine])) {
+      continue;
+    }
+    let closeLine;
+    for (let candidateLine = openLine + 1; candidateLine < lines.length; candidateLine += 1) {
+      if (isDocStringFenceLine(lines[candidateLine])) {
+        closeLine = candidateLine;
+        break;
+      }
+    }
+    if (closeLine === undefined) {
+      continue;
+    }
+    for (let line = openLine; line <= closeLine; line += 1) {
+      result.add(line);
+    }
+    stepLine = closeLine;
+  }
+  return result;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -213,8 +241,12 @@ function countStepReferences(document, normalizedStep, options = {}) {
   }
   let count = 0;
   const lines = document.getText().split(/\r?\n/);
+  const docStringLines = closedDocStringLines(lines);
   const multiline = Boolean(options.allowMultilineStep);
   for (let line = 0; line < lines.length; line += 1) {
+    if (docStringLines.has(line)) {
+      continue;
+    }
     let stepText = multiline
       ? multilineGaugeStepText(lines, line)
       : gaugeStepText(lines[line].replace(/\r$/, ""));
