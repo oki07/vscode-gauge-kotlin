@@ -4789,6 +4789,35 @@ test("GaugeStepDiagnosticsProvider reports Gauge step parser errors", () => {
   assert.deepEqual({ ...diagnostics[3].range.end }, { line: 5, character: 11 });
 });
 
+test("GaugeStepDiagnosticsProvider skips inline parser errors for docstring steps", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Use {literal}",
+    "\"\"\"",
+    "payload",
+    "\"\"\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+
+  const diagnostics = provider.provideDiagnostics(document);
+
+  assert.deepEqual(diagnostics, []);
+
+  const incompleteDocument = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Use {literal}",
+    "\"\"\"",
+    "payload",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/incomplete.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(incompleteDocument).map((diagnostic) => diagnostic.message),
+    ["'{' is a reserved character and should be escaped"],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports Gauge table header parser errors", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

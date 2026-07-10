@@ -4737,6 +4737,19 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
+function docStringEndLineAfterStep(lines, stepLine) {
+  const fenceLine = stepLine + 1;
+  if (!isDocStringFenceLine(lines[fenceLine])) {
+    return undefined;
+  }
+  for (let line = fenceLine + 1; line < lines.length; line += 1) {
+    if (isDocStringFenceLine(lines[line])) {
+      return line;
+    }
+  }
+  return undefined;
+}
+
 function conceptHashHeading(rawLine, lineNumber) {
   const match = /^([ \t]*)(#+)([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
   if (!match) {
@@ -4837,14 +4850,20 @@ function findGaugeSteps(text, options = {}) {
     if (stepText && lines[line + 1] !== undefined && isInlineTableLine(lines[line + 1])) {
       stepText = `${stepText} <table>`;
     }
+    const docStringEndLine = docStringEndLineAfterStep(lines, startLine);
     entries.push({
       end: { line: endLine, character: endCharacter },
       marker,
-      parseError: stepText ? stepParserError(stepText) : undefined,
+      parseError: stepText && docStringEndLine === undefined
+        ? stepParserError(stepText)
+        : undefined,
       normalized: stepText ? normalizeStepTemplate(stepText) : undefined,
       start: { line: startLine, character: marker },
       text: stepText,
     });
+    if (docStringEndLine !== undefined) {
+      line = docStringEndLine;
+    }
   }
   return entries;
 }
