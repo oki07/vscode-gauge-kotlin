@@ -98,7 +98,7 @@ test("GaugeSemanticTokensProvider tokenizes keyword lines with space before colo
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats tag continuation-looking lines as comments", () => {
+test("GaugeSemanticTokensProvider tokenizes comma-ended tag continuation lines", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -126,12 +126,16 @@ test("GaugeSemanticTokensProvider treats tag continuation-looking lines as comme
     "tagValue",
   ]);
   assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
-    "gaugeComment",
+    "tagValue",
   ]);
   assert.deepEqual(tokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
-    "gaugeComment",
+    "tagValue",
   ]);
   assert.equal(tokens.some((entry) => entry.line === 3 && entry.type === "tagValue"), false);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 3).map((entry) => entry.type), [
+    "stepMarker",
+    "step",
+  ]);
 });
 
 test("GaugeSemanticTokensProvider tokenizes table keyword lines after comma-ended tags", () => {

@@ -454,14 +454,14 @@ test("GaugeDynamicArgumentCompletionProvider requires Gauge tag keyword spacing"
   assert.deepEqual(labels(items), []);
 });
 
-test("GaugeDynamicArgumentCompletionProvider ignores tag continuation-looking lines", async () => {
+test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag continuation lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const document = createDocument([
     "# Checkout",
     "tags: smoke,",
-    "  ",
-    "",
+    "fast,",
+    "regression",
     "## Pay",
     "tags: fast",
     "* Pay",
@@ -471,9 +471,12 @@ test("GaugeDynamicArgumentCompletionProvider ignores tag continuation-looking li
     vscode,
   });
 
-  const items = await provider.provideCompletionItems(document, new vscode.Position(2, 2));
+  const items = await provider.provideCompletionItems(document, new vscode.Position(3, "reg".length));
 
-  assert.deepEqual(labels(items), []);
+  assert.deepEqual(labels(items), ["smoke", "fast", "regression"]);
+  assert.equal(items[2].detail, "Tag");
+  assert.deepEqual({ ...items[2].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...items[2].range.end }, { line: 3, character: "regression".length });
 });
 
 test("GaugeDynamicArgumentCompletionProvider ignores tag completions on table keyword lines", async () => {

@@ -196,6 +196,16 @@ function isLegacyScenarioHeadingAt(lines, lineNumber) {
     && /^-+$/.test(lines[lineNumber + 1] || "");
 }
 
+function isLegacySpecHeadingAt(lines, lineNumber) {
+  return hasLegacyHeadingText(lines[lineNumber])
+    && /^[=]+$/.test(lines[lineNumber + 1] || "");
+}
+
+function isLegacyHeadingAt(lines, lineNumber) {
+  return isLegacySpecHeadingAt(lines, lineNumber)
+    || isLegacyScenarioHeadingAt(lines, lineNumber);
+}
+
 function isLegacyConceptHeadingAt(lines, lineNumber) {
   return isConceptLegacyHeadingText(lines[lineNumber])
     && /^[=]+$/.test(lines[lineNumber + 1] || "")
@@ -372,11 +382,52 @@ function isTagLine(line) {
   return /^\s*tags[ \t\f]?:/i.test(String(line || ""));
 }
 
+function isTagLineEndingWithComma(line) {
+  return String(line || "").trim().endsWith(",");
+}
+
+function isTagContinuationBoundary(line) {
+  const text = String(line || "").trim();
+  return text.startsWith("*")
+    || text.startsWith("#")
+    || text.startsWith("//")
+    || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
+    || text.toLowerCase().startsWith("table:")
+    || text.toLowerCase().startsWith("table :")
+    || isTableLine(text)
+    || isDocStringFenceLine(text)
+    || isTeardownLine(text)
+    || /^={3,}\s*$/.test(text)
+    || /^-{3,}\s*$/.test(text);
+}
+
 function isTagsContext(lines, lineNumber) {
   if (lineNumber < 0 || lineNumber >= lines.length) {
     return false;
   }
-  return isTagLine(lines[lineNumber]);
+  let tagsContinuation = false;
+  for (let index = 0; index <= lineNumber; index += 1) {
+    const line = lines[index] || "";
+    if (isTagLine(line)) {
+      if (index === lineNumber) {
+        return true;
+      }
+      tagsContinuation = isTagLineEndingWithComma(line);
+    } else if (
+      tagsContinuation
+      && !isTagContinuationBoundary(line)
+      && !isLegacyHeadingAt(lines, index)
+    ) {
+      if (index === lineNumber) {
+        return true;
+      }
+      tagsContinuation = isTagLineEndingWithComma(line);
+    } else {
+      tagsContinuation = false;
+    }
+  }
+  return false;
 }
 
 function tagCompletionRange(line, position) {
@@ -384,14 +435,17 @@ function tagCompletionRange(line, position) {
   const commaIndex = prefix.lastIndexOf(",");
   const colonIndex = prefix.lastIndexOf(":");
   const separatorIndex = commaIndex > colonIndex ? commaIndex : colonIndex;
-  const start = separatorIndex + 1;
+  const start = separatorIndex === -1
+    ? Math.max(0, line.search(/\S/))
+    : separatorIndex + 1;
   const textAfterCursor = line.slice(position.character);
   const nextCommaIndex = textAfterCursor.indexOf(",");
   const end = nextCommaIndex === -1
     ? line.length
     : position.character + nextCommaIndex + 1;
   const suffix = nextCommaIndex === -1 ? "" : ",";
-  return { end, start, suffix };
+  const insertPrefix = separatorIndex === -1 ? "" : " ";
+  return { end, insertPrefix, start, suffix };
 }
 
 function tagValues(text) {
@@ -1368,7 +1422,7 @@ class GaugeDynamicArgumentCompletionProvider {
       {
         detail: "Tag",
         filterText: `${label}${targetRange.suffix}`,
-        insertText: ` ${label}${targetRange.suffix}`,
+        insertText: `${targetRange.insertPrefix}${label}${targetRange.suffix}`,
         kind,
         sortText: `a${label}`,
       },
