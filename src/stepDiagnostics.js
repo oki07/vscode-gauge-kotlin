@@ -4815,6 +4815,7 @@ function findGaugeSteps(text, options = {}) {
       continue;
     }
 
+    const startLine = line;
     const textLines = [rawLine.slice(marker + 1).trim()];
     let endLine = line;
     let endCharacter = rawLine.length;
@@ -4840,7 +4841,7 @@ function findGaugeSteps(text, options = {}) {
       marker,
       parseError: stepText ? stepParserError(stepText) : undefined,
       normalized: stepText ? normalizeStepTemplate(stepText) : undefined,
-      start: { line, character: marker },
+      start: { line: startLine, character: marker },
       text: stepText,
     });
   }

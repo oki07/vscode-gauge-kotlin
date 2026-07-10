@@ -5472,6 +5472,43 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge dynamic step paramet
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 19 });
 });
 
+test("GaugeStepDiagnosticsProvider reports undefined multiline Gauge steps from the marker line", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalAllowMultilineStep = process.env.allow_multiline_step;
+  process.env.allow_multiline_step = "true";
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Missing",
+    "  step",
+    "* Step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Step\")",
+    "fun step() {}",
+  ].join("\n"));
+
+  try {
+    const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+    assert.deepEqual(
+      diagnostics.map((diagnostic) => diagnostic.message),
+      [
+        "Undefined Step",
+      ],
+    );
+    assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+    assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 6 });
+  } finally {
+    if (originalAllowMultilineStep === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultilineStep;
+    }
+  }
+});
+
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge dynamic step parameters outside table headers", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
