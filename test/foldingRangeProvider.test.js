@@ -168,6 +168,35 @@ test("GaugeFoldingRangeProvider folds indented concept hash headings", () => {
   ]);
 });
 
+test("GaugeFoldingRangeProvider folds gauge-concept documents by language id", () => {
+  const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
+  const provider = new GaugeFoldingRangeProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/gauge/specs/concepts/shared");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+  });
+  const document = createDocument([
+    "  # Shared checkout",
+    "* Reuse",
+    "",
+    "# Next concept",
+    "* Reuse again",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared", "gauge-concept");
+
+  assert.deepEqual(provider.provideFoldingRanges(document), [
+    { start: 0, end: 1 },
+    { start: 3, end: 4 },
+  ]);
+});
+
 test("GaugeFoldingRangeProvider ignores concept equals underlines after identifiers", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();

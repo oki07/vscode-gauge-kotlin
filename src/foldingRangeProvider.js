@@ -6,6 +6,7 @@ const {
 } = require("./gaugeHeadings");
 
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_EXTENSION = ".spec";
 const CONCEPT_FILE_EXTENSION = ".cpt";
@@ -25,7 +26,8 @@ function documentPath(document) {
 }
 
 function isConceptDocument(document) {
-  return documentPath(document).toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
+  return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
+    || documentPath(document).toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
 }
 
 function isSpecDocument(document) {
