@@ -5,6 +5,7 @@ const nodePath = require("node:path");
 
 const COLLECTION_NAME = "gauge-kotlin";
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const BLANK_STEP_MESSAGE = "Step should not be blank";
@@ -8035,6 +8036,9 @@ function findStepFunctionsForDocument(document, externalConstants) {
 function isConceptDocument(candidate) {
   if (!candidate) {
     return false;
+  }
+  if (candidate.languageId === GAUGE_CONCEPT_LANGUAGE) {
+    return true;
   }
   const file = documentPath(candidate);
   return typeof file === "string" && CONCEPT_FILE_PATTERN.test(file);
