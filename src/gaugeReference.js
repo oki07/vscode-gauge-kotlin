@@ -690,7 +690,8 @@ function allowMultilineStep(options = {}) {
 
 function isConceptReferenceDocument(document) {
   const file = documentPath(document);
-  return typeof file === "string" && file.toLowerCase().endsWith(".cpt");
+  return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
+    || (typeof file === "string" && file.toLowerCase().endsWith(".cpt"));
 }
 
 function positionInRange(position, range) {

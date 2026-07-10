@@ -1424,6 +1424,64 @@ test("ReferenceProvider includes concept headings in local Step references", asy
   ]);
 });
 
+test("ReferenceProvider includes gauge-concept headings in local Step references by language id", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const kotlinDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Log in as <user>\")",
+        "fun login(user: String) {}",
+      ].join("\n");
+    },
+  };
+  const conceptDocument = {
+    languageId: "gauge-concept",
+    uri: {
+      fsPath: "/workspace/concepts/login",
+      toString() {
+        return "file:///workspace/concepts/login";
+      },
+    },
+    getText() {
+      return [
+        "  # Log in as <user>",
+        "* Enter username",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [kotlinDocument, conceptDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(
+    kotlinDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/concepts/login",
+      range: {
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 20 },
+      },
+    },
+  ]);
+});
+
 test("ReferenceProvider provides local references from concept heading cursor without LSP", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
@@ -1512,6 +1570,102 @@ test("ReferenceProvider provides local references from concept heading cursor wi
     },
     {
       uri: "file:///workspace/specs/concepts/reuse.cpt",
+      range: {
+        start: { line: 1, character: 0 },
+        end: { line: 1, character: 23 },
+      },
+    },
+  ]);
+});
+
+test("ReferenceProvider provides local references from gauge-concept heading cursor without LSP", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const conceptDocument = {
+    languageId: "gauge-concept",
+    uri: {
+      fsPath: "/workspace/specs/concepts/shared",
+      toString() {
+        return "file:///workspace/specs/concepts/shared";
+      },
+    },
+    getText() {
+      return [
+        "  # Shared checkout <item>",
+        "* Prepare cart",
+      ].join("\n");
+    },
+  };
+  const specDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/checkout.spec",
+      toString() {
+        return "file:///workspace/specs/checkout.spec";
+      },
+    },
+    getText() {
+      return [
+        "# Checkout",
+        "",
+        "## Scenario",
+        "* Shared checkout \"book\"",
+      ].join("\n");
+    },
+  };
+  const otherConceptDocument = {
+    languageId: "gauge-concept",
+    uri: {
+      fsPath: "/workspace/specs/concepts/reuse",
+      toString() {
+        return "file:///workspace/specs/concepts/reuse";
+      },
+    },
+    getText() {
+      return [
+        "# Reuse checkout",
+        "* Shared checkout \"pen\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      async findFiles(pattern) {
+        if (pattern === "**/*.spec" || pattern === "**/*.cpt" || pattern === "**/*.md") {
+          return [];
+        }
+        throw new Error(`unexpected findFiles pattern: ${pattern}`);
+      },
+      async openTextDocument() {
+        throw new Error("no unopened files should be opened");
+      },
+      textDocuments: [conceptDocument, specDocument, otherConceptDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const references = await provider.provideReferences(
+    conceptDocument,
+    { line: 0, character: 14 },
+  );
+
+  assert.deepEqual(references, [
+    {
+      uri: "file:///workspace/specs/concepts/shared",
+      range: {
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 26 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/checkout.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 24 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/concepts/reuse",
       range: {
         start: { line: 1, character: 0 },
         end: { line: 1, character: 23 },
