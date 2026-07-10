@@ -38,6 +38,7 @@ const UNDEFINED_STEP_MESSAGE = "Undefined Step";
 const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
 const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminated";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
+const GAUGE_DATA_DIR_PROPERTY = "gauge_data_dir";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
@@ -3708,6 +3709,12 @@ function allowMultilineStep(options = {}) {
   return projectValue === true;
 }
 
+function gaugeDataDir(options = {}) {
+  return process.env[GAUGE_DATA_DIR_PROPERTY]
+    || projectDefaultProperty(options, GAUGE_DATA_DIR_PROPERTY)
+    || ".";
+}
+
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
   return text.startsWith("|");
@@ -4088,7 +4095,7 @@ function resolveExternalTablePath(location, options = {}) {
   if (!options.projectRoot) {
     return undefined;
   }
-  return pathModule.join(options.projectRoot, location);
+  return pathModule.join(options.projectRoot, gaugeDataDir(options), location);
 }
 
 function externalTableExists(location, options = {}) {

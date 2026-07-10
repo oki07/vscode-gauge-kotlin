@@ -4921,6 +4921,100 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge external table files
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 23 });
 });
 
+test("GaugeStepDiagnosticsProvider resolves Gauge external tables from gauge data dir", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/data/users.csv");
+        return true;
+      },
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "gauge_data_dir = data\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table: users.csv",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideDiagnostics(document, [document, implementation]), []);
+});
+
+test("GaugeStepDiagnosticsProvider prefers environment Gauge data dir for external tables", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalGaugeDataDir = process.env.gauge_data_dir;
+  process.env.gauge_data_dir = "env-data";
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/env-data/users.csv");
+        return true;
+      },
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "gauge_data_dir = property-data\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table: users.csv",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  try {
+    assert.deepEqual(provider.provideDiagnostics(document, [document, implementation]), []);
+  } finally {
+    if (originalGaugeDataDir === undefined) {
+      delete process.env.gauge_data_dir;
+    } else {
+      process.env.gauge_data_dir = originalGaugeDataDir;
+    }
+  }
+});
+
 test("GaugeStepDiagnosticsProvider warns when Gauge external tables are outside specs and scenarios", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({
