@@ -289,14 +289,6 @@ function kotlinStringLiteral(value) {
   return JSON.stringify(value).replace(/\$/g, () => "\\$");
 }
 
-function isKotlinDocument(document) {
-  const file = document && document.uri && document.uri.fsPath;
-  return document && (
-    document.languageId === "kotlin"
-    || (typeof file === "string" && file.toLowerCase().endsWith(".kt"))
-  );
-}
-
 function kotlinFunctionNames(text) {
   const names = [];
   const pattern = /\bfun\s+(?:`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*))\s*\(/g;
@@ -304,20 +296,6 @@ function kotlinFunctionNames(text) {
   while (match) {
     names.push(match[1] || match[2]);
     match = pattern.exec(text);
-  }
-  return names;
-}
-
-function workspaceKotlinFunctionNames(vscode) {
-  const documents = vscode && vscode.workspace && Array.isArray(vscode.workspace.textDocuments)
-    ? vscode.workspace.textDocuments
-    : [];
-  const names = [];
-  for (const document of documents) {
-    if (!isKotlinDocument(document) || typeof document.getText !== "function") {
-      continue;
-    }
-    names.push(...kotlinFunctionNames(document.getText()));
   }
   return names;
 }
@@ -463,7 +441,7 @@ class GaugeStepCodeActionProvider {
       ? javaStepStubCode(step.text, "implementation", step.implicitParameterCount)
       : stepStubCode(
         step.text,
-        stepImplementationName(workspaceKotlinFunctionNames(this.vscode)),
+        "implementation",
         step.implicitParameterCount,
       ));
     action.command = {

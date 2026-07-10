@@ -25,3 +25,11 @@ Related:
 Broad:
 - Command: `npm run check`
 - Result: passed. Unit 598 of 598, LSP 22 of 22, VS Code 25 of 25, package succeeded.
+
+## Scope Correction
+
+The workspace-wide quick-fix name selection recorded above was superseded on 2026-07-10.
+`GaugeStepCodeActionProvider` now keeps the initial method name as `implementation`, and
+`GenerateStubCommandProvider` chooses the next available `implementationN` name only after the
+user selects the destination Kotlin or Java file. This matches `CreateStepImplFix`, which checks
+the selected implementation class rather than unrelated open source files.

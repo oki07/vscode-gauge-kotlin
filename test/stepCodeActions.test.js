@@ -756,7 +756,7 @@ test("GaugeStepCodeActionProvider ignores Gauge files by extension outside Gauge
   ]);
 });
 
-test("GaugeStepCodeActionProvider avoids duplicate Kotlin step stub names", () => {
+test("GaugeStepCodeActionProvider defers duplicate Kotlin stub names until destination selection", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
     GENERATE_STEP_STUB,
@@ -802,7 +802,7 @@ test("GaugeStepCodeActionProvider avoids duplicate Kotlin step stub names", () =
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Refund <amount>\")\nfun implementation1(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Refund <amount>\")\nfun implementation(arg0: Any) {\n}\n",
     ],
   });
 });
