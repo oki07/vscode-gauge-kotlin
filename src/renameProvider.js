@@ -999,6 +999,16 @@ function kotlinParameterName(parameter) {
   return match[1].startsWith("`") ? match[1].slice(1, -1) : match[1];
 }
 
+function javaParameterName(parameter) {
+  const cleaned = String(parameter || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\r\n]*/g, " ")
+    .replace(/@\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\s*\.\s*)*[A-Za-z_$][A-Za-z0-9_$]*(?:\s*\([^)]*\))?/g, " ")
+    .trim();
+  const match = /([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\[\s*\])*\s*$/.exec(cleaned);
+  return match ? match[1] : undefined;
+}
+
 function upperFirst(value) {
   return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
 }
@@ -1087,6 +1097,35 @@ function kotlinFunctionParameterReplacement(text, entry, newName, hasInlineTable
     }
     const generatedName = generatedKotlinParameterName(parameter.value, newIndex, usedNames);
     return `${generatedName}: Any`;
+  });
+  const replacement = replacementParameters.join(", ");
+  return replacement === String(entry.parameterText || "").trim() ? undefined : replacement;
+}
+
+function javaFunctionParameterReplacement(entry, newName, hasInlineTable, oldName) {
+  const oldParameters = stepParameters(entry.aliases[0]);
+  const newParameters = stepParameters(implementationStepName(newName, hasInlineTable, {
+    implementationAlias: entry.aliases[0],
+    oldName,
+  }));
+  const positions = parameterPositionMap(oldParameters, newParameters);
+  if (!hasStructuralParameterChange(oldParameters, newParameters, positions)) {
+    return undefined;
+  }
+  const currentParameters = splitKotlinParameterText(entry.parameterText || "");
+  const usedNames = new Set(currentParameters.map(javaParameterName).filter(Boolean));
+  const replacementParameters = newParameters.map((parameter, newIndex) => {
+    const oldIndex = positions[newIndex];
+    if (oldIndex !== -1 && currentParameters[oldIndex] !== undefined) {
+      const existing = currentParameters[oldIndex].trim();
+      const existingName = javaParameterName(existing);
+      if (existingName) {
+        usedNames.add(existingName);
+      }
+      return existing;
+    }
+    const generatedName = generatedKotlinParameterName(parameter.value, newIndex, usedNames);
+    return `Object ${generatedName}`;
   });
   const replacement = replacementParameters.join(", ");
   return replacement === String(entry.parameterText || "").trim() ? undefined : replacement;
@@ -1525,6 +1564,26 @@ class GaugeRenameProvider {
     edit.replace(document.uri, range, replacement);
   }
 
+  addJavaFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName) {
+    if (!isJavaDocument(document) || entry.parameterStart === undefined || entry.parameterEnd === undefined) {
+      return;
+    }
+    const replacement = javaFunctionParameterReplacement(entry, newName, hasInlineTable, oldName);
+    if (replacement === undefined) {
+      return;
+    }
+    const range = createRangeFromOffsets(this.vscode, text, entry.parameterStart, entry.parameterEnd);
+    if (editHasReplacement(edit, document.uri, range)) {
+      return;
+    }
+    edit.replace(document.uri, range, replacement);
+  }
+
+  addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName) {
+    this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+    this.addJavaFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+  }
+
   addStepImplementationRenames(edit, document, implementationDocuments, template, newName, hasInlineTable, oldName) {
     const text = document.getText();
     let externalConstants;
@@ -1557,12 +1616,12 @@ class GaugeRenameProvider {
             oldName,
           );
         }
-        this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+        this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
         continue;
       }
       const range = createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd);
       if (editHasReplacement(edit, document.uri, range)) {
-        this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+        this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
         continue;
       }
       edit.replace(
@@ -1575,7 +1634,7 @@ class GaugeRenameProvider {
           kotlin: kotlinDocument,
         }),
       );
-      this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+      this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
     }
   }
 

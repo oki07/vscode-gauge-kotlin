@@ -1559,6 +1559,78 @@ test("GaugeRenameProvider renames from Java Step annotations", async () => {
         },
         newText: "Pay with <value>",
       },
+      {
+        file: "/workspace/gauge/src/test/java/Steps.java",
+        range: {
+          start: { line: 6, character: 18 },
+          end: { line: 6, character: 31 },
+        },
+        newText: "Object argValue",
+      },
+    ],
+  );
+});
+
+test("GaugeRenameProvider updates Java Step method parameters when rename changes dynamic arguments", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const javaDocument = createDocument([
+    "package steps;",
+    "",
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "public class Steps {",
+    "  @Step(\"Pay with <amount>\")",
+    "  public void pay(String amount) {",
+    "  }",
+    "}",
+  ].join("\n"), "plaintext", "/workspace/gauge/src/test/java/Steps.java");
+  const vscode = createFakeVscode([specDocument, javaDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/java/Steps.java",
+        range: {
+          start: { line: 5, character: 9 },
+          end: { line: 5, character: 26 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/java/Steps.java",
+        range: {
+          start: { line: 6, character: 18 },
+          end: { line: 6, character: 31 },
+        },
+        newText: "Object argValue",
+      },
     ],
   );
 });
@@ -1602,6 +1674,10 @@ test("GaugeRenameProvider keeps Java Step annotation dollar text unescaped", asy
       {
         file: "/workspace/gauge/src/test/java/Steps.java",
         newText: "Pay $amount",
+      },
+      {
+        file: "/workspace/gauge/src/test/java/Steps.java",
+        newText: "",
       },
     ],
   );
