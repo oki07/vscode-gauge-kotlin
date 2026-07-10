@@ -651,6 +651,65 @@ test("GaugeStepCodeActionProvider creates fixes for concept files by extension",
   });
 });
 
+test("GaugeStepCodeActionProvider creates fixes for gauge-concept documents by language id", () => {
+  const {
+    CREATE_CONCEPT_TITLE,
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_CONCEPT_STUB,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/gauge/specs/concepts/payment");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Shared checkout",
+    "* Pay with <amount>",
+  ], "gauge-concept", "/workspace/gauge/specs/concepts/payment");
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+  assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
+  assert.deepEqual(actions[1].command, {
+    command: GENERATE_CONCEPT_STUB,
+    title: CREATE_CONCEPT_TITLE,
+    arguments: [
+      {
+        conceptName: "# Pay with <arg0>\n* ",
+        conceptFile: "",
+        dir: "",
+      },
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider ignores Gauge files by extension outside Gauge projects", () => {
   const {
     GaugeStepCodeActionProvider,

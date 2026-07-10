@@ -11,6 +11,7 @@ const CREATE_STEP_IMPLEMENTATION_TITLE = "Create step implementation";
 const GENERATE_CONCEPT_STUB = "gauge.generate.concept";
 const GENERATE_STEP_STUB = "gauge.generate.step";
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const JAVA_LANGUAGE = "java";
 const VALIDATE_MISSING_IMPLEMENTATION_MESSAGE = "Step implementation not found";
@@ -66,6 +67,9 @@ function isGaugeSpecDocument(document) {
     return false;
   }
   if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  if (document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return true;
   }
   return GAUGE_FILE_PATTERN.test(documentPath(document));
