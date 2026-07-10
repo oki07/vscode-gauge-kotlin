@@ -216,6 +216,9 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
 
   assert.deepEqual(events, [
     {
+      type: "lineBreak",
+    },
+    {
       type: "suiteStarted",
       id: "/workspace/specs/example.spec",
       parentId: "suite",
@@ -249,6 +252,96 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
       parentId: "suite",
       name: "Checkout",
       duration: 100,
+    },
+  ]);
+});
+
+test("MachineReadableEventProcessor separates the first spec and normalizes spec parent ids", () => {
+  const { MachineReadableEventProcessor } = require("../../src/execution/lineProcessors");
+  const events = [];
+  const processor = new MachineReadableEventProcessor((event) => events.push(event));
+
+  processor.process(JSON.stringify({
+    type: "specStart",
+    id: "/workspace/specs/example.spec:1",
+    name: "Checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 1,
+  }));
+  processor.process(JSON.stringify({
+    type: "scenarioStart",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Successful checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 12,
+  }));
+  processor.process(JSON.stringify({
+    type: "scenarioEnd",
+    id: "/workspace/specs/example.spec:12",
+    parentId: "/workspace/specs/example.spec",
+    name: "Successful checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 12,
+    result: {
+      status: "pass",
+      time: 45,
+    },
+  }));
+  processor.process(JSON.stringify({
+    type: "specEnd",
+    id: "/workspace/specs/example.spec:1",
+    name: "Checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 1,
+    result: {
+      status: "pass",
+      time: 100,
+    },
+  }));
+  processor.process(JSON.stringify({
+    type: "specStart",
+    id: "/workspace/specs/second.spec",
+    name: "Second",
+  }));
+
+  assert.deepEqual(events, [
+    {
+      type: "lineBreak",
+    },
+    {
+      type: "suiteStarted",
+      id: "/workspace/specs/example.spec",
+      parentId: "suite",
+      name: "Checkout",
+      location: "gauge:///workspace/specs/example.spec:1",
+    },
+    {
+      type: "testStarted",
+      id: "/workspace/specs/example.spec:12",
+      parentId: "/workspace/specs/example.spec",
+      name: "Successful checkout",
+      location: "gauge:///workspace/specs/example.spec:12",
+    },
+    {
+      type: "testFinished",
+      id: "/workspace/specs/example.spec:12",
+      parentId: "/workspace/specs/example.spec",
+      name: "Successful checkout",
+      duration: 45,
+    },
+    {
+      type: "suiteFinished",
+      id: "/workspace/specs/example.spec",
+      parentId: "suite",
+      name: "Checkout",
+      duration: 100,
+    },
+    {
+      type: "suiteStarted",
+      id: "/workspace/specs/second.spec",
+      parentId: "suite",
+      name: "Second",
     },
   ]);
 });

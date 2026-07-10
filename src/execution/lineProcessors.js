@@ -110,6 +110,10 @@ function tableIdentifier(event, value) {
   return table ? `${value}${TABLE_ROW_SEPARATOR}${table.rowIndex + 1}` : value;
 }
 
+function specIdentifier(value) {
+  return typeof value === "string" ? value.replace(/:\d+$/, "") : value;
+}
+
 function textWithLine(value) {
   if (!value) {
     return "";
@@ -241,7 +245,7 @@ function machineReadableEvents(event) {
       return [
         addLocation({
           type: "suiteStarted",
-          id: event.id,
+          id: specIdentifier(event.id),
           parentId: SUITE_ID,
           name: event.name,
         }, event),
@@ -252,12 +256,12 @@ function machineReadableEvents(event) {
           event,
           "Before Specification",
           "After Specification",
-          event.id,
-          event.id,
+          specIdentifier(event.id),
+          specIdentifier(event.id),
         ),
         {
           type: "suiteFinished",
-          id: event.id,
+          id: specIdentifier(event.id),
           parentId: SUITE_ID,
           name: event.name,
           duration: event.result && event.result.time,
@@ -268,7 +272,7 @@ function machineReadableEvents(event) {
         addLocation({
           type: "testStarted",
           id: tableIdentifier(event, event.id),
-          parentId: event.parentId,
+          parentId: specIdentifier(event.parentId),
           name: tableIdentifier(event, event.name),
         }, event),
       ];
@@ -282,7 +286,7 @@ function machineReadableEvents(event) {
         events.push({
           type: "testFailed",
           id,
-          parentId: event.parentId,
+          parentId: specIdentifier(event.parentId),
           name,
           message: scenarioMessage(result, "Failed: "),
         });
@@ -290,7 +294,7 @@ function machineReadableEvents(event) {
         events.push({
           type: "testIgnored",
           id,
-          parentId: event.parentId,
+          parentId: specIdentifier(event.parentId),
           name,
           message: scenarioMessage(result, "Skipped: "),
         });
@@ -298,7 +302,7 @@ function machineReadableEvents(event) {
       events.push({
         type: "testFinished",
         id,
-        parentId: event.parentId,
+        parentId: specIdentifier(event.parentId),
         name,
         duration: result.time,
       });
@@ -331,6 +335,7 @@ function machineReadableEvents(event) {
 class MachineReadableEventProcessor {
   constructor(sink) {
     this.sink = typeof sink === "function" ? sink : undefined;
+    this.seenSpecStart = false;
   }
 
   canProcess(lineText) {
@@ -341,6 +346,10 @@ class MachineReadableEventProcessor {
     const event = parseMachineReadableEvent(lineText);
     if (!event || !this.sink) {
       return;
+    }
+    if (String(event.type || "").toLowerCase() === "specstart" && !this.seenSpecStart) {
+      this.seenSpecStart = true;
+      this.sink({ type: "lineBreak" });
     }
     for (const mapped of machineReadableEvents(event)) {
       this.sink(mapped);

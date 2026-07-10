@@ -1943,6 +1943,9 @@ test("executor routes Gauge machine-readable output to the execution event sink"
 
   assert.deepEqual(events, [
     {
+      type: "lineBreak",
+    },
+    {
       type: "suiteStarted",
       id: "/workspace/specs/example.spec",
       parentId: "suite",
