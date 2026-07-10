@@ -930,6 +930,18 @@ function multilineStepText(lines, lineNumber) {
   return stepLines.join(" ");
 }
 
+function multilineStepEndLine(lines, lineNumber) {
+  let endLine = lineNumber;
+  for (let nextLine = lineNumber + 1; nextLine < lines.length; nextLine += 1) {
+    const nextText = lines[nextLine] || "";
+    if (isGaugeSyntaxBoundary(nextText)) {
+      break;
+    }
+    endLine = nextLine;
+  }
+  return endLine;
+}
+
 function specDynamicArguments(text, currentLineNumber, options = {}) {
   const values = [];
   const lines = text.split(/\r?\n/);
@@ -1148,6 +1160,7 @@ function usedStepEntriesFromDocument(document, options = {}) {
   }
   const lines = document.getText().split(/\r?\n/);
   const entries = [];
+  const multiline = Boolean(options.allowMultilineStep);
   for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
     const line = lines[lineNumber] || "";
     if (!isStepLine(line)) {
@@ -1158,12 +1171,14 @@ function usedStepEntriesFromDocument(document, options = {}) {
     }
     const marker = String(line || "").search(/\S/);
     const text = marker === -1 ? "" : line.slice(marker + 1).trim();
-    if (!text) {
+    const stepText = multiline ? multilineStepText(lines, lineNumber).trim() : text;
+    if (!stepText) {
       continue;
     }
-    entries.push(isTableLine(lines[lineNumber + 1] || "")
-      ? `${usedStepCompletionText(text)} <table>`
-      : usedStepCompletionText(text));
+    const endLine = multiline ? multilineStepEndLine(lines, lineNumber) : lineNumber;
+    entries.push(isTableLine(lines[endLine + 1] || "")
+      ? `${usedStepCompletionText(stepText)} <table>`
+      : usedStepCompletionText(stepText));
   }
   return entries;
 }
@@ -1296,12 +1311,18 @@ class GaugeDynamicArgumentCompletionProvider {
     const includeCurrentLine = currentLine !== undefined
       && String(currentLineText || "").slice(position.character).trim().length > 0;
     const sourcePath = documentPath(document);
+    const allowMultiline = allowMultilineStep({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot: sourceRoot,
+    });
     for (const candidate of documents) {
       if (!this.belongsToSourceGaugeProject(candidate, sourceRoot)) {
         continue;
       }
       const isCurrentDocument = documentPath(candidate) === sourcePath;
       for (const label of usedStepEntriesFromDocument(candidate, {
+        allowMultilineStep: allowMultiline,
         currentLine: isCurrentDocument ? currentLine : undefined,
         includeCurrentLine,
       })) {

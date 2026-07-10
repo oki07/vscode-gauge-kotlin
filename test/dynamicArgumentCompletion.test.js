@@ -1438,6 +1438,32 @@ test("GaugeDynamicArgumentCompletionProvider suggests used steps at non-argument
   ]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests multiline used steps when project allows them", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const originalAllowMultilineStep = process.env.allow_multiline_step;
+  process.env.allow_multiline_step = "true";
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with",
+    "  <card>",
+    "* Pay",
+  ].join("\n"));
+
+  try {
+    const items = provider.provideCompletionItems(document, new vscode.Position(3, 5));
+
+    assert.deepEqual(labels(items), ["Pay with <card>"]);
+  } finally {
+    if (originalAllowMultilineStep === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultilineStep;
+    }
+  }
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on step lines", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
