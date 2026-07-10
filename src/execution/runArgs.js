@@ -145,6 +145,16 @@ function joinedEnvironmentNames(env) {
   return "";
 }
 
+function parallelNodeCount(value) {
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? `${value}` : undefined;
+  }
+  if (typeof value === "string" && /^[+-]?\d+$/.test(value)) {
+    return value;
+  }
+  return undefined;
+}
+
 function buildGaugeArgs(spec, option = {}) {
   const args = ["run"];
   const launchArgs = additionalArgs(option.args);
@@ -162,6 +172,14 @@ function buildGaugeArgs(spec, option = {}) {
     ...option,
   };
   delete merged.args;
+  if (merged.parallel && Object.prototype.hasOwnProperty.call(merged, "n")) {
+    const nodes = parallelNodeCount(merged.n);
+    if (nodes === undefined) {
+      delete merged.n;
+    } else {
+      merged.n = nodes;
+    }
+  }
 
   for (const [key, value] of Object.entries(merged)) {
     args.push(...flagTokens(key, value));
@@ -200,8 +218,9 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
   }
   if (parallel) {
     args.push(prefixed("inParallel=true"));
-    if (n) {
-      args.push(prefixed(`nodes=${n}`));
+    const nodes = parallelNodeCount(n);
+    if (nodes !== undefined) {
+      args.push(prefixed(`nodes=${nodes}`));
     }
   }
   if (tags) {

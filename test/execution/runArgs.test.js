@@ -94,6 +94,32 @@ test("buildRunArgs.forGauge formats standard run options", () => {
   );
 });
 
+test("buildRunArgs omits invalid parallel node counts", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec:123", {
+      parallel: true,
+      n: "two",
+    }),
+    ["run", "--hide-suggestion", "--parallel", "my.spec:123"],
+  );
+  assert.equal(
+    buildRunArgs.forGradle("my.spec:123", {
+      parallel: true,
+      n: "two",
+    }).join(" "),
+    "clean gauge -PinParallel=true -PadditionalFlags=--hide-suggestion --simple-console -PspecsDir=my.spec:123",
+  );
+  assert.equal(
+    buildRunArgs.forMaven("my.spec:123", {
+      parallel: true,
+      n: "two",
+    }).join(" "),
+    "-q clean compile test-compile gauge:execute -DinParallel=true -Dflags=--hide-suggestion,--simple-console -DspecsDir=my.spec:123",
+  );
+});
+
 test("buildRunArgs.forGauge preserves boolean sort launch compatibility", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
