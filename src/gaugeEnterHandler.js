@@ -1,5 +1,7 @@
 "use strict";
 
+const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
@@ -44,7 +46,7 @@ class GaugeEnterHandler {
     if (!document) {
       return false;
     }
-    if (document.languageId === "gauge") {
+    if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
       return true;
     }
     const supportedByExtension = isGaugeFileByExtension(document);

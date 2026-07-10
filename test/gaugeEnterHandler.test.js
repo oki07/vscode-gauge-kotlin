@@ -143,6 +143,42 @@ test("GaugeEnterHandler saves concept files by extension after newline edits", (
   assert.deepEqual(saves, ["saved"]);
 });
 
+test("GaugeEnterHandler saves gauge-concept documents by language id after newline edits", () => {
+  const { GaugeEnterHandler } = require("../src/gaugeEnterHandler");
+  const listeners = [];
+  const vscode = {
+    workspace: {
+      onDidChangeTextDocument(listener) {
+        listeners.push(listener);
+        return { dispose() {} };
+      },
+    },
+  };
+  const saves = [];
+  const handler = new GaugeEnterHandler({
+    vscode,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        throw new Error("explicit Gauge concept documents should not require project lookup");
+      },
+    },
+  });
+  handler.register();
+
+  listeners[0]({
+    document: {
+      languageId: "gauge-concept",
+      uri: { fsPath: "/workspace/gauge/specs/concepts/shared" },
+      save() {
+        saves.push("saved");
+      },
+    },
+    contentChanges: [{ text: "\n" }],
+  });
+
+  assert.deepEqual(saves, ["saved"]);
+});
+
 test("GaugeEnterHandler ignores Markdown files when the resolved root is not a Gauge project", () => {
   const { GaugeEnterHandler } = require("../src/gaugeEnterHandler");
   const listeners = [];
