@@ -5293,7 +5293,7 @@ function findDocStringStepTemplates(text) {
   for (const entry of findGaugeSteps(text)) {
     if (
       entry.text
-      && isDocStringFenceLine(lines[entry.start.line + 1])
+      && docStringEndLineAfterStep(lines, entry.start.line) !== undefined
     ) {
       templates.add(entry.normalized);
     }

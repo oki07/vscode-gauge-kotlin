@@ -97,6 +97,29 @@ test("GaugeStepDiagnosticsProvider accepts docstring Step parameters used by Gau
   assert.deepEqual(diagnostics, []);
 });
 
+test("GaugeStepDiagnosticsProvider ignores unterminated docstrings for Step parameter counts", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Execute content",
+    "\"\"\"",
+    "payload",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const stepDocument = createDocument([
+    "@Step(\"Execute content\")",
+    "fun execute() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [
+    specDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(diagnostics, []);
+});
+
 test("GaugeStepDiagnosticsProvider reports plaintext Kotlin Step parameter count mismatches", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
