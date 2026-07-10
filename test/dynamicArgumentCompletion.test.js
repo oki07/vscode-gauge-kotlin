@@ -134,6 +134,103 @@ test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table he
   ]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider resolves external CSV headers from Gauge data dir", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const reads = [];
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    fileSystem: {
+      readFileSync(filename, encoding) {
+        reads.push({ encoding, filename });
+        assert.equal(encoding, "utf8");
+        if (filename === "/workspace/gauge/data/csv.csv") {
+          return "one,two\n1,2\n";
+        }
+        if (filename === "/workspace/gauge/env/default/default.properties") {
+          return "gauge_data_dir = data\n";
+        }
+        throw new Error(`unexpected read: ${filename}`);
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/checkout.spec");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table : csv.csv",
+    "",
+    "## Successful checkout",
+    "* Login as <o>",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
+
+  assert.deepEqual(labels(items), ["one", "two"]);
+  assert.ok(reads.some((entry) => entry.filename === "/workspace/gauge/data/csv.csv"));
+});
+
+test("GaugeDynamicArgumentCompletionProvider prefers environment Gauge data dir for external CSV headers", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const originalGaugeDataDir = process.env.gauge_data_dir;
+  process.env.gauge_data_dir = "env-data";
+  try {
+    const provider = new GaugeDynamicArgumentCompletionProvider({
+      fileSystem: {
+        readFileSync(filename, encoding) {
+          assert.equal(encoding, "utf8");
+          if (filename === "/workspace/gauge/env-data/csv.csv") {
+            return "envOne,envTwo\n1,2\n";
+          }
+          if (filename === "/workspace/gauge/env/default/default.properties") {
+            return "gauge_data_dir = property-data\n";
+          }
+          throw new Error(`unexpected read: ${filename}`);
+        },
+      },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath(filename) {
+          assert.equal(filename, "/workspace/gauge/specs/checkout.spec");
+          return "/workspace/gauge";
+        },
+        isGaugeProject(root) {
+          assert.equal(root, "/workspace/gauge");
+          return true;
+        },
+      },
+      vscode,
+    });
+    const document = createDocument([
+      "# Checkout",
+      "Table : csv.csv",
+      "",
+      "## Successful checkout",
+      "* Login as <e>",
+    ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+    const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
+
+    assert.deepEqual(labels(items), ["envOne", "envTwo"]);
+  } finally {
+    if (originalGaugeDataDir === undefined) {
+      delete process.env.gauge_data_dir;
+    } else {
+      process.env.gauge_data_dir = originalGaugeDataDir;
+    }
+  }
+});
+
 test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter for external headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -146,7 +243,7 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
         readFileSync(filename, encoding) {
           reads.push({ encoding, filename });
           assert.equal(encoding, "utf8");
-          if (filename === "/workspace/gauge/specs/csv.csv") {
+          if (filename === "/workspace/gauge/csv.csv") {
             return "one;two\n1;2\n";
           }
           if (filename === "/workspace/gauge/env/default/default.properties") {
@@ -182,7 +279,11 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
     assert.deepEqual(reads, [
       {
         encoding: "utf8",
-        filename: "/workspace/gauge/specs/csv.csv",
+        filename: "/workspace/gauge/env/default/default.properties",
+      },
+      {
+        encoding: "utf8",
+        filename: "/workspace/gauge/csv.csv",
       },
       {
         encoding: "utf8",

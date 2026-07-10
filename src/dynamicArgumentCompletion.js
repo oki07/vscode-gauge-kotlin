@@ -23,6 +23,7 @@ const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const CSV_DELIMITER_PROPERTY = "csv_delimiter";
+const GAUGE_DATA_DIR_PROPERTY = "gauge_data_dir";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
 function getVscode(vscode) {
@@ -676,6 +677,12 @@ function allowMultilineStep(options = {}) {
   return projectValue === true;
 }
 
+function gaugeDataDir(options = {}) {
+  return process.env[GAUGE_DATA_DIR_PROPERTY]
+    || projectDefaultProperty(options, GAUGE_DATA_DIR_PROPERTY)
+    || ".";
+}
+
 function csvHeaderCells(content, options = {}) {
   const delimiter = csvDelimiter(options);
   const lines = String(content || "").split(/\r?\n/);
@@ -695,6 +702,9 @@ function resolveExternalDataTablePath(dataTablePath, options = {}) {
   }
   if (pathModule.isAbsolute(dataTablePath)) {
     return dataTablePath;
+  }
+  if (options.projectRoot) {
+    return pathModule.join(options.projectRoot, gaugeDataDir(options), dataTablePath);
   }
   if (!options.filePath) {
     return undefined;
