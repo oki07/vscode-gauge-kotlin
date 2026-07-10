@@ -1066,6 +1066,35 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept dynamic arguments 
   assert.deepEqual(labels(items), ["item", "user", "i"]);
 });
 
+test("GaugeDynamicArgumentCompletionProvider suggests concept arguments by language id", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+  const dynamicStep = "* Select <i>";
+  const staticStep = "* Confirm \"c\"";
+  const document = createDocument([
+    "# Shared checkout <item> for <user>",
+    dynamicStep,
+    "* Pick \"cart\"",
+    staticStep,
+  ].join("\n"), "/workspace/gauge/untitled-concept", "gauge-concept");
+
+  const dynamicItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, dynamicStep.indexOf("i") + 1),
+  );
+  const staticItems = provider.provideCompletionItems(
+    document,
+    new vscode.Position(3, staticStep.indexOf("c") + 1),
+  );
+
+  assert.deepEqual(labels(dynamicItems), ["item", "user", "i"]);
+  assert.deepEqual(labels(staticItems), ["cart", "c"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests escaped concept dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -1641,6 +1670,35 @@ test("GaugeDynamicArgumentCompletionProvider suggests concept headings on step l
     "# Reuse payment <method>",
     "* Pay with <method>",
   ].join("\n"), "/workspace/gauge/specs/concepts/payment.cpt", "gauge");
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      workspace: {
+        textDocuments: [specDocument, conceptDocument],
+      },
+    },
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 7));
+
+  assert.deepEqual(labels(items), ["Reuse payment <method>", "Pay with <method>"]);
+  assert.equal(items[0].detail, "concept");
+  assert.equal(items[0].insertText.value, "Reuse payment \"${0:method}\"");
+});
+
+test("GaugeDynamicArgumentCompletionProvider suggests gauge-concept headings on step lines by language id", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Reuse",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment <method>",
+    "* Pay with <method>",
+  ].join("\n"), "/workspace/gauge/specs/concepts/payment", "gauge-concept");
   const provider = new GaugeDynamicArgumentCompletionProvider({
     projectFactory: createProjectFactory(),
     vscode: {

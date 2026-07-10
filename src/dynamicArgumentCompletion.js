@@ -17,6 +17,7 @@ const {
 const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
 const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
@@ -73,7 +74,8 @@ function documentUri(document) {
 }
 
 function isConceptDocument(document) {
-  return CONCEPT_FILE_PATTERN.test(documentPath(document));
+  return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
+    || CONCEPT_FILE_PATTERN.test(documentPath(document));
 }
 
 function isSpecDocument(document) {
