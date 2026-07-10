@@ -610,6 +610,7 @@ function registerStepDefinitionProvider(context, vscode, options) {
 function registerRenameProvider(context, vscode, options) {
   const RenameProviderCtor = options.GaugeRenameProvider || GaugeRenameProvider;
   const provider = new RenameProviderCtor({
+    cli: options.cli,
     clientsMap: options.clientsMap,
     projectFactory: options.projectFactory,
     vscode,

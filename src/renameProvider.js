@@ -14,6 +14,7 @@ const {
   allowMultilineStep,
   normalizeStepTemplate,
 } = require("./stepDefinitionProvider");
+const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -25,6 +26,7 @@ const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const JAVA_FILE_PATTERN = "**/*.java";
 const KOTLIN_FILE_PATTERN = "**/*.kt";
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
+const PRE_REFACTOR_ERRORS_MESSAGE = "Please fix all errors before refactoring.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
 
 function getVscode(vscode) {
@@ -69,6 +71,18 @@ function createWorkspaceEdit(vscode) {
       replacements.push({ uri, range, newText });
     },
   };
+}
+
+function validateErrors(result) {
+  if (Array.isArray(result)) {
+    return result;
+  }
+  return (result && result.errors) || [];
+}
+
+function isBlockingValidateError(error) {
+  const type = String((error && error.type) || "").replace(/^\[|\]$/g, "").toLowerCase();
+  return type !== "parsewarning";
 }
 
 function documentPath(document) {
@@ -1150,6 +1164,12 @@ class GaugeRenameProvider {
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
+    this.validateDiagnosticsProvider = options.validateDiagnosticsProvider
+      || new GaugeValidateDiagnosticsProvider({
+        cli: options.cli,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
   }
 
   isGaugeProjectDocument(document) {
@@ -1416,6 +1436,17 @@ class GaugeRenameProvider {
   async preflightRename(document) {
     if (this.vscode.workspace && typeof this.vscode.workspace.saveAll === "function") {
       await this.vscode.workspace.saveAll();
+    }
+    if (
+      !this.validateDiagnosticsProvider
+      || typeof this.validateDiagnosticsProvider.validateErrorsForDocument !== "function"
+    ) {
+      return;
+    }
+    const result = await this.validateDiagnosticsProvider.validateErrorsForDocument(document, new Map());
+    const errors = validateErrors(result).filter(isBlockingValidateError);
+    if (errors.length > 0) {
+      throw new Error(PRE_REFACTOR_ERRORS_MESSAGE);
     }
   }
 

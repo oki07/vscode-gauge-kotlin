@@ -275,7 +275,7 @@ test("GaugeRenameProvider reports Gauge language server rename errors", async ()
   );
 });
 
-test("GaugeRenameProvider renames local steps without Gauge validate preflight", async () => {
+test("GaugeRenameProvider rejects local renames when Gauge validate reports errors", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -298,40 +298,30 @@ test("GaugeRenameProvider renames local steps without Gauge validate preflight",
     validateDiagnosticsProvider: {
       validateErrorsForDocument() {
         validateCalls.push(true);
-        return { errors: [{ message: "Undefined step" }] };
+        return {
+          errors: [
+            { type: "[ParseError]", message: "Step is not defined" },
+          ],
+        };
       },
     },
     vscode,
   });
 
-  const edit = await provider.provideRenameEdits(
-    specDocument,
-    new vscode.Position(1, 4),
-    "Pay with <value>",
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /Please fix all errors before refactoring/,
   );
 
   assert.deepEqual(saveAllCalls, [true]);
-  assert.deepEqual(validateCalls, []);
-  assert.deepEqual(edit.replacements.map((replacement) => ({
-    file: replacement.uri.fsPath,
-    newText: replacement.newText,
-  })), [
-    {
-      file: "/workspace/gauge/specs/checkout.spec",
-      newText: "Pay with <value>",
-    },
-    {
-      file: "/workspace/gauge/src/test/kotlin/Steps.kt",
-      newText: "Pay with <value>",
-    },
-    {
-      file: "/workspace/gauge/src/test/kotlin/Steps.kt",
-      newText: "argValue: Any",
-    },
-  ]);
+  assert.deepEqual(validateCalls, [true]);
 });
 
-test("GaugeRenameProvider saves and delegates language server renames without Gauge validate preflight", async () => {
+test("GaugeRenameProvider saves and validates before language server renames", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -356,7 +346,7 @@ test("GaugeRenameProvider saves and delegates language server renames without Ga
       assert.equal(document, specDocument);
       assert.ok(diagnostics instanceof Map);
       return {
-        errors: [{ message: "Undefined step" }],
+        errors: [],
       };
     },
   };
@@ -378,11 +368,12 @@ test("GaugeRenameProvider saves and delegates language server renames without Ga
   );
 
   assert.deepEqual(saveAllCalls, [true]);
+  assert.deepEqual(requests.length, 1);
   assert.deepEqual(requests.map((request) => request.method), ["textDocument/rename"]);
   assert.deepEqual(edit.replacements, []);
 });
 
-test("GaugeRenameProvider does not compile before language server rename", async () => {
+test("GaugeRenameProvider validates but does not compile before language server rename", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const { MavenProject } = require("../src/project/mavenProject");
   const specDocument = createDocument([
@@ -461,7 +452,7 @@ test("GaugeRenameProvider does not compile before language server rename", async
 
   assert.deepEqual(saveAllCalls, [true]);
   assert.deepEqual(spawnSyncCalls, []);
-  assert.deepEqual(validateCalls, []);
+  assert.deepEqual(validateCalls, [true]);
   assert.deepEqual(requests.map((request) => request.method), ["textDocument/rename"]);
   assert.deepEqual(edit.replacements, []);
 });
@@ -525,7 +516,7 @@ test("GaugeRenameProvider does not reject renames for implementation diagnostics
 
   assert.deepEqual(saveAllCalls, [true]);
   assert.deepEqual(diagnosticCalls, []);
-  assert.deepEqual(validateCalls, []);
+  assert.deepEqual(validateCalls, [true]);
   assert.deepEqual(edit.replacements.map((replacement) => replacement.newText), [
     "Pay with <value>",
     "Pay with <value>",

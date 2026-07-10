@@ -2050,6 +2050,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   ]);
   assert.equal(created.renameProvider.options.vscode, fakeVscode);
   assert.equal(created.renameProvider.options.clientsMap, created.clientsMap);
+  assert.equal(created.renameProvider.options.cli, cli);
   assert.equal(created.renameProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.deepEqual(codeActionProviders, [
     {
