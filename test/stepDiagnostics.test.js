@@ -4921,6 +4921,66 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge external table files
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 23 });
 });
 
+test("GaugeStepDiagnosticsProvider explains Gauge data dir for unresolved external tables", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalGaugeDataDir = process.env.gauge_data_dir;
+  delete process.env.gauge_data_dir;
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync(filename) {
+        assert.equal(filename, "/workspace/gauge/data/inputinvalid.csv");
+        return false;
+      },
+      readFileSync(filename, encoding) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        assert.equal(encoding, "utf8");
+        return "gauge_data_dir = data\n";
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/gauge/")) {
+          return "/workspace/gauge";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "Table: inputinvalid.csv",
+    "## Scenario",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  try {
+    const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+    assert.deepEqual(
+      diagnostics.map((diagnostic) => diagnostic.message),
+      [
+        "Could not resolve table. File inputinvalid.csv doesn't exist. "
+          + "GAUGE_DATA_DIR property is set to 'data', Gauge will look for data files in this location.",
+      ],
+    );
+  } finally {
+    if (originalGaugeDataDir === undefined) {
+      delete process.env.gauge_data_dir;
+    } else {
+      process.env.gauge_data_dir = originalGaugeDataDir;
+    }
+  }
+});
+
 test("GaugeStepDiagnosticsProvider resolves Gauge external tables from gauge data dir", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({

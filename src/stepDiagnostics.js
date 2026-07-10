@@ -4071,8 +4071,13 @@ function isGaugeTagLine(line) {
   return /^tags\s*:/i.test(String(line || "").trim());
 }
 
-function missingTableFileMessage(location) {
-  return `Could not resolve table. File ${location} doesn't exist.`;
+function missingTableFileMessage(location, options = {}) {
+  let message = `Could not resolve table. File ${location} doesn't exist.`;
+  const dataDir = gaugeDataDir(options);
+  if (dataDir !== ".") {
+    message += ` GAUGE_DATA_DIR property is set to '${dataDir}', Gauge will look for data files in this location.`;
+  }
+  return message;
 }
 
 function missingTableFileParameterMessage(parameter, file) {
@@ -4193,7 +4198,7 @@ function tableLocationDiagnostics(vscode, text, options = {}) {
       diagnostics.push(createDiagnostic(
         vscode,
         range,
-        missingTableFileMessage(location),
+        missingTableFileMessage(location, options),
       ));
     }
   }
