@@ -4,6 +4,7 @@ const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
 const SELECT_ARGUMENT_RANGE_COMMAND = "gauge.selectArgumentRange";
 const SELECT_ARGUMENT_RANGE_TITLE = "Select Gauge Argument";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
@@ -55,7 +56,8 @@ function documentPath(document) {
 }
 
 function isConceptDocument(document) {
-  return CONCEPT_FILE_PATTERN.test(documentPath(document));
+  return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
+    || CONCEPT_FILE_PATTERN.test(documentPath(document));
 }
 
 function isSpecDocument(document) {

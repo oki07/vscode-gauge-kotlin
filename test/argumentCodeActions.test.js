@@ -224,6 +224,50 @@ test("GaugeArgumentCodeActionProvider converts indented concept hash heading arg
   assert.equal(replacement.newText, "\"item\"");
 });
 
+test("GaugeArgumentCodeActionProvider converts gauge-concept heading arguments by language id", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({
+    vscode: createFakeVscode(),
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        assert.equal(file, "/workspace/gauge/specs/concepts/shared");
+        return "/workspace/gauge";
+      },
+      isGaugeProject(root) {
+        assert.equal(root, "/workspace/gauge");
+        return true;
+      },
+    },
+  });
+  const line = '  # Shared checkout <item> as "cart"';
+  const document = createDocument(
+    line,
+    "/workspace/gauge/specs/concepts/shared",
+    "gauge-concept",
+  );
+
+  const dynamicActions = provider.provideCodeActions(
+    document,
+    createRange(0, line.indexOf("item")),
+  );
+  const staticActions = provider.provideCodeActions(
+    document,
+    createRange(0, line.indexOf("cart")),
+  );
+
+  assert.equal(dynamicActions.length, 1);
+  assert.equal(dynamicActions[0].title, "Convert to Static Parameter");
+  assert.equal(dynamicActions[0].edit.replacements[0].newText, "\"item\"");
+  assert.deepEqual({ ...dynamicActions[0].edit.replacements[0].range.start }, { line: 0, character: 20 });
+  assert.deepEqual({ ...dynamicActions[0].edit.replacements[0].range.end }, { line: 0, character: 26 });
+
+  assert.equal(staticActions.length, 1);
+  assert.equal(staticActions[0].title, "Convert to Dynamic Parameter");
+  assert.equal(staticActions[0].edit.replacements[0].newText, "<cart>");
+  assert.deepEqual({ ...staticActions[0].edit.replacements[0].range.start }, { line: 0, character: 30 });
+  assert.deepEqual({ ...staticActions[0].edit.replacements[0].range.end }, { line: 0, character: 36 });
+});
+
 test("GaugeArgumentCodeActionProvider converts indented step marker arguments", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
