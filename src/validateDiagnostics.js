@@ -5,6 +5,7 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const COLLECTION_NAME = "gauge-validate";
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const SPEC_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const WORKSPACE_GAUGE_FILE_GLOB = "**/*.{spec,md,cpt}";
 const VALIDATE_ARG = "validate";
@@ -29,6 +30,9 @@ function isGaugeSpecDocument(document) {
     return false;
   }
   if (document.languageId === GAUGE_LANGUAGE) {
+    return true;
+  }
+  if (document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return true;
   }
   return SPEC_FILE_PATTERN.test(documentPath(document));
