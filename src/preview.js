@@ -8,6 +8,8 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 const { createProjectFactory } = require("./project/projectFactory");
 
 const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
+const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
@@ -43,7 +45,7 @@ function activeGaugeFile(vscode) {
   if (!document || !filePath) {
     return undefined;
   }
-  if (document.languageId === "gauge") {
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return filePath;
   }
   if (GAUGE_FILE_EXTENSIONS.has(nodePath.extname(filePath).toLowerCase())) {

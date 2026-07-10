@@ -315,6 +315,65 @@ test("previewGaugeDocument creates Spectacle docs for concept files by extension
   ]);
 });
 
+test("previewGaugeDocument creates Spectacle docs for gauge-concept documents by language id", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode({
+    document: {
+      languageId: "gauge-concept",
+      uri: { fsPath: "/workspace/gauge/specs/concepts" },
+      fileName: "/workspace/gauge/specs/concepts",
+    },
+  });
+  const spawns = [];
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          return createChildProcess({ stdout: "created\n" });
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/gauge/specs/concepts");
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spawns, [
+    {
+      args: ["docs", "spectacle", "/workspace/gauge/specs/concepts"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: {
+          PATH: "/bin",
+          spectacle_out_dir: "/tmp/gauge-preview/docs",
+        },
+      },
+    },
+  ]);
+  assert.deepEqual(opened, [
+    {
+      fsPath: "/tmp/gauge-preview/docs/html/specs/concepts.html",
+      scheme: "file",
+    },
+  ]);
+});
+
 test("previewGaugeDocument ignores Markdown when the resolved root is not a Gauge project", async () => {
   const {
     NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE,
