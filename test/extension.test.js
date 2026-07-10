@@ -2873,6 +2873,103 @@ test("activation starts Gauge workspace services for an active concept file by e
   assert.equal(context.subscriptions.includes(created.workspace), true);
 });
 
+test("activation starts Gauge workspace services for an active gauge-concept document", () => {
+  const extension = require("../src/extension");
+
+  const created = {};
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge-concept",
+        uri: { fsPath: "/workspace/gauge/specs/concepts/shared" },
+      },
+    },
+    workspaceFolders: [],
+  });
+  const cli = {
+    isGaugeInstalled() {
+      return true;
+    },
+    isGaugeVersionGreaterOrEqual() {
+      return true;
+    },
+  };
+
+  class FakeGaugeClients extends Map {
+    constructor() {
+      super();
+      created.clientsMap = this;
+    }
+  }
+
+  class FakeGaugeWorkspace {
+    constructor(options) {
+      this.options = options;
+      created.workspace = this;
+    }
+
+    dispose() {}
+  }
+
+  class FakeProvider {
+    constructor(...args) {
+      this.args = args;
+    }
+
+    dispose() {}
+  }
+
+  class FakeProjectInitializer {
+    constructor(options) {
+      this.options = options;
+    }
+
+    dispose() {}
+  }
+
+  class FakeStepDiagnosticsProvider {
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return cli;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeClients: FakeGaugeClients,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    ConfigProvider: FakeProvider,
+    ExtractConceptCommandProvider: FakeProvider,
+    GenerateStubCommandProvider: FakeProvider,
+    SpecNodeProvider: FakeProvider,
+    ProjectInitializer: FakeProjectInitializer,
+    ReferenceProvider: FakeProvider,
+    GaugeSemanticTokensProvider: FakeProvider,
+    GaugeFoldingRangeProvider: FakeProvider,
+    GaugeArgumentCodeActionProvider: FakeProvider,
+    GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
+    semanticTokensLegend: { id: "legend" },
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        throw new Error("explicit Gauge concept documents should not require project lookup");
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(created.workspace.options.clientsMap, created.clientsMap);
+  assert.equal(created.workspace.options.vscode, fakeVscode);
+  assert.equal(context.subscriptions.includes(created.workspace), true);
+});
+
 test("activation shows install guidance when Gauge is unavailable", () => {
   const extension = require("../src/extension");
 

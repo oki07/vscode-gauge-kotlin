@@ -266,7 +266,10 @@ function hasActiveGaugeDocument(vscode, projectFactory) {
   if (!editor || !editor.document) {
     return false;
   }
-  if (editor.document.languageId === "gauge" && !isMarkdownPath(editor.document)) {
+  if (
+    [GAUGE_LANGUAGE, GAUGE_CONCEPT_LANGUAGE].includes(editor.document.languageId)
+    && !isMarkdownPath(editor.document)
+  ) {
     return true;
   }
   if (isSpecPath(editor.document) || isConceptPath(editor.document)) {
