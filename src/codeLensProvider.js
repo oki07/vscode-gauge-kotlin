@@ -22,6 +22,7 @@ const DEBUG_COMMAND = "gauge.debug";
 const IN_PARALLEL_COMMAND = "gauge.execute.inParallel";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_EXTENSION = ".spec";
 const MARKDOWN_SPEC_EXTENSION = ".md";
@@ -63,7 +64,8 @@ function sameDocument(left, right) {
 }
 
 function isConceptDocument(document) {
-  return documentPath(document).toLowerCase().endsWith(".cpt");
+  return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
+    || documentPath(document).toLowerCase().endsWith(".cpt");
 }
 
 function isGaugeReferenceDocument(document) {
@@ -71,7 +73,7 @@ function isGaugeReferenceDocument(document) {
     return false;
   }
   const file = documentPath(document).toLowerCase();
-  if (document.languageId === GAUGE_LANGUAGE) {
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return true;
   }
   if (file.endsWith(SPEC_FILE_EXTENSION) || file.endsWith(".cpt")) {

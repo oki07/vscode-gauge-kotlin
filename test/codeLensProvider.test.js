@@ -514,6 +514,52 @@ test("GaugeCodeLensProvider adds reference lenses for concept headings", async (
   ]);
 });
 
+test("GaugeCodeLensProvider adds reference lenses for gauge-concept headings by language id", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "  # Reuse checkout <user>",
+    "* Prepare cart",
+    "",
+  ].join("\n"), "/workspace/specs/concepts/shared", "gauge-concept");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Reuse checkout \"Alice\"",
+    "",
+  ].join("\n"));
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [
+          document,
+          specDocument,
+        ],
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 0,
+      character: 2,
+      title: "1 reference(s)",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/specs/concepts/shared",
+        { line: 0, character: 2 },
+        "Reuse checkout {}",
+      ],
+    },
+  ]);
+});
+
 test("GaugeCodeLensProvider ignores documents outside Gauge projects", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider({
