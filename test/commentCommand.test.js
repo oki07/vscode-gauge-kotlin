@@ -202,6 +202,40 @@ test("toggleGaugeLineComment comments concept files by extension", async () => {
   ]);
 });
 
+test("toggleGaugeLineComment comments gauge-concept documents by language id", async () => {
+  const { toggleGaugeLineComment } = require("../src/commentCommand");
+  const document = createDocument(
+    "* Shared step",
+    "gauge-concept",
+    "/workspace/specs/concepts/shared",
+  );
+  const { appliedEdits, commandCalls, vscode } = createFakeVscode(
+    document,
+    createSelection(0, 0, 0, 0),
+  );
+
+  const result = await toggleGaugeLineComment(vscode, {
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        assert.equal(filename, "/workspace/specs/concepts/shared");
+        return "/workspace";
+      },
+    },
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(commandCalls, []);
+  assert.deepEqual(appliedEdits[0].replacements.map((replacement) => ({
+    file: replacement.uri.fsPath,
+    newText: replacement.newText,
+  })), [
+    {
+      file: "/workspace/specs/concepts/shared",
+      newText: "// * Shared step",
+    },
+  ]);
+});
+
 test("toggleGaugeLineComment uncomments Markdown Gauge spec lines", async () => {
   const { toggleGaugeLineComment } = require("../src/commentCommand");
   const document = createDocument([

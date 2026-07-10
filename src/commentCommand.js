@@ -1,6 +1,7 @@
 "use strict";
 
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
@@ -25,7 +26,8 @@ function createRange(vscode, startLine, startCharacter, endLine, endCharacter) {
 }
 
 function isGaugeDocument(document) {
-  return document && document.languageId === GAUGE_LANGUAGE;
+  return document
+    && (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE);
 }
 
 function isMarkdownGaugeSpec(document) {
