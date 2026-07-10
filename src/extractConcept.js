@@ -7,6 +7,8 @@ const { allowMultilineStep } = require("./stepDefinitionProvider");
 const EXTRACT_CONCEPT_COMMAND = "gauge.extract.concept";
 const GET_CONCEPT_FILES_REQUEST = "gauge/getImplFiles";
 const INVALID_SELECTION_ERROR = "Cannot Extract to Concept, selected text contains invalid elements";
+const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SPEC_FILE_PATTERN = /\.spec$/i;
@@ -215,7 +217,8 @@ function hasExtractableGaugeSyntax(document) {
   const path = documentPath(document);
   return document
     && (
-      document.languageId === "gauge"
+      document.languageId === GAUGE_LANGUAGE
+      || document.languageId === GAUGE_CONCEPT_LANGUAGE
       || SPEC_FILE_PATTERN.test(path)
       || CONCEPT_FILE_PATTERN.test(path)
       || (
@@ -809,7 +812,7 @@ function canExtractConceptFromDocument(document, projectClient) {
     return false;
   }
   const hasProjectClient = Boolean(projectClient && projectClient.client && projectClient.project);
-  if (document.languageId === "gauge") {
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
     return hasProjectClient;
   }
   if (SPEC_FILE_PATTERN.test(documentPath(document))) {
