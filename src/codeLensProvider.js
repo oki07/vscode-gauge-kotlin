@@ -515,7 +515,7 @@ class GaugeCodeLensProvider {
     return config.get(REFERENCE_CONFIG) !== false;
   }
 
-  async findWorkspaceStepImplementationDocuments() {
+  async findWorkspaceStepImplementationDocuments(sourceRoot) {
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -535,7 +535,7 @@ class GaugeCodeLensProvider {
 
       for (const uri of uris || []) {
         const file = uriPath(uri);
-        if (!this.isGaugeProjectFile(file)) {
+        if (!this.belongsFileToSourceGaugeProject(file, sourceRoot)) {
           continue;
         }
 
@@ -674,6 +674,7 @@ class GaugeCodeLensProvider {
 
   async stepImplementationDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
+    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -682,7 +683,7 @@ class GaugeCodeLensProvider {
         || sameDocument(candidate, sourceDocument)
         || !isStepImplementationDocument(candidate)
         || typeof candidate.getText !== "function"
-        || !this.isGaugeProjectDocument(candidate)
+        || !this.diagnosticsProvider.belongsToSourceGaugeProject(candidate, sourceRoot)
       ) {
         return;
       }
@@ -701,7 +702,7 @@ class GaugeCodeLensProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceStepImplementationDocuments()) {
+    for (const candidate of await this.findWorkspaceStepImplementationDocuments(sourceRoot)) {
       addDocument(candidate);
     }
     return documents;

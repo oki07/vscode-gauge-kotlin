@@ -854,6 +854,99 @@ test("GaugeCodeLensProvider skips unopened Step sources resolved to non-Gauge pr
   assert.deepEqual(openedFiles, []);
 });
 
+test("GaugeCodeLensProvider skips unopened Step sources from other Gauge projects", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const openedFiles = [];
+  const foreignUri = {
+    fsPath: "/workspace/project-b/src/test/kotlin/OtherSteps.kt",
+  };
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/project-a/src/test/kotlin/LoginSteps.kt", "kotlin");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/project-a/")) {
+          return "/workspace/project-a";
+        }
+        if (filename.startsWith("/workspace/project-b/")) {
+          return "/workspace/project-b";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/project-a" || root === "/workspace/project-b";
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document],
+        findFiles(pattern) {
+          return pattern === "**/*.kt" ? Promise.resolve([foreignUri]) : Promise.resolve([]);
+        },
+        openTextDocument(uri) {
+          openedFiles.push(uri.fsPath);
+          return Promise.resolve(createDocument([
+            "import com.thoughtworks.gauge.Step",
+            "",
+            "@Step(\"Other <value>\")",
+            "fun other(value: String) {}",
+          ].join("\n"), uri.fsPath, "kotlin"));
+        },
+      },
+    }),
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.equal(lenses.length, 1);
+  assert.deepEqual(openedFiles, []);
+});
+
+test("GaugeCodeLensProvider skips open Step sources from other Gauge projects", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/project-a/src/test/kotlin/LoginSteps.kt", "kotlin");
+  const foreignDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Other <value>\")",
+    "fun other(value: String) {}",
+  ].join("\n"), "/workspace/project-b/src/test/kotlin/OtherSteps.kt", "kotlin");
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/project-a/")) {
+          return "/workspace/project-a";
+        }
+        if (filename.startsWith("/workspace/project-b/")) {
+          return "/workspace/project-b";
+        }
+        throw new Error("not a Gauge project file");
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/project-a" || root === "/workspace/project-b";
+      },
+    },
+    vscode: createFakeVscode({
+      workspace: {
+        textDocuments: [document, foreignDocument],
+      },
+    }),
+  });
+
+  const documents = await provider.stepImplementationDocuments(document);
+
+  assert.deepEqual(documents, []);
+});
+
 test("GaugeCodeLensProvider adds reference lenses for Java Step methods", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
