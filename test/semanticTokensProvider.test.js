@@ -322,6 +322,41 @@ test("GaugeSemanticTokensProvider treats concept keyword-like lines as comments"
   ]);
 });
 
+test("GaugeSemanticTokensProvider tokenizes gauge-concept documents by language id", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const document = {
+    languageId: "gauge-concept",
+    uri: { fsPath: "/workspace/specs/concepts/shared" },
+    getText() {
+      return [
+        "  # Shared checkout <item>",
+        "table: users.csv",
+        "tags: smoke",
+      ].join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document)
+    .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  assert.deepEqual(tokens.filter((entry) => entry.line === 0).map((entry) => entry.type), [
+    "specification",
+    "dynamicArgument",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 1).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+  assert.deepEqual(tokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
+    "gaugeComment",
+  ]);
+});
+
 test("GaugeSemanticTokensProvider distinguishes specification scenario and concept headings", () => {
   const {
     GaugeSemanticTokensProvider,
