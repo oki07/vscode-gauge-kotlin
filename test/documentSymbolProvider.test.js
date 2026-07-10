@@ -145,6 +145,35 @@ test("GaugeDocumentSymbolProvider lists concept symbols by extension", () => {
   assert.deepEqual({ ...symbols[1].location.range.start }, { line: 3, character: 0 });
 });
 
+test("GaugeDocumentSymbolProvider lists concept symbols by language id", () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDocumentSymbolProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        throw new Error("explicit Gauge concept documents should not require project lookup");
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "  # Shared checkout",
+    "* Reuse",
+    "",
+    "## Shared payment",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared", "gauge-concept");
+
+  const symbols = provider.provideDocumentSymbols(document);
+
+  assert.deepEqual(symbols.map((symbol) => symbol.name), [
+    "# Shared checkout",
+    "## Shared payment",
+  ]);
+  assert.deepEqual({ ...symbols[0].location.range.start }, { line: 0, character: 2 });
+  assert.deepEqual({ ...symbols[1].location.range.start }, { line: 3, character: 0 });
+});
+
 test("GaugeDocumentSymbolProvider ignores Gauge files when project root is unresolved", () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
