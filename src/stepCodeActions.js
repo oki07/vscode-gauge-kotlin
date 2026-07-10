@@ -139,6 +139,18 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
+function hasClosedDocString(document, fenceLine) {
+  if (!isDocStringFenceLine(documentLine(document, fenceLine))) {
+    return false;
+  }
+  for (let line = fenceLine + 1; line < documentLineCount(document); line += 1) {
+    if (isDocStringFenceLine(documentLine(document, line))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -280,7 +292,7 @@ function gaugeStepAt(document, lineNumber, options = {}) {
   }
   const nextLine = documentLine(document, endLineNumber + 1);
   return {
-    implicitParameterCount: isDocStringFenceLine(nextLine) ? 1 : 0,
+    implicitParameterCount: hasClosedDocString(document, endLineNumber + 1) ? 1 : 0,
     text: isInlineTableLine(nextLine) ? `${text} <table>` : text,
   };
 }

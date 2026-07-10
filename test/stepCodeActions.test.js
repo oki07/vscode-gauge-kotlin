@@ -543,6 +543,40 @@ test("GaugeStepCodeActionProvider includes docstring arguments in step stubs", (
   });
 });
 
+test("GaugeStepCodeActionProvider ignores unterminated docstrings in step stubs", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Execute content",
+    "\"\"\"",
+    "payload",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 17),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Execute content\")\nfun implementation() {\n}\n",
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider creates fixes for indented Gauge steps", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
