@@ -596,6 +596,52 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
   );
 });
 
+test("GaugeRenameProvider skips starred docstring payloads during local rename", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Execute content",
+    "\"\"\"",
+    "* Literal payload",
+    "\"\"\"",
+    "* Literal payload",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Literal payload\")",
+    "fun literal() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    kotlinDocument,
+    new vscode.Position(2, 10),
+    "Renamed payload",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      line: replacement.range.start.line,
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        line: 5,
+        newText: "Renamed payload",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        line: 2,
+        newText: "Renamed payload",
+      },
+    ],
+  );
+});
+
 test("GaugeRenameProvider renames multiline Gauge steps and Kotlin Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const originalAllowMultilineStep = process.env.allow_multiline_step;

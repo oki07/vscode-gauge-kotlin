@@ -172,6 +172,34 @@ function isStepLine(line) {
   return marker !== -1 && line[marker] === "*";
 }
 
+function closedDocStringLines(lines) {
+  const result = new Set();
+  for (let stepLine = 0; stepLine < lines.length; stepLine += 1) {
+    if (!isStepLine(lines[stepLine])) {
+      continue;
+    }
+    const openLine = stepLine + 1;
+    if (!isDocStringFenceLine(lines[openLine])) {
+      continue;
+    }
+    let closeLine;
+    for (let candidateLine = openLine + 1; candidateLine < lines.length; candidateLine += 1) {
+      if (isDocStringFenceLine(lines[candidateLine])) {
+        closeLine = candidateLine;
+        break;
+      }
+    }
+    if (closeLine === undefined) {
+      continue;
+    }
+    for (let line = openLine; line <= closeLine; line += 1) {
+      result.add(line);
+    }
+    stepLine = closeLine;
+  }
+  return result;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -391,6 +419,10 @@ function lineTrimEndLength(line) {
 
 function gaugeStepOnLine(vscode, document, lineNumber, lines, options = {}) {
   const sourceLines = lines || documentLines(document);
+  const docStringLines = options.docStringLines || closedDocStringLines(sourceLines);
+  if (docStringLines.has(lineNumber)) {
+    return undefined;
+  }
   const startLine = options.allowMultilineStep && !isStepLine(sourceLines[lineNumber])
     ? multilineStepStartLine(sourceLines, lineNumber)
     : lineNumber;
@@ -1494,9 +1526,11 @@ class GaugeRenameProvider {
   addGaugeRenames(edit, document, template, newName) {
     const lines = documentLines(document);
     const allowMultiline = this.allowsMultilineStep(document);
+    const docStringLines = closedDocStringLines(lines);
     for (let line = 0; line < lines.length; line += 1) {
       const step = gaugeStepOnLine(this.vscode, document, line, lines, {
         allowMultilineStep: allowMultiline,
+        docStringLines,
       });
       if (step && step.template === template) {
         edit.replace(document.uri, step.range, gaugeReplacementName(newName, step.hasInlineTable));
