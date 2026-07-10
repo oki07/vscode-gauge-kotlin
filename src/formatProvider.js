@@ -5,6 +5,7 @@ const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const FORMAT_COMMAND = "format";
 const GAUGE_LANGUAGE = "gauge";
+const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_EXTENSION = ".spec";
 const CONCEPT_FILE_EXTENSION = ".cpt";
@@ -31,8 +32,9 @@ function isSpecDocument(filePath) {
   return filePath.toLowerCase().endsWith(SPEC_FILE_EXTENSION);
 }
 
-function isConceptDocument(filePath) {
-  return filePath.toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
+function isConceptDocument(document, filePath) {
+  return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
+    || filePath.toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
 }
 
 function collectOutput(stream, chunks) {
@@ -213,7 +215,7 @@ class GaugeFormatProvider {
       && (
         document.languageId === GAUGE_LANGUAGE
         || isSpecDocument(filePath)
-        || isConceptDocument(filePath)
+        || isConceptDocument(document, filePath)
         || isMarkdownSpecDocument(document, filePath)
       ),
     );
