@@ -347,7 +347,7 @@ test("GaugeStepDefinitionProvider resolves table steps without closing pipes", a
   assert.equal(definitions[0].uri, kotlinDocument.uri);
 });
 
-test("GaugeStepDefinitionProvider resolves docstring steps without annotation placeholder", async () => {
+test("GaugeStepDefinitionProvider resolves starred docstring payloads to their owner step", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Execution specification",
@@ -355,8 +355,9 @@ test("GaugeStepDefinitionProvider resolves docstring steps without annotation pl
     "## Runs content",
     "* Execute the following content",
     "\"\"\"",
-    "payload",
+    "* Literal payload",
     "\"\"\"",
+    "* Run next step",
   ].join("\n"), "gauge", "/workspace/gauge/specs/execution.spec");
   const kotlinDocument = createDocument([
     "package steps",
@@ -366,6 +367,12 @@ test("GaugeStepDefinitionProvider resolves docstring steps without annotation pl
     "class ExecutionSteps {",
     "  @Step(\"Execute the following content\")",
     "  fun execute(content: String) {}",
+    "",
+    "  @Step(\"Literal payload\")",
+    "  fun literalPayload() {}",
+    "",
+    "  @Step(\"Run next step\")",
+    "  fun runNextStep() {}",
     "}",
   ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/ExecutionSteps.kt");
   const vscode = createFakeVscode([specDocument, kotlinDocument]);
@@ -375,12 +382,18 @@ test("GaugeStepDefinitionProvider resolves docstring steps without annotation pl
   });
 
   const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
-  const contentDefinitions = await provider.provideDefinition(specDocument, { line: 5, character: 1 });
+  const contentDefinitions = await provider.provideDefinition(specDocument, { line: 5, character: 5 });
+  const followingDefinitions = await provider.provideDefinition(specDocument, { line: 7, character: 5 });
 
   assert.equal(definitions.length, 1);
   assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.equal(definitions[0].range.start.line, 6);
   assert.equal(contentDefinitions.length, 1);
   assert.equal(contentDefinitions[0].uri, kotlinDocument.uri);
+  assert.equal(contentDefinitions[0].range.start.line, 6);
+  assert.equal(followingDefinitions.length, 1);
+  assert.equal(followingDefinitions[0].uri, kotlinDocument.uri);
+  assert.equal(followingDefinitions[0].range.start.line, 12);
 });
 
 test("GaugeStepDefinitionProvider resolves multiline Gauge steps when project allows them", async () => {

@@ -228,8 +228,9 @@ function isGaugeStepSourceDocument(document) {
     && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
-function docStringStepLineAt(document, line) {
-  for (let openLine = line; openLine >= 0; openLine -= 1) {
+function docStringStepLineAt(document, lineNumber) {
+  const lineCount = documentLineCount(document);
+  for (let openLine = 0; openLine <= lineNumber && openLine < lineCount; openLine += 1) {
     if (!isDocStringFenceLine(documentLine(document, openLine))) {
       continue;
     }
@@ -239,12 +240,20 @@ function docStringStepLineAt(document, line) {
       continue;
     }
 
-    for (let closeLine = openLine + 1; closeLine <= line; closeLine += 1) {
-      if (isDocStringFenceLine(documentLine(document, closeLine))) {
-        return closeLine === line ? stepLine : undefined;
+    let closeLine;
+    for (let candidateLine = openLine + 1; candidateLine < lineCount; candidateLine += 1) {
+      if (isDocStringFenceLine(documentLine(document, candidateLine))) {
+        closeLine = candidateLine;
+        break;
       }
     }
-    return stepLine;
+    if (closeLine === undefined) {
+      continue;
+    }
+    if (lineNumber >= openLine && lineNumber <= closeLine) {
+      return stepLine;
+    }
+    openLine = closeLine;
   }
   return undefined;
 }
@@ -377,15 +386,18 @@ function stepTextCandidatesAt(document, position, options = {}) {
   }
   let lineNumber = position.line;
   let line = documentLine(document, lineNumber);
-  if (!isStepLine(line)) {
-    const docStringStepLine = docStringStepLineAt(document, lineNumber);
+  const docStringStepLine = docStringStepLineAt(document, lineNumber);
+  if (docStringStepLine !== undefined) {
+    lineNumber = docStringStepLine;
+    line = documentLine(document, lineNumber);
+  } else if (!isStepLine(line)) {
     const multilineStepLine = options.allowMultilineStep
       ? multilineStepLineAt(document, lineNumber)
       : undefined;
-    if (docStringStepLine === undefined && multilineStepLine === undefined) {
+    if (multilineStepLine === undefined) {
       return [];
     }
-    lineNumber = docStringStepLine === undefined ? multilineStepLine : docStringStepLine;
+    lineNumber = multilineStepLine;
     line = documentLine(document, lineNumber);
   }
   if (!isStepLine(line)) {
