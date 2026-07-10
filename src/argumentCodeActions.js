@@ -103,12 +103,49 @@ function uriPath(uri) {
   return (uri && (uri.fsPath || uri.path)) || "";
 }
 
-function isGaugeStepOrConceptHeading(line, document) {
+function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
-  if (marker !== -1 && line[marker] === "*") {
-    return true;
+  return marker !== -1 && line[marker] === "*";
+}
+
+function isDocStringFenceLine(line) {
+  return String(line || "").trim() === "\"\"\"";
+}
+
+function closedDocStringLines(document) {
+  if (!document || typeof document.getText !== "function") {
+    return new Set();
   }
-  return isConceptHeadingLine(line, document);
+  const lines = document.getText().split(/\r?\n/);
+  const result = new Set();
+  for (let stepLine = 0; stepLine < lines.length; stepLine += 1) {
+    if (!isStepLine(lines[stepLine])) {
+      continue;
+    }
+    const openLine = stepLine + 1;
+    if (!isDocStringFenceLine(lines[openLine])) {
+      continue;
+    }
+    let closeLine;
+    for (let candidateLine = openLine + 1; candidateLine < lines.length; candidateLine += 1) {
+      if (isDocStringFenceLine(lines[candidateLine])) {
+        closeLine = candidateLine;
+        break;
+      }
+    }
+    if (closeLine === undefined) {
+      continue;
+    }
+    for (let line = openLine; line <= closeLine; line += 1) {
+      result.add(line);
+    }
+    stepLine = closeLine;
+  }
+  return result;
+}
+
+function isGaugeStepOrConceptHeading(line, document) {
+  return isStepLine(line) || isConceptHeadingLine(line, document);
 }
 
 function rangeIntersectsArgument(range, start, end) {
@@ -188,6 +225,9 @@ class GaugeArgumentCodeActionProvider {
 
   provideCodeActions(document, range) {
     if (!isGaugeProjectDocument(document, this.projectFactory)) {
+      return [];
+    }
+    if (closedDocStringLines(document).has(range.start.line)) {
       return [];
     }
     const line = document.lineAt(range.start.line).text;

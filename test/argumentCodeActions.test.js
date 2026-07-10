@@ -36,12 +36,16 @@ function createFakeVscode() {
   };
 }
 
-function createDocument(line, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
+function createDocument(text, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
+  const lines = text.split("\n");
   return {
     languageId,
     uri: { fsPath },
-    lineAt() {
-      return { text: line };
+    getText() {
+      return text;
+    },
+    lineAt(line) {
+      return { text: lines[line] || "" };
     },
   };
 }
@@ -336,6 +340,42 @@ test("GaugeArgumentCodeActionProvider ignores non-step text", () => {
     provider.provideCodeActions(createDocument('Note "cart"'), createRange(0, 7)),
     [],
   );
+});
+
+test("GaugeArgumentCodeActionProvider ignores argument-looking starred docstring payloads", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Execute content",
+    "\"\"\"",
+    "* Literal \"cart\"",
+    "\"\"\"",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideCodeActions(document, createRange(4, 12)),
+    [],
+  );
+});
+
+test("GaugeArgumentCodeActionProvider preserves actions after unterminated docstring fences", () => {
+  const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
+  const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Execute content",
+    "\"\"\"",
+    "* Literal \"cart\"",
+  ].join("\n"));
+
+  const actions = provider.provideCodeActions(document, createRange(4, 12));
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, "Convert to Dynamic Parameter");
+  assert.equal(actions[0].edit.replacements[0].newText, "<cart>");
 });
 
 test("GaugeArgumentCodeActionProvider converts arguments on double-star step lines", () => {
