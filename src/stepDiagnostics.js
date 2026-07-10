@@ -3893,10 +3893,9 @@ function duplicateScenarioDiagnostics(vscode, text) {
       ));
       continue;
     }
-    pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
-    currentScenario = undefined;
-
     if (isEmptyScenarioHeading(rawLine)) {
+      pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
+      currentScenario = undefined;
       hasEmptyScenarioHeading = true;
       diagnostics.push(createDiagnostic(
         vscode,
@@ -3914,14 +3913,15 @@ function duplicateScenarioDiagnostics(vscode, text) {
         lineContentRange(vscode, rawLine, line),
         duplicateScenarioMessage(previous),
       ));
-    } else {
-      seen.set(key, heading);
-      currentScenario = {
-        hasStep: false,
-        range: lineContentRange(vscode, rawLine, line),
-      };
-      hasScenarioHeading = true;
+      continue;
     }
+    pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
+    seen.set(key, heading);
+    currentScenario = {
+      hasStep: false,
+      range: lineContentRange(vscode, rawLine, line),
+    };
+    hasScenarioHeading = true;
   }
   pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
   if (!hasSpecHeading && !firstContentRange) {
