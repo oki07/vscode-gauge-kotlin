@@ -1215,14 +1215,15 @@ class GaugeRenameProvider {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
 
-  shouldOpenWorkspaceFile(file) {
+  shouldOpenWorkspaceFile(file, sourceRoot) {
     if (
       !this.projectFactory
       || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
     ) {
       return true;
     }
-    return this.diagnosticsProvider.rootForFile(file) !== undefined;
+    const root = this.diagnosticsProvider.rootForFile(file);
+    return sourceRoot === undefined ? root !== undefined : root === sourceRoot;
   }
 
   allowsMultilineStep(document) {
@@ -1235,6 +1236,7 @@ class GaugeRenameProvider {
 
   async workspaceDocuments(sourceDocument) {
     const workspace = this.vscode.workspace || {};
+    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -1242,7 +1244,7 @@ class GaugeRenameProvider {
         !candidate
         || typeof candidate.getText !== "function"
         || (!isGaugeDocument(candidate) && !isStepImplementationDocument(candidate))
-        || !this.isGaugeProjectDocument(candidate)
+        || !this.diagnosticsProvider.belongsToSourceGaugeProject(candidate, sourceRoot)
       ) {
         return;
       }
@@ -1278,7 +1280,7 @@ class GaugeRenameProvider {
           if (file && seenPaths.has(file)) {
             continue;
           }
-          if (file && !this.shouldOpenWorkspaceFile(file)) {
+          if (file && !this.shouldOpenWorkspaceFile(file, sourceRoot)) {
             continue;
           }
           try {

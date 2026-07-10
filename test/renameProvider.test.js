@@ -1737,6 +1737,62 @@ test("GaugeRenameProvider does not open unopened files outside Gauge projects du
   ]);
 });
 
+test("GaugeRenameProvider keeps workspace documents within the source Gauge project", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/project-a/specs/checkout.spec");
+  const foreignKotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/project-b/src/test/kotlin/Steps.kt");
+  const foreignSpecUri = { fsPath: "/workspace/project-b/specs/checkout.spec" };
+  const opened = [];
+  const vscode = {
+    ...createFakeVscode([specDocument, foreignKotlinDocument]),
+    workspace: {
+      textDocuments: [specDocument, foreignKotlinDocument],
+      async findFiles(pattern) {
+        return pattern === "**/*.spec" ? [foreignSpecUri] : [];
+      },
+      async openTextDocument(uri) {
+        opened.push(uri.fsPath);
+        return createDocument([
+          "# Checkout",
+          "* Pay with <amount>",
+        ].join("\n"), "gauge", uri.fsPath);
+      },
+    },
+  };
+  const provider = new GaugeRenameProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath(filename) {
+        if (filename.startsWith("/workspace/project-a/")) {
+          return "/workspace/project-a";
+        }
+        if (filename.startsWith("/workspace/project-b/")) {
+          return "/workspace/project-b";
+        }
+        return undefined;
+      },
+      isGaugeProject(root) {
+        return root === "/workspace/project-a" || root === "/workspace/project-b";
+      },
+    },
+    vscode,
+  });
+
+  const documents = await provider.workspaceDocuments(specDocument);
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(documents.map((document) => document.uri.fsPath), [
+    "/workspace/project-a/specs/checkout.spec",
+  ]);
+});
+
 test("GaugeRenameProvider prepares rename on double-star step lines", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
