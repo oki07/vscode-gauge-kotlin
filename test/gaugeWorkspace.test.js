@@ -543,6 +543,26 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     { line: 6, character: 2 },
   );
 
+  const emptyResultFallback = await middleware.provideDefinition(
+    conceptDocument,
+    { line: 1, character: 5 },
+    {},
+    () => Promise.resolve([]),
+  );
+  assert.equal(emptyResultFallback.length, 1);
+  assert.equal(emptyResultFallback[0].uri, externalKotlinDocument.uri);
+
+  const remoteDefinitions = [{ uri: { fsPath: "/workspace/gauge/specs/concepts/remote.cpt" } }];
+  assert.equal(
+    await middleware.provideDefinition(
+      conceptDocument,
+      { line: 1, character: 5 },
+      {},
+      () => Promise.resolve(remoteDefinitions),
+    ),
+    remoteDefinitions,
+  );
+
   await assert.rejects(
     () => middleware.provideDefinition({}, {}, {}, () => Promise.reject(new Error("definition failed"))),
     /definition failed/,

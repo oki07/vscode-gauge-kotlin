@@ -1486,3 +1486,37 @@ test("GaugeStepDefinitionProvider registers concept definition selectors", () =>
   ]);
   assert.equal(vscode.registration.provider, provider);
 });
+
+test("GaugeStepDefinitionProvider defers to the active Gauge language client", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/LoginSteps.kt");
+  const languageClient = {};
+  const provider = new GaugeStepDefinitionProvider({
+    clientsMap: {
+      get(filename) {
+        assert.equal(filename, specDocument.uri.fsPath);
+        return { client: languageClient };
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode: createFakeVscode([specDocument, kotlinDocument]),
+  });
+
+  const definitions = await provider.provideDefinition(
+    specDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(definitions, []);
+});

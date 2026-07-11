@@ -150,7 +150,15 @@ function clientMiddleware(options = {}) {
   return {
     async provideDefinition(document, position, token, next) {
       try {
-        return await next(document, position, token);
+        const definitions = await next(document, position, token);
+        if (Array.isArray(definitions) ? definitions.length > 0 : Boolean(definitions)) {
+          return definitions;
+        }
+        try {
+          return await localDefinitionProvider.provideDefinition(document, position, token);
+        } catch (_fallbackError) {
+          return definitions || [];
+        }
       } catch (error) {
         if (isExternalImplementationSourceError(error)) {
           try {

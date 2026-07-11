@@ -589,6 +589,7 @@ function registerValidateDiagnosticsProvider(context, vscode, options) {
 function registerStepDefinitionProvider(context, vscode, options) {
   const StepDefinitionProviderCtor = options.GaugeStepDefinitionProvider || GaugeStepDefinitionProvider;
   const provider = new StepDefinitionProviderCtor({
+    clientsMap: options.clientsMap,
     projectFactory: options.projectFactory,
     vscode,
   });
