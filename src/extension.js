@@ -34,7 +34,6 @@ const {
   GaugeSemanticTokensProvider,
   createLegend,
 } = require("./semanticTokensProvider");
-const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const { GaugeTestController } = require("./testController");
 const { TerminalProvider } = require("./terminalProvider");
@@ -586,35 +585,6 @@ function registerValidateDiagnosticsProvider(context, vscode, options) {
   }
 }
 
-function registerStepDefinitionProvider(context, vscode, options) {
-  const StepDefinitionProviderCtor = options.GaugeStepDefinitionProvider || GaugeStepDefinitionProvider;
-  const provider = new StepDefinitionProviderCtor({
-    clientsMap: options.clientsMap,
-    projectFactory: options.projectFactory,
-    vscode,
-  });
-  const disposable = typeof provider.register === "function"
-    ? provider.register()
-    : (
-      vscode.languages
-      && typeof vscode.languages.registerDefinitionProvider === "function"
-        ? vscode.languages.registerDefinitionProvider(
-          [
-            { language: GAUGE_LANGUAGE },
-            { language: GAUGE_CONCEPT_LANGUAGE },
-            SPEC_FILE_SELECTOR,
-            CONCEPT_FILE_SELECTOR,
-            MARKDOWN_GAUGE_SPEC_SELECTOR,
-          ],
-          provider,
-        )
-        : undefined
-    );
-  if (disposable) {
-    context.subscriptions.push(disposable);
-  }
-}
-
 function registerRenameProvider(context, vscode, options) {
   const RenameProviderCtor = options.GaugeRenameProvider || GaugeRenameProvider;
   const provider = new RenameProviderCtor({
@@ -858,10 +828,6 @@ function startGaugeServices(context, vscode, options = {}) {
     projectFactory,
   });
   registerDocumentSymbolProvider(context, vscode, {
-    ...options,
-    projectFactory,
-  });
-  registerStepDefinitionProvider(context, vscode, {
     ...options,
     projectFactory,
   });

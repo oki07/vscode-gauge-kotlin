@@ -543,6 +543,25 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
     { line: 6, character: 2 },
   );
 
+  const specDocument = createDocument([
+    "# Login",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  let specRemoteCalls = 0;
+  const specKotlinDefinitions = await middleware.provideDefinition(
+    specDocument,
+    { line: 2, character: 5 },
+    {},
+    () => {
+      specRemoteCalls += 1;
+      return Promise.resolve([]);
+    },
+  );
+  assert.equal(specKotlinDefinitions.length, 1);
+  assert.equal(specKotlinDefinitions[0].uri, externalKotlinDocument.uri);
+  assert.equal(specRemoteCalls, 0);
+
   const emptyResultFallback = await middleware.provideDefinition(
     conceptDocument,
     { line: 1, character: 5 },
@@ -552,10 +571,28 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
   assert.equal(emptyResultFallback.length, 1);
   assert.equal(emptyResultFallback[0].uri, externalKotlinDocument.uri);
 
-  const remoteDefinitions = [{ uri: { fsPath: "/workspace/gauge/specs/concepts/remote.cpt" } }];
+  let remoteCalls = 0;
+  const preferredLocalDefinitions = await middleware.provideDefinition(
+    conceptDocument,
+    { line: 1, character: 5 },
+    {},
+    () => {
+      remoteCalls += 1;
+      return Promise.resolve([{ uri: { fsPath: "/workspace/gauge/specs/concepts/remote.cpt" } }]);
+    },
+  );
+  assert.equal(preferredLocalDefinitions.length, 1);
+  assert.equal(preferredLocalDefinitions[0].uri, externalKotlinDocument.uri);
+  assert.equal(remoteCalls, 0);
+
+  const remoteOnlyDocument = createDocument([
+    "# Remote only",
+    "* A step unavailable locally",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/remote.spec");
+  const remoteDefinitions = [{ uri: { fsPath: "/workspace/external/RemoteSteps.kt" } }];
   assert.equal(
     await middleware.provideDefinition(
-      conceptDocument,
+      remoteOnlyDocument,
       { line: 1, character: 5 },
       {},
       () => Promise.resolve(remoteDefinitions),

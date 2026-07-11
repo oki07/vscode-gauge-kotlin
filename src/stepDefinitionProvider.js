@@ -459,7 +459,6 @@ class GaugeStepDefinitionProvider {
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
-    this.clientsMap = options.clientsMap;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
       fileSystem: this.fileSystem,
       pathModule: this.pathModule,
@@ -752,13 +751,6 @@ class GaugeStepDefinitionProvider {
   }
 
   async provideDefinition(document, position) {
-    const entry = this.clientsMap
-      && typeof this.clientsMap.get === "function"
-      ? this.clientsMap.get(documentPath(document))
-      : undefined;
-    if (entry && entry.client) {
-      return [];
-    }
     const wantedSteps = stepTextCandidatesAt(document, position, {
       allowMultilineStep: this.allowsMultilineStep(document),
     });

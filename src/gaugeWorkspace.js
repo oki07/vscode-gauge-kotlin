@@ -149,23 +149,24 @@ function clientMiddleware(options = {}) {
   });
   return {
     async provideDefinition(document, position, token, next) {
+      let localDefinitions;
       try {
-        const definitions = await next(document, position, token);
-        if (Array.isArray(definitions) ? definitions.length > 0 : Boolean(definitions)) {
-          return definitions;
+        localDefinitions = await localDefinitionProvider.provideDefinition(document, position, token);
+        if (
+          Array.isArray(localDefinitions)
+            ? localDefinitions.length > 0
+            : Boolean(localDefinitions)
+        ) {
+          return localDefinitions;
         }
-        try {
-          return await localDefinitionProvider.provideDefinition(document, position, token);
-        } catch (_fallbackError) {
-          return definitions || [];
-        }
+      } catch (_localError) {
+        localDefinitions = undefined;
+      }
+      try {
+        return await next(document, position, token);
       } catch (error) {
         if (isExternalImplementationSourceError(error)) {
-          try {
-            return await localDefinitionProvider.provideDefinition(document, position, token);
-          } catch (_fallbackError) {
-            return [];
-          }
+          return localDefinitions || [];
         }
         throw error;
       }

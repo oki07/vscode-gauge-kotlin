@@ -2448,7 +2448,7 @@ test("activation registers Gauge document symbols for Gauge documents", () => {
   assert.equal(context.subscriptions.includes(workspaceSymbolProviders[0].disposable), true);
 });
 
-test("activation registers Kotlin step definitions for Gauge documents", () => {
+test("activation leaves Gauge definition ownership to language client middleware", () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
@@ -2515,17 +2515,7 @@ test("activation registers Kotlin step definitions for Gauge documents", () => {
     showWelcomeNotification() {},
   });
 
-  assert.equal(definitionProviders.length, 1);
-  assert.deepEqual(definitionProviders[0].selector, [
-    { language: "gauge" },
-    { language: "gauge-concept" },
-    { scheme: "file", pattern: "**/*.spec" },
-    { scheme: "file", pattern: "**/*.cpt" },
-    { language: "markdown", scheme: "file", pattern: "**/*.md" },
-  ]);
-  assert.equal(definitionProviders[0].provider.options.vscode, fakeVscode);
-  assert.equal(definitionProviders[0].provider.options.projectFactory, projectFactory);
-  assert.equal(context.subscriptions.includes(definitionProviders[0].disposable), true);
+  assert.deepEqual(definitionProviders, []);
 });
 
 test("activation starts Gauge workspace services for an active Kotlin implementation document", () => {
