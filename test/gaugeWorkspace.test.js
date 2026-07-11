@@ -659,6 +659,28 @@ test("GaugeWorkspace suppresses the external implementation source popup from Ga
   assert.deepEqual(infos.map((entry) => entry.message), ["runner ready"]);
 });
 
+test("clientMiddleware suppresses LSP definitions owned by the stable local provider", async () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const localDefinitions = [{ uri: { fsPath: "/workspace/gauge/Steps.kt" } }];
+  let remoteCalls = 0;
+  const middleware = clientMiddleware({
+    localDefinitionOwnedExternally: true,
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve(localDefinitions);
+      },
+    },
+  });
+
+  const result = await middleware.provideDefinition({}, {}, {}, () => {
+    remoteCalls += 1;
+    return Promise.resolve([{ uri: { fsPath: "/workspace/gauge/Remote.kt" } }]);
+  });
+
+  assert.deepEqual(result, []);
+  assert.equal(remoteCalls, 0);
+});
+
 test("GaugeWorkspace shares one output channel across workspace project clients", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

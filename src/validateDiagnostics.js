@@ -2,6 +2,7 @@
 
 const nodePath = require("node:path");
 const { envWithGaugeHome } = require("./config/gaugeConfig");
+const { GAUGE_CUSTOM_CLASSPATH } = require("./project/classpath");
 
 const COLLECTION_NAME = "gauge-validate";
 const GAUGE_LANGUAGE = "gauge";
@@ -121,6 +122,31 @@ function projectEnvironment(project, cli) {
     return {};
   }
   return project.envs(cli) || {};
+}
+
+function projectLanguage(project) {
+  if (!project) {
+    return "";
+  }
+  try {
+    return String(typeof project.language === "function" ? project.language() : project.language || "")
+      .toLowerCase();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function requiresProjectClasspath(project) {
+  const language = projectLanguage(project);
+  return language === "java" || language === "kotlin";
+}
+
+function hasProjectClasspath(environment) {
+  return Boolean(
+    environment
+    && typeof environment[GAUGE_CUSTOM_CLASSPATH] === "string"
+    && environment[GAUGE_CUSTOM_CLASSPATH].trim(),
+  );
 }
 
 function normalizeFile(pathModule, root, filename) {
@@ -281,7 +307,7 @@ class GaugeValidateDiagnosticsProvider {
     } catch (_error) {
       value = {};
     }
-    if (root) {
+    if (root && (!requiresProjectClasspath(project) || hasProjectClasspath(value))) {
       this.projectEnvironments.set(root, value);
     }
     return value;
@@ -310,9 +336,13 @@ class GaugeValidateDiagnosticsProvider {
       return [];
     }
 
+    const options = this.validateOptions(project);
+    if (requiresProjectClasspath(project) && !hasProjectClasspath(options.env)) {
+      return [];
+    }
     let result;
     try {
-      result = command.spawnSync([VALIDATE_ARG], this.validateOptions(project));
+      result = command.spawnSync([VALIDATE_ARG], options);
     } catch (_error) {
       return [];
     }
@@ -331,6 +361,10 @@ class GaugeValidateDiagnosticsProvider {
     if (!command || !projectRoot(project)) {
       return Promise.resolve([]);
     }
+    const options = this.validateOptions(project);
+    if (requiresProjectClasspath(project) && !hasProjectClasspath(options.env)) {
+      return Promise.resolve([]);
+    }
     if (typeof command.spawn !== "function") {
       return Promise.resolve(this.runValidate(project));
     }
@@ -338,7 +372,7 @@ class GaugeValidateDiagnosticsProvider {
     return new Promise((resolve) => {
       let child;
       try {
-        child = command.spawn([VALIDATE_ARG], this.validateOptions(project));
+        child = command.spawn([VALIDATE_ARG], options);
       } catch (_error) {
         resolve([]);
         return;

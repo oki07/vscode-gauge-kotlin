@@ -35,6 +35,7 @@ const {
   GaugeSemanticTokensProvider,
   createLegend,
 } = require("./semanticTokensProvider");
+const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const { GaugeTestController } = require("./testController");
 const { TerminalProvider } = require("./terminalProvider");
@@ -572,6 +573,37 @@ function registerStepDiagnosticsProvider(context, vscode, options) {
   }
 }
 
+function registerStepDefinitionProvider(context, vscode, options) {
+  const StepDefinitionProviderCtor = options.GaugeStepDefinitionProvider
+    || GaugeStepDefinitionProvider;
+  const provider = options.stepDefinitionProvider || new StepDefinitionProviderCtor({
+    dependencyStepIndex: options.dependencyStepIndex,
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = typeof provider.register === "function"
+    ? provider.register()
+    : (
+      vscode.languages
+      && typeof vscode.languages.registerDefinitionProvider === "function"
+        ? vscode.languages.registerDefinitionProvider(
+          [
+            { language: GAUGE_LANGUAGE },
+            { language: GAUGE_CONCEPT_LANGUAGE },
+            SPEC_FILE_SELECTOR,
+            CONCEPT_FILE_SELECTOR,
+            MARKDOWN_GAUGE_SPEC_SELECTOR,
+          ],
+          provider,
+        )
+        : undefined
+    );
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+  return provider;
+}
+
 function registerValidateDiagnosticsProvider(context, vscode, options) {
   const ValidateDiagnosticsProviderCtor = options.GaugeValidateDiagnosticsProvider
     || GaugeValidateDiagnosticsProvider;
@@ -847,6 +879,11 @@ function startGaugeServices(context, vscode, options = {}) {
     ...options,
     projectFactory,
   });
+  const stepDefinitionProvider = registerStepDefinitionProvider(context, vscode, {
+    ...options,
+    dependencyStepIndex,
+    projectFactory,
+  });
   registerRenameProvider(context, vscode, {
     ...options,
     clientsMap,
@@ -881,6 +918,7 @@ function startGaugeServices(context, vscode, options = {}) {
     cli,
     clientsMap,
     dependencyStepIndex,
+    localDefinitionOwnedExternally: true,
     env: options.env,
     execSync: options.execSync,
     fileSystem: options.fileSystem,
@@ -889,6 +927,7 @@ function startGaugeServices(context, vscode, options = {}) {
     projectFactory,
     RevealOutputChannelOn: options.RevealOutputChannelOn,
     state,
+    stepDefinitionProvider,
     vscode,
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, {

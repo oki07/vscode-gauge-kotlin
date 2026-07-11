@@ -124,6 +124,57 @@ test("GaugeValidateDiagnosticsProvider maps gauge validate output for the curren
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 11 });
 });
 
+test("GaugeValidateDiagnosticsProvider retries an unavailable JVM classpath without false errors", async () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+
+  const spawnEnvironments = [];
+  const command = {
+    spawnSync(_args, options) {
+      spawnEnvironments.push(options.env);
+      return {
+        stdout: Buffer.from(options.env.gauge_custom_classpath
+          ? ""
+          : "ValidationError /workspace/gauge/specs/example.spec:2 Step implementation not found"),
+        stderr: Buffer.from(""),
+      };
+    },
+  };
+  let environmentCalls = 0;
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    language() {
+      return "java";
+    },
+    envs() {
+      environmentCalls += 1;
+      return environmentCalls === 1
+        ? {}
+        : { gauge_custom_classpath: "/workspace/gauge/target/test-classes" };
+    },
+  };
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: { gaugeCommand: () => command },
+    env: { PATH: "/bin" },
+    projectFactory: {
+      getProjectByFilepath() {
+        return project;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument("# Example\n* A project Step");
+
+  assert.deepEqual(await provider.provideDiagnosticsAsync(document, new Map()), []);
+  assert.deepEqual(await provider.provideDiagnosticsAsync(document, new Map()), []);
+  assert.equal(environmentCalls, 2);
+  assert.deepEqual(spawnEnvironments, [{
+    PATH: "/bin",
+    gauge_custom_classpath: "/workspace/gauge/target/test-classes",
+  }]);
+});
+
 test("GaugeValidateDiagnosticsProvider maps parse warnings to warning diagnostics", () => {
   const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
 

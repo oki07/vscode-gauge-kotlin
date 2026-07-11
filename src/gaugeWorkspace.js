@@ -158,7 +158,7 @@ function clientMiddleware(options = {}) {
             ? localDefinitions.length > 0
             : Boolean(localDefinitions)
         ) {
-          return localDefinitions;
+          return options.localDefinitionOwnedExternally ? [] : localDefinitions;
         }
       } catch (_localError) {
         localDefinitions = undefined;
@@ -197,6 +197,8 @@ class GaugeWorkspace {
     this.fileSystem = options.fileSystem || nodeFs;
     this.cli = options.cli;
     this.dependencyStepIndex = options.dependencyStepIndex;
+    this.localDefinitionOwnedExternally = options.localDefinitionOwnedExternally === true;
+    this.stepDefinitionProvider = options.stepDefinitionProvider;
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
     this.env = envWithGaugeHome(options.env || process.env, {
@@ -573,7 +575,9 @@ class GaugeWorkspace {
       revealOutputChannelOn: this.revealOutputChannelOnNever,
       middleware: clientMiddleware({
         dependencyStepIndex: this.dependencyStepIndex,
+        localDefinitionOwnedExternally: this.localDefinitionOwnedExternally,
         projectFactory: this.projectFactory,
+        stepDefinitionProvider: this.stepDefinitionProvider,
         vscode: this.vscode,
       }),
       synchronize: {
@@ -747,4 +751,5 @@ class GaugeWorkspace {
 
 module.exports = {
   GaugeWorkspace,
+  clientMiddleware,
 };
