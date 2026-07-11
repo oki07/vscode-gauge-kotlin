@@ -77,7 +77,11 @@
           "Specification",
           "Spec"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/gauge-icon.png",
+          "dark": "./images/gauge-icon.png"
+        }
       },
       {
         "id": "gauge-concept",
@@ -88,7 +92,11 @@
           "Gauge Concept",
           "Concept"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/gauge-icon.png",
+          "dark": "./images/gauge-icon.png"
+        }
       }
     ],
     "grammars": [

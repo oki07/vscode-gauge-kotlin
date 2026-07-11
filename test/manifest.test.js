@@ -172,11 +172,25 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(language.extensions, [".spec"]);
   assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec"]);
   assert.equal(language.configuration, "./language-configuration.json");
+  assert.deepEqual(language.icon, {
+    light: "./images/gauge-icon.png",
+    dark: "./images/gauge-icon.png",
+  });
   const conceptLanguage = manifest.contributes.languages.find((entry) => entry.id === "gauge-concept");
   assert.ok(conceptLanguage);
   assert.deepEqual(conceptLanguage.extensions, [".cpt"]);
   assert.deepEqual(conceptLanguage.aliases, ["Gauge Concept", "Concept"]);
   assert.equal(conceptLanguage.configuration, "./language-configuration.json");
+  assert.deepEqual(conceptLanguage.icon, {
+    light: "./images/gauge-icon.png",
+    dark: "./images/gauge-icon.png",
+  });
+  for (const iconPath of Object.values(language.icon)) {
+    assert.equal(fs.existsSync(path.join(root, iconPath)), true);
+  }
+  for (const iconPath of Object.values(conceptLanguage.icon)) {
+    assert.equal(fs.existsSync(path.join(root, iconPath)), true);
+  }
 
   assert.deepEqual(manifest.contributes.iconThemes, [
     {
