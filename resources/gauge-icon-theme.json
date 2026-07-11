@@ -1,10 +1,16 @@
 {
   "iconDefinitions": {
     "_gauge_spec": {
-      "iconPath": "../images/gauge-icon.png"
+      "iconPath": "../images/gauge-file-dark.svg"
     },
     "_gauge_concept": {
-      "iconPath": "../images/gauge-icon.png"
+      "iconPath": "../images/gauge-file-dark.svg"
+    },
+    "_gauge_spec_light": {
+      "iconPath": "../images/gauge-file-light.svg"
+    },
+    "_gauge_concept_light": {
+      "iconPath": "../images/gauge-file-light.svg"
     }
   },
   "fileExtensions": {
@@ -14,5 +20,15 @@
   "languageIds": {
     "gauge": "_gauge_spec",
     "gauge-concept": "_gauge_concept"
+  },
+  "light": {
+    "fileExtensions": {
+      "spec": "_gauge_spec_light",
+      "cpt": "_gauge_concept_light"
+    },
+    "languageIds": {
+      "gauge": "_gauge_spec_light",
+      "gauge-concept": "_gauge_concept_light"
+    }
   }
 }

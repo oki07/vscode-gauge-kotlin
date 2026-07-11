@@ -79,8 +79,8 @@
         ],
         "configuration": "./language-configuration.json",
         "icon": {
-          "light": "./images/gauge-icon.png",
-          "dark": "./images/gauge-icon.png"
+          "light": "./images/gauge-file-light.svg",
+          "dark": "./images/gauge-file-dark.svg"
         }
       },
       {
@@ -94,8 +94,8 @@
         ],
         "configuration": "./language-configuration.json",
         "icon": {
-          "light": "./images/gauge-icon.png",
-          "dark": "./images/gauge-icon.png"
+          "light": "./images/gauge-file-light.svg",
+          "dark": "./images/gauge-file-dark.svg"
         }
       }
     ],

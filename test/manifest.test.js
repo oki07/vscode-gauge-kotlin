@@ -173,8 +173,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(language.aliases, ["Gauge", "Specification", "Spec"]);
   assert.equal(language.configuration, "./language-configuration.json");
   assert.deepEqual(language.icon, {
-    light: "./images/gauge-icon.png",
-    dark: "./images/gauge-icon.png",
+    light: "./images/gauge-file-light.svg",
+    dark: "./images/gauge-file-dark.svg",
   });
   const conceptLanguage = manifest.contributes.languages.find((entry) => entry.id === "gauge-concept");
   assert.ok(conceptLanguage);
@@ -182,8 +182,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(conceptLanguage.aliases, ["Gauge Concept", "Concept"]);
   assert.equal(conceptLanguage.configuration, "./language-configuration.json");
   assert.deepEqual(conceptLanguage.icon, {
-    light: "./images/gauge-icon.png",
-    dark: "./images/gauge-icon.png",
+    light: "./images/gauge-file-light.svg",
+    dark: "./images/gauge-file-dark.svg",
   });
   for (const iconPath of Object.values(language.icon)) {
     assert.equal(fs.existsSync(path.join(root, iconPath)), true);
@@ -211,11 +211,19 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.equal(
     iconTheme.iconDefinitions._gauge_spec.iconPath,
-    "../images/gauge-icon.png",
+    "../images/gauge-file-dark.svg",
   );
   assert.equal(
     iconTheme.iconDefinitions._gauge_concept.iconPath,
-    "../images/gauge-icon.png",
+    "../images/gauge-file-dark.svg",
+  );
+  assert.equal(
+    iconTheme.iconDefinitions._gauge_spec_light.iconPath,
+    "../images/gauge-file-light.svg",
+  );
+  assert.equal(
+    iconTheme.iconDefinitions._gauge_concept_light.iconPath,
+    "../images/gauge-file-light.svg",
   );
   for (const definition of Object.values(iconTheme.iconDefinitions)) {
     assert.equal(
@@ -223,6 +231,14 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       true,
     );
   }
+  assert.deepEqual(iconTheme.light.fileExtensions, {
+    spec: "_gauge_spec_light",
+    cpt: "_gauge_concept_light",
+  });
+  assert.deepEqual(iconTheme.light.languageIds, {
+    gauge: "_gauge_spec_light",
+    "gauge-concept": "_gauge_concept_light",
+  });
 
   const commandIds = manifest.contributes.commands.map((entry) => entry.command);
   assert.deepEqual(commandIds, [
