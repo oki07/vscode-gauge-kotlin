@@ -183,6 +183,7 @@ class FakeLanguageClient {
     this.started = false;
     this.stopped = false;
     this.features = [];
+    this.codeLensFeatureCleared = false;
     this.notificationHandlers = new Map();
   }
 
@@ -204,6 +205,17 @@ class FakeLanguageClient {
 
   registerFeatures(features) {
     this.features.push(...features);
+  }
+
+  getFeature(method) {
+    if (method !== "textDocument/codeLens") {
+      return undefined;
+    }
+    return {
+      clear: () => {
+        this.codeLensFeatureCleared = true;
+      },
+    };
   }
 
   sendRequest(method) {
@@ -284,6 +296,29 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:multipleProjects?", value: false },
   ]);
+});
+
+test("GaugeWorkspace removes the LSP CodeLens feature after startup", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+  });
+  const { vscode } = createFakeVscode();
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+
+  await workspace.ready();
+
+  assert.equal(clients.get("/workspace/gauge").client.codeLensFeatureCleared, true);
 });
 
 test("GaugeWorkspace disposes active clients when the workspace is disposed", async () => {

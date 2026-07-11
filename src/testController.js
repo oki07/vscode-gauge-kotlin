@@ -1,7 +1,7 @@
 "use strict";
 
 const nodePath = require("node:path");
-const { headingMarkers } = require("./codeLensProvider");
+const { headingMarkers } = require("./gaugeHeadings");
 
 const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";

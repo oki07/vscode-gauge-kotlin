@@ -13,6 +13,7 @@ const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
 const GAUGE_LAUNCH_CONFIG = "gauge.launch";
+const CODE_LENS_METHOD = "textDocument/codeLens";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -174,6 +175,16 @@ function clientMiddleware(options = {}) {
       }
     },
   };
+}
+
+function clearLspCodeLensFeature(languageClient) {
+  if (!languageClient || typeof languageClient.getFeature !== "function") {
+    return;
+  }
+  const feature = languageClient.getFeature(CODE_LENS_METHOD);
+  if (feature && typeof feature.clear === "function") {
+    feature.clear();
+  }
 }
 
 function isInside(root, filename, pathModule) {
@@ -625,6 +636,7 @@ class GaugeWorkspace {
       }
       this.registerDynamicFeatures(languageClient);
       await languageClient.start();
+      clearLspCodeLensFeature(languageClient);
     } catch (error) {
       this.clientsMap.delete(project.root());
       this.clientLanguageMap.delete(project.root());

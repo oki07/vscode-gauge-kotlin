@@ -833,7 +833,7 @@ test("execute specification ignores active specs rejected by project root resolu
   assert.deepEqual(errors, ["No workspace folder is open."]);
 });
 
-test("execute in parallel runs the Gauge code lens target", async () => {
+test("execute in parallel runs the selected Gauge target", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
   const { vscode } = createFakeVscode({

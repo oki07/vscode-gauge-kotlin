@@ -522,6 +522,50 @@ test("GaugeTestController treats triple-hash headings as scenarios", () => {
   ]);
 });
 
+test("GaugeTestController ignores headings inside closed step docstrings", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Execution",
+    "* Execute content",
+    "\"\"\"",
+    "## Payload heading",
+    "\"\"\"",
+    "## Real scenario",
+    "* Continue",
+  ].join("\n"));
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+
+  const spec = controller.items.get("/workspace/specs/example.spec");
+  assert.deepEqual(spec.children.values().map((scenario) => scenario.id), [
+    "/workspace/specs/example.spec:6",
+  ]);
+});
+
+test("GaugeTestController discovers legacy underline headings", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "Legacy specification",
+    "====================",
+    "",
+    "Legacy scenario",
+    "---------------",
+    "* Continue",
+  ].join("\n"));
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+
+  const spec = controller.items.get("/workspace/specs/example.spec");
+  assert.equal(spec.label, "Legacy specification");
+  assert.deepEqual(spec.children.values().map((scenario) => [scenario.id, scenario.label]), [
+    ["/workspace/specs/example.spec:4", "Legacy scenario"],
+  ]);
+});
+
 test("GaugeTestController resolves unopened workspace specs from Gauge LSP", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();

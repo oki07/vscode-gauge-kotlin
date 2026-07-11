@@ -4,8 +4,9 @@ const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
 const {
-  isScenarioHashHeading,
-  isSpecHashHeading,
+  closedDocStringLines,
+  isDocStringFenceLine,
+  isStepLine,
 } = require("./gaugeHeadings");
 const {
   GaugeStepDiagnosticsProvider,
@@ -17,9 +18,6 @@ const {
 const { superStepAliasesForEntry } = require("./gaugeReference");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
-const RUN_COMMAND = "gauge.execute";
-const DEBUG_COMMAND = "gauge.debug";
-const IN_PARALLEL_COMMAND = "gauge.execute.inParallel";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -82,35 +80,6 @@ function isGaugeReferenceDocument(document) {
   return document.languageId === MARKDOWN_LANGUAGE && file.endsWith(MARKDOWN_SPEC_EXTENSION);
 }
 
-function isMarkdownSpecDocument(document, file) {
-  return Boolean(
-    document
-    && document.languageId === MARKDOWN_LANGUAGE
-    && file.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
-  );
-}
-
-function isSpecDocument(document, file) {
-  return Boolean(document && file.toLowerCase().endsWith(SPEC_FILE_EXTENSION));
-}
-
-function documentLine(document, line) {
-  if (typeof document.lineAt === "function") {
-    return document.lineAt(line).text;
-  }
-  return String(document.getText()).split(/\r?\n/)[line] || "";
-}
-
-function documentLineCount(document) {
-  if (typeof document.lineCount === "number") {
-    return document.lineCount;
-  }
-  if (typeof document.getText === "function") {
-    return String(document.getText()).split(/\r?\n/).length;
-  }
-  return 0;
-}
-
 function firstNonWhitespace(line) {
   const index = line.search(/\S/);
   return index === -1 ? 0 : index;
@@ -144,22 +113,9 @@ function createCodeLens(vscode, range, command) {
     : { range, command };
 }
 
-function isLegacySpecificationUnderline(line) {
-  return /^=+$/.test(line);
-}
-
-function isLegacyScenarioUnderline(line) {
-  return /^-+$/.test(line);
-}
-
 function isTableLine(line) {
   const text = String(line || "").trim();
   return text.startsWith("|");
-}
-
-function isStepLine(line) {
-  const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*";
 }
 
 function gaugeStepText(line) {
@@ -169,38 +125,6 @@ function gaugeStepText(line) {
   }
   const text = String(line).slice(marker + 1).trim();
   return text || undefined;
-}
-
-function isDocStringFenceLine(line) {
-  return String(line || "").trim() === "\"\"\"";
-}
-
-function closedDocStringLines(lines) {
-  const result = new Set();
-  for (let stepLine = 0; stepLine < lines.length; stepLine += 1) {
-    if (!isStepLine(lines[stepLine])) {
-      continue;
-    }
-    const openLine = stepLine + 1;
-    if (!isDocStringFenceLine(lines[openLine])) {
-      continue;
-    }
-    let closeLine;
-    for (let candidateLine = openLine + 1; candidateLine < lines.length; candidateLine += 1) {
-      if (isDocStringFenceLine(lines[candidateLine])) {
-        closeLine = candidateLine;
-        break;
-      }
-    }
-    if (closeLine === undefined) {
-      continue;
-    }
-    for (let line = openLine; line <= closeLine; line += 1) {
-      result.add(line);
-    }
-    stepLine = closeLine;
-  }
-  return result;
 }
 
 function isGaugeSyntaxBoundary(line) {
@@ -372,101 +296,6 @@ function allowMultilineStep(options = {}) {
 
 function referenceTitle(count) {
   return `${count} reference(s)`;
-}
-
-function hasHeadingText(line) {
-  return Boolean(line && line.trim());
-}
-
-function hashHeadingKind(line) {
-  if (isScenarioHashHeading(line)) {
-    return "scenario";
-  }
-  return isSpecHashHeading(line) ? "specification" : undefined;
-}
-
-function legacyHeadingKind(line, nextLine) {
-  if (!hasHeadingText(line)) {
-    return undefined;
-  }
-  if (isLegacySpecificationUnderline(nextLine || "")) {
-    return "specification";
-  }
-  if (isLegacyScenarioUnderline(nextLine || "")) {
-    return "scenario";
-  }
-  return undefined;
-}
-
-function headingMarkers(document) {
-  const markers = [];
-  const lineCount = documentLineCount(document);
-  const lines = Array.from({ length: lineCount }, (_value, line) => documentLine(document, line));
-  const docStringLines = closedDocStringLines(lines);
-  for (let line = 0; line < lineCount; line += 1) {
-    if (docStringLines.has(line)) {
-      continue;
-    }
-    const text = lines[line];
-    const hashKind = hashHeadingKind(text);
-    if (hashKind) {
-      markers.push({ kind: hashKind, line, start: firstNonWhitespace(text), end: text.length });
-      continue;
-    }
-
-    const legacyKind = legacyHeadingKind(text, lines[line + 1]);
-    if (legacyKind) {
-      markers.push({ kind: legacyKind, line, start: firstNonWhitespace(text), end: text.length });
-      line += 1;
-    }
-  }
-  return markers;
-}
-
-function scenarioTarget(file, marker) {
-  return `${file}:${marker.line + 1}`;
-}
-
-function targetForMarker(file, marker) {
-  return marker.kind === "scenario" ? scenarioTarget(file, marker) : file;
-}
-
-function titlesForMarker(marker) {
-  return marker.kind === "scenario"
-    ? ["Run Scenario", "Debug Scenario"]
-    : ["Run Spec", "Debug Spec"];
-}
-
-function codeLensHeadingMarkers(document) {
-  const markers = headingMarkers(document);
-  return [
-    ...markers.filter((marker) => marker.kind === "scenario"),
-    ...markers.filter((marker) => marker.kind !== "scenario"),
-  ];
-}
-
-function runLinkRange(vscode, marker, title) {
-  return createRange(vscode, marker.line, marker.start, marker.start + title.length);
-}
-
-function hasSpecificationDataTable(document, specificationLine) {
-  const lineCount = documentLineCount(document);
-  for (let line = specificationLine + 1; line < lineCount; line += 1) {
-    const text = documentLine(document, line);
-    if (hashHeadingKind(text) === "scenario") {
-      return false;
-    }
-    if (legacyHeadingKind(text, documentLine(document, line + 1)) === "scenario") {
-      return false;
-    }
-    if (isStepLine(text)) {
-      return false;
-    }
-    if (isTableLine(text)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function normalizedStepValues(aliases) {
@@ -808,47 +637,10 @@ class GaugeCodeLensProvider {
     if (isStepImplementationDocument(document)) {
       return this.provideStepReferenceCodeLenses(document);
     }
-    const supportedDocument = document.languageId === GAUGE_LANGUAGE
-      || isSpecDocument(document, file)
-      || isMarkdownSpecDocument(document, file);
-    if (!supportedDocument) {
-      return [];
-    }
-    if (!this.isGaugeProjectDocument(document)) {
-      return [];
-    }
-
-    const lenses = [];
-    for (const marker of codeLensHeadingMarkers(document)) {
-      const target = targetForMarker(file, marker);
-      const [runTitle, debugTitle] = titlesForMarker(marker);
-      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, runTitle), {
-        command: RUN_COMMAND,
-        title: runTitle,
-        arguments: [target],
-      }));
-      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, debugTitle), {
-        command: DEBUG_COMMAND,
-        title: debugTitle,
-        arguments: [target],
-      }));
-      if (marker.kind === "specification" && hasSpecificationDataTable(document, marker.line)) {
-        const parallelTitle = "Run in parallel";
-        lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, parallelTitle), {
-          command: IN_PARALLEL_COMMAND,
-          title: parallelTitle,
-          arguments: [target],
-        }));
-      }
-    }
-    return lenses;
+    return [];
   }
 }
 
 module.exports = {
-  DEBUG_COMMAND,
   GaugeCodeLensProvider,
-  IN_PARALLEL_COMMAND,
-  RUN_COMMAND,
-  headingMarkers,
 };

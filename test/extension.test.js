@@ -2227,7 +2227,7 @@ test("activation registers dynamic argument completions for Gauge documents", ()
   assert.equal(context.subscriptions.includes(completionProviders[0].disposable), true);
 });
 
-test("activation registers Gauge run code lenses for Gauge documents", () => {
+test("activation registers reference code lenses without specification execution selectors", () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
@@ -2295,11 +2295,8 @@ test("activation registers Gauge run code lenses for Gauge documents", () => {
 
   assert.equal(codeLensProviders.length, 1);
   assert.deepEqual(codeLensProviders[0].selector, [
-    { language: "gauge" },
     { language: "gauge-concept" },
-    { scheme: "file", pattern: "**/*.spec" },
     { scheme: "file", pattern: "**/*.cpt" },
-    { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { language: "kotlin" },
     { scheme: "file", pattern: "**/*.kt" },
     { language: "java" },
