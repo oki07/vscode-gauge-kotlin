@@ -401,15 +401,20 @@ function legacyHeadingKind(line, nextLine) {
 function headingMarkers(document) {
   const markers = [];
   const lineCount = documentLineCount(document);
+  const lines = Array.from({ length: lineCount }, (_value, line) => documentLine(document, line));
+  const docStringLines = closedDocStringLines(lines);
   for (let line = 0; line < lineCount; line += 1) {
-    const text = documentLine(document, line);
+    if (docStringLines.has(line)) {
+      continue;
+    }
+    const text = lines[line];
     const hashKind = hashHeadingKind(text);
     if (hashKind) {
       markers.push({ kind: hashKind, line, start: firstNonWhitespace(text), end: text.length });
       continue;
     }
 
-    const legacyKind = legacyHeadingKind(text, documentLine(document, line + 1));
+    const legacyKind = legacyHeadingKind(text, lines[line + 1]);
     if (legacyKind) {
       markers.push({ kind: legacyKind, line, start: firstNonWhitespace(text), end: text.length });
       line += 1;

@@ -95,6 +95,43 @@ test("GaugeCodeLensProvider adds run and debug lenses for specification and scen
   ]);
 });
 
+test("GaugeCodeLensProvider excludes headings inside closed docstrings from execution lenses", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Execution",
+    "## Runs content",
+    "* Execute content",
+    "\"\"\"",
+    "## Payload heading",
+    "Payload legacy scenario",
+    "-----------------------",
+    "\"\"\"",
+    "## Real follow-up",
+    "* Continue",
+  ].join("\n"));
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.range.start.line), [1, 1, 8, 8, 0, 0]);
+});
+
+test("GaugeCodeLensProvider preserves headings after unterminated docstring fences", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Execution",
+    "## Runs content",
+    "* Execute content",
+    "\"\"\"",
+    "## Parsed after unterminated fence",
+  ].join("\n"));
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.range.start.line), [1, 1, 4, 4, 0, 0]);
+});
+
 test("GaugeCodeLensProvider matches reference run link command arguments and ranges", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
