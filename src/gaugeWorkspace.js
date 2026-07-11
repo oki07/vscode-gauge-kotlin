@@ -13,9 +13,7 @@ const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
 const GAUGE_LAUNCH_CONFIG = "gauge.launch";
-const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
-const REFERENCE_CONFIG = "reference";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const JAVA_RUNNER = "java";
@@ -534,11 +532,10 @@ class GaugeWorkspace {
       args.push("-l", "debug");
     }
 
-    const env = minimalEnv(project, this.cli, this.env);
-    const codeLensConfig = this.vscode.workspace.getConfiguration(GAUGE_CODELENS_CONFIG);
-    if (codeLensConfig && codeLensConfig.has(REFERENCE_CONFIG) && !codeLensConfig.get(REFERENCE_CONFIG)) {
-      env.gauge_lsp_reference_codelens = "false";
-    }
+    const env = {
+      ...minimalEnv(project, this.cli, this.env),
+      gauge_lsp_reference_codelens: "false",
+    };
 
     return {
       command: command.command,

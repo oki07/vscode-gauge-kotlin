@@ -227,7 +227,7 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
   const { contexts, vscode } = createFakeVscode({
     configurations: {
       "gauge.launch": { enableDebugLogs: true },
-      "gauge.codeLenses": { reference: false },
+      "gauge.codeLenses": { reference: true },
     },
   });
   const cli = new CLI(new Command("gauge"), {
