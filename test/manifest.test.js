@@ -578,8 +578,8 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       ["\"", "\""],
     ],
     autoClosingPairs: [
-      ["<", ">"],
-      ["\"", "\""],
+      { open: "<", close: ">" },
+      { open: "\"", close: "\"" },
     ],
     surroundingPairs: [
       ["<", ">"],

@@ -1149,6 +1149,9 @@ test("execute failed skips project prompt when only one workspace folder is a Ga
 
   const controller = createGaugeExecutionController({
     vscode,
+    createCli() {
+      return undefined;
+    },
     pathModule: path.posix,
     fileSystem: {
       existsSync(filename) {

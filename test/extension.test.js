@@ -439,8 +439,8 @@ test("activation preserves Gauge editor language configuration", () => {
       ["\"", "\""],
     ]);
     assert.deepEqual(entry.configuration.autoClosingPairs, [
-      ["<", ">"],
-      ["\"", "\""],
+      { open: "<", close: ">" },
+      { open: "\"", close: "\"" },
     ]);
     assert.deepEqual(entry.configuration.surroundingPairs, [
       ["<", ">"],
