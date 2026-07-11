@@ -185,6 +185,8 @@ class GaugeValidateDiagnosticsProvider {
     this.path = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
     this.vscode = getVscode(options.vscode);
+    this.pendingRefresh = undefined;
+    this.projectEnvironments = new Map();
   }
 
   shouldDiagnose(document) {
@@ -268,6 +270,33 @@ class GaugeValidateDiagnosticsProvider {
     }
   }
 
+  projectEnvironment(project) {
+    const root = projectRoot(project);
+    if (root && this.projectEnvironments.has(root)) {
+      return this.projectEnvironments.get(root);
+    }
+    let value = {};
+    try {
+      value = projectEnvironment(project, this.cli);
+    } catch (_error) {
+      value = {};
+    }
+    if (root) {
+      this.projectEnvironments.set(root, value);
+    }
+    return value;
+  }
+
+  validateOptions(project) {
+    return {
+      cwd: projectRoot(project),
+      env: {
+        ...envWithGaugeHome(this.env, { vscode: this.vscode }),
+        ...this.projectEnvironment(project),
+      },
+    };
+  }
+
   runValidate(project) {
     if (!this.cli || typeof this.cli.gaugeCommand !== "function") {
       return [];
@@ -282,15 +311,8 @@ class GaugeValidateDiagnosticsProvider {
     }
 
     let result;
-    const baseEnv = envWithGaugeHome(this.env, { vscode: this.vscode });
     try {
-      result = command.spawnSync([VALIDATE_ARG], {
-        cwd: root,
-        env: {
-          ...baseEnv,
-          ...projectEnvironment(project, this.cli),
-        },
-      });
+      result = command.spawnSync([VALIDATE_ARG], this.validateOptions(project));
     } catch (_error) {
       return [];
     }
@@ -299,6 +321,53 @@ class GaugeValidateDiagnosticsProvider {
       bufferToString(result && result.stderr),
     ].filter(Boolean).join("\n");
     return parseGaugeValidateErrors(output);
+  }
+
+  runValidateAsync(project) {
+    if (!this.cli || typeof this.cli.gaugeCommand !== "function") {
+      return Promise.resolve([]);
+    }
+    const command = this.cli.gaugeCommand();
+    if (!command || !projectRoot(project)) {
+      return Promise.resolve([]);
+    }
+    if (typeof command.spawn !== "function") {
+      return Promise.resolve(this.runValidate(project));
+    }
+
+    return new Promise((resolve) => {
+      let child;
+      try {
+        child = command.spawn([VALIDATE_ARG], this.validateOptions(project));
+      } catch (_error) {
+        resolve([]);
+        return;
+      }
+      if (!child || typeof child.once !== "function") {
+        resolve([]);
+        return;
+      }
+
+      const output = [];
+      const collect = (stream) => {
+        if (stream && typeof stream.on === "function") {
+          stream.on("data", (chunk) => output.push(bufferToString(chunk)));
+        }
+      };
+      collect(child.stdout);
+      collect(child.stderr);
+
+      let finished = false;
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        resolve(parseGaugeValidateErrors(output.join("\n")));
+      };
+      child.once("error", finish);
+      child.once("close", finish);
+    });
   }
 
   validateErrorsForDocument(document, cache) {
@@ -321,8 +390,12 @@ class GaugeValidateDiagnosticsProvider {
     if (!this.shouldDiagnose(document)) {
       return [];
     }
-    const currentFile = documentPath(document);
     const { errors, root } = this.validateErrorsForDocument(document, cache);
+    return this.diagnosticsForDocument(document, errors, root);
+  }
+
+  diagnosticsForDocument(document, errors, root) {
+    const currentFile = documentPath(document);
     return errors
       .filter((error) => sameFile(this.path, root, error.fileName, currentFile))
       .map((error) => createDiagnostic(
@@ -331,6 +404,26 @@ class GaugeValidateDiagnosticsProvider {
         validationMessage(error),
         error,
       ));
+  }
+
+  async validateErrorsForDocumentAsync(document, cache) {
+    const project = this.projectForDocument(document);
+    const root = projectRoot(project);
+    if (!project || !root) {
+      return { errors: [], root: "" };
+    }
+    if (!cache.has(root)) {
+      cache.set(root, this.runValidateAsync(project));
+    }
+    return { errors: await cache.get(root), root };
+  }
+
+  async provideDiagnosticsAsync(document, cache) {
+    if (!this.shouldDiagnose(document)) {
+      return [];
+    }
+    const { errors, root } = await this.validateErrorsForDocumentAsync(document, cache);
+    return this.diagnosticsForDocument(document, errors, root);
   }
 
   updateDocument(collection, document, cache) {
@@ -344,6 +437,19 @@ class GaugeValidateDiagnosticsProvider {
       return;
     }
     collection.set(document.uri, this.provideDiagnostics(document, cache));
+  }
+
+  async updateDocumentAsync(collection, document, cache) {
+    if (!document || !document.uri) {
+      return;
+    }
+    if (!this.shouldDiagnose(document)) {
+      if (typeof collection.delete === "function") {
+        collection.delete(document.uri);
+      }
+      return;
+    }
+    collection.set(document.uri, await this.provideDiagnosticsAsync(document, cache));
   }
 
   async workspaceGaugeDocuments() {
@@ -392,12 +498,25 @@ class GaugeValidateDiagnosticsProvider {
     return documents;
   }
 
-  async refreshDocuments(collection) {
+  async performRefreshDocuments(collection) {
     const cache = new Map();
     const documents = await this.workspaceGaugeDocuments();
-    for (const document of documents) {
-      this.updateDocument(collection, document, cache);
+    await Promise.all(documents.map((document) => (
+      this.updateDocumentAsync(collection, document, cache)
+    )));
+  }
+
+  refreshDocuments(collection) {
+    if (this.pendingRefresh) {
+      return this.pendingRefresh;
     }
+    const refresh = this.performRefreshDocuments(collection).finally(() => {
+      if (this.pendingRefresh === refresh) {
+        this.pendingRefresh = undefined;
+      }
+    });
+    this.pendingRefresh = refresh;
+    return refresh;
   }
 
   register() {

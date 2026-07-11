@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const test = require("node:test");
 
 function createFakeVscode(options = {}) {
@@ -695,6 +696,125 @@ test("GaugeValidateDiagnosticsProvider registers validation refresh listeners", 
   );
   assert.deepEqual(deletes, [document.uri]);
   assert.deepEqual(disposals, ["gauge-validate", "open", "save", "close"]);
+});
+
+test("GaugeValidateDiagnosticsProvider coalesces concurrent workspace refreshes", async () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+  let findCalls = 0;
+  let resolveFiles;
+  const files = new Promise((resolve) => {
+    resolveFiles = resolve;
+  });
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return undefined;
+      },
+    },
+    vscode: {
+      ...createFakeVscode(),
+      workspace: {
+        textDocuments: [],
+        findFiles() {
+          findCalls += 1;
+          return files;
+        },
+        openTextDocument() {
+          throw new Error("openTextDocument should not run");
+        },
+      },
+    },
+  });
+  const collection = { set() {} };
+
+  const first = provider.refreshDocuments(collection);
+  const second = provider.refreshDocuments(collection);
+
+  assert.equal(first, second);
+  assert.equal(findCalls, 1);
+  resolveFiles([]);
+  await first;
+});
+
+test("GaugeValidateDiagnosticsProvider runs Gauge validation without blocking refresh", async () => {
+  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const spawnCalls = [];
+  const document = createDocument([
+    "# Example",
+    "",
+    "* malformed",
+  ].join("\n"));
+  const provider = new GaugeValidateDiagnosticsProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawn(args, options) {
+            spawnCalls.push({ args, options });
+            return child;
+          },
+          spawnSync() {
+            throw new Error("spawnSync should not run during workspace refresh");
+          },
+        };
+      },
+    },
+    env: { PATH: "/bin" },
+    projectFactory: {
+      getProjectByFilepath() {
+        return {
+          root() {
+            return "/workspace/gauge";
+          },
+          envs() {
+            return {};
+          },
+        };
+      },
+    },
+    vscode: {
+      ...createFakeVscode(),
+      workspace: {
+        textDocuments: [document],
+        findFiles() {
+          return Promise.resolve([]);
+        },
+        openTextDocument() {
+          throw new Error("openTextDocument should not run");
+        },
+      },
+    },
+  });
+  const sets = [];
+  const refresh = provider.refreshDocuments({
+    set(uri, diagnostics) {
+      sets.push({ diagnostics, uri });
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(spawnCalls, [
+    {
+      args: ["validate"],
+      options: {
+        cwd: "/workspace/gauge",
+        env: { PATH: "/bin" },
+      },
+    },
+  ]);
+  assert.deepEqual(sets, []);
+
+  child.stdout.emit(
+    "data",
+    Buffer.from("ParseError /workspace/gauge/specs/example.spec:3: Step is malformed"),
+  );
+  child.emit("close", 1);
+  await refresh;
+
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].diagnostics[0].message, "ParseError line number: 3, Step is malformed");
 });
 
 test("parseGaugeValidateErrors accepts optional colon separators", () => {
