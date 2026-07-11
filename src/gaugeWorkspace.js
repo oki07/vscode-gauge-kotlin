@@ -147,6 +147,9 @@ function clientMiddleware(options = {}) {
     vscode: options.vscode,
   });
   return {
+    provideCodeLenses() {
+      return [];
+    },
     async provideDefinition(document, position, token, next) {
       let localDefinitions;
       try {

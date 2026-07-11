@@ -681,6 +681,26 @@ test("clientMiddleware suppresses LSP definitions owned by the stable local prov
   assert.equal(remoteCalls, 0);
 });
 
+test("clientMiddleware suppresses LSP code lenses owned by the local provider", async () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  let remoteCalls = 0;
+  const middleware = clientMiddleware({
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+  });
+
+  const result = await middleware.provideCodeLenses({}, {}, () => {
+    remoteCalls += 1;
+    return Promise.resolve([{ command: { title: "Run Spec" } }]);
+  });
+
+  assert.deepEqual(result, []);
+  assert.equal(remoteCalls, 0);
+});
+
 test("GaugeWorkspace shares one output channel across workspace project clients", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
