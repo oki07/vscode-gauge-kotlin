@@ -1896,6 +1896,18 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeDependencyStepIndex {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      created.dependencyStepIndex = this;
+    }
+
+    register() {
+      return this.disposable;
+    }
+  }
+
   extension.activate(context, fakeVscode, {
     createCli(options) {
       created.cliOptions = options;
@@ -1906,6 +1918,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       return executionController;
     },
     GaugeClients: FakeGaugeClients,
+    DependencyStepIndex: FakeDependencyStepIndex,
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
@@ -1953,6 +1966,20 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.workspace.options.state, created.state);
   assert.equal(created.state.context, context);
   assert.equal(created.workspace.options.vscode, fakeVscode);
+  assert.equal(created.dependencyStepIndex.options.cli, cli);
+  assert.equal(
+    created.dependencyStepIndex.options.projectFactory,
+    created.workspace.options.projectFactory,
+  );
+  assert.equal(
+    created.workspace.options.dependencyStepIndex,
+    created.dependencyStepIndex,
+  );
+  assert.equal(
+    created.stepDiagnosticsProvider.options.dependencyStepIndex,
+    created.dependencyStepIndex,
+  );
+  assert.equal(context.subscriptions.includes(created.dependencyStepIndex.disposable), true);
   assert.equal(created.argumentCodeActionProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);

@@ -20,6 +20,7 @@ const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFormatProvider } = require("./formatProvider");
 const { GaugeDocumentSymbolProvider } = require("./documentSymbolProvider");
+const { DependencyStepIndex } = require("./dependencyStepIndex");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
 const { GaugeStepCodeActionProvider } = require("./stepCodeActions");
 const { GaugeClients } = require("./gaugeClients");
@@ -561,6 +562,7 @@ function registerDocumentSymbolProvider(context, vscode, options) {
 function registerStepDiagnosticsProvider(context, vscode, options) {
   const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider || GaugeStepDiagnosticsProvider;
   const provider = new StepDiagnosticsProviderCtor({
+    dependencyStepIndex: options.dependencyStepIndex,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -802,6 +804,20 @@ function startGaugeServices(context, vscode, options = {}) {
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
+  const DependencyStepIndexCtor = options.DependencyStepIndex || DependencyStepIndex;
+  const dependencyStepIndex = options.dependencyStepIndex || new DependencyStepIndexCtor({
+    cli,
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    projectFactory,
+    vscode,
+  });
+  const dependencyStepIndexDisposable = typeof dependencyStepIndex.register === "function"
+    ? dependencyStepIndex.register()
+    : undefined;
+  if (dependencyStepIndexDisposable) {
+    context.subscriptions.push(dependencyStepIndexDisposable);
+  }
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
   registerGaugeLanguageConfiguration(context, vscode);
@@ -839,6 +855,7 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
+    dependencyStepIndex,
     projectFactory,
   });
   registerValidateDiagnosticsProvider(context, vscode, {
@@ -863,6 +880,7 @@ function startGaugeServices(context, vscode, options = {}) {
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
     clientsMap,
+    dependencyStepIndex,
     env: options.env,
     execSync: options.execSync,
     fileSystem: options.fileSystem,

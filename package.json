@@ -19,7 +19,8 @@
   "dependencies": {
     "get-port": "^7.1.0",
     "ps-tree": "^1.2.0",
-    "vscode-languageclient": "~9.0.1"
+    "vscode-languageclient": "~9.0.1",
+    "yauzl": "^3.4.0"
   },
   "categories": [
     "Programming Languages",

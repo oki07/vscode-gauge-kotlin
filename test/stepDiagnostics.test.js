@@ -53,6 +53,17 @@ function createMultiProjectFactory() {
   };
 }
 
+function createProjectFactory() {
+  return {
+    getGaugeRootFromFilePath(filename) {
+      if (filename.startsWith("/workspace/gauge/")) {
+        return "/workspace/gauge";
+      }
+      throw new Error("not a Gauge project file");
+    },
+  };
+}
+
 test("GaugeStepDiagnosticsProvider reports Kotlin Step parameter count mismatches", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -6558,6 +6569,77 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps when no impleme
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 15 });
+});
+
+test("GaugeStepDiagnosticsProvider accepts dependency steps from the library index", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# HTTP specification",
+    "## Request",
+    "* Send the request",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/http.spec");
+  const dependencyStepIndex = {
+    stepTemplates(projectRoot) {
+      assert.equal(projectRoot, "/workspace/gauge");
+      return new Set(["Send the request"]);
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    dependencyStepIndex,
+    projectFactory: createProjectFactory(),
+    vscode: createFakeVscode(),
+  });
+
+  const diagnostics = provider.provideDiagnostics(specDocument, []);
+
+  assert.deepEqual(diagnostics, []);
+});
+
+test("GaugeStepDiagnosticsProvider refreshes the dependency index before diagnostics", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = createDocument([
+    "# HTTP specification",
+    "## Request",
+    "* Send the request",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/http.spec");
+  const refreshedRoots = [];
+  let ready = false;
+  const dependencyStepIndex = {
+    async refresh(projectRoot) {
+      refreshedRoots.push(projectRoot);
+      ready = true;
+    },
+    stepTemplates() {
+      return ready ? new Set(["Send the request"]) : new Set();
+    },
+  };
+  const vscode = {
+    ...createFakeVscode(),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles() {
+        return [];
+      },
+      async openTextDocument() {
+        throw new Error("No document should be opened");
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    dependencyStepIndex,
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+  const results = new Map();
+
+  await provider.refreshDocuments({
+    set(uri, diagnostics) {
+      results.set(uri.fsPath, diagnostics);
+    },
+  });
+
+  assert.deepEqual(refreshedRoots, ["/workspace/gauge"]);
+  assert.deepEqual(results.get(specDocument.uri.fsPath), []);
 });
 
 test("GaugeStepDiagnosticsProvider reports undefined markdown Gauge spec steps", async () => {

@@ -8080,6 +8080,7 @@ function isGaugeStepSourceDocument(candidate) {
 
 class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
+    this.dependencyStepIndex = options.dependencyStepIndex;
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
@@ -8519,14 +8520,23 @@ class GaugeStepDiagnosticsProvider {
   implementedStepTemplates(document, workspaceDocuments) {
     const implementationDocuments = this.stepImplementationDocuments(document, workspaceDocuments);
     const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
+    const templates = new Set();
+    if (
+      this.dependencyStepIndex
+      && typeof this.dependencyStepIndex.stepTemplates === "function"
+    ) {
+      const projectRoot = this.gaugeProjectRoot(document);
+      for (const template of this.dependencyStepIndex.stepTemplates(projectRoot) || []) {
+        templates.add(template);
+      }
+    }
     if (implementationDocuments.length === 0 && conceptDocuments.length === 0) {
-      if (isWorkspaceStepImplementationScanComplete(workspaceDocuments)) {
-        return new Set();
+      if (templates.size > 0 || isWorkspaceStepImplementationScanComplete(workspaceDocuments)) {
+        return templates;
       }
       return undefined;
     }
 
-    const templates = new Set();
     for (const candidate of implementationDocuments) {
       let externalConstants;
       if (isStepImplementationDocument(candidate)) {
@@ -8687,13 +8697,39 @@ class GaugeStepDiagnosticsProvider {
     }
   }
 
+  refreshDependencySteps(workspaceDocuments) {
+    if (
+      !this.dependencyStepIndex
+      || typeof this.dependencyStepIndex.refresh !== "function"
+    ) {
+      return undefined;
+    }
+    const roots = new Set();
+    for (const document of workspaceDocuments || []) {
+      const root = this.gaugeProjectRoot(document);
+      if (root) {
+        roots.add(root);
+      }
+    }
+    return Promise.all([...roots].map((root) => (
+      Promise.resolve(this.dependencyStepIndex.refresh(root)).catch(() => undefined)
+    )));
+  }
+
   refreshDocuments(collection) {
     const workspaceDocuments = this.workspaceDocuments();
+    const refresh = (documents) => {
+      const dependencyRefresh = this.refreshDependencySteps(documents);
+      if (dependencyRefresh && typeof dependencyRefresh.then === "function") {
+        return dependencyRefresh.then(() => this.refreshDocumentsWith(collection, documents));
+      }
+      this.refreshDocumentsWith(collection, documents);
+      return undefined;
+    };
     if (workspaceDocuments && typeof workspaceDocuments.then === "function") {
-      return workspaceDocuments.then((documents) => this.refreshDocumentsWith(collection, documents));
+      return workspaceDocuments.then(refresh);
     }
-    this.refreshDocumentsWith(collection, workspaceDocuments);
-    return undefined;
+    return refresh(workspaceDocuments);
   }
 
   register() {

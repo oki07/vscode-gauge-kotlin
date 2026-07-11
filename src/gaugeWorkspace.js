@@ -144,6 +144,7 @@ function errorMessages(error, seen = new Set()) {
 
 function clientMiddleware(options = {}) {
   const localDefinitionProvider = options.stepDefinitionProvider || new GaugeStepDefinitionProvider({
+    dependencyStepIndex: options.dependencyStepIndex,
     projectFactory: options.projectFactory,
     vscode: options.vscode,
   });
@@ -195,6 +196,7 @@ class GaugeWorkspace {
     this.pathModule = options.pathModule || nodePath;
     this.fileSystem = options.fileSystem || nodeFs;
     this.cli = options.cli;
+    this.dependencyStepIndex = options.dependencyStepIndex;
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
     this.env = envWithGaugeHome(options.env || process.env, {
@@ -570,6 +572,7 @@ class GaugeWorkspace {
       outputChannel: this.outputChannel,
       revealOutputChannelOn: this.revealOutputChannelOnNever,
       middleware: clientMiddleware({
+        dependencyStepIndex: this.dependencyStepIndex,
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       }),

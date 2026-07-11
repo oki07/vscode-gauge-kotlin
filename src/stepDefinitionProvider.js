@@ -455,6 +455,7 @@ function targetRange(vscode, text, entry) {
 
 class GaugeStepDefinitionProvider {
   constructor(options = {}) {
+    this.dependencyStepIndex = options.dependencyStepIndex;
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
@@ -757,6 +758,7 @@ class GaugeStepDefinitionProvider {
     if (wantedSteps.length === 0 || !this.isGaugeProjectDocument(document)) {
       return [];
     }
+    const sourceRoot = this.gaugeProjectRoot(document);
 
     const {
       externalDocuments,
@@ -776,6 +778,23 @@ class GaugeStepDefinitionProvider {
     );
     if (conceptDefinitions.length > 0) {
       return conceptDefinitions;
+    }
+    if (
+      this.dependencyStepIndex
+      && typeof this.dependencyStepIndex.findDefinitions === "function"
+      && sourceRoot !== undefined
+    ) {
+      const dependencyDefinitions = await this.dependencyStepIndex.findDefinitions(
+        sourceRoot,
+        wantedSteps,
+      );
+      if (
+        Array.isArray(dependencyDefinitions)
+          ? dependencyDefinitions.length > 0
+          : Boolean(dependencyDefinitions)
+      ) {
+        return dependencyDefinitions;
+      }
     }
     return this.definitionsForDocuments(
       wantedSteps,

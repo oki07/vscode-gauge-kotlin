@@ -927,6 +927,45 @@ test("GaugeStepDefinitionProvider falls back to external workspace Kotlin Step f
   );
 });
 
+test("GaugeStepDefinitionProvider resolves dependency Step methods from the library index", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# HTTP specification",
+    "",
+    "## Request",
+    "* Send the request",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/http.spec");
+  const dependencyUri = { scheme: "gauge-dependency", path: "/steps/RequestSteps.class" };
+  const dependencyRange = {
+    start: { line: 7, character: 2 },
+    end: { line: 7, character: 17 },
+  };
+  const requests = [];
+  const dependencyStepIndex = {
+    async findDefinitions(projectRoot, normalizedSteps) {
+      requests.push({ normalizedSteps, projectRoot });
+      return [{ range: dependencyRange, uri: dependencyUri }];
+    },
+  };
+  const vscode = createFakeVscode([specDocument]);
+  const provider = new GaugeStepDefinitionProvider({
+    dependencyStepIndex,
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+
+  assert.deepEqual(requests, [{
+    normalizedSteps: ["Send the request"],
+    projectRoot: "/workspace/gauge",
+  }]);
+  assert.deepEqual(definitions, [{
+    range: dependencyRange,
+    uri: dependencyUri,
+  }]);
+});
+
 test("GaugeStepDefinitionProvider prefers Gauge project Kotlin Step functions over external fallback", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const conceptDocument = createDocument([
