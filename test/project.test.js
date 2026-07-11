@@ -119,6 +119,41 @@ test("MavenProject returns Gauge custom classpath environment", () => {
   ]);
 });
 
+test("MavenProject prepares test classes before direct Gauge execution", () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const calls = [];
+  const gaugeCommand = { command: "gauge" };
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("/workspace/gauge/target/test-classes\n");
+    },
+  });
+  const cli = {
+    gaugeCommand() {
+      return gaugeCommand;
+    },
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  };
+
+  assert.equal(project.getExecutionCommand(cli), gaugeCommand);
+  assert.equal(project.executionKind(), "gauge");
+  assert.deepEqual(project.executionEnvs(cli), {
+    gauge_custom_classpath: "/workspace/gauge/target/test-classes",
+  });
+  assert.deepEqual(calls, [
+    {
+      command: "mvn -q test-compile gauge:classpath",
+      options: { cwd: "/workspace/gauge" },
+    },
+  ]);
+});
+
 test("MavenProject reports classpath calculation errors", () => {
   const { MavenProject } = require("../src/project/mavenProject");
   const errors = [];

@@ -236,6 +236,9 @@ function detectProjectKind(projectRoot, fileSystem, pathModule) {
 }
 
 function projectKindFromProject(project) {
+  if (project && typeof project.executionKind === "function") {
+    return project.executionKind();
+  }
   if (project instanceof MavenProject) {
     return "maven";
   }
@@ -357,6 +360,13 @@ function projectEnvironment(project, cli) {
     return {};
   }
   return project.envs(cli) || {};
+}
+
+function projectExecutionEnvironment(project, cli) {
+  if (!project || typeof project.executionEnvs !== "function") {
+    return projectEnvironment(project, cli);
+  }
+  return project.executionEnvs(cli);
 }
 
 function hasEnvironment(env) {
@@ -718,7 +728,10 @@ function createGaugeExecutionController(options = {}) {
         || detectProjectKind(projectRoot, fileSystem, pathModule);
       const cli = getCli();
       const executionTool = project ? commandFromProject(project, cli) : undefined;
-      const projectEnv = projectEnvironment(project, cli);
+      const projectEnv = projectExecutionEnvironment(project, cli);
+      if (project && typeof project.executionEnvs === "function" && !projectEnv) {
+        return undefined;
+      }
       const launchConfigurations = getLaunchConfigurations(vscode, projectRoot);
       const launchExecutionOption = extractGaugeExecutionOption(launchConfigurations);
       const option = executionRunOptions(

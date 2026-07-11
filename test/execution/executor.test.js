@@ -606,9 +606,16 @@ test("execute specification runs all specs when Explorer selected resource is th
   ]);
 });
 
-test("execute specification uses Maven args when Maven and Gradle files coexist", async () => {
+test("execute Maven specification compiles the project and runs Gauge directly", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const classpathCalls = [];
   const calls = [];
+  const gaugeCommand = {
+    command: "gauge",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
   const mavenCommand = {
     command: "mvn",
     argsForSpawnType(args) {
@@ -630,6 +637,9 @@ test("execute specification uses Maven args when Maven and Gradle files coexist"
   const controller = createGaugeExecutionController({
     vscode,
     cli: {
+      gaugeCommand() {
+        return gaugeCommand;
+      },
       mavenCommand() {
         return mavenCommand;
       },
@@ -649,6 +659,10 @@ test("execute specification uses Maven args when Maven and Gradle files coexist"
         return Buffer.from(JSON.stringify({ Language: "kotlin" }));
       },
     },
+    execSync(command, options) {
+      classpathCalls.push({ command, options });
+      return Buffer.from("/workspace/target/test-classes\n");
+    },
     async runner(command) {
       calls.push(command);
       return true;
@@ -658,17 +672,31 @@ test("execute specification uses Maven args when Maven and Gradle files coexist"
   const result = await controller.handleCommand("gauge.execute.specification");
 
   assert.equal(result, true);
-  assert.equal(calls[0].command, "mvn");
-  assert.equal(calls[0].tool, mavenCommand);
-  assert.deepEqual(calls[0].args, [
-    "-q",
-    "clean",
-    "compile",
-    "test-compile",
-    "gauge:execute",
-    "-Dtags=smoke",
-    "-Dflags=--hide-suggestion,--simple-console",
-    "-DspecsDir=specs/example.spec",
+  assert.deepEqual(classpathCalls, [
+    {
+      command: "mvn -q test-compile gauge:classpath",
+      options: { cwd: "/workspace" },
+    },
+  ]);
+  assert.deepEqual(calls, [
+    {
+      command: "gauge",
+      tool: gaugeCommand,
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "--tags",
+        "smoke",
+        "/workspace/specs/example.spec",
+      ],
+      cwd: "/workspace",
+      env: {
+        ...process.env,
+        gauge_custom_classpath: "/workspace/target/test-classes",
+      },
+      status: "/workspace/specs/example.spec",
+    },
   ]);
 });
 
@@ -2238,6 +2266,147 @@ test("execute scenario at cursor accepts command flags for Test UI events", asyn
       cwd: "/workspace",
       status: "/workspace/specs/example.spec:8",
     },
+  ]);
+});
+
+test("execute Maven scenario compiles the project and runs Gauge directly", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const classpathCalls = [];
+  const runCalls = [];
+  const gaugeCommand = {
+    command: "gauge",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
+  const mavenCommand = {
+    command: "mvn",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      selection: { active: { line: 2, character: 0 } },
+      document: {
+        fileName: "/workspace/specs/example.spec",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    cli: {
+      gaugeCommand() {
+        return gaugeCommand;
+      },
+      mavenCommand() {
+        return mavenCommand;
+      },
+    },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || filename === "/workspace/pom.xml";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
+    },
+    execSync(command, options) {
+      classpathCalls.push({ command, options });
+      return Buffer.from("/workspace/target/test-classes\n");
+    },
+    async scenariosProvider() {
+      return {
+        heading: "Checkout order",
+        executionIdentifier: "/workspace/specs/example.spec:3",
+      };
+    },
+    async runner(command) {
+      runCalls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.scenario");
+
+  assert.equal(result, true);
+  assert.deepEqual(classpathCalls, [
+    {
+      command: "mvn -q test-compile gauge:classpath",
+      options: { cwd: "/workspace" },
+    },
+  ]);
+  assert.deepEqual(runCalls, [
+    {
+      command: "gauge",
+      tool: gaugeCommand,
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/specs/example.spec:3",
+      ],
+      cwd: "/workspace",
+      env: {
+        ...process.env,
+        gauge_custom_classpath: "/workspace/target/test-classes",
+      },
+      status: "/workspace/specs/example.spec:3",
+    },
+  ]);
+});
+
+test("execute Maven scenario stops when project compilation fails", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const runCalls = [];
+  const { errors, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    cli: {
+      gaugeCommand() {
+        return { command: "gauge" };
+      },
+      mavenCommand() {
+        return { command: "mvn" };
+      },
+    },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || filename === "/workspace/pom.xml";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
+    },
+    execSync() {
+      throw { output: Buffer.from("Compilation failed.") };
+    },
+    async scenariosProvider() {
+      return {
+        heading: "Checkout order",
+        executionIdentifier: "/workspace/specs/example.spec:3",
+      };
+    },
+    async runner(command) {
+      runCalls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.scenario");
+
+  assert.equal(result, undefined);
+  assert.deepEqual(runCalls, []);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nCompilation failed.",
   ]);
 });
 
