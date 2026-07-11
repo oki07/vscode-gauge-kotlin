@@ -539,6 +539,34 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
+function closedDocStringLines(lines) {
+  const result = new Set();
+  for (let stepLine = 0; stepLine < lines.length; stepLine += 1) {
+    if (gaugeStepMarker(lines[stepLine]) === -1) {
+      continue;
+    }
+    const openLine = stepLine + 1;
+    if (!isDocStringFenceLine(lines[openLine])) {
+      continue;
+    }
+    let closeLine;
+    for (let candidateLine = openLine + 1; candidateLine < lines.length; candidateLine += 1) {
+      if (isDocStringFenceLine(lines[candidateLine])) {
+        closeLine = candidateLine;
+        break;
+      }
+    }
+    if (closeLine === undefined) {
+      continue;
+    }
+    for (let line = openLine; line <= closeLine; line += 1) {
+      result.add(line);
+    }
+    stepLine = closeLine;
+  }
+  return result;
+}
+
 function isGaugeSyntaxBoundary(line) {
   const text = String(line || "").trim();
   return !text
@@ -728,7 +756,11 @@ function localGaugeStepReferences(document, targetTemplate, options = {}) {
 
   const locations = [];
   const lines = document.getText().split(/\r?\n/);
+  const docStringLines = closedDocStringLines(lines);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    if (docStringLines.has(lineIndex)) {
+      continue;
+    }
     const startLine = lineIndex;
     const entry = gaugeStepReferenceEntry(lines, lineIndex, options);
     if (!entry) {
@@ -749,6 +781,9 @@ function localGaugeStepReferences(document, targetTemplate, options = {}) {
   }
   if (isConceptReferenceDocument(document)) {
     for (const heading of findConceptHeadings(document.getText())) {
+      if (docStringLines.has(heading.start.line)) {
+        continue;
+      }
       if (heading.normalized !== targetTemplate) {
         continue;
       }

@@ -697,6 +697,83 @@ test("ReferenceProvider provides local references for Kotlin Step aliases", asyn
   ]);
 });
 
+test("ReferenceProvider excludes closed docstring payloads but keeps unterminated payload steps", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Not a Gauge step\")",
+        "fun wrong() {}",
+      ].join("\n");
+    },
+  };
+  const gaugeDocument = (name, closed) => ({
+    languageId: "gauge",
+    uri: {
+      fsPath: `/workspace/specs/${name}.spec`,
+      toString() {
+        return `file:///workspace/specs/${name}.spec`;
+      },
+    },
+    getText() {
+      return [
+        `# ${name}`,
+        "## Scenario",
+        "* Execute content",
+        "\"\"\"",
+        "* Not a Gauge step",
+        ...(closed ? ["\"\"\""] : []),
+      ].join("\n");
+    },
+  });
+  const closedDocument = gaugeDocument("closed", true);
+  const unterminatedDocument = gaugeDocument("unterminated", false);
+  const conceptDocument = {
+    languageId: "gauge-concept",
+    uri: {
+      fsPath: "/workspace/concepts/closed.cpt",
+      toString() {
+        return "file:///workspace/concepts/closed.cpt";
+      },
+    },
+    getText() {
+      return [
+        "# Real concept",
+        "* Execute content",
+        "\"\"\"",
+        "# Not a Gauge step",
+        "\"\"\"",
+      ].join("\n");
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: {
+      textDocuments: [activeDocument, closedDocument, unterminatedDocument, conceptDocument],
+    },
+  });
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+
+  const result = await provider.provideReferences(activeDocument, { line: 3, character: 5 });
+
+  assert.deepEqual(result, [{
+    uri: "file:///workspace/specs/unterminated.spec",
+    range: {
+      start: { line: 4, character: 0 },
+      end: { line: 4, character: 18 },
+    },
+  }]);
+});
+
 test("ReferenceProvider matches multiline local Gauge references for Kotlin Step aliases", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
