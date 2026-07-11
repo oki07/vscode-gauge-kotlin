@@ -129,7 +129,12 @@ test("MavenProject prepares test classes before direct Gauge execution", () => {
   }, {
     execSync(command, options) {
       calls.push({ command, options });
-      return Buffer.from("/workspace/gauge/target/test-classes\n");
+      return Buffer.from([
+        "SLF4J(W): No SLF4J providers were found.",
+        "No errors found.",
+        "/workspace/gauge/target/test-classes",
+        "",
+      ].join("\n"));
     },
   });
   const cli = {
