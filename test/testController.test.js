@@ -847,6 +847,73 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
+test("GaugeTestController starts a targeted TestRun for CodeLens execution", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"));
+  const { calls, vscode } = createFakeVscode({ textDocuments: [document] });
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+  gaugeTests.register();
+
+  await gaugeTests.runCodeLensTarget("gauge.execute", "/workspace/specs/example.spec:3");
+
+  const runCall = calls.find((entry) => entry[0] === "run");
+  assert.deepEqual(runCall[1].include.map((item) => item.id), [
+    "/workspace/specs/example.spec:3",
+  ]);
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/example.spec:3", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+    }],
+  ]);
+});
+
+test("GaugeTestController maps parallel CodeLens execution into TestRun flags", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"));
+  const { vscode } = createFakeVscode({ textDocuments: [document] });
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand(command, ...args) {
+        executionCalls.push([command, ...args]);
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+  gaugeTests.register();
+
+  await gaugeTests.runCodeLensTarget("gauge.execute.inParallel", "/workspace/specs/example.spec");
+
+  assert.deepEqual(executionCalls, [
+    ["gauge.execute", "/workspace/specs/example.spec", {
+      "hide-suggestion": true,
+      "machine-readable": true,
+      parallel: true,
+    }],
+  ]);
+});
+
 test("GaugeTestController batches multiple included specification items into one execution request", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();

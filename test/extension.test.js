@@ -1636,6 +1636,50 @@ test("execution commands delegate without Test UI machine-readable flags", () =>
   ]);
 });
 
+test("CodeLens execution commands delegate to the Gauge TestController", () => {
+  const extension = require("../src/extension");
+  const testCalls = [];
+  const executionCalls = [];
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+
+  class FakeGaugeTestController {
+    createExecutionEventSink() {
+      return () => {};
+    }
+
+    setExecutionController() {}
+
+    register() {
+      return { dispose() {} };
+    }
+
+    runCodeLensTarget(command, target) {
+      testCalls.push([command, target]);
+      return "test-run";
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    GaugeTestController: FakeGaugeTestController,
+    createExecutionController() {
+      return {
+        handleCommand(command, ...args) {
+          executionCalls.push([command, ...args]);
+          return "direct-run";
+        },
+      };
+    },
+  });
+
+  const command = registeredCommands.find((entry) => entry.command === "gauge.execute");
+  const result = command.handler("/workspace/specs/example.spec:3");
+
+  assert.equal(result, "test-run");
+  assert.deepEqual(testCalls, [["gauge.execute", "/workspace/specs/example.spec:3"]]);
+  assert.deepEqual(executionCalls, []);
+});
+
 test("activation wires Gauge Test UI execution events into the execution controller", () => {
   const extension = require("../src/extension");
 

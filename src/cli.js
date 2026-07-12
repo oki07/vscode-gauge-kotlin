@@ -123,7 +123,9 @@ class CLI {
   installGaugeRunner(language, options = {}) {
     const vscode = getVscode(options.vscode);
     const channel = vscode.window.createOutputChannel("Gauge Install");
-    const output = new OutputChannel(channel, `Installing gauge ${language} plugin ...\n`, "");
+    const output = new OutputChannel(channel, `Installing gauge ${language} plugin ...\n`, "", {
+      reveal: true,
+    });
     const env = envWithGaugeHome(options.env || process.env, { vscode });
 
     return new Promise((resolve) => {

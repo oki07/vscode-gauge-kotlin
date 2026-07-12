@@ -13,7 +13,7 @@ class OutputChannel {
 
     this.channel.clear();
     this.channel.appendLine(initial);
-    if (typeof this.channel.show === "function") {
+    if (options.reveal === true && typeof this.channel.show === "function") {
       this.channel.show(true);
     }
     this.outBuffer.onLine((line) => this.channel.appendLine(line));

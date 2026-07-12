@@ -59,6 +59,11 @@ const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const IMPLEMENTATION_LANGUAGES = new Set([JAVA_LANGUAGE, KOTLIN_LANGUAGE]);
+const CODE_LENS_EXECUTION_COMMANDS = new Set([
+  "gauge.execute",
+  "gauge.debug",
+  "gauge.execute.inParallel",
+]);
 const MARKDOWN_GAUGE_SPEC_SELECTOR = { language: "markdown", scheme: "file", pattern: "**/*.md" };
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_SELECTOR = { scheme: "file", pattern: "**/*.spec" };
@@ -742,6 +747,15 @@ function executionCommandArgs(_command, args) {
 function createCommandHandler(command, vscode, executionController, options = {}) {
   return function handleGaugeCommand(...args) {
     if (EXECUTION_COMMANDS.has(command)) {
+      if (
+        CODE_LENS_EXECUTION_COMMANDS.has(command)
+        && args.length === 1
+        && typeof args[0] === "string"
+        && options.testController
+        && typeof options.testController.runCodeLensTarget === "function"
+      ) {
+        return options.testController.runCodeLensTarget(command, args[0]);
+      }
       return executionController.handleCommand(command, ...executionCommandArgs(command, args));
     }
 
@@ -974,6 +988,7 @@ function activate(context, vscodeApi, options = {}) {
   };
   const GaugeTestControllerCtor = options.GaugeTestController || GaugeTestController;
   const testController = new GaugeTestControllerCtor({ clientsMap, projectFactory, vscode });
+  const commandOptions = { ...serviceOptions, testController };
   const executionEventSink = typeof testController.createExecutionEventSink === "function"
     ? testController.createExecutionEventSink()
     : undefined;
@@ -1027,7 +1042,7 @@ function activate(context, vscodeApi, options = {}) {
   for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
     const disposable = vscode.commands.registerCommand(
       command,
-      createCommandHandler(command, vscode, executionController, serviceOptions),
+      createCommandHandler(command, vscode, executionController, commandOptions),
     );
     context.subscriptions.push(disposable);
   }

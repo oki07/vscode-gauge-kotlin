@@ -294,6 +294,13 @@ function testUiDebugFlags() {
   return { ...TEST_UI_RUN_FLAGS, debug: true };
 }
 
+function testRunRequest(vscode, item) {
+  const include = item ? [item] : [];
+  return typeof vscode.TestRunRequest === "function"
+    ? new vscode.TestRunRequest(include)
+    : { include };
+}
+
 function attemptItemId(id, attempt) {
   return attempt > 1 ? `${id}${ATTEMPT_ID_SEPARATOR}${attempt}` : id;
 }
@@ -793,6 +800,41 @@ class GaugeTestController {
 
   setExecutionController(executionController) {
     this.executionController = executionController;
+  }
+
+  testItemForTarget(target) {
+    const existing = this.items.get(target);
+    if (existing) {
+      return existing;
+    }
+    const file = targetFile(target);
+    const uri = fileUri(this.vscode, file);
+    const scenarioMatch = /:(\d+)$/.exec(String(target || ""));
+    if (!scenarioMatch) {
+      return this.upsertItem(file, nodePath.basename(file), uri);
+    }
+    const parent = this.items.get(file)
+      || this.upsertItem(file, nodePath.basename(file), uri);
+    const line = Math.max(0, Number.parseInt(scenarioMatch[1], 10) - 1);
+    return this.upsertItem(
+      target,
+      target,
+      uri,
+      createRange(this.vscode, line),
+      parent && parent.id,
+    );
+  }
+
+  runCodeLensTarget(command, target, token) {
+    const item = this.testItemForTarget(target);
+    const request = testRunRequest(this.vscode, item);
+    const flags = command === "gauge.debug"
+      ? testUiDebugFlags()
+      : testUiRunFlags();
+    if (command === "gauge.execute.inParallel") {
+      flags.parallel = true;
+    }
+    return this.runWithFlags(request, flags, token);
   }
 
   createExecutionEventSink() {

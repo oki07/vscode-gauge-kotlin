@@ -6,6 +6,7 @@ class MockOutputChannel {
   constructor() {
     this.text = "";
     this.lines = [];
+    this.showCalls = [];
   }
 
   appendLine(value) {
@@ -18,8 +19,31 @@ class MockOutputChannel {
     this.lines = [];
   }
 
-  show() {}
+  show(...args) {
+    this.showCalls.push(args);
+  }
 }
+
+test("OutputChannel keeps test results visible by default", () => {
+  const { OutputChannel } = require("../../src/execution/outputChannel");
+  const channel = new MockOutputChannel();
+
+  new OutputChannel(channel, "Running tests", "project", { pathModule: path.posix });
+
+  assert.deepEqual(channel.showCalls, []);
+});
+
+test("OutputChannel reveals non-test operations only when requested", () => {
+  const { OutputChannel } = require("../../src/execution/outputChannel");
+  const channel = new MockOutputChannel();
+
+  new OutputChannel(channel, "Installing plugin", "project", {
+    pathModule: path.posix,
+    reveal: true,
+  });
+
+  assert.deepEqual(channel.showCalls, [[true]]);
+});
 
 test("OutputChannel converts specification paths from relative to absolute", () => {
   const { OutputChannel } = require("../../src/execution/outputChannel");
