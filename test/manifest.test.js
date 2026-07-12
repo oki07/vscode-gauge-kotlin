@@ -373,6 +373,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.equal(configuration["gauge.specExplorer.enabled"].default, true);
   assert.equal(configuration["gauge.execution.debugPort"].default, 9229);
+  assert.equal(configuration["gauge.codeLenses.execution"].default, true);
   assert.equal(configuration["gauge.codeLenses.reference"].default, true);
   assert.equal(configuration["gauge.kotlin.template"].default, "gradle");
   assert.deepEqual(configuration["gauge.semanticTokenColors.dynamicArgument"], {

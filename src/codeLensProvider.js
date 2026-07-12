@@ -5,6 +5,7 @@ const nodePath = require("node:path");
 
 const {
   closedDocStringLines,
+  headingMarkers,
   isDocStringFenceLine,
   isStepLine,
 } = require("./gaugeHeadings");
@@ -18,6 +19,9 @@ const {
 const { superStepAliasesForEntry } = require("./gaugeReference");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 
+const RUN_COMMAND = "gauge.execute";
+const DEBUG_COMMAND = "gauge.debug";
+const IN_PARALLEL_COMMAND = "gauge.execute.inParallel";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -25,6 +29,7 @@ const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_EXTENSION = ".spec";
 const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_CODELENS_CONFIG = "gauge.codeLenses";
+const EXECUTION_CONFIG = "execution";
 const REFERENCE_CONFIG = "reference";
 const GAUGE_REFERENCE_WORKSPACE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
@@ -78,6 +83,18 @@ function isGaugeReferenceDocument(document) {
     return true;
   }
   return document.languageId === MARKDOWN_LANGUAGE && file.endsWith(MARKDOWN_SPEC_EXTENSION);
+}
+
+function isMarkdownSpecDocument(document, file) {
+  return Boolean(
+    document
+    && document.languageId === MARKDOWN_LANGUAGE
+    && file.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+  );
+}
+
+function isSpecDocument(document, file) {
+  return Boolean(document && file.toLowerCase().endsWith(SPEC_FILE_EXTENSION));
 }
 
 function firstNonWhitespace(line) {
@@ -298,6 +315,46 @@ function referenceTitle(count) {
   return `${count} reference(s)`;
 }
 
+function targetForMarker(file, marker) {
+  return marker.kind === "scenario" ? `${file}:${marker.line + 1}` : file;
+}
+
+function titlesForMarker(marker) {
+  return marker.kind === "scenario"
+    ? ["Run Scenario", "Debug Scenario"]
+    : ["Run Spec", "Debug Spec"];
+}
+
+function orderedExecutionMarkers(document) {
+  const markers = headingMarkers(document);
+  return [
+    ...markers.filter((marker) => marker.kind === "scenario"),
+    ...markers.filter((marker) => marker.kind !== "scenario"),
+  ];
+}
+
+function runLinkRange(vscode, marker, title) {
+  return createRange(vscode, marker.line, marker.start, marker.start + title.length);
+}
+
+function hasSpecificationDataTable(document, specificationLine) {
+  if (!document || typeof document.getText !== "function") {
+    return false;
+  }
+  const lines = String(document.getText()).split(/\r?\n/);
+  const nextHeading = headingMarkers(document).find((marker) => marker.line > specificationLine);
+  const endLine = nextHeading ? nextHeading.line : lines.length;
+  for (let line = specificationLine + 1; line < endLine; line += 1) {
+    if (isStepLine(lines[line])) {
+      return false;
+    }
+    if (isTableLine(lines[line])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function normalizedStepValues(aliases) {
   const values = [];
   const seen = new Set();
@@ -379,6 +436,18 @@ class GaugeCodeLensProvider {
       return config.get(REFERENCE_CONFIG) !== false;
     }
     return config.get(REFERENCE_CONFIG) !== false;
+  }
+
+  executionCodeLensesEnabled() {
+    const workspace = this.vscode.workspace || {};
+    if (typeof workspace.getConfiguration !== "function") {
+      return true;
+    }
+    const config = workspace.getConfiguration(GAUGE_CODELENS_CONFIG);
+    if (!config || typeof config.get !== "function") {
+      return true;
+    }
+    return config.get(EXECUTION_CONFIG) !== false;
   }
 
   async findWorkspaceStepImplementationDocuments(sourceRoot) {
@@ -637,10 +706,47 @@ class GaugeCodeLensProvider {
     if (isStepImplementationDocument(document)) {
       return this.provideStepReferenceCodeLenses(document);
     }
-    return [];
+    const supportedDocument = document.languageId === GAUGE_LANGUAGE
+      || isSpecDocument(document, file)
+      || isMarkdownSpecDocument(document, file);
+    if (
+      !supportedDocument
+      || !this.executionCodeLensesEnabled()
+      || !this.isGaugeProjectDocument(document)
+    ) {
+      return [];
+    }
+
+    const lenses = [];
+    for (const marker of orderedExecutionMarkers(document)) {
+      const target = targetForMarker(file, marker);
+      const [runTitle, debugTitle] = titlesForMarker(marker);
+      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, runTitle), {
+        command: RUN_COMMAND,
+        title: runTitle,
+        arguments: [target],
+      }));
+      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, debugTitle), {
+        command: DEBUG_COMMAND,
+        title: debugTitle,
+        arguments: [target],
+      }));
+      if (marker.kind === "specification" && hasSpecificationDataTable(document, marker.line)) {
+        const parallelTitle = "Run in parallel";
+        lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, parallelTitle), {
+          command: IN_PARALLEL_COMMAND,
+          title: parallelTitle,
+          arguments: [target],
+        }));
+      }
+    }
+    return lenses;
   }
 }
 
 module.exports = {
+  DEBUG_COMMAND,
   GaugeCodeLensProvider,
+  IN_PARALLEL_COMMAND,
+  RUN_COMMAND,
 };

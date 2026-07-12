@@ -48,7 +48,7 @@ function createFakeVscode(options = {}) {
   };
 }
 
-test("GaugeCodeLensProvider leaves specification execution to the TestController", () => {
+test("GaugeCodeLensProvider adds one local execution surface for TestController tests", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
   const document = createDocument([
@@ -60,7 +60,95 @@ test("GaugeCodeLensProvider leaves specification execution to the TestController
     "",
   ].join("\n"));
 
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 3,
+      title: "Run Scenario",
+      command: "gauge.execute",
+      arguments: ["/workspace/specs/example.spec:4"],
+    },
+    {
+      line: 3,
+      title: "Debug Scenario",
+      command: "gauge.debug",
+      arguments: ["/workspace/specs/example.spec:4"],
+    },
+    {
+      line: 0,
+      title: "Run Spec",
+      command: "gauge.execute",
+      arguments: ["/workspace/specs/example.spec"],
+    },
+    {
+      line: 0,
+      title: "Debug Spec",
+      command: "gauge.debug",
+      arguments: ["/workspace/specs/example.spec"],
+    },
+  ]);
+});
+
+test("GaugeCodeLensProvider allows execution CodeLens text to be disabled", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode({ codeLenses: { execution: false } }),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"));
+
   assert.deepEqual(provider.provideCodeLenses(document), []);
+});
+
+test("GaugeCodeLensProvider mirrors Gauge parallel execution CodeLens for specification tables", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Checkout",
+    "| user |",
+    "| Alice |",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"));
+
+  const lenses = provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => lens.command.title), [
+    "Run Scenario",
+    "Debug Scenario",
+    "Run Spec",
+    "Debug Spec",
+    "Run in parallel",
+  ]);
+});
+
+test("GaugeCodeLensProvider adds execution CodeLens text to Markdown Gauge specs", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"), "/workspace/specs/example.md", "markdown");
+
+  assert.deepEqual(provider.provideCodeLenses(document).map((lens) => lens.command.title), [
+    "Run Scenario",
+    "Debug Scenario",
+    "Run Spec",
+    "Debug Spec",
+  ]);
 });
 
 test("GaugeCodeLensProvider adds reference lenses for concept headings", async () => {

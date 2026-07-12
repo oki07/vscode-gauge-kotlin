@@ -458,6 +458,11 @@
           "default": true,
           "description": "When true, reference codeLenses appers in implementation files."
         },
+        "gauge.codeLenses.execution": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, Run and Debug CodeLens actions appear above Gauge specification and scenario headings."
+        },
         "gauge.recommendedSettings.options": {
           "type": "string",
           "default": "Remind me later",
