@@ -297,8 +297,8 @@ function testUiDebugFlags() {
 function testRunRequest(vscode, item) {
   const include = item ? [item] : [];
   return typeof vscode.TestRunRequest === "function"
-    ? new vscode.TestRunRequest(include)
-    : { include };
+    ? new vscode.TestRunRequest(include, undefined, undefined, undefined, false)
+    : { include, preserveFocus: false };
 }
 
 function attemptItemId(id, attempt) {

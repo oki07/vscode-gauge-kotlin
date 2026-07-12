@@ -856,6 +856,15 @@ test("GaugeTestController starts a targeted TestRun for CodeLens execution", asy
     "* Pay",
   ].join("\n"));
   const { calls, vscode } = createFakeVscode({ textDocuments: [document] });
+  vscode.TestRunRequest = class TestRunRequest {
+    constructor(include, exclude, profile, continuous, preserveFocus) {
+      this.include = include;
+      this.exclude = exclude;
+      this.profile = profile;
+      this.continuous = continuous;
+      this.preserveFocus = preserveFocus;
+    }
+  };
   const executionCalls = [];
   const gaugeTests = new GaugeTestController({
     vscode,
@@ -871,6 +880,7 @@ test("GaugeTestController starts a targeted TestRun for CodeLens execution", asy
   await gaugeTests.runCodeLensTarget("gauge.execute", "/workspace/specs/example.spec:3");
 
   const runCall = calls.find((entry) => entry[0] === "run");
+  assert.equal(runCall[1].preserveFocus, false);
   assert.deepEqual(runCall[1].include.map((item) => item.id), [
     "/workspace/specs/example.spec:3",
   ]);
