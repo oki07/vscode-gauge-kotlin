@@ -1509,6 +1509,103 @@ test("GaugeStepDefinitionProvider ignores headings and resolves double-star step
   assert.equal(doubleStarDefinitions[0].uri, kotlinDocument.uri);
 });
 
+test("GaugeStepDefinitionProvider uses the shared document store without workspace scans", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* Log in as \"alice\"",
+    "* Pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const kotlinPath = "/workspace/gauge/src/test/kotlin/steps/LoginSteps.kt";
+  const conceptPath = "/workspace/gauge/specs/concepts/payment.cpt";
+  const diskFiles = new Map([
+    [kotlinPath, [
+      "package steps",
+      "",
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "class LoginSteps {",
+      "  @Step(\"Log in as <user>\")",
+      "  fun login(user: String) {}",
+      "}",
+    ].join("\n")],
+    [conceptPath, [
+      "# Pay with <method>",
+      "* Enter payment method <method>",
+    ].join("\n")],
+  ]);
+  const findFilesPatterns = [];
+  const openedFiles = [];
+  const vscode = createFakeVscode([specDocument], {
+    async findFiles(pattern) {
+      findFilesPatterns.push(pattern);
+      return [{ fsPath: kotlinPath }, { fsPath: conceptPath }];
+    },
+    async openTextDocument(uri) {
+      openedFiles.push(uri.fsPath);
+      return createDocument(
+        diskFiles.get(uri.fsPath) || "",
+        uri.fsPath === kotlinPath ? "kotlin" : "gauge",
+        uri.fsPath,
+      );
+    },
+  });
+  const projectFactory = createProjectFactory();
+  const documentStore = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        async readFile(file) {
+          if (!diskFiles.has(file)) {
+            throw new Error(`unexpected read: ${file}`);
+          }
+          return diskFiles.get(file);
+        },
+      },
+    },
+    projectFactory,
+    vscode,
+  });
+  await documentStore.whenReady();
+  const provider = new GaugeStepDefinitionProvider({
+    documentStore,
+    projectFactory,
+    vscode,
+  });
+
+  const stepDefinitions = await provider.provideDefinition(specDocument, { line: 3, character: 5 });
+  const conceptDefinitions = await provider.provideDefinition(specDocument, { line: 4, character: 5 });
+
+  assert.equal(stepDefinitions.length, 1);
+  assert.equal(stepDefinitions[0].uri.fsPath, kotlinPath);
+  assert.deepEqual(
+    { ...stepDefinitions[0].range.start },
+    { line: 6, character: 2 },
+  );
+  assert.deepEqual(
+    { ...stepDefinitions[0].range.end },
+    { line: 6, character: 26 },
+  );
+  assert.equal(conceptDefinitions.length, 1);
+  assert.equal(conceptDefinitions[0].uri.fsPath, conceptPath);
+  assert.deepEqual(
+    { ...conceptDefinitions[0].range.start },
+    { line: 0, character: 2 },
+  );
+  assert.deepEqual(
+    { ...conceptDefinitions[0].range.end },
+    { line: 0, character: 19 },
+  );
+  assert.equal(
+    findFilesPatterns.length,
+    1,
+    `expected only the store scan, saw findFiles patterns: ${findFilesPatterns.join(", ")}`,
+  );
+  assert.deepEqual(openedFiles, []);
+});
+
 test("GaugeStepDefinitionProvider registers concept definition selectors", () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const vscode = createRegistrationVscode();

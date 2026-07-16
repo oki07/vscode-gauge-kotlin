@@ -406,6 +406,81 @@ test("GaugeDocumentSymbolProvider groups and sorts workspace spec and scenario s
   ]);
 });
 
+test("GaugeDocumentSymbolProvider uses the shared document store without workspace scans", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const specPath = "/workspace/gauge/specs/example.spec";
+  const conceptPath = "/workspace/gauge/specs/concepts/shared.cpt";
+  const diskFiles = new Map([
+    [specPath, [
+      "# Specification Heading",
+      "* Context",
+      "",
+      "## Vowel counts in single word",
+      "* Count",
+    ].join("\n")],
+    [conceptPath, [
+      "# Shared checkout",
+      "* Reuse checkout",
+    ].join("\n")],
+  ]);
+  const findFilesPatterns = [];
+  const openedFiles = [];
+  const vscode = createFakeVscode();
+  vscode.workspace = {
+    textDocuments: [],
+    async findFiles(pattern) {
+      findFilesPatterns.push(pattern);
+      return [{ fsPath: specPath }, { fsPath: conceptPath }];
+    },
+    async openTextDocument(uri) {
+      openedFiles.push(uri.fsPath);
+      return createDocument(diskFiles.get(uri.fsPath) || "", uri.fsPath);
+    },
+  };
+  const documentStore = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        async readFile(file) {
+          if (!diskFiles.has(file)) {
+            throw new Error(`unexpected read: ${file}`);
+          }
+          return diskFiles.get(file);
+        },
+      },
+    },
+    vscode,
+  });
+  await documentStore.whenReady();
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+
+  const symbols = await provider.provideWorkspaceSymbols("Spe");
+
+  assert.deepEqual(symbols.map((symbol) => ({
+    name: symbol.name,
+    fsPath: symbol.location.uri.fsPath,
+    range: {
+      start: { ...symbol.location.range.start },
+      end: { ...symbol.location.range.end },
+    },
+  })), [
+    {
+      name: "# Specification Heading",
+      fsPath: specPath,
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 23 },
+      },
+    },
+  ]);
+  assert.equal(
+    findFilesPatterns.length,
+    1,
+    `expected only the store scan, saw findFiles patterns: ${findFilesPatterns.join(", ")}`,
+  );
+  assert.deepEqual(openedFiles, []);
+});
+
 test("GaugeDocumentSymbolProvider returns no workspace symbols for one-character queries", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();

@@ -208,6 +208,7 @@ class GaugeDocumentSymbolProvider {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+    this.documentStore = options.documentStore;
   }
 
   provideDocumentSymbols(document) {
@@ -251,6 +252,15 @@ class GaugeDocumentSymbolProvider {
   }
 
   async workspaceDocuments() {
+    if (this.documentStore) {
+      await this.documentStore.whenReady();
+      return this.documentStore.documents().filter((document) => {
+        const file = documentPath(document);
+        return SPEC_FILE_PATTERN.test(file)
+          || MARKDOWN_SPEC_FILE_PATTERN.test(file)
+          || CONCEPT_FILE_PATTERN.test(file);
+      });
+    }
     const workspace = this.vscode && this.vscode.workspace;
     if (
       !workspace

@@ -33,6 +33,8 @@ const EXECUTION_CONFIG = "execution";
 const REFERENCE_CONFIG = "reference";
 const GAUGE_REFERENCE_WORKSPACE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
+const GAUGE_REFERENCE_FILE_PATTERN = /\.(spec|cpt|md)$/i;
+const STEP_IMPLEMENTATION_FILE_PATTERN = /\.(kt|java)$/i;
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
@@ -375,7 +377,9 @@ class GaugeCodeLensProvider {
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+    this.documentStore = options.documentStore;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      documentStore: this.documentStore,
       fileSystem: this.fileSystem,
       pathModule: this.pathModule,
       projectFactory: this.projectFactory,
@@ -450,7 +454,27 @@ class GaugeCodeLensProvider {
     return config.get(EXECUTION_CONFIG) !== false;
   }
 
+  async storeDocumentsMatching(filePattern, sourceRoot) {
+    await this.documentStore.whenReady();
+    const documents = [];
+    for (const candidate of this.documentStore.documents()) {
+      const file = documentPath(candidate);
+      if (
+        !file
+        || !filePattern.test(file)
+        || !this.belongsFileToSourceGaugeProject(file, sourceRoot)
+      ) {
+        continue;
+      }
+      documents.push(candidate);
+    }
+    return documents;
+  }
+
   async findWorkspaceStepImplementationDocuments(sourceRoot) {
+    if (this.documentStore) {
+      return this.storeDocumentsMatching(STEP_IMPLEMENTATION_FILE_PATTERN, sourceRoot);
+    }
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -485,6 +509,9 @@ class GaugeCodeLensProvider {
   }
 
   async findWorkspaceGaugeReferenceDocuments(sourceRoot) {
+    if (this.documentStore) {
+      return this.storeDocumentsMatching(GAUGE_REFERENCE_FILE_PATTERN, sourceRoot);
+    }
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"

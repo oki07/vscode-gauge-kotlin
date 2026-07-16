@@ -2305,3 +2305,73 @@ test("GaugeDynamicArgumentCompletionProvider suggests package wildcard const Ste
   assert.deepEqual(labels(items), ["Log in as <user>"]);
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
 });
+
+test("GaugeDynamicArgumentCompletionProvider uses the shared document store without workspace scans", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const vscode = createFakeVscode();
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/example.spec");
+  const kotlinPath = "/workspace/gauge/src/test/kotlin/steps/PaymentSteps.kt";
+  const diskFiles = new Map([
+    [kotlinPath, [
+      "package steps",
+      "",
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "@Step(\"Pay with <card>\")",
+      "fun pay(card: String) {}",
+    ].join("\n")],
+  ]);
+  const findFilesPatterns = [];
+  const openedFiles = [];
+  const workspaceVscode = {
+    ...vscode,
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        findFilesPatterns.push(pattern);
+        return [{ fsPath: kotlinPath }];
+      },
+      async openTextDocument(uri) {
+        openedFiles.push(uri.fsPath);
+        return createDocument(diskFiles.get(uri.fsPath) || "", uri.fsPath, "kotlin");
+      },
+    },
+  };
+  const projectFactory = createProjectFactory();
+  const documentStore = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        async readFile(file) {
+          if (!diskFiles.has(file)) {
+            throw new Error(`unexpected read: ${file}`);
+          }
+          return diskFiles.get(file);
+        },
+      },
+    },
+    projectFactory,
+    vscode: workspaceVscode,
+  });
+  await documentStore.whenReady();
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    documentStore,
+    projectFactory,
+    vscode: workspaceVscode,
+  });
+
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
+
+  assert.deepEqual(labels(items), ["Pay with <card>"]);
+  assert.equal(items[0].insertText.value, "Pay with \"${0:card}\"");
+  assert.equal(
+    findFilesPatterns.length,
+    1,
+    `expected only the store scan, saw findFiles patterns: ${findFilesPatterns.join(", ")}`,
+  );
+  assert.deepEqual(openedFiles, []);
+});

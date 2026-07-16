@@ -19,6 +19,7 @@ const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
+const STEP_IMPLEMENTATION_FILE_PATTERN = /\.(kt|java)$/i;
 const PROJECT_ROOT_GAUGE = "gauge";
 const PROJECT_ROOT_NON_GAUGE = "nonGauge";
 const PROJECT_ROOT_UNKNOWN = "unknown";
@@ -460,7 +461,10 @@ class GaugeStepDefinitionProvider {
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+    this.documentStore = options.documentStore;
+    this.externalConstantsProvider = undefined;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      documentStore: this.documentStore,
       fileSystem: this.fileSystem,
       pathModule: this.pathModule,
       projectFactory: this.projectFactory,
@@ -535,7 +539,26 @@ class GaugeStepDefinitionProvider {
     return true;
   }
 
+  async storeWorkspaceDocuments(filePattern, sourceRoot) {
+    await this.documentStore.whenReady();
+    const documents = [];
+    for (const candidate of this.documentStore.documents()) {
+      const file = documentPath(candidate);
+      if (!file || !filePattern.test(file)) {
+        continue;
+      }
+      if (!this.shouldOpenWorkspaceDocument(file, sourceRoot)) {
+        continue;
+      }
+      documents.push(candidate);
+    }
+    return documents;
+  }
+
   async findWorkspaceStepImplementationDocuments(sourceRoot) {
+    if (this.documentStore) {
+      return this.storeWorkspaceDocuments(STEP_IMPLEMENTATION_FILE_PATTERN, sourceRoot);
+    }
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -568,6 +591,9 @@ class GaugeStepDefinitionProvider {
   }
 
   async findWorkspaceConceptDocuments(sourceRoot) {
+    if (this.documentStore) {
+      return this.storeWorkspaceDocuments(CONCEPT_FILE_PATTERN, sourceRoot);
+    }
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -681,16 +707,29 @@ class GaugeStepDefinitionProvider {
     return documents;
   }
 
+  externalWorkspaceConstantsProvider() {
+    // The external fallback intentionally omits the project factory so that
+    // constants from workspace documents outside the source Gauge project are
+    // still resolved. Construct it once and reuse it so repeated definition
+    // lookups keep its per-document caches instead of re-parsing every file.
+    if (!this.externalConstantsProvider) {
+      this.externalConstantsProvider = new GaugeStepDiagnosticsProvider({
+        documentStore: this.documentStore,
+        vscode: this.vscode,
+      });
+    }
+    return this.externalConstantsProvider;
+  }
+
   collectWorkspaceConstants(document, kotlinDocuments, options = {}) {
     // Pass the Kotlin documents directly as the workspace document list. Do NOT
     // spread `this.vscode` or `vscode.workspace`: object spread enumerates every
     // own getter, and VS Code / Cursor expose proposed-API getters (e.g.
     // workspace.tunnels) that throw for extensions that did not declare the
     // proposal, which would abort the entire definition lookup.
-    const diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      projectFactory: options.includeExternalWorkspace ? undefined : this.projectFactory,
-      vscode: this.vscode,
-    });
+    const diagnosticsProvider = options.includeExternalWorkspace
+      ? this.externalWorkspaceConstantsProvider()
+      : this.diagnosticsProvider;
     return diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
   }
 

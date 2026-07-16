@@ -16,6 +16,14 @@ const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_REFERENCE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const STEP_IMPLEMENTATION_REFERENCE_PATTERNS = ["**/*.kt", "**/*.java"];
+const KOTLIN_FILE_PATTERN = /\.kt$/i;
+const JAVA_FILE_PATTERN = /\.java$/i;
+const GAUGE_REFERENCE_FILE_PATTERNS = [
+  SPEC_FILE_PATTERN,
+  CONCEPT_FILE_PATTERN,
+  MARKDOWN_SPEC_FILE_PATTERN,
+];
+const STEP_IMPLEMENTATION_FILE_PATTERNS = [KOTLIN_FILE_PATTERN, JAVA_FILE_PATTERN];
 const PROJECT_ROOT_GAUGE = "gauge";
 const PROJECT_ROOT_NON_GAUGE = "nonGauge";
 const PROJECT_ROOT_UNKNOWN = "unknown";
@@ -79,7 +87,10 @@ function sameDocument(left, right) {
 
 function documentUri(document) {
   if (document && document.uri && typeof document.uri.toString === "function") {
-    return document.uri.toString();
+    const value = document.uri.toString();
+    if (value && value !== "[object Object]") {
+      return value;
+    }
   }
   const file = documentPath(document);
   return file ? `file://${file}` : undefined;
@@ -806,7 +817,9 @@ class ReferenceProvider {
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
+    this.documentStore = options.documentStore;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      documentStore: this.documentStore,
       fileSystem: this.fileSystem,
       pathModule: this.pathModule,
       projectFactory: this.projectFactory,
@@ -1091,7 +1104,30 @@ class ReferenceProvider {
     return sourceRoot === undefined || projectRootInfo.root === sourceRoot;
   }
 
+  async storeDocumentsMatching(filePatterns, includeFile) {
+    await this.documentStore.whenReady();
+    const documents = [];
+    for (const document of this.documentStore.documents()) {
+      const file = documentPath(document);
+      if (
+        !file
+        || !filePatterns.some((pattern) => pattern.test(file))
+        || !includeFile(file)
+      ) {
+        continue;
+      }
+      documents.push(document);
+    }
+    return documents;
+  }
+
   async findWorkspaceStepImplementationDocuments(sourceRoot) {
+    if (this.documentStore) {
+      return this.storeDocumentsMatching(
+        STEP_IMPLEMENTATION_FILE_PATTERNS,
+        (file) => this.shouldOpenWorkspaceStepImplementation(file, sourceRoot),
+      );
+    }
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"
@@ -1126,6 +1162,12 @@ class ReferenceProvider {
   }
 
   async findWorkspaceGaugeDocuments(sourceRoot) {
+    if (this.documentStore) {
+      return this.storeDocumentsMatching(
+        GAUGE_REFERENCE_FILE_PATTERNS,
+        (file) => this.belongsPathToSourceGaugeProject(file, sourceRoot),
+      );
+    }
     const workspace = this.vscode.workspace || {};
     if (
       typeof workspace.findFiles !== "function"

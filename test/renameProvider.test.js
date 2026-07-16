@@ -2160,3 +2160,114 @@ test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () =
   ]);
   assert.equal(vscode.registration.provider, provider);
 });
+
+test("GaugeRenameProvider uses the shared document store without workspace scans", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const diskFiles = new Map([
+    [
+      "/workspace/gauge/specs/retry.spec",
+      ["# Retry", "* Pay with <amount>"].join("\n"),
+    ],
+    [
+      "/workspace/gauge/src/test/kotlin/Steps.kt",
+      [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Pay with <amount>\")",
+        "fun pay(amount: String) {}",
+      ].join("\n"),
+    ],
+  ]);
+  const findFilesPatterns = [];
+  const openedFiles = [];
+  const vscode = {
+    ...createFakeVscode([specDocument]),
+    workspace: {
+      textDocuments: [specDocument],
+      async findFiles(pattern) {
+        findFilesPatterns.push(pattern);
+        return [...diskFiles.keys()].map((fsPath) => ({ fsPath }));
+      },
+      async openTextDocument(uri) {
+        openedFiles.push(uri.fsPath);
+        return createDocument(
+          diskFiles.get(uri.fsPath),
+          uri.fsPath.endsWith(".kt") ? "kotlin" : "gauge",
+          uri.fsPath,
+        );
+      },
+    },
+  };
+  const fileSystem = {
+    promises: {
+      async readFile(file) {
+        assert.ok(diskFiles.has(file), `unexpected readFile: ${file}`);
+        return diskFiles.get(file);
+      },
+    },
+  };
+  const documentStore = new WorkspaceDocumentStore({ fileSystem, vscode });
+  const provider = new GaugeRenameProvider({ documentStore, vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/specs/retry.spec",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 24 },
+        },
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+        newText: "argValue: Any",
+      },
+    ],
+  );
+  assert.ok(
+    findFilesPatterns.length <= 1,
+    `expected at most one findFiles call (store scan), got: ${JSON.stringify(findFilesPatterns)}`,
+  );
+  assert.deepEqual(openedFiles, []);
+});

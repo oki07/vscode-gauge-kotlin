@@ -25,6 +25,13 @@ const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const GAUGE_FILE_PATTERNS = ["**/*.spec", "**/*.cpt", "**/*.md"];
 const JAVA_FILE_PATTERN = "**/*.java";
 const KOTLIN_FILE_PATTERN = "**/*.kt";
+const WORKSPACE_SCAN_FILE_PATTERNS = [
+  SPEC_FILE_PATTERN,
+  CONCEPT_FILE_PATTERN,
+  MARKDOWN_SPEC_FILE_PATTERN,
+  /\.kt$/i,
+  /\.java$/i,
+];
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 const PRE_REFACTOR_ERRORS_MESSAGE = "Please fix all errors before refactoring.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
@@ -1231,7 +1238,9 @@ class GaugeRenameProvider {
     this.vscode = getVscode(options.vscode);
     this.clientsMap = options.clientsMap;
     this.projectFactory = options.projectFactory;
+    this.documentStore = options.documentStore;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      documentStore: this.documentStore,
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
@@ -1296,7 +1305,21 @@ class GaugeRenameProvider {
       addDocument(candidate);
     }
 
-    if (
+    if (this.documentStore) {
+      await this.documentStore.whenReady();
+      for (const candidate of this.documentStore.documents()) {
+        const file = documentPath(candidate);
+        if (
+          !file
+          || seenPaths.has(file)
+          || !WORKSPACE_SCAN_FILE_PATTERNS.some((pattern) => pattern.test(file))
+          || !this.shouldOpenWorkspaceFile(file, sourceRoot)
+        ) {
+          continue;
+        }
+        addDocument(candidate);
+      }
+    } else if (
       typeof workspace.findFiles === "function"
       && typeof workspace.openTextDocument === "function"
     ) {

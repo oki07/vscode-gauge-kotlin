@@ -2625,3 +2625,106 @@ test("ReferenceProvider ignores local Gauge references from another Gauge projec
     },
   ]);
 });
+
+test("ReferenceProvider uses the shared document store without workspace scans", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const requestCalls = [];
+  const activeDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/Steps.kt",
+      toString() {
+        return "file:///workspace/tests/Steps.kt";
+      },
+    },
+    getText() {
+      return [
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "@Step(\"Say hello to <name>\")",
+        "fun say(name: String) {}",
+      ].join("\n");
+    },
+  };
+  const specText = [
+    "# Example",
+    "",
+    "## Scenario",
+    "  * Say hello to \"alice\"",
+  ].join("\n");
+  const specUri = { fsPath: "/workspace/specs/example.spec" };
+  const findFilesPatterns = [];
+  const openedFiles = [];
+  const { vscode } = createFakeVscode({
+    activeDocument,
+    activePosition: { line: 3, character: 5 },
+    workspace: {
+      async findFiles(pattern) {
+        findFilesPatterns.push(pattern);
+        return [specUri];
+      },
+      async openTextDocument(uri) {
+        openedFiles.push(uri.fsPath);
+        return {
+          languageId: "gauge",
+          uri: {
+            fsPath: uri.fsPath,
+            toString() {
+              return `file://${uri.fsPath}`;
+            },
+          },
+          getText() {
+            return specText;
+          },
+        };
+      },
+      textDocuments: [activeDocument],
+    },
+  });
+  const fileSystem = {
+    promises: {
+      async readFile(file) {
+        assert.equal(file, specUri.fsPath);
+        return specText;
+      },
+    },
+  };
+  const documentStore = new WorkspaceDocumentStore({ fileSystem, vscode });
+  const clients = new GaugeClients();
+  const client = createClient({
+    "gauge/stepReferences": null,
+  }, requestCalls);
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client,
+  });
+
+  const provider = new ReferenceProvider(clients, { documentStore, vscode });
+  const result = await provider.provideReferences(
+    activeDocument,
+    { line: 3, character: 5 },
+  );
+
+  assert.deepEqual(requestCalls.map((entry) => entry.method), [
+    "gauge/stepReferences",
+  ]);
+  assert.equal(requestCalls[0].params, "Say hello to <name>");
+  assert.deepEqual(result, [
+    {
+      uri: "file:///workspace/specs/example.spec",
+      range: {
+        start: { line: 3, character: 2 },
+        end: { line: 3, character: 24 },
+      },
+      converted: "location",
+    },
+  ]);
+  assert.ok(
+    findFilesPatterns.length <= 1,
+    `expected at most one findFiles call (store scan), got: ${JSON.stringify(findFilesPatterns)}`,
+  );
+  assert.deepEqual(openedFiles, []);
+});

@@ -879,6 +879,101 @@ test("GaugeCodeLensProvider includes Java super Step aliases in implementation l
   ]);
 });
 
+test("GaugeCodeLensProvider uses the shared document store without workspace scans", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const document = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
+  const diskFiles = {
+    "/workspace/specs/login.spec": [
+      "# Login",
+      "  * Log in as \"Alice\"",
+      "",
+    ].join("\n"),
+  };
+  const findFilesCalls = [];
+  const openTextDocumentCalls = [];
+  const fakeVscode = createFakeVscode({
+    workspace: {
+      textDocuments: [document],
+      findFiles(pattern) {
+        findFilesCalls.push(pattern);
+        return Promise.resolve(Object.keys(diskFiles).map((fsPath) => ({ fsPath })));
+      },
+      openTextDocument(uri) {
+        openTextDocumentCalls.push(uri.fsPath);
+        return Promise.reject(new Error("openTextDocument must not be used"));
+      },
+    },
+  });
+  const projectFactory = {
+    getGaugeRootFromFilePath(filename) {
+      assert.equal(filename.startsWith("/workspace/"), true);
+      return "/workspace";
+    },
+    isGaugeProject(root) {
+      assert.equal(root, "/workspace");
+      return true;
+    },
+  };
+  const documentStore = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        readFile(file) {
+          if (!Object.prototype.hasOwnProperty.call(diskFiles, file)) {
+            return Promise.reject(new Error(`unexpected disk read: ${file}`));
+          }
+          return Promise.resolve(diskFiles[file]);
+        },
+      },
+    },
+    projectFactory,
+    vscode: fakeVscode,
+  });
+  const provider = new GaugeCodeLensProvider({
+    documentStore,
+    fileSystem: {
+      readFileSync() {
+        throw new Error("no default properties");
+      },
+    },
+    projectFactory,
+    vscode: fakeVscode,
+  });
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    line: lens.range.start.line,
+    character: lens.range.start.character,
+    title: lens.command.title,
+    command: lens.command.command,
+    arguments: lens.command.arguments,
+  })), [
+    {
+      line: 3,
+      character: 0,
+      title: "1 reference(s)",
+      command: "gauge.showReferences",
+      arguments: [
+        "file:///workspace/tests/LoginSteps.kt",
+        { line: 3, character: 0 },
+        "Log in as {}",
+      ],
+    },
+  ]);
+  assert.equal(
+    findFilesCalls.length <= 1,
+    true,
+    `expected at most one findFiles call, got: ${findFilesCalls.join(", ")}`,
+  );
+  assert.deepEqual(openTextDocumentCalls, []);
+});
+
 test("GaugeCodeLensProvider suppresses Kotlin reference lenses when disabled", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider({

@@ -1196,7 +1196,9 @@ class GaugeDynamicArgumentCompletionProvider {
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
+    this.documentStore = options.documentStore;
     this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
+      documentStore: this.documentStore,
       projectFactory: this.projectFactory,
       vscode: this.vscode,
     });
@@ -1236,6 +1238,12 @@ class GaugeDynamicArgumentCompletionProvider {
   }
 
   workspaceDocuments() {
+    const store = this.documentStore;
+    if (store && typeof store.whenReady === "function" && !store.isScanComplete()) {
+      // Wait for the store's one-time scan instead of falling back to a fresh
+      // findFiles/openTextDocument sweep of the whole workspace.
+      return store.whenReady().then(() => this.diagnosticsProvider.workspaceDocuments());
+    }
     return this.diagnosticsProvider.workspaceDocuments();
   }
 
