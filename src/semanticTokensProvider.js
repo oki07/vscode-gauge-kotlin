@@ -189,10 +189,6 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
-function isTableBlockStartLine(line, options = {}) {
-  return options.allowIndented ? isTableLine(line) : String(line || "").startsWith("|") && isTableLine(line);
-}
-
 function isStepLine(line) {
   const marker = String(line || "").search(/\S/);
   return marker !== -1 && line[marker] === "*";
@@ -244,28 +240,16 @@ function isTagContinuationBoundary(line) {
     || /^-{3,}\s*$/.test(text);
 }
 
-function tableBlockStartLine(lines, lineNumber, options = {}) {
-  if (!isTableLine(lines[lineNumber] || "")) {
-    return -1;
+function computeTableRunStarts(lines) {
+  const runStarts = new Array(lines.length).fill(-1);
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    if (isTableLine(lines[lineNumber] || "")) {
+      runStarts[lineNumber] = lineNumber > 0 && runStarts[lineNumber - 1] !== -1
+        ? runStarts[lineNumber - 1]
+        : lineNumber;
+    }
   }
-
-  let startLine = lineNumber;
-  while (startLine > 0 && isTableLine(lines[startLine - 1] || "")) {
-    startLine -= 1;
-  }
-  return isTableBlockStartLine(lines[startLine] || "", options) ? startLine : -1;
-}
-
-function semanticTableBlockStartLine(lines, lineNumber) {
-  return tableBlockStartLine(lines, lineNumber, { allowIndented: true });
-}
-
-function isFirstTableLine(lines, lineNumber) {
-  return semanticTableBlockStartLine(lines, lineNumber) === lineNumber;
-}
-
-function isTableBlockLine(lines, lineNumber) {
-  return semanticTableBlockStartLine(lines, lineNumber) !== -1;
+  return runStarts;
 }
 
 class GaugeSemanticTokensProvider {
@@ -293,6 +277,7 @@ class GaugeSemanticTokensProvider {
       return builder.build();
     }
     const lines = document.getText().split(/\r?\n/);
+    const tableRunStarts = computeTableRunStarts(lines);
     const conceptDocument = isConceptDocument(document);
     const argumentRegex = /(?:"(?:\\"|[^"\r\n])*"|<(?:\\[<>]|[^>\r\n])*>)/g;
     const dynamicArgumentRegex = /<(?:\\[<>]|[^>\r\n])*>/g;
@@ -404,9 +389,9 @@ class GaugeSemanticTokensProvider {
         pushToken(builder, index, valueStart, line.length - valueStart, "tagValue");
         tagsContinuation = isTagLineEndingWithComma(line);
         index += 1;
-      } else if (isTableBlockLine(lines, index)) {
+      } else if (tableRunStarts[index] !== -1) {
         tagsContinuation = false;
-        const tableStartLine = semanticTableBlockStartLine(lines, index);
+        const tableStartLine = tableRunStarts[index];
         if (index === tableStartLine + 1 && tableHeaderSeparatorRegex.test(trimmedLine)) {
           for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
             const char = line[charIndex];

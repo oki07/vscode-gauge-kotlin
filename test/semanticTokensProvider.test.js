@@ -1356,3 +1356,43 @@ test("GaugeSemanticTokensProvider ignores escaped argument starts", () => {
 
   assert.deepEqual(argumentTokens, []);
 });
+
+test("GaugeSemanticTokensProvider scales linearly on large contiguous tables", () => {
+  const { GaugeSemanticTokensProvider } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+
+  const tableDocument = (rows) => {
+    const lines = ["# Spec", "## Scenario", "* step with table", "| a | b |", "| - | - |"];
+    for (let index = 0; index < rows; index += 1) {
+      lines.push(`| value${index} | <dyn${index}> |`);
+    }
+    return { getText: () => lines.join("\n") };
+  };
+
+  const bestOf = (rows, attempts) => {
+    const document = tableDocument(rows);
+    provider.provideDocumentSemanticTokens(document);
+    let best = Infinity;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const start = process.hrtime.bigint();
+      provider.provideDocumentSemanticTokens(document);
+      const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+      if (elapsed < best) {
+        best = elapsed;
+      }
+    }
+    return best;
+  };
+
+  const small = bestOf(500, 5);
+  const large = bestOf(4000, 5);
+
+  // Linear scaling gives ~8x for 8x rows; the quadratic table-block walk
+  // measures ~45-50x. Allow generous noise headroom around the linear shape.
+  assert.ok(
+    large <= small * 20,
+    `expected linear table scaling, got ${small.toFixed(2)}ms at 500 rows vs ${large.toFixed(2)}ms at 4000 rows`,
+  );
+});
