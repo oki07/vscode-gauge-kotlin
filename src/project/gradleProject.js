@@ -14,11 +14,19 @@ function systemGradleCommand() {
 }
 
 class GradleProject extends BuildToolProject {
-  getExecutionCommand(cli) {
+  getBuildCommand(cli) {
     if (this.hasGradleWrapper()) {
       return cli.gradleCommand();
     }
     return systemGradleCommand();
+  }
+
+  getExecutionCommand(cli) {
+    return cli.gaugeCommand();
+  }
+
+  executionKind() {
+    return "gauge";
   }
 
   hasGradleWrapper() {
@@ -31,7 +39,14 @@ class GradleProject extends BuildToolProject {
   }
 
   envs(cli) {
-    return this.classpathEnv(this.getExecutionCommand(cli), "-q clean classpath");
+    return this.classpathEnv(this.getBuildCommand(cli), "-q clean classpath");
+  }
+
+  executionEnvs(cli) {
+    return this.classpathEnv(
+      this.getBuildCommand(cli),
+      "-q testClasses classpath",
+    );
   }
 }
 

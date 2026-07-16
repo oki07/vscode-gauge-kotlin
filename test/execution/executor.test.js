@@ -702,7 +702,14 @@ test("execute Maven specification compiles the project and runs Gauge directly",
 
 test("execute specification resolves the project root from the active Gauge file", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const classpathCalls = [];
   const calls = [];
+  const gaugeCommand = {
+    command: "/tools/gauge",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
   const { errors, vscode } = createFakeVscode({
     activeTextEditor: {
       document: {
@@ -718,6 +725,14 @@ test("execute specification resolves the project root from the active Gauge file
 
   const controller = createGaugeExecutionController({
     vscode,
+    cli: {
+      gaugeCommand() {
+        return gaugeCommand;
+      },
+      gradleCommand() {
+        return { command: "./gradlew" };
+      },
+    },
     pathModule: path.posix,
     fileSystem: {
       existsSync(filename) {
@@ -729,8 +744,9 @@ test("execute specification resolves the project root from the active Gauge file
         return Buffer.from(JSON.stringify({ Language: "kotlin", Plugins: [] }));
       },
     },
-    execSync() {
-      return Buffer.from("");
+    execSync(command, options) {
+      classpathCalls.push({ command, options });
+      return Buffer.from("/outside/gauge/build/classes/kotlin/test\n");
     },
     async runner(command) {
       calls.push(command);
@@ -742,16 +758,28 @@ test("execute specification resolves the project root from the active Gauge file
 
   assert.equal(result, true);
   assert.deepEqual(errors, []);
+  assert.deepEqual(classpathCalls, [
+    {
+      command: "gradle -q testClasses classpath",
+      options: { cwd: "/outside/gauge" },
+    },
+  ]);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].command, "gradle");
+  assert.equal(calls[0].command, "/tools/gauge");
+  assert.equal(calls[0].tool, gaugeCommand);
   assert.deepEqual(calls[0].args, [
-    "clean",
-    "gauge",
-    "-Ptags=smoke",
-    "-PadditionalFlags=--hide-suggestion --simple-console",
-    "-PspecsDir=specs/example.spec",
+    "run",
+    "--hide-suggestion",
+    "--simple-console",
+    "--tags",
+    "smoke",
+    "/outside/gauge/specs/example.spec",
   ]);
   assert.equal(calls[0].cwd, "/outside/gauge");
+  assert.deepEqual(calls[0].env, {
+    ...process.env,
+    gauge_custom_classpath: "/outside/gauge/build/classes/kotlin/test",
+  });
   assert.equal(calls[0].status, "/outside/gauge/specs/example.spec");
 });
 
@@ -2355,6 +2383,99 @@ test("execute Maven scenario compiles the project and runs Gauge directly", asyn
       env: {
         ...process.env,
         gauge_custom_classpath: "/workspace/target/test-classes",
+      },
+      status: "/workspace/specs/example.spec:3",
+    },
+  ]);
+});
+
+test("execute Kotlin Gradle scenario prepares classes and runs Gauge directly", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const classpathCalls = [];
+  const runCalls = [];
+  const gaugeCommand = {
+    command: "/tools/gauge",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
+  const gradleCommand = {
+    command: "./gradlew",
+    argsForSpawnType(args) {
+      return args;
+    },
+  };
+  const { vscode } = createFakeVscode({
+    activeTextEditor: {
+      selection: { active: { line: 2, character: 0 } },
+      document: {
+        fileName: "/workspace/specs/example.spec",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    cli: {
+      gaugeCommand() {
+        return gaugeCommand;
+      },
+      gradleCommand() {
+        return gradleCommand;
+      },
+    },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || filename === "/workspace/build.gradle.kts"
+          || filename === "/workspace/gradlew";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
+    },
+    execSync(command, options) {
+      classpathCalls.push({ command, options });
+      return Buffer.from("/workspace/build/classes/kotlin/test\n");
+    },
+    async scenariosProvider() {
+      return {
+        heading: "Checkout order",
+        executionIdentifier: "/workspace/specs/example.spec:3",
+      };
+    },
+    async runner(command) {
+      runCalls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand("gauge.execute.scenario");
+
+  assert.equal(result, true);
+  assert.deepEqual(classpathCalls, [
+    {
+      command: "./gradlew -q testClasses classpath",
+      options: { cwd: "/workspace" },
+    },
+  ]);
+  assert.deepEqual(runCalls, [
+    {
+      command: "/tools/gauge",
+      tool: gaugeCommand,
+      args: [
+        "run",
+        "--hide-suggestion",
+        "--simple-console",
+        "/workspace/specs/example.spec:3",
+      ],
+      cwd: "/workspace",
+      env: {
+        ...process.env,
+        gauge_custom_classpath: "/workspace/build/classes/kotlin/test",
       },
       status: "/workspace/specs/example.spec:3",
     },

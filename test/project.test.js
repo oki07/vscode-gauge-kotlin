@@ -220,7 +220,48 @@ test("GradleProject returns Gauge custom classpath environment", () => {
   ]);
 });
 
-test("GradleProject uses the wrapper command when the project has a Gradle wrapper", () => {
+test("GradleProject prepares Kotlin classes for direct Gauge execution", () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const calls = [];
+  const gaugeCommand = { command: "/tools/gauge" };
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("/workspace/gauge/build/classes/kotlin/test\n");
+    },
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/gauge/gradlew";
+      },
+    },
+    pathModule: path.posix,
+  });
+  const cli = {
+    gaugeCommand() {
+      return gaugeCommand;
+    },
+    gradleCommand() {
+      return { command: "./gradlew" };
+    },
+  };
+
+  assert.equal(project.getExecutionCommand(cli), gaugeCommand);
+  assert.equal(project.executionKind(), "gauge");
+  assert.deepEqual(project.executionEnvs(cli), {
+    gauge_custom_classpath: "/workspace/gauge/build/classes/kotlin/test",
+  });
+  assert.deepEqual(calls, [
+    {
+      command: "./gradlew -q testClasses classpath",
+      options: { cwd: "/workspace/gauge" },
+    },
+  ]);
+});
+
+test("GradleProject uses the wrapper command for builds when the project has a Gradle wrapper", () => {
   const { GradleProject } = require("../src/project/gradleProject");
   const project = new GradleProject("/workspace/gauge", {
     Language: "kotlin",
@@ -234,7 +275,7 @@ test("GradleProject uses the wrapper command when the project has a Gradle wrapp
     pathModule: path.posix,
   });
 
-  const command = project.getExecutionCommand({
+  const command = project.getBuildCommand({
     gradleCommand() {
       return { command: "./gradlew" };
     },
@@ -243,7 +284,7 @@ test("GradleProject uses the wrapper command when the project has a Gradle wrapp
   assert.equal(command.command, "./gradlew");
 });
 
-test("GradleProject falls back to the system Gradle command without a wrapper", () => {
+test("GradleProject falls back to the system Gradle build command without a wrapper", () => {
   const { GradleProject } = require("../src/project/gradleProject");
   const project = new GradleProject("/workspace/gauge", {
     Language: "kotlin",
@@ -257,7 +298,7 @@ test("GradleProject falls back to the system Gradle command without a wrapper", 
     pathModule: path.posix,
   });
 
-  const command = project.getExecutionCommand({
+  const command = project.getBuildCommand({
     gradleCommand() {
       return { command: "./gradlew" };
     },
