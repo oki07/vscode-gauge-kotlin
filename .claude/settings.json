@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$d\" != \"/\" ] && [ ! -x \"$d/.codex/hooks/check-source-language.sh\" ]; do d=\"$(dirname \"$d\")\"; done; s=\"$d/.codex/hooks/check-source-language.sh\"; if [ -x \"$s\" ]; then exec \"$s\"; else exit 0; fi",
+            "timeout": 60,
+            "statusMessage": "Checking workspace language policy"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$d\" != \"/\" ] && [ ! -x \"$d/.codex/hooks/check-source-language.sh\" ]; do d=\"$(dirname \"$d\")\"; done; s=\"$d/.codex/hooks/check-source-language.sh\"; if [ -x \"$s\" ]; then exec \"$s\"; else exit 0; fi",
+            "timeout": 60,
+            "statusMessage": "Checking workspace language policy"
+          },
+          {
+            "type": "command",
+            "command": "d=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$d\" != \"/\" ] && [ ! -x \"$d/.codex/hooks/check-tdd-stop-readiness.sh\" ]; do d=\"$(dirname \"$d\")\"; done; s=\"$d/.codex/hooks/check-tdd-stop-readiness.sh\"; if [ -x \"$s\" ]; then exec \"$s\"; else exit 0; fi",
+            "timeout": 60,
+            "statusMessage": "Checking TDD stop readiness"
+          },
+          {
+            "type": "command",
+            "command": "d=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$d\" != \"/\" ] && [ ! -x \"$d/.codex/hooks/check-product-repo-clean.sh\" ]; do d=\"$(dirname \"$d\")\"; done; s=\"$d/.codex/hooks/check-product-repo-clean.sh\"; if [ -x \"$s\" ]; then exec \"$s\"; else exit 0; fi",
+            "timeout": 60,
+            "statusMessage": "Checking product repository commit discipline"
+          }
+        ]
+      }
+    ]
+  }
+}
