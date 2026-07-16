@@ -35,6 +35,8 @@ function invalidProjectError(pathname) {
   return new Error(`${pathname} does not belong to a valid gauge project.`);
 }
 
+const GAUGE_MANIFEST_GLOB = "**/manifest.json";
+
 function createProjectFactory(options = {}) {
   const fileSystem = options.fileSystem || nodeFs;
   const pathModule = options.pathModule || nodePath;
@@ -46,6 +48,42 @@ function createProjectFactory(options = {}) {
     pathModule,
     vscode: options.vscode,
   };
+
+  const projectCache = new Map();
+  const gaugeProjectCache = new Map();
+  const rootLookupCache = new Map();
+  const rootsDiscoveryCache = new Map();
+  const NO_ROOT = Symbol("noGaugeRoot");
+
+  function invalidate() {
+    projectCache.clear();
+    gaugeProjectCache.clear();
+    rootLookupCache.clear();
+    rootsDiscoveryCache.clear();
+  }
+
+  function registerManifestWatcher() {
+    const workspace = options.vscode && options.vscode.workspace;
+    if (!workspace || typeof workspace.createFileSystemWatcher !== "function") {
+      return;
+    }
+    try {
+      const watcher = workspace.createFileSystemWatcher(GAUGE_MANIFEST_GLOB);
+      const onEvent = () => invalidate();
+      if (typeof watcher.onDidCreate === "function") {
+        watcher.onDidCreate(onEvent);
+      }
+      if (typeof watcher.onDidChange === "function") {
+        watcher.onDidChange(onEvent);
+      }
+      if (typeof watcher.onDidDelete === "function") {
+        watcher.onDidDelete(onEvent);
+      }
+    } catch (_error) {
+      // Root resolution still works without watcher-based invalidation.
+    }
+  }
+  registerManifestWatcher();
 
   function exists(relativeRoot, filename) {
     return fileSystem.existsSync(pathModule.join(relativeRoot, filename));
@@ -63,7 +101,12 @@ function createProjectFactory(options = {}) {
   ];
 
   function isGaugeProject(root) {
-    return isGaugeProjectRoot(fileSystem, pathModule, root);
+    if (gaugeProjectCache.has(root)) {
+      return gaugeProjectCache.get(root);
+    }
+    const result = isGaugeProjectRoot(fileSystem, pathModule, root);
+    gaugeProjectCache.set(root, result);
+    return result;
   }
 
   function isDirectory(filename) {
@@ -93,6 +136,15 @@ function createProjectFactory(options = {}) {
   }
 
   function findGaugeProjectRoots(root) {
+    if (rootsDiscoveryCache.has(root)) {
+      return rootsDiscoveryCache.get(root);
+    }
+    const roots = discoverGaugeProjectRoots(root);
+    rootsDiscoveryCache.set(root, roots);
+    return roots;
+  }
+
+  function discoverGaugeProjectRoots(root) {
     if (!isDirectory(root)) {
       return isGaugeProject(root) ? [root] : [];
     }
@@ -131,26 +183,49 @@ function createProjectFactory(options = {}) {
     if (!root) {
       throw invalidProjectError(root);
     }
+    if (projectCache.has(root)) {
+      return projectCache.get(root);
+    }
 
     const manifest = readManifest(root);
     const language = manifestLanguage(manifest);
+    let project;
     if (isJvmLanguage(language)) {
       const builder = jvmProjectBuilders.find((entry) => entry.predicate(root));
       if (builder) {
-        return builder.build(root, manifest);
+        project = builder.build(root, manifest);
       }
     }
-    return new GaugeProject(root, manifest, projectOptions);
+    if (!project) {
+      project = new GaugeProject(root, manifest, projectOptions);
+    }
+    projectCache.set(root, project);
+    return project;
   }
 
   function getGaugeRootFromFilePath(filepath) {
+    const cached = rootLookupCache.get(filepath);
+    if (cached !== undefined) {
+      if (cached === NO_ROOT) {
+        throw invalidProjectError(filepath);
+      }
+      return cached;
+    }
+    const visited = [filepath];
     let current = filepath;
     while (!isGaugeProject(current)) {
       const parent = pathModule.parse(current).dir;
       if (!parent || parent === current) {
+        for (const entry of visited) {
+          rootLookupCache.set(entry, NO_ROOT);
+        }
         throw invalidProjectError(filepath);
       }
       current = parent;
+      visited.push(current);
+    }
+    for (const entry of visited) {
+      rootLookupCache.set(entry, current);
     }
     return current;
   }
@@ -164,6 +239,7 @@ function createProjectFactory(options = {}) {
     findGaugeProjectRoots,
     getGaugeRootFromFilePath,
     getProjectByFilepath,
+    invalidate,
     isGaugeProject,
   };
 }

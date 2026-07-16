@@ -199,3 +199,124 @@ test("ProjectFactory creates generic Gauge projects without manifest language", 
   assert.equal(project.root(), "/workspace/gauge");
   assert.equal(project.language(), undefined);
 });
+
+function createCountingFileSystem(entries) {
+  const fileSystem = createFakeFileSystem(entries);
+  const counts = { existsSync: 0, readFileSync: 0, readdirSync: 0 };
+  return {
+    counts,
+    fileSystem: {
+      existsSync(filename) {
+        counts.existsSync += 1;
+        return fileSystem.existsSync(filename);
+      },
+      readdirSync(dirname) {
+        counts.readdirSync += 1;
+        return fileSystem.readdirSync(dirname);
+      },
+      readFileSync(filename) {
+        counts.readFileSync += 1;
+        return fileSystem.readFileSync(filename);
+      },
+      statSync(filename) {
+        return fileSystem.statSync(filename);
+      },
+    },
+  };
+}
+
+test("ProjectFactory caches project instances until manifests change", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const { counts, fileSystem } = createCountingFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin" }),
+  });
+  const factory = createProjectFactory({ fileSystem, pathModule: path.posix });
+
+  const first = factory.get("/workspace/gauge");
+  const readsAfterFirst = counts.readFileSync;
+  const second = factory.get("/workspace/gauge");
+
+  assert.equal(first, second);
+  assert.equal(counts.readFileSync, readsAfterFirst);
+});
+
+test("ProjectFactory caches root resolution for repeated file lookups", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const { counts, fileSystem } = createCountingFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin" }),
+    "/workspace/gauge/specs/deep/nested/example.spec": "# Example",
+  });
+  const factory = createProjectFactory({ fileSystem, pathModule: path.posix });
+
+  const first = factory.getGaugeRootFromFilePath("/workspace/gauge/specs/deep/nested/example.spec");
+  const existsAfterFirst = counts.existsSync;
+  const second = factory.getGaugeRootFromFilePath("/workspace/gauge/specs/deep/nested/example.spec");
+
+  assert.equal(first, "/workspace/gauge");
+  assert.equal(second, "/workspace/gauge");
+  assert.equal(counts.existsSync, existsAfterFirst);
+});
+
+test("ProjectFactory caches workspace root discovery", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const { counts, fileSystem } = createCountingFileSystem({
+    "/workspace/alpha/manifest.json": JSON.stringify({ Language: "kotlin" }),
+    "/workspace/beta/manifest.json": JSON.stringify({ Language: "kotlin" }),
+  });
+  const factory = createProjectFactory({ fileSystem, pathModule: path.posix });
+
+  const first = factory.findGaugeProjectRoots("/workspace");
+  const readdirAfterFirst = counts.readdirSync;
+  const second = factory.findGaugeProjectRoots("/workspace");
+
+  assert.deepEqual(first, ["/workspace/alpha", "/workspace/beta"]);
+  assert.deepEqual(second, first);
+  assert.equal(counts.readdirSync, readdirAfterFirst);
+});
+
+test("ProjectFactory invalidates caches on manifest watcher events", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const watchers = [];
+  const entries = {
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin" }),
+  };
+  const { counts, fileSystem } = createCountingFileSystem(entries);
+  const factory = createProjectFactory({
+    fileSystem,
+    pathModule: path.posix,
+    vscode: {
+      workspace: {
+        createFileSystemWatcher(glob) {
+          const watcher = {
+            changeListeners: [],
+            createListeners: [],
+            deleteListeners: [],
+            glob,
+            onDidChange(listener) {
+              watcher.changeListeners.push(listener);
+              return { dispose() {} };
+            },
+            onDidCreate(listener) {
+              watcher.createListeners.push(listener);
+              return { dispose() {} };
+            },
+            onDidDelete(listener) {
+              watcher.deleteListeners.push(listener);
+              return { dispose() {} };
+            },
+            dispose() {},
+          };
+          watchers.push(watcher);
+          return watcher;
+        },
+      },
+    },
+  });
+
+  const first = factory.get("/workspace/gauge");
+  assert.equal(watchers.length, 1);
+  watchers[0].changeListeners[0]({ fsPath: "/workspace/gauge/manifest.json" });
+  const second = factory.get("/workspace/gauge");
+
+  assert.notEqual(first, second);
+});
