@@ -10,6 +10,7 @@ function createFakeVscode(overrides = {}) {
   const shownDocuments = [];
   const treeProviders = [];
   const watcherListeners = [];
+  const watchers = [];
   class EventEmitter {
     constructor() {
       this.events = [];
@@ -103,6 +104,7 @@ function createFakeVscode(overrides = {}) {
           },
           dispose() {},
         };
+        watchers.push(watcher);
         return watcher;
       },
       getConfiguration(section) {
@@ -138,6 +140,7 @@ function createFakeVscode(overrides = {}) {
     treeProviders,
     vscode,
     watcherListeners,
+    watchers,
   };
 }
 
@@ -456,4 +459,25 @@ test("SpecNodeProvider disables the activated context when spec explorer is disa
   assert.deepEqual(commands, []);
   assert.deepEqual(watcherListeners, []);
   assert.equal(client.started, 0);
+});
+
+test("SpecNodeProvider watcher listens for spec creation and deletion events", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  const { vscode, watchers } = createFakeVscode();
+  const workspace = createFakeWorkspace(client);
+
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout() {
+      return { unref() {} };
+    },
+    vscode,
+  });
+  await provider.ready();
+
+  assert.equal(watchers.length, 1);
+  assert.equal(watchers[0].ignoreCreate, false);
+  assert.equal(watchers[0].ignoreChange, true);
+  assert.equal(watchers[0].ignoreDelete, false);
 });

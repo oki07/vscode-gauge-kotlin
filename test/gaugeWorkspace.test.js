@@ -1686,3 +1686,43 @@ test("GaugeWorkspace computes the LSP project classpath once per server start", 
   assert.equal(callsAfterStartup, 1);
   assert.equal(execCalls.length, callsAfterStartup);
 });
+
+test("GaugeWorkspace ignores configuration changes outside the gauge section", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin", Plugins: [] }),
+  });
+  const { vscode } = createFakeVscode();
+  const configurationListeners = [];
+  let configurationReads = 0;
+  vscode.workspace.onDidChangeConfiguration = (listener) => {
+    configurationListeners.push(listener);
+    return { dispose() {} };
+  };
+  const originalGetConfiguration = vscode.workspace.getConfiguration;
+  vscode.workspace.getConfiguration = (section) => {
+    configurationReads += 1;
+    return originalGetConfiguration.call(vscode.workspace, section);
+  };
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: new GaugeClients(),
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const readsAfterStartup = configurationReads;
+  assert.equal(configurationListeners.length > 0, true);
+  configurationListeners[0]({
+    affectsConfiguration(section) {
+      return section === "editor";
+    },
+  });
+
+  assert.equal(configurationReads, readsAfterStartup);
+});

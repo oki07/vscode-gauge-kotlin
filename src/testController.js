@@ -760,10 +760,26 @@ class GaugeTestController {
     }
     const discovered = [];
     const discoveredIds = new Set();
-    for (const spec of specs || []) {
-      if (!spec || !spec.heading || !spec.executionIdentifier) {
-        continue;
+    const specEntries = (specs || []).filter((spec) => (
+      spec && spec.heading && spec.executionIdentifier
+    ));
+    const scenarioLists = await Promise.all(specEntries.map((spec) => {
+      let request;
+      try {
+        request = client.sendRequest(
+          SCENARIOS_REQUEST,
+          {
+            textDocument: { uri: spec.executionIdentifier },
+            position: createPosition(this.vscode, 1, 1),
+          },
+          createToken(this.vscode),
+        );
+      } catch (_error) {
+        return [];
       }
+      return Promise.resolve(request).catch(() => []);
+    }));
+    for (const [specIndex, spec] of specEntries.entries()) {
       const specId = spec.executionIdentifier;
       discoveredIds.add(specId);
       const specItem = this.upsertItem(
@@ -777,19 +793,7 @@ class GaugeTestController {
         discovered.push(specItem);
       }
 
-      let scenarios;
-      try {
-        scenarios = await client.sendRequest(
-          SCENARIOS_REQUEST,
-          {
-            textDocument: { uri: specId },
-            position: createPosition(this.vscode, 1, 1),
-          },
-          createToken(this.vscode),
-        );
-      } catch (_error) {
-        scenarios = [];
-      }
+      const scenarios = scenarioLists[specIndex];
       for (const scenario of scenarios || []) {
         if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
           continue;

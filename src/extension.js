@@ -24,7 +24,6 @@ const { DependencyStepIndex } = require("./dependencyStepIndex");
 const { GaugeFoldingRangeProvider } = require("./foldingRangeProvider");
 const { GaugeStepCodeActionProvider } = require("./stepCodeActions");
 const { GaugeClients } = require("./gaugeClients");
-const { GaugeEnterHandler } = require("./gaugeEnterHandler");
 const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
@@ -341,15 +340,6 @@ function registerGaugeLanguageConfiguration(context, vscode) {
   }
 }
 
-function registerGaugeEnterHandler(context, vscode, options) {
-  const GaugeEnterHandlerCtor = options.GaugeEnterHandler || GaugeEnterHandler;
-  const handler = new GaugeEnterHandlerCtor({ vscode, projectFactory: options.projectFactory });
-  const disposable = typeof handler.register === "function" ? handler.register() : undefined;
-  if (disposable) {
-    context.subscriptions.push(disposable);
-  }
-}
-
 function registerDebugConfigurationProvider(context, vscode) {
   if (!vscode.debug || typeof vscode.debug.registerDebugConfigurationProvider !== "function") {
     return;
@@ -426,6 +416,7 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
     || GaugeDynamicArgumentCompletionProvider;
   const provider = new CompletionProviderCtor({
     clientsMap: options.clientsMap,
+    documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -456,8 +447,9 @@ function registerCodeLensProvider(context, vscode, options) {
   }
   const CodeLensProviderCtor = options.GaugeCodeLensProvider || GaugeCodeLensProvider;
   const provider = new CodeLensProviderCtor({
-    vscode,
+    documentStore: options.documentStore,
     projectFactory: options.projectFactory,
+    vscode,
   });
   const disposable = vscode.languages.registerCodeLensProvider(
     [
@@ -540,6 +532,7 @@ function registerDocumentSymbolProvider(context, vscode, options) {
   }
   const DocumentSymbolProviderCtor = options.GaugeDocumentSymbolProvider || GaugeDocumentSymbolProvider;
   const provider = new DocumentSymbolProviderCtor({
+    documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -585,6 +578,7 @@ function registerStepDefinitionProvider(context, vscode, options) {
     || GaugeStepDefinitionProvider;
   const provider = options.stepDefinitionProvider || new StepDefinitionProviderCtor({
     dependencyStepIndex: options.dependencyStepIndex,
+    documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -631,6 +625,7 @@ function registerRenameProvider(context, vscode, options) {
   const provider = new RenameProviderCtor({
     cli: options.cli,
     clientsMap: options.clientsMap,
+    documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -698,11 +693,36 @@ function updateGaugeSemanticTokenColors(vscode) {
   }
   rules.gaugeComment = { foreground: gaugeConfig.get("comment") };
   const editorConfig = vscode.workspace.getConfiguration("editor");
+  const current = typeof editorConfig.get === "function"
+    ? editorConfig.get("semanticTokenColorCustomizations")
+    : undefined;
+  if (semanticTokenRulesEqual(current && current.rules, rules)) {
+    return undefined;
+  }
   return editorConfig.update(
     "semanticTokenColorCustomizations",
     { rules },
     vscode.ConfigurationTarget && vscode.ConfigurationTarget.Global,
   );
+}
+
+function semanticTokenRulesEqual(currentRules, desiredRules) {
+  if (!currentRules || typeof currentRules !== "object") {
+    return false;
+  }
+  const currentKeys = Object.keys(currentRules);
+  const desiredKeys = Object.keys(desiredRules);
+  if (currentKeys.length !== desiredKeys.length) {
+    return false;
+  }
+  return desiredKeys.every((key) => {
+    const current = currentRules[key];
+    const desired = desiredRules[key];
+    return current
+      && typeof current === "object"
+      && Object.keys(current).length === 1
+      && current.foreground === desired.foreground;
+  });
 }
 
 function registerSemanticTokenColorUpdates(context, vscode) {
@@ -869,17 +889,26 @@ function startGaugeServices(context, vscode, options = {}) {
   (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
   registerDebugConfigurationProvider(context, vscode);
   registerGaugeLanguageConfiguration(context, vscode);
-  registerGaugeEnterHandler(context, vscode, {
-    ...options,
+  const WorkspaceDocumentStoreCtor = options.WorkspaceDocumentStore || WorkspaceDocumentStore;
+  const documentStore = options.documentStore || new WorkspaceDocumentStoreCtor({
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
     projectFactory,
+    vscode,
   });
+  if (!options.documentStore) {
+    context.subscriptions.push(documentStore);
+  }
+  documentStore.start();
   registerDynamicArgumentCompletionProvider(context, vscode, {
     ...options,
     clientsMap,
+    documentStore,
     projectFactory,
   });
   registerCodeLensProvider(context, vscode, {
     ...options,
+    documentStore,
     projectFactory,
   });
   registerFoldingRangeProvider(context, vscode, {
@@ -893,30 +922,22 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerDocumentSymbolProvider(context, vscode, {
     ...options,
+    documentStore,
     projectFactory,
   });
   const stepDefinitionProvider = registerStepDefinitionProvider(context, vscode, {
     ...options,
     dependencyStepIndex,
+    documentStore,
     projectFactory,
   });
   registerRenameProvider(context, vscode, {
     ...options,
     clientsMap,
     cli,
+    documentStore,
     projectFactory,
   });
-  const WorkspaceDocumentStoreCtor = options.WorkspaceDocumentStore || WorkspaceDocumentStore;
-  const documentStore = options.documentStore || new WorkspaceDocumentStoreCtor({
-    fileSystem: options.fileSystem,
-    pathModule: options.pathModule,
-    projectFactory,
-    vscode,
-  });
-  if (!options.documentStore) {
-    context.subscriptions.push(documentStore);
-  }
-  documentStore.start();
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
     dependencyStepIndex,
@@ -959,6 +980,7 @@ function startGaugeServices(context, vscode, options = {}) {
     vscode,
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, {
+    documentStore,
     projectFactory,
     vscode,
   });

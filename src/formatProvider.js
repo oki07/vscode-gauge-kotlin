@@ -194,6 +194,19 @@ class GaugeFormatProvider {
     this.fileSystem = options.fileSystem || nodeFs;
     this.projectFactory = options.projectFactory;
     this.vscode = getVscode(options.vscode);
+    this.projectEnvironments = new Map();
+  }
+
+  cachedProjectEnvironment(project, cli) {
+    const root = projectRoot(project);
+    if (root && this.projectEnvironments.has(root)) {
+      return this.projectEnvironments.get(root);
+    }
+    const env = projectEnvironment(project, cli);
+    if (root && hasEnvironment(env)) {
+      this.projectEnvironments.set(root, env);
+    }
+    return env;
   }
 
   createCliIfNeeded() {
@@ -306,7 +319,7 @@ class GaugeFormatProvider {
 
     const processOptions = { cwd: root };
     const baseEnv = envWithGaugeHome(this.env || process.env, { vscode: this.vscode });
-    const projectEnv = projectEnvironment(project, cli);
+    const projectEnv = this.cachedProjectEnvironment(project, cli);
     if (this.env || baseEnv !== process.env || hasEnvironment(projectEnv)) {
       processOptions.env = {
         ...baseEnv,

@@ -589,3 +589,62 @@ test("GaugeFormatProvider ignores non-Gauge documents", async () => {
 
   assert.deepEqual(edits, []);
 });
+
+test("GaugeFormatProvider caches the project environment across format requests", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  let envCalls = 0;
+  const project = {
+    envs() {
+      envCalls += 1;
+      return { gauge_custom_classpath: "/classes" };
+    },
+    root() {
+      return "/workspace/gauge";
+    },
+  };
+  const command = {
+    spawn() {
+      const { EventEmitter } = require("node:events");
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => child.emit("close", 0));
+      return child;
+    },
+  };
+  const documentText = "# Example\n";
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand() {
+        return command;
+      },
+    },
+    env: { PATH: "/bin" },
+    fileSystem: {
+      readFileSync() {
+        return Buffer.from(documentText);
+      },
+    },
+    projectFactory: {
+      getProjectByFilepath() {
+        return project;
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+    getText() {
+      return documentText;
+    },
+  };
+
+  await provider.provideDocumentFormattingEdits(document);
+  await provider.provideDocumentFormattingEdits(document);
+
+  assert.equal(envCalls, 1);
+});

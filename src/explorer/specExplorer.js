@@ -257,7 +257,7 @@ class SpecNodeProvider {
       refreshMethod(document.uri);
     }));
 
-    const watcher = workspace.createFileSystemWatcher("**/*.{spec,md}", true, false, true);
+    const watcher = workspace.createFileSystemWatcher("**/*.{spec,md}", false, true, false);
     addDisposable(this.disposables, watcher);
     addDisposable(this.disposables, watcher.onDidCreate(refreshMethod));
     addDisposable(this.disposables, watcher.onDidDelete(refreshMethod));

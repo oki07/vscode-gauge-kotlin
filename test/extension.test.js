@@ -269,7 +269,12 @@ function createFakeVscode(overrides = {}) {
         return disposable;
       },
       onDidChangeTextDocument(listener) {
-        const disposable = { dispose() {} };
+        const disposable = {
+          disposeCalls: 0,
+          dispose() {
+            this.disposeCalls += 1;
+          },
+        };
         textDocumentListeners.push({ listener, disposable });
         return disposable;
       },
@@ -413,7 +418,6 @@ test("activation preserves Gauge editor language configuration", () => {
     GaugeState: DisposableOnly,
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
-    GaugeEnterHandler: RegisteringDisposable,
     GaugeStepDiagnosticsProvider: RegisteringDisposable,
     GaugeValidateDiagnosticsProvider: RegisteringDisposable,
     ProjectInitializer: DisposableOnly,
@@ -449,73 +453,6 @@ test("activation preserves Gauge editor language configuration", () => {
     assert.equal(entry.configuration.wordPattern.source, "^(?:[*])([^*].*)$");
     assert.equal(entry.configuration.wordPattern.flags, "g");
   }
-});
-
-test("activation passes the project factory to the Gauge enter handler", () => {
-  const extension = require("../src/extension");
-  const context = { subscriptions: [] };
-  const projectFactory = {
-    isGaugeProject() {
-      return true;
-    },
-    getGaugeRootFromFilePath() {
-      return "/workspace";
-    },
-  };
-  let enterHandlerOptions;
-  const { fakeVscode } = createFakeVscode({
-    activeTextEditor: {
-      document: {
-        languageId: "gauge",
-        uri: { fsPath: "/workspace/specs/example.spec" },
-      },
-    },
-    workspaceFolders: [
-      { uri: { fsPath: "/workspace" } },
-    ],
-  });
-
-  class FakeGaugeEnterHandler {
-    constructor(options) {
-      enterHandlerOptions = options;
-    }
-
-    register() {
-      return { dispose() {} };
-    }
-  }
-
-  extension.activate(context, fakeVscode, {
-    createCli() {
-      return {
-        isGaugeInstalled() {
-          return true;
-        },
-        isGaugeVersionGreaterOrEqual() {
-          return true;
-        },
-      };
-    },
-    semanticTokensLegend: {},
-    showWelcomeNotification() {},
-    GaugeEnterHandler: FakeGaugeEnterHandler,
-    GaugeWorkspace: class GaugeWorkspace {
-      constructor() {}
-      dispose() {}
-    },
-    ConfigProvider: class ConfigProvider {
-      constructor() {}
-      dispose() {}
-    },
-    SpecNodeProvider: class SpecNodeProvider {
-      constructor() {}
-      dispose() {}
-    },
-    projectFactory,
-  });
-
-  assert.equal(enterHandlerOptions.vscode, fakeVscode);
-  assert.equal(enterHandlerOptions.projectFactory, projectFactory);
 });
 
 test("activation registers Gauge reference providers", () => {
@@ -2060,7 +1997,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(created.validateDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
-  assert.equal(context.subscriptions.includes(textDocumentListeners[0].disposable), true);
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+  assert.equal(
+    textDocumentListeners.every((entry) => entry.disposable.disposeCalls > 0),
+    true,
+    "every text document listener must be disposed through the subscriptions",
+  );
   assert.equal(debugProviders[0].type, "gauge");
   assert.throws(
     () => debugProviders[0].provider.resolveDebugConfiguration(),
@@ -3230,7 +3176,6 @@ test("activation propagates the default project factory to Gauge providers", () 
     GaugeClients: FakeGaugeClients,
     GaugeCodeLensProvider: FakeProvider,
     GaugeDocumentSymbolProvider: FakeProvider,
-    GaugeEnterHandler: FakeProvider,
     GaugeFoldingRangeProvider: FakeFoldingRangeProvider,
     GaugeFormatProvider: FakeProvider,
     GaugeRenameProvider: FakeProvider,
@@ -3356,4 +3301,146 @@ test("activation shares a single CLI probe across services and execution", () =>
   const executorCli = executionOptions.createCli({ vscode: fakeVscode });
   assert.equal(executorCli, cli);
   assert.equal(probes, 1);
+});
+
+test("activation does not save Gauge documents when Enter is typed", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const { fakeVscode, textDocumentListeners } = createFakeVscode({
+    activeTextEditor: {
+      document: {
+        languageId: "gauge",
+        uri: { fsPath: "/workspace/specs/example.spec" },
+      },
+    },
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    semanticTokensLegend: {},
+    showWelcomeNotification() {},
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: class FakeConfigProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+    },
+  });
+
+  let saves = 0;
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/specs/example.spec" },
+    getText() {
+      return "# Example\n";
+    },
+    save() {
+      saves += 1;
+      return Promise.resolve(true);
+    },
+  };
+  for (const listener of textDocumentListeners) {
+    if (typeof listener.listener === "function") {
+      listener.listener({ contentChanges: [{ text: "\n" }], document });
+    }
+  }
+
+  assert.equal(saves, 0);
+});
+
+test("activation skips the global semantic color write when rules are unchanged", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const { editorUpdates, fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+
+  const desiredRules = {};
+  for (const key of [
+    "argument", "stepMarker", "step", "dynamicArgument", "table", "tableHeader",
+    "tableHeaderSeparator", "tableBorder", "tableKeyword", "tableFileValue",
+    "tagKeyword", "tagValue", "specification", "scenario", "disabledStep",
+  ]) {
+    desiredRules[key] = { foreground: undefined };
+  }
+  desiredRules.gaugeComment = { foreground: undefined };
+  fakeVscode.workspace.getConfiguration = (section) => {
+    if (section === "editor") {
+      return {
+        get(key) {
+          if (key === "semanticTokenColorCustomizations") {
+            return { rules: desiredRules };
+          }
+          return undefined;
+        },
+        update(key, value, target) {
+          editorUpdates.push({ key, value, target });
+          return Promise.resolve(undefined);
+        },
+      };
+    }
+    return {
+      get() {
+        return undefined;
+      },
+      update() {
+        return Promise.resolve(undefined);
+      },
+    };
+  };
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    semanticTokensLegend: {},
+    showWelcomeNotification() {},
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    ConfigProvider: class FakeConfigProvider {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+    },
+  });
+
+  assert.deepEqual(editorUpdates, []);
 });

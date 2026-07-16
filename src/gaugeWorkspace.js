@@ -378,9 +378,16 @@ class GaugeWorkspace {
     if (!this.vscode.workspace || typeof this.vscode.workspace.onDidChangeConfiguration !== "function") {
       return;
     }
-    const disposable = this.vscode.workspace.onDidChangeConfiguration(
-      () => this.onConfigurationChanged(),
-    );
+    const disposable = this.vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        event
+        && typeof event.affectsConfiguration === "function"
+        && !event.affectsConfiguration("gauge")
+      ) {
+        return undefined;
+      }
+      return this.onConfigurationChanged();
+    });
     if (disposable) {
       this.disposables.push(disposable);
     }
