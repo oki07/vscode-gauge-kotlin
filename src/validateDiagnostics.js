@@ -182,6 +182,19 @@ function documentLineText(document, line) {
   return "";
 }
 
+// Matches the Gauge daemon's sentinel range width for files that are not
+// open in the editor, where the real line length is unknown.
+const CLOSED_FILE_RANGE_END = 10000;
+
+function fallbackDiagnosticRange(vscode, lineNumber) {
+  const line = Math.max(0, lineNumber - 1);
+  return createRange(
+    vscode,
+    { line, character: 0 },
+    { line, character: CLOSED_FILE_RANGE_END },
+  );
+}
+
 function diagnosticRange(vscode, document, lineNumber) {
   const line = Math.max(0, lineNumber - 1);
   const text = documentLineText(document, line);
@@ -213,6 +226,12 @@ class GaugeValidateDiagnosticsProvider {
     this.vscode = getVscode(options.vscode);
     this.pendingRefresh = undefined;
     this.projectEnvironments = new Map();
+    this.refreshDelayMs = options.refreshDelayMs === undefined ? 300 : options.refreshDelayMs;
+    this.pendingRoots = new Set();
+    this.refreshTimer = undefined;
+    this.pendingRefreshPromise = undefined;
+    this.activeRootRefreshes = new Map();
+    this.lastClosedErrorFiles = new Map();
   }
 
   shouldDiagnose(document) {
@@ -553,6 +572,132 @@ class GaugeValidateDiagnosticsProvider {
     return refresh;
   }
 
+  rootForDocument(document) {
+    const project = this.projectForDocument(document);
+    const root = projectRoot(project);
+    return root || undefined;
+  }
+
+  projectForRoot(root) {
+    if (!root || !this.projectFactory) {
+      return undefined;
+    }
+    try {
+      if (typeof this.projectFactory.get === "function") {
+        return this.projectFactory.get(root);
+      }
+    } catch (_error) {
+      return undefined;
+    }
+    return {
+      envs() {
+        return {};
+      },
+      root() {
+        return root;
+      },
+    };
+  }
+
+  scheduleRootRefresh(collection, root) {
+    if (!root) {
+      return this.pendingRefreshPromise || Promise.resolve();
+    }
+    this.pendingRoots.add(root);
+    if (this.refreshTimer !== undefined) {
+      return this.pendingRefreshPromise;
+    }
+    this.pendingRefreshPromise = new Promise((resolve) => {
+      const run = () => {
+        this.refreshTimer = undefined;
+        const roots = [...this.pendingRoots];
+        this.pendingRoots.clear();
+        Promise.all(roots.map((pendingRoot) => this.refreshRoot(collection, pendingRoot)))
+          .then(() => resolve(), () => resolve());
+      };
+      this.refreshTimer = setTimeout(run, this.refreshDelayMs);
+      if (this.refreshTimer && typeof this.refreshTimer.unref === "function") {
+        this.refreshTimer.unref();
+      }
+    });
+    return this.pendingRefreshPromise;
+  }
+
+  waitForPendingRefresh() {
+    return this.pendingRefreshPromise || Promise.resolve();
+  }
+
+  refreshRoot(collection, root) {
+    if (this.activeRootRefreshes.has(root)) {
+      return this.activeRootRefreshes.get(root);
+    }
+    const refresh = this.performRootRefresh(collection, root).finally(() => {
+      if (this.activeRootRefreshes.get(root) === refresh) {
+        this.activeRootRefreshes.delete(root);
+      }
+    });
+    this.activeRootRefreshes.set(root, refresh);
+    return refresh;
+  }
+
+  async performRootRefresh(collection, root) {
+    const project = this.projectForRoot(root);
+    if (!project) {
+      return;
+    }
+    const errors = await this.runValidateAsync(project);
+    this.applyRootDiagnostics(collection, root, errors);
+  }
+
+  applyRootDiagnostics(collection, root, errors) {
+    const workspace = this.vscode.workspace || {};
+    const openFiles = new Set();
+    for (const document of workspace.textDocuments || []) {
+      if (!this.shouldDiagnose(document) || this.rootForDocument(document) !== root) {
+        continue;
+      }
+      openFiles.add(normalizeFile(this.path, root, documentPath(document)));
+      if (typeof collection.set === "function") {
+        collection.set(document.uri, this.diagnosticsForDocument(document, errors, root));
+      }
+    }
+
+    const uriFactory = this.vscode.Uri;
+    if (!uriFactory || typeof uriFactory.file !== "function") {
+      return;
+    }
+    const closedFiles = new Map();
+    for (const error of errors) {
+      const file = normalizeFile(this.path, root, error.fileName);
+      if (!file || openFiles.has(file)) {
+        continue;
+      }
+      if (!closedFiles.has(file)) {
+        closedFiles.set(file, []);
+      }
+      closedFiles.get(file).push(createDiagnostic(
+        this.vscode,
+        fallbackDiagnosticRange(this.vscode, error.lineNumber),
+        validationMessage(error),
+        error,
+      ));
+    }
+    if (typeof collection.set === "function") {
+      for (const [file, diagnostics] of closedFiles) {
+        collection.set(uriFactory.file(file), diagnostics);
+      }
+    }
+    const previousClosedFiles = this.lastClosedErrorFiles.get(root) || new Set();
+    if (typeof collection.delete === "function") {
+      for (const file of previousClosedFiles) {
+        if (!closedFiles.has(file) && !openFiles.has(file)) {
+          collection.delete(uriFactory.file(file));
+        }
+      }
+    }
+    this.lastClosedErrorFiles.set(root, new Set(closedFiles.keys()));
+  }
+
   register() {
     if (!this.vscode.languages || typeof this.vscode.languages.createDiagnosticCollection !== "function") {
       return { dispose() {} };
@@ -569,19 +714,32 @@ class GaugeValidateDiagnosticsProvider {
         }
       }
     };
+    const scheduleForDocument = (document) => {
+      if (!this.shouldDiagnose(document)) {
+        return;
+      }
+      this.scheduleRootRefresh(collection, this.rootForDocument(document));
+    };
 
-    this.refreshDocuments(collection);
-    registerListener("onDidOpenTextDocument", () => this.refreshDocuments(collection));
-    registerListener("onDidSaveTextDocument", () => this.refreshDocuments(collection));
+    for (const document of workspace.textDocuments || []) {
+      scheduleForDocument(document);
+    }
+    registerListener("onDidOpenTextDocument", scheduleForDocument);
+    registerListener("onDidSaveTextDocument", scheduleForDocument);
     registerListener("onDidCloseTextDocument", (document) => {
       if (document && document.uri && typeof collection.delete === "function") {
         collection.delete(document.uri);
       }
-      this.refreshDocuments(collection);
     });
 
+    const provider = this;
     return {
       dispose() {
+        if (provider.refreshTimer !== undefined) {
+          clearTimeout(provider.refreshTimer);
+          provider.refreshTimer = undefined;
+          provider.pendingRoots.clear();
+        }
         for (const disposable of disposables) {
           if (disposable && typeof disposable.dispose === "function") {
             disposable.dispose();

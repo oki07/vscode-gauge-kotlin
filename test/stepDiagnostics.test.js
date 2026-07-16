@@ -6960,7 +6960,7 @@ test("GaugeStepDiagnosticsProvider uses Java constants in Kotlin Step annotation
   );
 });
 
-test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", () => {
+test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const opened = [];
   const changed = [];
@@ -7003,20 +7003,24 @@ test("GaugeStepDiagnosticsProvider updates and clears the diagnostic collection"
       },
     },
   };
-  const provider = new GaugeStepDiagnosticsProvider({ vscode });
+  const provider = new GaugeStepDiagnosticsProvider({ refreshDelayMs: 0, vscode });
 
   const disposable = provider.register();
+  await provider.waitForPendingRefresh();
   const changedDocument = createDocument("@Step(\"A <value>\")\nfun a(value: String) {}");
   vscode.workspace.textDocuments = [changedDocument];
   changed[0]({ document: changedDocument });
+  await provider.waitForPendingRefresh();
   vscode.workspace.textDocuments = [];
   closed[0](changedDocument);
   disposable.dispose();
 
   assert.equal(sets[0].diagnostics.length, 1);
-  assert.deepEqual(sets[1].diagnostics, []);
+  assert.deepEqual(sets[sets.length - 1].diagnostics, []);
   assert.deepEqual(deletes, [document.uri]);
-  assert.deepEqual(disposals, ["gauge-kotlin", "open", "change", "close"]);
+  for (const expected of ["gauge-kotlin", "open", "change", "close"]) {
+    assert.equal(disposals.includes(expected), true, `missing disposal: ${expected}`);
+  }
 });
 
 test("GaugeStepDiagnosticsProvider resolves unopened workspace Kotlin constants during refresh", async () => {
@@ -7122,4 +7126,228 @@ test("GaugeStepDiagnosticsProvider reuses an in-flight workspace scan during ref
 
   finishFindFiles();
   await Promise.all([firstRefresh, secondRefresh]);
+});
+
+function createSchedulerFakeVscode(options = {}) {
+  const state = {
+    findFilesCalls: [],
+    listeners: { change: [], close: [], open: [] },
+    openTextDocumentCalls: 0,
+    sets: [],
+    watchers: [],
+  };
+  const vscode = {
+    ...createFakeVscode(),
+    languages: {
+      createDiagnosticCollection(name) {
+        return {
+          name,
+          set(uri, diagnostics) {
+            state.sets.push({ diagnostics, uri });
+          },
+          delete() {},
+          dispose() {},
+        };
+      },
+    },
+    workspace: {
+      textDocuments: options.textDocuments || [],
+      async findFiles(pattern) {
+        state.findFilesCalls.push(pattern);
+        return (options.files || []).map((file) => ({ fsPath: file }));
+      },
+      async openTextDocument(uri) {
+        state.openTextDocumentCalls += 1;
+        return { getText: () => "", languageId: "plaintext", uri };
+      },
+      onDidOpenTextDocument(listener) {
+        state.listeners.open.push(listener);
+        return { dispose() {} };
+      },
+      onDidChangeTextDocument(listener) {
+        state.listeners.change.push(listener);
+        return { dispose() {} };
+      },
+      onDidCloseTextDocument(listener) {
+        state.listeners.close.push(listener);
+        return { dispose() {} };
+      },
+      createFileSystemWatcher() {
+        const watcher = {
+          changeListeners: [],
+          onDidCreate() { return { dispose() {} }; },
+          onDidChange(listener) {
+            watcher.changeListeners.push(listener);
+            return { dispose() {} };
+          },
+          onDidDelete() { return { dispose() {} }; },
+          dispose() {},
+        };
+        state.watchers.push(watcher);
+        return watcher;
+      },
+    },
+  };
+  return { state, vscode };
+}
+
+function createSchedulerFileSystem(files) {
+  return {
+    files,
+    promises: {
+      async readFile(file) {
+        if (!Object.prototype.hasOwnProperty.call(files, file)) {
+          throw new Error(`ENOENT: ${file}`);
+        }
+        return files[file];
+      },
+    },
+  };
+}
+
+test("GaugeStepDiagnosticsProvider register does not rescan the workspace on change events", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = {
+    ...createDocument("# Spec\n## Scenario\n* missing step", "gauge", "/ws/specs/a.spec"),
+    version: 1,
+  };
+  const { state, vscode } = createSchedulerFakeVscode({
+    files: ["/ws/specs/a.spec"],
+    textDocuments: [specDocument],
+  });
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: createSchedulerFileSystem({ "/ws/specs/a.spec": "# Spec\n" }),
+    refreshDelayMs: 0,
+    vscode,
+  });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  await provider.waitForPendingRefresh();
+  const scanCallsAfterStartup = state.findFilesCalls.length;
+
+  specDocument.version = 2;
+  state.listeners.change[0]({ document: specDocument });
+  await provider.waitForPendingRefresh();
+  specDocument.version = 3;
+  state.listeners.change[0]({ document: specDocument });
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  assert.equal(scanCallsAfterStartup <= 1, true);
+  assert.equal(state.findFilesCalls.length, scanCallsAfterStartup);
+  assert.equal(state.openTextDocumentCalls, 0);
+});
+
+test("GaugeStepDiagnosticsProvider coalesces change bursts into one refresh", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const specDocument = {
+    ...createDocument("# Spec\n## Scenario\n* missing step", "gauge", "/ws/specs/a.spec"),
+    version: 1,
+  };
+  const { state, vscode } = createSchedulerFakeVscode({
+    files: [],
+    textDocuments: [specDocument],
+  });
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: createSchedulerFileSystem({}),
+    refreshDelayMs: 20,
+    vscode,
+  });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  await provider.waitForPendingRefresh();
+  state.sets.length = 0;
+
+  specDocument.version = 2;
+  state.listeners.change[0]({ document: specDocument });
+  specDocument.version = 3;
+  state.listeners.change[0]({ document: specDocument });
+  specDocument.version = 4;
+  state.listeners.change[0]({ document: specDocument });
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  const specSets = state.sets.filter((entry) => entry.uri === specDocument.uri);
+  assert.equal(specSets.length, 1);
+});
+
+test("GaugeStepDiagnosticsProvider re-diagnoses only the changed spec document", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const changedSpec = {
+    ...createDocument("# Spec A\n## Scenario\n* step a", "gauge", "/ws/specs/a.spec"),
+    version: 1,
+  };
+  const unrelatedSpec = {
+    ...createDocument("# Spec B\n## Scenario\n* step b", "gauge", "/ws/specs/b.spec"),
+    version: 1,
+  };
+  const { state, vscode } = createSchedulerFakeVscode({
+    files: [],
+    textDocuments: [changedSpec, unrelatedSpec],
+  });
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: createSchedulerFileSystem({}),
+    refreshDelayMs: 0,
+    vscode,
+  });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  await provider.waitForPendingRefresh();
+  state.sets.length = 0;
+
+  changedSpec.version = 2;
+  state.listeners.change[0]({ document: changedSpec });
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  assert.equal(state.sets.some((entry) => entry.uri === changedSpec.uri), true);
+  assert.equal(state.sets.some((entry) => entry.uri === unrelatedSpec.uri), false);
+});
+
+test("GaugeStepDiagnosticsProvider refreshes gauge documents after watcher Kotlin changes", async () => {
+  const { GaugeStepDiagnosticsProvider, UNDEFINED_STEP_MESSAGE } = require("../src/stepDiagnostics");
+  const specDocument = {
+    ...createDocument("# Spec\n## Scenario\n* say hello", "gauge", "/ws/specs/a.spec"),
+    version: 1,
+  };
+  const files = { "/ws/src/Steps.kt": "package steps\n" };
+  const { state, vscode } = createSchedulerFakeVscode({
+    files: Object.keys(files),
+    textDocuments: [specDocument],
+  });
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: createSchedulerFileSystem(files),
+    refreshDelayMs: 0,
+    vscode,
+  });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  await provider.waitForPendingRefresh();
+  const initialMessages = state.sets
+    .filter((entry) => entry.uri === specDocument.uri)
+    .flatMap((entry) => entry.diagnostics.map((diagnostic) => diagnostic.message));
+  assert.equal(initialMessages.includes(UNDEFINED_STEP_MESSAGE), true);
+  state.sets.length = 0;
+
+  files["/ws/src/Steps.kt"] = [
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"say hello\")",
+    "fun sayHello() {}",
+  ].join("\n");
+  await state.watchers[0].changeListeners[0]({ fsPath: "/ws/src/Steps.kt" });
+  await provider.waitForPendingRefresh();
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  const refreshed = state.sets.filter((entry) => entry.uri === specDocument.uri);
+  assert.equal(refreshed.length > 0, true);
+  const lastDiagnostics = refreshed[refreshed.length - 1].diagnostics;
+  assert.deepEqual(lastDiagnostics.map((diagnostic) => diagnostic.message), []);
 });

@@ -7983,7 +7983,12 @@ function uriPath(uri) {
   return uri && uri.fsPath;
 }
 
-const WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE = "__gaugeStepImplementationScanComplete";
+const {
+  WorkspaceDocumentStore,
+  isWorkspaceStepImplementationScanComplete,
+  markWorkspaceStepImplementationScanComplete,
+} = require("./workspaceDocumentStore");
+
 const JAVA_FILE_PATTERN = /\.java$/i;
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
@@ -7993,22 +7998,8 @@ const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 const SPEC_WORKSPACE_PATTERN = "**/*.spec";
 const MARKDOWN_SPEC_WORKSPACE_PATTERN = "**/*.md";
-
-function markWorkspaceStepImplementationScanComplete(documents) {
-  Object.defineProperty(documents, WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE, {
-    configurable: true,
-    enumerable: false,
-    value: true,
-  });
-  return documents;
-}
-
-function isWorkspaceStepImplementationScanComplete(workspaceDocuments) {
-  return Boolean(
-    workspaceDocuments
-    && workspaceDocuments[WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE],
-  );
-}
+const IMPLEMENTATION_DATA_FILE_PATTERN = /\.(?:kts?|java|cpt)$/i;
+const SPEC_DATA_FILE_PATTERN = /\.(?:spec|md)$/i;
 
 // Identify Kotlin sources by file extension rather than relying on the editor
 // languageId. VS Code ships no built-in Kotlin language, so without a separate
@@ -8078,6 +8069,73 @@ function isGaugeStepSourceDocument(candidate) {
   return isGaugeSpecDocument(candidate) || isConceptDocument(candidate);
 }
 
+const TYPE_ALIAS_TOKEN_PATTERN = /\btypealias\b/;
+
+function computeCandidateAnalysis(candidate) {
+  const text = candidate.getText();
+  const candidateIsKotlin = isKotlinDocument(candidate);
+  const candidateIsJava = isJavaDocument(candidate);
+  const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const packageName = candidateIsJava
+    ? collectJavaPackageName(text, ignoredRanges)
+    : collectKotlinPackageName(text, ignoredRanges);
+  return {
+    aliasDeclarationNames: candidateIsKotlin && packageName !== undefined
+      ? collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges)
+      : undefined,
+    classifiers: candidateIsKotlin ? localClassifierNames(text, ignoredRanges) : undefined,
+    collected: packageName !== undefined && (candidateIsKotlin || candidateIsJava)
+      ? (candidateIsJava ? collectJavaStringConstants(text) : collectStringConstants(text))
+      : undefined,
+    hasTypeAliases: candidateIsKotlin && TYPE_ALIAS_TOKEN_PATTERN.test(text),
+    ignoredRanges,
+    isJava: candidateIsJava,
+    isKotlin: candidateIsKotlin,
+    packageName,
+    text,
+  };
+}
+
+function mapContentEquals(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (!(left instanceof Map) || !(right instanceof Map) || left.size !== right.size) {
+    return false;
+  }
+  for (const [key, value] of left) {
+    if (!right.has(key) || right.get(key) !== value) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function setContentEquals(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (!(left instanceof Set) || !(right instanceof Set) || left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function workspaceConstantsEquals(left, right) {
+  return Boolean(left && right)
+    && mapContentEquals(left.constants, right.constants)
+    && mapContentEquals(left.constantTypes, right.constantTypes)
+    && mapContentEquals(left.samePackageConstants, right.samePackageConstants)
+    && mapContentEquals(left.samePackageConstantTypes, right.samePackageConstantTypes)
+    && setContentEquals(left.samePackageClassifiers, right.samePackageClassifiers)
+    && mapContentEquals(left.stepAliases, right.stepAliases);
+}
+
 class GaugeStepDiagnosticsProvider {
   constructor(options = {}) {
     this.dependencyStepIndex = options.dependencyStepIndex;
@@ -8086,6 +8144,104 @@ class GaugeStepDiagnosticsProvider {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.pendingWorkspaceDocuments = undefined;
+    this.documentStore = options.documentStore;
+    this.ownedStore = undefined;
+    this.refreshDelayMs = options.refreshDelayMs === undefined ? 150 : options.refreshDelayMs;
+    this.analysisCache = new WeakMap();
+    this.stepFunctionsCache = new WeakMap();
+    this.workspaceMemos = new WeakMap();
+    this.storeConstantsCache = new Map();
+    this.storeTemplatesCache = new Map();
+    this.storeDocStringsCache = new Map();
+    this.lastDiagnosisKeys = new Map();
+    this.rootGenerations = new Map();
+    this.fullGeneration = 0;
+    this.pendingChanges = undefined;
+    this.refreshTimer = undefined;
+    this.pendingRefreshPromise = undefined;
+    this.lastDependencyGeneration = undefined;
+  }
+
+  activeDocumentStore() {
+    return this.documentStore || this.ownedStore;
+  }
+
+  storeFor(workspaceDocuments) {
+    const store = this.activeDocumentStore();
+    return store
+      && Array.isArray(workspaceDocuments)
+      && store.cachedDocuments === workspaceDocuments
+      ? store
+      : undefined;
+  }
+
+  rootGenerationsFor(rootKey) {
+    let entry = this.rootGenerations.get(rootKey || "");
+    if (!entry) {
+      entry = { impl: 0, spec: 0 };
+      this.rootGenerations.set(rootKey || "", entry);
+    }
+    return entry;
+  }
+
+  bumpGenerationsForChange(file) {
+    if (!file) {
+      this.fullGeneration += 1;
+      return;
+    }
+    const entry = this.rootGenerationsFor(this.rootForFile(file) || "");
+    if (IMPLEMENTATION_DATA_FILE_PATTERN.test(file)) {
+      entry.impl += 1;
+    } else if (SPEC_DATA_FILE_PATTERN.test(file)) {
+      entry.spec += 1;
+    }
+  }
+
+  dependencyGeneration() {
+    return this.dependencyStepIndex && typeof this.dependencyStepIndex.generation === "number"
+      ? this.dependencyStepIndex.generation
+      : 0;
+  }
+
+  candidateAnalysis(candidate) {
+    const version = candidate.version;
+    if (version !== undefined) {
+      const cached = this.analysisCache.get(candidate);
+      if (cached && cached.version === version) {
+        return cached.value;
+      }
+    }
+    const value = computeCandidateAnalysis(candidate);
+    if (version !== undefined) {
+      this.analysisCache.set(candidate, { value, version });
+    }
+    return value;
+  }
+
+  stepFunctionsFor(document, externalConstants) {
+    const version = document.version;
+    if (version === undefined) {
+      return findStepFunctionsForDocument(document, externalConstants);
+    }
+    const cached = this.stepFunctionsCache.get(document);
+    if (cached && cached.version === version && cached.constants === externalConstants) {
+      return cached.value;
+    }
+    const value = findStepFunctionsForDocument(document, externalConstants);
+    this.stepFunctionsCache.set(document, { constants: externalConstants, value, version });
+    return value;
+  }
+
+  memosFor(workspaceDocuments) {
+    if (!Array.isArray(workspaceDocuments)) {
+      return undefined;
+    }
+    let memos = this.workspaceMemos.get(workspaceDocuments);
+    if (!memos || memos.size !== workspaceDocuments.length) {
+      memos = { size: workspaceDocuments.length };
+      this.workspaceMemos.set(workspaceDocuments, memos);
+    }
+    return memos;
   }
 
   isGaugeProjectRoot(root) {
@@ -8159,6 +8315,49 @@ class GaugeStepDiagnosticsProvider {
   }
 
   collectWorkspaceConstants(document, workspaceDocuments) {
+    const documentKey = documentPath(document);
+    if (!documentKey) {
+      return this.computeWorkspaceConstants(document, workspaceDocuments);
+    }
+    const store = this.storeFor(workspaceDocuments);
+    if (store) {
+      const rootKey = this.gaugeProjectRoot(document) || "";
+      const generations = this.rootGenerationsFor(rootKey);
+      const cacheKey = `${this.fullGeneration}:${generations.impl}`;
+      const cached = this.storeConstantsCache.get(documentKey);
+      if (cached && cached.cacheKey === cacheKey && cached.version === document.version) {
+        return cached.value;
+      }
+      const value = this.computeWorkspaceConstants(document, workspaceDocuments);
+      if (cached && workspaceConstantsEquals(cached.value, value)) {
+        cached.cacheKey = cacheKey;
+        cached.version = document.version;
+        return cached.value;
+      }
+      this.storeConstantsCache.set(documentKey, {
+        cacheKey,
+        contentVersion: cached ? cached.contentVersion + 1 : 0,
+        value,
+        version: document.version,
+      });
+      return value;
+    }
+    const memos = this.memosFor(workspaceDocuments);
+    if (!memos) {
+      return this.computeWorkspaceConstants(document, workspaceDocuments);
+    }
+    if (!memos.constantsByDoc) {
+      memos.constantsByDoc = new Map();
+    }
+    if (memos.constantsByDoc.has(documentKey)) {
+      return memos.constantsByDoc.get(documentKey);
+    }
+    const value = this.computeWorkspaceConstants(document, workspaceDocuments);
+    memos.constantsByDoc.set(documentKey, value);
+    return value;
+  }
+
+  computeWorkspaceConstants(document, workspaceDocuments) {
     const workspace = this.vscode.workspace || {};
     const constants = new Map();
     const constantTypes = new Map();
@@ -8176,11 +8375,8 @@ class GaugeStepDiagnosticsProvider {
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
     const activeDocumentPath = documentPath(document);
     const activeProjectRoot = this.gaugeProjectRoot(document);
-    const activeText = document.getText();
-    const activeIgnoredRanges = collectIgnoredKotlinRanges(activeText);
-    const activePackageName = isJavaDocument(document)
-      ? collectJavaPackageName(activeText, activeIgnoredRanges)
-      : collectKotlinPackageName(activeText, activeIgnoredRanges);
+    const activeAnalysis = this.candidateAnalysis(document);
+    const activePackageName = activeAnalysis.packageName;
     const addPackageClassifiers = (packageName, names) => {
       if (packageName === undefined || names.size === 0) {
         return;
@@ -8194,7 +8390,10 @@ class GaugeStepDiagnosticsProvider {
       }
     };
     if (activePackageName !== undefined && isKotlinDocument(document)) {
-      addPackageClassifiers(activePackageName, localClassifierNames(activeText, activeIgnoredRanges));
+      addPackageClassifiers(
+        activePackageName,
+        activeAnalysis.classifiers || localClassifierNames(activeAnalysis.text, activeAnalysis.ignoredRanges),
+      );
     }
     for (const candidate of textDocuments) {
       const candidatePath = documentPath(candidate);
@@ -8211,17 +8410,14 @@ class GaugeStepDiagnosticsProvider {
         continue;
       }
 
-      const text = candidate.getText();
-      const ignoredRanges = collectIgnoredKotlinRanges(text);
-      const packageName = candidateIsJava
-        ? collectJavaPackageName(text, ignoredRanges)
-        : collectKotlinPackageName(text, ignoredRanges);
+      const analysis = this.candidateAnalysis(candidate);
+      const { ignoredRanges, packageName, text } = analysis;
       if (packageName === undefined) {
         continue;
       }
 
       if (candidateIsKotlin) {
-        const candidateClassifiers = localClassifierNames(text, ignoredRanges);
+        const candidateClassifiers = analysis.classifiers;
         addPackageClassifiers(packageName, candidateClassifiers);
         if (activePackageName === packageName) {
           for (const name of candidateClassifiers) {
@@ -8229,8 +8425,10 @@ class GaugeStepDiagnosticsProvider {
           }
         }
 
-        stepAliasDocuments.push({ ignoredRanges, packageName, text });
-        for (const name of collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges)) {
+        if (analysis.hasTypeAliases) {
+          stepAliasDocuments.push({ ignoredRanges, packageName, text });
+        }
+        for (const name of analysis.aliasDeclarationNames || []) {
           if (ambiguousWorkspaceStepAliases.has(name)) {
             continue;
           }
@@ -8243,9 +8441,7 @@ class GaugeStepDiagnosticsProvider {
         }
       }
 
-      const collected = candidateIsJava
-        ? collectJavaStringConstants(text)
-        : collectStringConstants(text);
+      const collected = analysis.collected;
       const packagePrefix = `${packageName}.`;
       for (const [name, value] of collected.constants) {
         if (!name.startsWith(packagePrefix) || ambiguousWorkspaceConstants.has(name)) {
@@ -8429,7 +8625,7 @@ class GaugeStepDiagnosticsProvider {
     const docStringSteps = isStepImplementationDocument(document)
       ? this.docStringStepTemplates(document, workspaceDocuments)
       : new Set();
-    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
+    for (const entry of this.stepFunctionsFor(document, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart);
       const end = positionAt(text, entry.parameterEnd);
@@ -8508,6 +8704,39 @@ class GaugeStepDiagnosticsProvider {
   }
 
   docStringStepTemplates(document, workspaceDocuments) {
+    const entry = this.docStringCacheEntry(document, workspaceDocuments);
+    return entry
+      ? entry.value
+      : this.computeDocStringStepTemplates(document, workspaceDocuments);
+  }
+
+  docStringCacheEntry(document, workspaceDocuments) {
+    const store = this.storeFor(workspaceDocuments);
+    if (!store) {
+      return undefined;
+    }
+    const rootKey = this.gaugeProjectRoot(document) || "";
+    const generations = this.rootGenerationsFor(rootKey);
+    const cacheKey = `${this.fullGeneration}:${generations.spec}`;
+    const cached = this.storeDocStringsCache.get(rootKey);
+    if (cached && cached.cacheKey === cacheKey) {
+      return cached;
+    }
+    const value = this.computeDocStringStepTemplates(document, workspaceDocuments);
+    if (cached && setContentEquals(cached.value, value)) {
+      cached.cacheKey = cacheKey;
+      return cached;
+    }
+    const entry = {
+      cacheKey,
+      contentVersion: cached ? cached.contentVersion + 1 : 0,
+      value,
+    };
+    this.storeDocStringsCache.set(rootKey, entry);
+    return entry;
+  }
+
+  computeDocStringStepTemplates(document, workspaceDocuments) {
     const templates = new Set();
     for (const candidate of this.gaugeSpecDocuments(document, workspaceDocuments)) {
       for (const template of findDocStringStepTemplates(candidate.getText())) {
@@ -8518,6 +8747,43 @@ class GaugeStepDiagnosticsProvider {
   }
 
   implementedStepTemplates(document, workspaceDocuments) {
+    const entry = this.implementedTemplatesCacheEntry(document, workspaceDocuments);
+    return entry
+      ? entry.value
+      : this.computeImplementedStepTemplates(document, workspaceDocuments);
+  }
+
+  implementedTemplatesCacheEntry(document, workspaceDocuments) {
+    const store = this.storeFor(workspaceDocuments);
+    if (!store || !isGaugeStepSourceDocument(document)) {
+      return undefined;
+    }
+    const rootKey = this.gaugeProjectRoot(document) || "";
+    const generations = this.rootGenerationsFor(rootKey);
+    const cacheKey = `${this.fullGeneration}:${generations.impl}:${this.dependencyGeneration()}`;
+    const cached = this.storeTemplatesCache.get(rootKey);
+    if (cached && cached.cacheKey === cacheKey) {
+      return cached;
+    }
+    const value = this.computeImplementedStepTemplates(document, workspaceDocuments);
+    if (
+      cached
+      && (cached.value instanceof Set) === (value instanceof Set)
+      && (value instanceof Set ? setContentEquals(cached.value, value) : cached.value === value)
+    ) {
+      cached.cacheKey = cacheKey;
+      return cached;
+    }
+    const entry = {
+      cacheKey,
+      contentVersion: cached ? cached.contentVersion + 1 : 0,
+      value,
+    };
+    this.storeTemplatesCache.set(rootKey, entry);
+    return entry;
+  }
+
+  computeImplementedStepTemplates(document, workspaceDocuments) {
     const implementationDocuments = this.stepImplementationDocuments(document, workspaceDocuments);
     const conceptDocuments = this.conceptDocuments(document, workspaceDocuments);
     const templates = new Set();
@@ -8537,16 +8803,19 @@ class GaugeStepDiagnosticsProvider {
       return undefined;
     }
 
+    const constantsScope = isStepImplementationDocument(document)
+      ? implementationDocuments
+      : workspaceDocuments;
     for (const candidate of implementationDocuments) {
       let externalConstants;
       if (isStepImplementationDocument(candidate)) {
         try {
-          externalConstants = this.collectWorkspaceConstants(candidate, implementationDocuments);
+          externalConstants = this.collectWorkspaceConstants(candidate, constantsScope);
         } catch (_error) {
           externalConstants = undefined;
         }
       }
-      for (const entry of findStepFunctionsForDocument(candidate, externalConstants)) {
+      for (const entry of this.stepFunctionsFor(candidate, externalConstants)) {
         for (const alias of entry.aliases) {
           templates.add(normalizeStepTemplate(alias));
         }
@@ -8604,6 +8873,10 @@ class GaugeStepDiagnosticsProvider {
   }
 
   workspaceDocuments() {
+    const store = this.activeDocumentStore();
+    if (store && store.isScanComplete()) {
+      return store.documents();
+    }
     const workspace = this.vscode.workspace || {};
     const documents = [];
     const seenPaths = new Set();
@@ -8732,6 +9005,103 @@ class GaugeStepDiagnosticsProvider {
     return refresh(workspaceDocuments);
   }
 
+  scheduleRefresh(collection, store, change) {
+    if (!this.pendingChanges) {
+      this.pendingChanges = { files: new Set(), full: false };
+    }
+    if (!change || !change.file) {
+      this.pendingChanges.full = true;
+    } else {
+      this.pendingChanges.files.add(change.file);
+    }
+    this.bumpGenerationsForChange(change && change.file);
+    if (this.refreshTimer !== undefined) {
+      return this.pendingRefreshPromise;
+    }
+    this.pendingRefreshPromise = new Promise((resolve) => {
+      const run = () => {
+        this.refreshTimer = undefined;
+        this.pendingChanges = undefined;
+        try {
+          this.performScheduledRefresh(collection, store);
+        } finally {
+          resolve();
+        }
+      };
+      this.refreshTimer = setTimeout(run, this.refreshDelayMs);
+      if (this.refreshTimer && typeof this.refreshTimer.unref === "function") {
+        this.refreshTimer.unref();
+      }
+    });
+    return this.pendingRefreshPromise;
+  }
+
+  waitForPendingRefresh() {
+    return this.pendingRefreshPromise || Promise.resolve();
+  }
+
+  diagnosisKey(document, workspaceDocuments) {
+    if (!document || document.version === undefined || !this.storeFor(workspaceDocuments)) {
+      return undefined;
+    }
+    const dependencyGeneration = this.dependencyGeneration();
+    if (isStepImplementationDocument(document)) {
+      try {
+        this.collectWorkspaceConstants(document, workspaceDocuments);
+      } catch (_error) {
+        return undefined;
+      }
+      const constantsEntry = this.storeConstantsCache.get(documentPath(document));
+      const docStringsEntry = this.docStringCacheEntry(document, workspaceDocuments);
+      const constantsVersion = constantsEntry ? constantsEntry.contentVersion : -1;
+      const docStringsVersion = docStringsEntry ? docStringsEntry.contentVersion : -1;
+      return `impl:${document.version}:${this.fullGeneration}:${constantsVersion}:${docStringsVersion}:${dependencyGeneration}`;
+    }
+    if (isConceptDocument(document)) {
+      const generations = this.rootGenerationsFor(this.gaugeProjectRoot(document) || "");
+      return `cpt:${document.version}:${this.fullGeneration}:${generations.impl}:${dependencyGeneration}`;
+    }
+    if (isGaugeStepSourceDocument(document)) {
+      const templatesEntry = this.implementedTemplatesCacheEntry(document, workspaceDocuments);
+      const templatesVersion = templatesEntry ? templatesEntry.contentVersion : -1;
+      return `spec:${document.version}:${this.fullGeneration}:${templatesVersion}`;
+    }
+    return `other:${document.version}`;
+  }
+
+  updateDocumentIfStale(collection, document, workspaceDocuments) {
+    if (!document || !document.uri) {
+      return;
+    }
+    const file = documentPath(document);
+    const key = this.diagnosisKey(document, workspaceDocuments);
+    if (file && key !== undefined && this.lastDiagnosisKeys.get(file) === key) {
+      return;
+    }
+    this.updateDocument(collection, document, workspaceDocuments);
+    if (file && key !== undefined) {
+      this.lastDiagnosisKeys.set(file, key);
+    }
+  }
+
+  performScheduledRefresh(collection, store) {
+    const workspaceDocuments = store.documents();
+    const workspace = this.vscode.workspace || {};
+    for (const document of workspace.textDocuments || []) {
+      this.updateDocumentIfStale(collection, document, workspaceDocuments);
+    }
+    const dependencyRefresh = this.refreshDependencySteps(workspaceDocuments);
+    if (dependencyRefresh && typeof dependencyRefresh.then === "function") {
+      dependencyRefresh.then(() => {
+        const dependencyGeneration = this.dependencyGeneration();
+        if (dependencyGeneration !== this.lastDependencyGeneration) {
+          this.lastDependencyGeneration = dependencyGeneration;
+          this.scheduleRefresh(collection, store, undefined);
+        }
+      }).catch(() => undefined);
+    }
+  }
+
   register() {
     if (!this.vscode.languages || typeof this.vscode.languages.createDiagnosticCollection !== "function") {
       return { dispose() {} };
@@ -8740,27 +9110,51 @@ class GaugeStepDiagnosticsProvider {
     const collection = this.vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
     const workspace = this.vscode.workspace || {};
     const disposables = [collection];
-    const registerListener = (name, listener) => {
-      if (typeof workspace[name] === "function") {
-        const disposable = workspace[name](listener);
-        if (disposable) {
-          disposables.push(disposable);
+
+    let store = this.documentStore;
+    if (!store) {
+      store = new WorkspaceDocumentStore({
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
+      this.ownedStore = store;
+      disposables.push(store);
+    }
+    this.lastDependencyGeneration = this.dependencyGeneration();
+
+    if (typeof workspace.onDidCloseTextDocument === "function") {
+      const closeDisposable = workspace.onDidCloseTextDocument((document) => {
+        if (document && document.uri && typeof collection.delete === "function") {
+          collection.delete(document.uri);
         }
+        const file = documentPath(document);
+        if (file) {
+          this.lastDiagnosisKeys.delete(file);
+        }
+      });
+      if (closeDisposable) {
+        disposables.push(closeDisposable);
       }
-    };
+    }
 
-    this.refreshDocuments(collection);
-    registerListener("onDidOpenTextDocument", () => this.refreshDocuments(collection));
-    registerListener("onDidChangeTextDocument", () => this.refreshDocuments(collection));
-    registerListener("onDidCloseTextDocument", (document) => {
-      if (document && document.uri && typeof collection.delete === "function") {
-        collection.delete(document.uri);
-      }
-      this.refreshDocuments(collection);
+    const subscription = store.onDidChangeDocuments((change) => {
+      this.scheduleRefresh(collection, store, change);
     });
+    disposables.push(subscription);
 
+    store.start();
+    this.scheduleRefresh(collection, store, undefined);
+
+    const provider = this;
     return {
       dispose() {
+        if (provider.refreshTimer !== undefined) {
+          clearTimeout(provider.refreshTimer);
+          provider.refreshTimer = undefined;
+          provider.pendingChanges = undefined;
+        }
         for (const disposable of disposables) {
           if (disposable && typeof disposable.dispose === "function") {
             disposable.dispose();

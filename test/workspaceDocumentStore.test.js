@@ -1,0 +1,317 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+
+function createFakeFileSystem(files) {
+  return {
+    files,
+    promises: {
+      async readFile(file) {
+        if (!Object.prototype.hasOwnProperty.call(files, file)) {
+          const error = new Error(`ENOENT: ${file}`);
+          error.code = "ENOENT";
+          throw error;
+        }
+        return files[file];
+      },
+    },
+  };
+}
+
+function createFakeWatcher(glob) {
+  return {
+    glob,
+    createListeners: [],
+    changeListeners: [],
+    deleteListeners: [],
+    disposed: false,
+    onDidCreate(listener) {
+      this.createListeners.push(listener);
+      return { dispose() {} };
+    },
+    onDidChange(listener) {
+      this.changeListeners.push(listener);
+      return { dispose() {} };
+    },
+    onDidDelete(listener) {
+      this.deleteListeners.push(listener);
+      return { dispose() {} };
+    },
+    dispose() {
+      this.disposed = true;
+    },
+  };
+}
+
+function createFakeVscode(options = {}) {
+  const state = {
+    findFilesCalls: [],
+    listeners: { open: [], change: [], close: [] },
+    watchers: [],
+  };
+  const workspace = {
+    textDocuments: options.textDocuments || [],
+    async findFiles(pattern) {
+      state.findFilesCalls.push(pattern);
+      return (options.files || []).map((file) => ({ fsPath: file }));
+    },
+    onDidOpenTextDocument(listener) {
+      state.listeners.open.push(listener);
+      return { dispose() {} };
+    },
+    onDidChangeTextDocument(listener) {
+      state.listeners.change.push(listener);
+      return { dispose() {} };
+    },
+    onDidCloseTextDocument(listener) {
+      state.listeners.close.push(listener);
+      return { dispose() {} };
+    },
+    createFileSystemWatcher(glob) {
+      const watcher = createFakeWatcher(glob);
+      state.watchers.push(watcher);
+      return watcher;
+    },
+  };
+  return { vscode: { workspace }, state };
+}
+
+function createDocument(text, languageId, fsPath) {
+  return {
+    languageId,
+    uri: { fsPath },
+    version: 1,
+    getText() {
+      return text;
+    },
+  };
+}
+
+test("WorkspaceDocumentStore scans the workspace once and reads files from disk", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { isWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/src/Steps.kt": "package steps\n",
+    "/ws/specs/login.spec": "# Login\n",
+  };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode: vscode,
+  });
+
+  await store.start();
+  const documents = store.documents();
+
+  assert.equal(state.findFilesCalls.length, 1);
+  assert.equal(documents.length, 2);
+  const byPath = new Map(documents.map((doc) => [doc.uri.fsPath, doc]));
+  assert.equal(byPath.get("/ws/src/Steps.kt").languageId, "kotlin");
+  assert.equal(byPath.get("/ws/src/Steps.kt").getText(), "package steps\n");
+  assert.equal(byPath.get("/ws/specs/login.spec").languageId, "gauge");
+  assert.equal(isWorkspaceStepImplementationScanComplete(documents), true);
+});
+
+test("WorkspaceDocumentStore prefers open text documents over disk content", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/src/Steps.kt": "stale disk content" };
+  const openDocument = createDocument("fresh editor content", "kotlin", "/ws/src/Steps.kt");
+  const { vscode } = createFakeVscode({
+    files: Object.keys(files),
+    textDocuments: [openDocument],
+  });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  const documents = store.documents();
+
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].getText(), "fresh editor content");
+});
+
+test("WorkspaceDocumentStore never opens editor documents during the scan", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode } = createFakeVscode({ files: Object.keys(files) });
+  let opened = 0;
+  vscode.workspace.openTextDocument = async () => {
+    opened += 1;
+    return undefined;
+  };
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  store.documents();
+
+  assert.equal(opened, 0);
+});
+
+test("WorkspaceDocumentStore updates disk content on watcher change events", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+  await store.start();
+
+  files["/ws/specs/login.spec"] = "# Login updated\n";
+  await state.watchers[0].changeListeners[0]({ fsPath: "/ws/specs/login.spec" });
+  const documents = store.documents();
+
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].getText(), "# Login updated\n");
+});
+
+test("WorkspaceDocumentStore adds and removes documents on watcher create and delete", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+  await store.start();
+
+  files["/ws/src/New.kt"] = "package steps\n";
+  await state.watchers[0].createListeners[0]({ fsPath: "/ws/src/New.kt" });
+  assert.equal(store.documents().length, 2);
+
+  delete files["/ws/specs/login.spec"];
+  await state.watchers[0].deleteListeners[0]({ fsPath: "/ws/specs/login.spec" });
+  const documents = store.documents();
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].uri.fsPath, "/ws/src/New.kt");
+});
+
+test("WorkspaceDocumentStore reuses the documents array until something changes", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+  await store.start();
+
+  const first = store.documents();
+  const second = store.documents();
+  assert.equal(first, second);
+
+  await state.watchers[0].changeListeners[0]({ fsPath: "/ws/specs/login.spec" });
+  assert.notEqual(store.documents(), first);
+});
+
+test("WorkspaceDocumentStore excludes files outside Gauge project roots", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/other/src/Helper.kt": "package other\n",
+    "/ws/src/Steps.kt": "package steps\n",
+  };
+  const { vscode } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        return file.startsWith("/ws/") ? "/ws" : undefined;
+      },
+      isGaugeProject(root) {
+        return root === "/ws";
+      },
+    },
+    vscode,
+  });
+
+  await store.start();
+  const documents = store.documents();
+
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].uri.fsPath, "/ws/src/Steps.kt");
+});
+
+test("WorkspaceDocumentStore notifies listeners with the changed file path", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+  const changes = [];
+  store.onDidChangeDocuments((change) => changes.push(change));
+  await store.start();
+
+  await state.watchers[0].changeListeners[0]({ fsPath: "/ws/specs/login.spec" });
+
+  assert.equal(changes.some((change) => change.file === "/ws/specs/login.spec"), true);
+});
+
+test("WorkspaceDocumentStore invalidates on text document change events", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const openDocument = createDocument("# Login\n", "gauge", "/ws/specs/login.spec");
+  const { vscode, state } = createFakeVscode({ files: [], textDocuments: [openDocument] });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem({}),
+    vscode,
+  });
+  const changes = [];
+  store.onDidChangeDocuments((change) => changes.push(change));
+  await store.start();
+  const before = store.documents();
+
+  state.listeners.change[0]({ document: openDocument });
+
+  assert.notEqual(store.documents(), before);
+  assert.equal(changes.some((change) => change.file === "/ws/specs/login.spec"), true);
+});
+
+test("WorkspaceDocumentStore ignores text events for unrelated files", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const unrelated = createDocument("{}", "json", "/ws/package.json");
+  const { vscode, state } = createFakeVscode({ files: [], textDocuments: [unrelated] });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem({}),
+    vscode,
+  });
+  const changes = [];
+  store.onDidChangeDocuments((change) => changes.push(change));
+  await store.start();
+
+  state.listeners.change[0]({ document: unrelated });
+
+  assert.deepEqual(changes.filter((change) => change.file !== undefined), []);
+});
+
+test("WorkspaceDocumentStore is not scan complete without a findFiles API", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { isWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem({}),
+    vscode: { workspace: {} },
+  });
+
+  await store.start();
+
+  assert.equal(isWorkspaceStepImplementationScanComplete(store.documents()), false);
+});
+
+test("WorkspaceDocumentStore dispose stops watcher and listener updates", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+  await store.start();
+
+  store.dispose();
+
+  assert.equal(state.watchers[0].disposed, true);
+});

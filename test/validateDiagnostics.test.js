@@ -722,25 +722,25 @@ test("GaugeValidateDiagnosticsProvider registers validation refresh listeners", 
         };
       },
     },
+    refreshDelayMs: 0,
     vscode: fakeVscode,
   });
 
   const disposable = provider.register();
-  await new Promise((resolve) => setImmediate(resolve));
-  await saved[0]();
+  await provider.waitForPendingRefresh();
+  saved[0](document);
+  await provider.waitForPendingRefresh();
   closed[0](document);
-  await new Promise((resolve) => setImmediate(resolve));
   disposable.dispose();
 
   assert.equal(opened.length, 1);
   assert.equal(saved.length, 1);
   assert.equal(closed.length, 1);
-  assert.equal(spawnCalls.length, 3);
-  assert.equal(sets.length, 3);
+  assert.equal(spawnCalls.length, 2);
+  assert.equal(sets.length, 2);
   assert.deepEqual(
     sets.map((entry) => entry.diagnostics[0].message),
     [
-      "ParseError line number: 3, Step is malformed",
       "ParseError line number: 3, Step is malformed",
       "ParseError line number: 3, Step is malformed",
     ],
@@ -889,4 +889,160 @@ test("parseGaugeValidateErrors accepts optional colon separators", () => {
       message: "Duplicate step",
     },
   ]);
+});
+
+function createScopedValidateFixture(options = {}) {
+  const state = {
+    deletes: [],
+    findFilesCalls: 0,
+    listeners: { close: [], open: [], save: [] },
+    sets: [],
+    spawnCalls: [],
+  };
+  const documents = options.textDocuments || [];
+  const fakeVscode = {
+    ...createFakeVscode(),
+    Uri: {
+      file(fsPath) {
+        return { fsPath };
+      },
+    },
+    languages: {
+      createDiagnosticCollection(name) {
+        return {
+          name,
+          set(uri, diagnostics) {
+            state.sets.push({ diagnostics, uri });
+          },
+          delete(uri) {
+            state.deletes.push(uri);
+          },
+          dispose() {},
+        };
+      },
+    },
+  };
+  fakeVscode.workspace = {
+    ...fakeVscode.workspace,
+    textDocuments: documents,
+    async findFiles() {
+      state.findFilesCalls += 1;
+      return [];
+    },
+    async openTextDocument() {
+      throw new Error("openTextDocument should not run");
+    },
+    onDidOpenTextDocument(listener) {
+      state.listeners.open.push(listener);
+      return { dispose() {} };
+    },
+    onDidSaveTextDocument(listener) {
+      state.listeners.save.push(listener);
+      return { dispose() {} };
+    },
+    onDidCloseTextDocument(listener) {
+      state.listeners.close.push(listener);
+      return { dispose() {} };
+    },
+  };
+  const command = {
+    spawnSync(args, spawnOptions) {
+      state.spawnCalls.push({ args, options: spawnOptions });
+      return { stderr: Buffer.from(""), stdout: Buffer.from(options.validateOutput || "") };
+    },
+  };
+  const provider = new (require("../src/validateDiagnostics").GaugeValidateDiagnosticsProvider)({
+    cli: {
+      gaugeCommand() {
+        return command;
+      },
+    },
+    env: { PATH: "/bin" },
+    projectFactory: {
+      get(root) {
+        return { envs: () => ({}), root: () => root };
+      },
+      getGaugeRootFromFilePath(file) {
+        const roots = options.roots || ["/workspace/gauge"];
+        return roots.find((root) => file.startsWith(`${root}/`));
+      },
+      getProjectByFilepath(file) {
+        const roots = options.roots || ["/workspace/gauge"];
+        const root = roots.find((candidate) => file.startsWith(`${candidate}/`));
+        return root ? { envs: () => ({}), root: () => root } : undefined;
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    refreshDelayMs: 0,
+    vscode: fakeVscode,
+  });
+  return { provider, state };
+}
+
+test("GaugeValidateDiagnosticsProvider save events do not rescan the workspace", async () => {
+  const document = createDocument("# Example\n* step", "/workspace/gauge/specs/example.spec", "gauge");
+  const { provider, state } = createScopedValidateFixture({ textDocuments: [document] });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  state.listeners.save[0](document);
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  assert.equal(state.findFilesCalls, 0);
+});
+
+test("GaugeValidateDiagnosticsProvider validates only the saved document's project root", async () => {
+  const documentA = createDocument("# A\n* step", "/projects/alpha/specs/a.spec", "gauge");
+  const documentB = createDocument("# B\n* step", "/projects/beta/specs/b.spec", "gauge");
+  const { provider, state } = createScopedValidateFixture({
+    roots: ["/projects/alpha", "/projects/beta"],
+    textDocuments: [documentA, documentB],
+  });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  state.spawnCalls.length = 0;
+
+  state.listeners.save[0](documentA);
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  assert.deepEqual(state.spawnCalls.map((call) => call.options.cwd), ["/projects/alpha"]);
+});
+
+test("GaugeValidateDiagnosticsProvider coalesces save bursts into one validate per root", async () => {
+  const document = createDocument("# Example\n* step", "/workspace/gauge/specs/example.spec", "gauge");
+  const { provider, state } = createScopedValidateFixture({ textDocuments: [document] });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  state.spawnCalls.length = 0;
+
+  state.listeners.save[0](document);
+  state.listeners.save[0](document);
+  state.listeners.save[0](document);
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  assert.equal(state.spawnCalls.length, 1);
+});
+
+test("GaugeValidateDiagnosticsProvider attaches validate errors to unopened files", async () => {
+  const document = createDocument("# Example\n* step", "/workspace/gauge/specs/example.spec", "gauge");
+  const { provider, state } = createScopedValidateFixture({
+    textDocuments: [document],
+    validateOutput: "ParseError /workspace/gauge/specs/closed.spec:3: Step is malformed",
+  });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  const closedSet = state.sets.find((entry) => entry.uri && entry.uri.fsPath === "/workspace/gauge/specs/closed.spec");
+  assert.notEqual(closedSet, undefined);
+  assert.equal(closedSet.diagnostics.length, 1);
+  assert.equal(closedSet.diagnostics[0].message, "ParseError line number: 3, Step is malformed");
 });

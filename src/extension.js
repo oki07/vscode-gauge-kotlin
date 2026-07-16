@@ -40,6 +40,7 @@ const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const { GaugeTestController } = require("./testController");
 const { TerminalProvider } = require("./terminalProvider");
 const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
+const { WorkspaceDocumentStore } = require("./workspaceDocumentStore");
 const {
   createConcept,
   createGaugeSpecDirsProvider,
@@ -569,6 +570,7 @@ function registerStepDiagnosticsProvider(context, vscode, options) {
   const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider || GaugeStepDiagnosticsProvider;
   const provider = new StepDiagnosticsProviderCtor({
     dependencyStepIndex: options.dependencyStepIndex,
+    documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
   });
@@ -904,9 +906,21 @@ function startGaugeServices(context, vscode, options = {}) {
     cli,
     projectFactory,
   });
+  const WorkspaceDocumentStoreCtor = options.WorkspaceDocumentStore || WorkspaceDocumentStore;
+  const documentStore = options.documentStore || new WorkspaceDocumentStoreCtor({
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    projectFactory,
+    vscode,
+  });
+  if (!options.documentStore) {
+    context.subscriptions.push(documentStore);
+  }
+  documentStore.start();
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
     dependencyStepIndex,
+    documentStore,
     projectFactory,
   });
   registerValidateDiagnosticsProvider(context, vscode, {

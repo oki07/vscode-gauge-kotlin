@@ -439,6 +439,7 @@ class DependencyStepIndex {
     this.contents = new Map();
     this.indices = new Map();
     this.pending = new Map();
+    this.generation = 0;
   }
 
   projectClasspath(root) {
@@ -491,6 +492,7 @@ class DependencyStepIndex {
     }
     const index = { classpathKey, entriesByTemplate };
     this.indices.set(root, index);
+    this.generation += 1;
     return index;
   }
 
@@ -515,6 +517,7 @@ class DependencyStepIndex {
 
   invalidate(root) {
     this.indices.delete(root);
+    this.generation += 1;
   }
 
   stepTemplates(root) {
