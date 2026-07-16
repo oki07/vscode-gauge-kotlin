@@ -156,6 +156,10 @@ function createOptionalMessage(vscode, message) {
   return message ? createMessage(vscode, message) : undefined;
 }
 
+function testResultsOutput(value) {
+  return String(value || "").replace(/\r\n|\r|\n/g, "\r\n");
+}
+
 function notificationText(event) {
   const title = String((event && event.title) || "").trim();
   const message = String((event && event.message) || "").trim();
@@ -1186,12 +1190,12 @@ class GaugeTestController {
       }
       case "output":
         if (run && typeof run.appendOutput === "function") {
-          run.appendOutput(event.message || "");
+          run.appendOutput(testResultsOutput(event.message));
         }
         break;
       case "lineBreak":
         if (run && typeof run.appendOutput === "function") {
-          run.appendOutput("\n");
+          run.appendOutput("\r\n");
         }
         break;
       case "notification":

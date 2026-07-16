@@ -1657,6 +1657,26 @@ test("GaugeTestController delays failed and skipped results until finish events 
   ]);
 });
 
+test("GaugeTestController writes Test Results output with CRLF line endings", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({
+    type: "output",
+    message: "first\nsecond\r\nthird\rfour",
+  });
+  sink({ type: "lineBreak" });
+
+  assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
+    ["output", "first\r\nsecond\r\nthird\r\nfour"],
+    ["output", "\r\n"],
+  ]);
+});
+
 test("GaugeTestController displays Gauge notification events through VS Code messages", () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, vscode } = createFakeVscode();
