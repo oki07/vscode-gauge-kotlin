@@ -1645,3 +1645,44 @@ test("GaugeWorkspace stores the last html report path in state", async () => {
 
   assert.equal(workspace.getReportPath(), "/workspace/reports/html-report/index.html");
 });
+
+test("GaugeWorkspace computes the LSP project classpath once per server start", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode();
+  const execCalls = [];
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    env: { PATH: "/bin" },
+    execSync(command, options) {
+      execCalls.push({ command, options });
+      return Buffer.from("/workspace/gauge/build/classes");
+    },
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+  const callsAfterStartup = execCalls.length;
+  workspace.serverOptionsFor(entry.project);
+  workspace.serverOptionsFor(entry.project);
+
+  assert.equal(callsAfterStartup, 1);
+  assert.equal(execCalls.length, callsAfterStartup);
+});

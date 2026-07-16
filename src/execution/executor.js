@@ -21,6 +21,7 @@ const { GradleProject } = require("../project/gradleProject");
 const { MavenProject } = require("../project/mavenProject");
 const { createProjectFactory } = require("../project/projectFactory");
 
+const BUILD_FILE_GLOB = "**/{build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,pom.xml}";
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
@@ -631,6 +632,7 @@ function createGaugeExecutionController(options = {}) {
   const fileSystem = options.fileSystem || nodeFs;
   const allowWorkspaceProjectFallback = !options.projectFactory;
   const projectFactory = options.projectFactory || createProjectFactory({
+    exec: options.exec,
     execSync: options.execSync,
     fileSystem,
     pathModule,
@@ -651,6 +653,39 @@ function createGaugeExecutionController(options = {}) {
   let activeRunUserAborted = false;
   let sawExecutionTestEvent = false;
   let cachedCli;
+  const executionEnvCache = new Map();
+  let buildFileWatcher;
+  if (
+    vscode.workspace
+    && typeof vscode.workspace.createFileSystemWatcher === "function"
+  ) {
+    try {
+      buildFileWatcher = vscode.workspace.createFileSystemWatcher(BUILD_FILE_GLOB);
+      const clearExecutionEnvCache = () => executionEnvCache.clear();
+      if (typeof buildFileWatcher.onDidCreate === "function") {
+        buildFileWatcher.onDidCreate(clearExecutionEnvCache);
+      }
+      if (typeof buildFileWatcher.onDidChange === "function") {
+        buildFileWatcher.onDidChange(clearExecutionEnvCache);
+      }
+      if (typeof buildFileWatcher.onDidDelete === "function") {
+        buildFileWatcher.onDidDelete(clearExecutionEnvCache);
+      }
+    } catch (_error) {
+      buildFileWatcher = undefined;
+    }
+  }
+
+  async function resolveBuildToolExecutionEnvironment(project, cli, projectRoot) {
+    const cached = executionEnvCache.get(projectRoot);
+    const env = await project.executionEnvsAsync(cli, cached);
+    if (env) {
+      executionEnvCache.set(projectRoot, env);
+    } else {
+      executionEnvCache.delete(projectRoot);
+    }
+    return env;
+  }
 
   function setReportPath(nextReportPath) {
     return reportState.setReportPath(nextReportPath && nextReportPath.trim());
@@ -728,8 +763,20 @@ function createGaugeExecutionController(options = {}) {
         || detectProjectKind(projectRoot, fileSystem, pathModule);
       const cli = getCli();
       const executionTool = project ? commandFromProject(project, cli) : undefined;
-      const projectEnv = projectExecutionEnvironment(project, cli);
-      if (project && typeof project.executionEnvs === "function" && !projectEnv) {
+      const runningStatus = flags.status || spec || pathModule.join(projectRoot, "All specs");
+      executionStatusBar.beforeExecute(
+        { env: flags.debug ? { DEBUGGING: true } : undefined, status: runningStatus },
+        formatRunningStatus(projectRoot, runningStatus, pathModule),
+      );
+      const usesBuildTool = Boolean(project && typeof project.executionEnvsAsync === "function");
+      const projectEnv = usesBuildTool
+        ? await resolveBuildToolExecutionEnvironment(project, cli, projectRoot)
+        : projectExecutionEnvironment(project, cli);
+      if (
+        project
+        && (usesBuildTool || typeof project.executionEnvs === "function")
+        && !projectEnv
+      ) {
         return undefined;
       }
       const launchConfigurations = getLaunchConfigurations(vscode, projectRoot);
@@ -750,7 +797,7 @@ function createGaugeExecutionController(options = {}) {
         command: executionTool ? executionTool.command : commandForProjectKind(projectKind, options),
         args: buildArgs(projectKind, projectRoot, spec, option, pathModule),
         cwd: executionCwd(projectRoot, launchExecutionOption.cwd, pathModule),
-        status: flags.status || spec || pathModule.join(projectRoot, "All specs"),
+        status: runningStatus,
       };
       if (executionTool) {
         command.tool = executionTool;
@@ -780,10 +827,6 @@ function createGaugeExecutionController(options = {}) {
         command.env = await activeDebugger.addDebugEnv(command.env || executionEnv);
       }
 
-      executionStatusBar.beforeExecute(
-        command,
-        formatRunningStatus(projectRoot, command.status, pathModule),
-      );
       activeRun = runner(command);
       result = await activeRun;
       if (option["machine-readable"] && !sawExecutionTestEvent && !activeRunUserAborted) {
@@ -1221,6 +1264,9 @@ function createGaugeExecutionController(options = {}) {
     executeScenario,
     dispose() {
       executionStatusBar.dispose();
+      if (buildFileWatcher && typeof buildFileWatcher.dispose === "function") {
+        buildFileWatcher.dispose();
+      }
     },
     getReportPath,
     handleCommand,

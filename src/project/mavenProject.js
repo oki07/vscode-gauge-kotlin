@@ -26,6 +26,18 @@ class MavenProject extends BuildToolProject {
       "-q test-compile gauge:classpath",
     );
   }
+
+  executionBuildToolCommand(cli) {
+    return cli.mavenCommand();
+  }
+
+  executionBuildArgs() {
+    return "-q test-compile";
+  }
+
+  executionClasspathArgs() {
+    return "-q gauge:classpath";
+  }
 }
 
 module.exports = {

@@ -674,7 +674,11 @@ test("execute Maven specification compiles the project and runs Gauge directly",
   assert.equal(result, true);
   assert.deepEqual(classpathCalls, [
     {
-      command: "mvn -q test-compile gauge:classpath",
+      command: "mvn -q test-compile",
+      options: { cwd: "/workspace" },
+    },
+    {
+      command: "mvn -q gauge:classpath",
       options: { cwd: "/workspace" },
     },
   ]);
@@ -760,7 +764,11 @@ test("execute specification resolves the project root from the active Gauge file
   assert.deepEqual(errors, []);
   assert.deepEqual(classpathCalls, [
     {
-      command: "gradle -q testClasses classpath",
+      command: "gradle -q testClasses",
+      options: { cwd: "/outside/gauge" },
+    },
+    {
+      command: "gradle -q classpath",
       options: { cwd: "/outside/gauge" },
     },
   ]);
@@ -2365,7 +2373,11 @@ test("execute Maven scenario compiles the project and runs Gauge directly", asyn
   assert.equal(result, true);
   assert.deepEqual(classpathCalls, [
     {
-      command: "mvn -q test-compile gauge:classpath",
+      command: "mvn -q test-compile",
+      options: { cwd: "/workspace" },
+    },
+    {
+      command: "mvn -q gauge:classpath",
       options: { cwd: "/workspace" },
     },
   ]);
@@ -2458,7 +2470,11 @@ test("execute Kotlin Gradle scenario prepares classes and runs Gauge directly", 
   assert.equal(result, true);
   assert.deepEqual(classpathCalls, [
     {
-      command: "./gradlew -q testClasses classpath",
+      command: "./gradlew -q testClasses",
+      options: { cwd: "/workspace" },
+    },
+    {
+      command: "./gradlew -q classpath",
       options: { cwd: "/workspace" },
     },
   ]);
@@ -3032,4 +3048,107 @@ test("debug node cancels Gauge execution when the debug session terminates", asy
 
   assert.equal(await run, false);
   assert.deepEqual(cancelCalls, [false]);
+});
+
+function createMavenExecutionFixture(overrides = {}) {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const buildToolCalls = [];
+  const runnerCalls = [];
+  const watchers = [];
+  const fake = createFakeVscode(overrides);
+  fake.vscode.workspace.createFileSystemWatcher = (glob) => {
+    const watcher = {
+      changeListeners: [],
+      glob,
+      onDidChange(listener) {
+        watcher.changeListeners.push(listener);
+        return { dispose() {} };
+      },
+      onDidCreate() {
+        return { dispose() {} };
+      },
+      onDidDelete() {
+        return { dispose() {} };
+      },
+      dispose() {},
+    };
+    watchers.push(watcher);
+    return watcher;
+  };
+  const asCommand = (command) => ({
+    command,
+    argsForSpawnType(args) {
+      return args;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode: fake.vscode,
+    cli: {
+      gaugeCommand() {
+        return asCommand("gauge");
+      },
+      mavenCommand() {
+        return asCommand("mvn");
+      },
+      gradleCommand() {
+        return asCommand("gradle");
+      },
+    },
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json"
+          || filename === "/workspace/pom.xml";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "kotlin" }));
+      },
+    },
+    execSync(command, options) {
+      buildToolCalls.push({ command, options, stopShown: fake.statusBarItems[0]
+        ? fake.statusBarItems[0].showCalls > 0
+        : false });
+      return Buffer.from("/workspace/target/test-classes\n");
+    },
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+  });
+  return { buildToolCalls, controller, fake, runnerCalls, watchers };
+}
+
+test("execute shows the running status before any build tool work", async () => {
+  const { buildToolCalls, controller } = createMavenExecutionFixture();
+
+  await controller.handleCommand("gauge.execute.specification");
+
+  assert.equal(buildToolCalls.length > 0, true);
+  assert.equal(buildToolCalls[0].stopShown, true);
+});
+
+test("back-to-back runs reuse the resolved execution classpath", async () => {
+  const { buildToolCalls, controller } = createMavenExecutionFixture();
+
+  await controller.handleCommand("gauge.execute.specification");
+  await controller.handleCommand("gauge.execute.specification");
+
+  const classpathResolutions = buildToolCalls.filter((call) => call.command.includes("classpath"));
+  const compiles = buildToolCalls.filter((call) => call.command.includes("test-compile"));
+  assert.equal(classpathResolutions.length, 1);
+  assert.equal(compiles.length, 2);
+});
+
+test("build file changes invalidate the cached execution classpath", async () => {
+  const { buildToolCalls, controller, watchers } = createMavenExecutionFixture();
+
+  await controller.handleCommand("gauge.execute.specification");
+  const buildWatcher = watchers.find((watcher) => watcher.glob.includes("pom.xml"));
+  assert.notEqual(buildWatcher, undefined);
+  buildWatcher.changeListeners[0]({ fsPath: "/workspace/pom.xml" });
+  await controller.handleCommand("gauge.execute.specification");
+
+  const classpathResolutions = buildToolCalls.filter((call) => call.command.includes("classpath"));
+  assert.equal(classpathResolutions.length, 2);
 });

@@ -987,6 +987,17 @@ function startGaugeServices(context, vscode, options = {}) {
 
 function activate(context, vscodeApi, options = {}) {
   const vscode = getVscode(vscodeApi);
+  const baseCreateCli = options.createCli || ((cliOptions) => CLI.instance(cliOptions));
+  let sharedCli = options.cli;
+  let sharedCliResolved = options.cli !== undefined;
+  const sharedCreateCli = (cliOptions) => {
+    if (!sharedCliResolved) {
+      sharedCliResolved = true;
+      sharedCli = baseCreateCli(cliOptions);
+    }
+    return sharedCli;
+  };
+  options = { ...options, createCli: sharedCreateCli };
   const state = createGaugeState(context, options);
   const projectFactory = options.projectFactory || createProjectFactory({
     fileSystem: options.fileSystem,

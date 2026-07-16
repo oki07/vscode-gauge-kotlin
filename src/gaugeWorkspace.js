@@ -102,17 +102,6 @@ function stateOrMemory(state) {
   };
 }
 
-function minimalEnv(project, cli, baseEnv) {
-  const env = {
-    ...baseEnv,
-    GAUGE_IGNORE_RUNNER_BUILD_FAILURES: "true",
-  };
-  return {
-    ...env,
-    ...(project.envs(cli) || {}),
-  };
-}
-
 function isExternalImplementationSourceError(error) {
   return errorMessages(error).some((message) => message.includes(EXTERNAL_IMPLEMENTATION_SOURCE_ERROR));
 }
@@ -213,6 +202,7 @@ class GaugeWorkspace {
     this.stepDefinitionProvider = options.stepDefinitionProvider;
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
+    this.projectEnvironmentCache = new Map();
     this.env = envWithGaugeHome(options.env || process.env, {
       vscode: this.vscode,
       gaugeHome: options.gaugeHome,
@@ -266,6 +256,7 @@ class GaugeWorkspace {
     for (const [projectRoot, projectClient] of this.clientsMap.entries()) {
       this.clientsMap.delete(projectRoot);
       this.clientLanguageMap.delete(projectRoot);
+      this.projectEnvironmentCache.delete(projectRoot);
       if (projectClient.client && typeof projectClient.client.stop === "function") {
         stopPromises.push(Promise.resolve(projectClient.client.stop()).catch(() => undefined));
       }
@@ -532,9 +523,20 @@ class GaugeWorkspace {
     const projectRoot = projectClient.project.root();
     this.clientsMap.delete(projectRoot);
     this.clientLanguageMap.delete(projectRoot);
+    this.projectEnvironmentCache.delete(projectRoot);
     if (projectClient.client && typeof projectClient.client.stop === "function") {
       await projectClient.client.stop();
     }
+  }
+
+  cachedProjectEnvs(project) {
+    const projectRoot = project.root();
+    if (this.projectEnvironmentCache.has(projectRoot)) {
+      return this.projectEnvironmentCache.get(projectRoot);
+    }
+    const envs = project.envs(this.cli) || {};
+    this.projectEnvironmentCache.set(projectRoot, envs);
+    return envs;
   }
 
   serverOptionsFor(project) {
@@ -547,7 +549,9 @@ class GaugeWorkspace {
     }
 
     const env = {
-      ...minimalEnv(project, this.cli, this.env),
+      ...this.env,
+      GAUGE_IGNORE_RUNNER_BUILD_FAILURES: "true",
+      ...this.cachedProjectEnvs(project),
       gauge_lsp_reference_codelens: "false",
     };
 
@@ -640,6 +644,7 @@ class GaugeWorkspace {
     } catch (error) {
       this.clientsMap.delete(project.root());
       this.clientLanguageMap.delete(project.root());
+      this.projectEnvironmentCache.delete(project.root());
       await this.showLanguageServerStartupError(project, error);
       return undefined;
     }

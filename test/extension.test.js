@@ -3313,3 +3313,47 @@ test("activation shows unsupported Gauge version guidance when Gauge is too old"
   ]);
   assert.equal(workspaceCreated, false);
 });
+
+test("activation shares a single CLI probe across services and execution", () => {
+  const extension = require("../src/extension");
+
+  let probes = 0;
+  const cli = {
+    isGaugeInstalled() {
+      return false;
+    },
+    isGaugeVersionGreaterOrEqual() {
+      return true;
+    },
+  };
+  let executionOptions;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      probes += 1;
+      return cli;
+    },
+    createExecutionController(options) {
+      executionOptions = options;
+      return { handleCommand() {} };
+    },
+    ProjectInitializer: class FakeProjectInitializer {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showInstallGaugeNotification() {},
+  });
+
+  assert.equal(probes, 1);
+  const executorCli = executionOptions.createCli({ vscode: fakeVscode });
+  assert.equal(executorCli, cli);
+  assert.equal(probes, 1);
+});

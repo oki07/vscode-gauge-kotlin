@@ -39,7 +39,7 @@ class GradleProject extends BuildToolProject {
   }
 
   envs(cli) {
-    return this.classpathEnv(this.getBuildCommand(cli), "-q clean classpath");
+    return this.classpathEnv(this.getBuildCommand(cli), "-q classpath");
   }
 
   executionEnvs(cli) {
@@ -47,6 +47,18 @@ class GradleProject extends BuildToolProject {
       this.getBuildCommand(cli),
       "-q testClasses classpath",
     );
+  }
+
+  executionBuildToolCommand(cli) {
+    return this.getBuildCommand(cli);
+  }
+
+  executionBuildArgs() {
+    return "-q testClasses";
+  }
+
+  executionClasspathArgs() {
+    return "-q classpath";
   }
 }
 

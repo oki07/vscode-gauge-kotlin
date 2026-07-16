@@ -214,7 +214,7 @@ test("GradleProject returns Gauge custom classpath environment", () => {
   });
   assert.deepEqual(calls, [
     {
-      command: "gradle -q clean classpath",
+      command: "gradle -q classpath",
       options: { cwd: "/workspace/gauge" },
     },
   ]);
