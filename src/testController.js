@@ -22,6 +22,11 @@ const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
   "machine-readable": true,
 };
+const ANSI_CYAN = "\x1b[36m";
+const ANSI_GREEN = "\x1b[32m";
+const ANSI_RED = "\x1b[31m";
+const ANSI_RESET = "\x1b[0m";
+const ANSI_YELLOW = "\x1b[33m";
 const NON_GAUGE_PROJECT_ROOT = Symbol("nonGaugeProjectRoot");
 
 function getVscode(vscode) {
@@ -158,6 +163,27 @@ function createOptionalMessage(vscode, message) {
 
 function testResultsOutput(value) {
   return String(value || "").replace(/\r\n|\r|\n/g, "\r\n");
+}
+
+function appendTestResultsOutput(run, value) {
+  if (run && typeof run.appendOutput === "function") {
+    run.appendOutput(testResultsOutput(value));
+  }
+}
+
+function highlightedHeading(event, prefix, color) {
+  const name = String((event && (event.name || event.id)) || "");
+  return name ? `${color}${prefix}${name}${ANSI_RESET}\r\n` : "";
+}
+
+function highlightedResult(status) {
+  const styles = {
+    failed: [ANSI_RED, "FAIL"],
+    passed: [ANSI_GREEN, "PASS"],
+    skipped: [ANSI_YELLOW, "SKIP"],
+  };
+  const style = styles[status];
+  return style ? `    ${style[0]}[${style[1]}]${ANSI_RESET}\r\n` : "";
 }
 
 function notificationText(event) {
@@ -1108,11 +1134,11 @@ class GaugeTestController {
       this.childResults.delete(event.id);
       if (childResult.failed && typeof run.failed === "function") {
         run.failed(item, createMessage(this.vscode, childResult.message || ""), event.duration);
-        return;
+        return "failed";
       }
       if (childResult.skipped && !childResult.passed && typeof run.skipped === "function") {
         run.skipped(item, createOptionalMessage(this.vscode, childResult.message));
-        return;
+        return "skipped";
       }
     }
     const pending = this.pendingResults.get(event.id);
@@ -1120,17 +1146,18 @@ class GaugeTestController {
     if (pending && pending.status === "failed" && typeof run.failed === "function") {
       this.recordChildResult(event, "failed", pending.message);
       run.failed(item, createMessage(this.vscode, pending.message), event.duration);
-      return;
+      return "failed";
     }
     if (pending && pending.status === "skipped" && typeof run.skipped === "function") {
       this.recordChildResult(event, "skipped", pending.message);
       run.skipped(item, createOptionalMessage(this.vscode, pending.message));
-      return;
+      return "skipped";
     }
     this.recordChildResult(event, "passed");
     if (typeof run.passed === "function") {
       run.passed(item, event.duration);
     }
+    return "passed";
   }
 
   showNotification(event) {
@@ -1150,6 +1177,7 @@ class GaugeTestController {
     switch (event.type) {
       case "suiteStarted": {
         const item = this.ensureItem(event);
+        appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN));
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
@@ -1158,6 +1186,7 @@ class GaugeTestController {
       case "testStarted": {
         const attemptEvent = this.resolveAttemptEvent(event);
         const item = this.ensureItem(attemptEvent);
+        appendTestResultsOutput(run, highlightedHeading(attemptEvent, "  ## ", ANSI_YELLOW));
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
@@ -1168,7 +1197,8 @@ class GaugeTestController {
         break;
       case "testFinished": {
         const attemptEvent = this.resolveAttemptEvent(event);
-        this.finishItem(attemptEvent);
+        const status = this.finishItem(attemptEvent);
+        appendTestResultsOutput(run, highlightedResult(status));
         this.forgetActiveAttempt(event);
         break;
       }
@@ -1189,14 +1219,10 @@ class GaugeTestController {
         break;
       }
       case "output":
-        if (run && typeof run.appendOutput === "function") {
-          run.appendOutput(testResultsOutput(event.message));
-        }
+        appendTestResultsOutput(run, event.message);
         break;
       case "lineBreak":
-        if (run && typeof run.appendOutput === "function") {
-          run.appendOutput("\r\n");
-        }
+        appendTestResultsOutput(run, "\r\n");
         break;
       case "notification":
         this.showNotification(event);

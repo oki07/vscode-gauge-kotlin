@@ -238,9 +238,12 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["profile", "Run Failed", 1, calls[3][3], false],
     ["profile", "Run Repeat", 1, calls[4][3], false],
     ["run", { include: [] }],
+    ["output", "\x1b[36m# Checkout\x1b[0m\r\n"],
     ["started", "/workspace/specs/example.spec"],
+    ["output", "\x1b[33m  ## Successful checkout\x1b[0m\r\n"],
     ["started", "/workspace/specs/example.spec:12"],
     ["passed", "/workspace/specs/example.spec:12", 42],
+    ["output", "    \x1b[32m[PASS]\x1b[0m\r\n"],
     ["passed", "/workspace/specs/example.spec", 100],
     ["dispose"],
   ]);
@@ -1667,13 +1670,42 @@ test("GaugeTestController writes Test Results output with CRLF line endings", ()
   const sink = gaugeTests.createExecutionEventSink();
   sink({
     type: "output",
-    message: "first\nsecond\r\nthird\rfour",
+    message: "\x1b[35mfirst\x1b[0m\nsecond\r\nthird\rfour",
   });
   sink({ type: "lineBreak" });
 
   assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
-    ["output", "first\r\nsecond\r\nthird\r\nfour"],
+    ["output", "\x1b[35mfirst\x1b[0m\r\nsecond\r\nthird\r\nfour"],
     ["output", "\r\n"],
+  ]);
+});
+
+test("GaugeTestController restores Gauge highlights in Test Results output", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({ type: "suiteStarted", id: "spec", name: "Checkout" });
+  sink({ type: "testStarted", id: "passing", parentId: "spec", name: "Successful checkout" });
+  sink({ type: "testFinished", id: "passing", parentId: "spec", name: "Successful checkout" });
+  sink({ type: "testStarted", id: "failing", parentId: "spec", name: "Failed checkout" });
+  sink({ type: "testFailed", id: "failing", parentId: "spec", message: "Expected success" });
+  sink({ type: "testFinished", id: "failing", parentId: "spec", name: "Failed checkout" });
+  sink({ type: "testStarted", id: "skipped", parentId: "spec", name: "Skipped checkout" });
+  sink({ type: "testIgnored", id: "skipped", parentId: "spec", message: "Not applicable" });
+  sink({ type: "testFinished", id: "skipped", parentId: "spec", name: "Skipped checkout" });
+
+  assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
+    ["output", "\x1b[36m# Checkout\x1b[0m\r\n"],
+    ["output", "\x1b[33m  ## Successful checkout\x1b[0m\r\n"],
+    ["output", "    \x1b[32m[PASS]\x1b[0m\r\n"],
+    ["output", "\x1b[33m  ## Failed checkout\x1b[0m\r\n"],
+    ["output", "    \x1b[31m[FAIL]\x1b[0m\r\n"],
+    ["output", "\x1b[33m  ## Skipped checkout\x1b[0m\r\n"],
+    ["output", "    \x1b[33m[SKIP]\x1b[0m\r\n"],
   ]);
 });
 
