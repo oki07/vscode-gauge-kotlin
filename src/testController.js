@@ -167,14 +167,9 @@ function testResultsOutput(value) {
   return String(value || "").replace(/\r\n|\r|\n/g, "\r\n");
 }
 
-function appendTestResultsOutput(run, value, item) {
+function appendTestResultsOutput(run, value) {
   if (run && typeof run.appendOutput === "function") {
-    const output = testResultsOutput(value);
-    if (item) {
-      run.appendOutput(output, undefined, item);
-    } else {
-      run.appendOutput(output);
-    }
+    run.appendOutput(testResultsOutput(value));
   }
 }
 
@@ -1200,7 +1195,7 @@ class GaugeTestController {
     switch (event.type) {
       case "suiteStarted": {
         const item = this.ensureItem(event);
-        appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN), item);
+        appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN));
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
@@ -1212,7 +1207,6 @@ class GaugeTestController {
         appendTestResultsOutput(
           run,
           highlightedHeading(attemptEvent, "  ## ", ANSI_YELLOW),
-          item,
         );
         if (run && item && typeof run.started === "function") {
           run.started(item);
@@ -1228,7 +1222,6 @@ class GaugeTestController {
         appendTestResultsOutput(
           run,
           highlightedResult(status),
-          this.items.get(attemptEvent.id),
         );
         this.forgetActiveAttempt(event);
         break;
