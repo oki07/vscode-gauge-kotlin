@@ -209,6 +209,11 @@ test("WorkspaceStepIndex excludes the current used step from position-aware comp
     vscode: { workspace: { textDocuments: [specification] } },
   });
 
+  await index.completionEntries(specification);
+  specification.getText = () => {
+    throw new Error("warm position-aware completion must use cached used-step occurrences");
+  };
+
   const entries = await index.completionEntries(specification, { line: 1, character: 12 });
 
   assert.deepEqual(entries.map((entry) => entry.label), ["Second step"]);

@@ -6,7 +6,7 @@ const {
   isTagSourceDocument,
   parameterEntriesFromDocument,
   tagValues,
-  usedStepEntriesFromDocument,
+  usedStepRecordsFromDocument,
 } = require("./dynamicArgumentCompletion");
 const {
   localGaugeStepReferenceEntries,
@@ -54,6 +54,7 @@ function emptyRecord(document) {
     stepEntries: [],
     tags: [],
     usedSteps: [],
+    usedStepsByLine: new Map(),
   };
 }
 
@@ -254,13 +255,20 @@ class WorkspaceStepIndex {
     }
     if (isGaugeReferenceDocument(document)) {
       record.references = await Promise.resolve(this.referenceEntriesProvider(document, root));
-      record.usedSteps = usedStepEntriesFromDocument(document, {
+      const usedStepRecords = usedStepRecordsFromDocument(document, {
         allowMultilineStep: allowMultilineStep({
           fileSystem: this.fileSystem,
           pathModule: this.pathModule,
           projectRoot: root,
         }),
       });
+      record.usedSteps = usedStepRecords.map((entry) => entry.label);
+      for (const entry of usedStepRecords) {
+        if (!record.usedStepsByLine.has(entry.line)) {
+          record.usedStepsByLine.set(entry.line, []);
+        }
+        record.usedStepsByLine.get(entry.line).push(entry.label);
+      }
     }
     if (isTagSourceDocument(document)) {
       record.tags = await Promise.resolve(this.tagEntriesProvider(document, root));
@@ -429,18 +437,13 @@ class WorkspaceStepIndex {
       ? sourceDocument.lineAt(position.line).text
       : "";
     const includeCurrentLine = String(line || "").slice(position.character).trim().length > 0;
-    const allowedCurrentOccurrences = new Map();
-    for (const label of usedStepEntriesFromDocument(sourceDocument, {
-      allowMultilineStep: allowMultilineStep({
-        fileSystem: this.fileSystem,
-        pathModule: this.pathModule,
-        projectRoot: state.root,
-      }),
-      currentLine: position.line,
-      includeCurrentLine,
-    })) {
+    const excludedCurrentOccurrences = new Map();
+    const currentLabels = includeCurrentLine
+      ? []
+      : record.usedStepsByLine.get(position.line) || [];
+    for (const label of currentLabels) {
       const key = normalizedKey(label);
-      allowedCurrentOccurrences.set(key, (allowedCurrentOccurrences.get(key) || 0) + 1);
+      excludedCurrentOccurrences.set(key, (excludedCurrentOccurrences.get(key) || 0) + 1);
     }
     return state.completionEntries.filter((entry) => {
       const key = normalizedKey(entry.label);
@@ -451,11 +454,9 @@ class WorkspaceStepIndex {
       if (!occurrences) {
         return true;
       }
-      let count = allowedCurrentOccurrences.get(key) || 0;
-      for (const [candidateFile, candidateCount] of occurrences) {
-        if (candidateFile !== file) {
-          count += candidateCount;
-        }
+      let count = -(excludedCurrentOccurrences.get(key) || 0);
+      for (const candidateCount of occurrences.values()) {
+        count += candidateCount;
       }
       return count > 0;
     });

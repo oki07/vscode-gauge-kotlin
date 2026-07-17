@@ -1276,7 +1276,7 @@ function isUsedStepSourceDocument(document) {
   return isSpecDocument(document) || isMarkdownSpecDocument(document) || isConceptDocument(document);
 }
 
-function usedStepEntriesFromDocument(document, options = {}) {
+function usedStepRecordsFromDocument(document, options = {}) {
   if (!document || typeof document.getText !== "function" || !isUsedStepSourceDocument(document)) {
     return [];
   }
@@ -1298,11 +1298,18 @@ function usedStepEntriesFromDocument(document, options = {}) {
       continue;
     }
     const endLine = multiline ? multilineStepEndLine(lines, lineNumber) : lineNumber;
-    entries.push(isTableLine(lines[endLine + 1] || "")
-      ? `${usedStepCompletionText(stepText)} <table>`
-      : usedStepCompletionText(stepText));
+    entries.push({
+      label: isTableLine(lines[endLine + 1] || "")
+        ? `${usedStepCompletionText(stepText)} <table>`
+        : usedStepCompletionText(stepText),
+      line: lineNumber,
+    });
   }
   return entries;
+}
+
+function usedStepEntriesFromDocument(document, options = {}) {
+  return usedStepRecordsFromDocument(document, options).map((entry) => entry.label);
 }
 
 function resolveClientsMap(clientsMap) {
@@ -1736,4 +1743,5 @@ module.exports = {
   parameterEntriesFromDocument,
   tagValues,
   usedStepEntriesFromDocument,
+  usedStepRecordsFromDocument,
 };
