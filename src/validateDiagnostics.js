@@ -223,6 +223,7 @@ class GaugeValidateDiagnosticsProvider {
     this.env = options.env || process.env;
     this.path = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
+    this.projectEnvironmentService = options.projectEnvironmentService;
     this.vscode = getVscode(options.vscode);
     this.pendingRefresh = undefined;
     this.projectEnvironments = new Map();
@@ -317,6 +318,13 @@ class GaugeValidateDiagnosticsProvider {
 
   projectEnvironment(project) {
     const root = projectRoot(project);
+    if (
+      root
+      && this.projectEnvironmentService
+      && typeof this.projectEnvironmentService.cachedEnvironment === "function"
+    ) {
+      return this.projectEnvironmentService.cachedEnvironment(root) || {};
+    }
     if (root && this.projectEnvironments.has(root)) {
       return this.projectEnvironments.get(root);
     }
@@ -332,12 +340,32 @@ class GaugeValidateDiagnosticsProvider {
     return value;
   }
 
+  async projectEnvironmentAsync(project) {
+    if (
+      this.projectEnvironmentService
+      && typeof this.projectEnvironmentService.environmentFor === "function"
+    ) {
+      return this.projectEnvironmentService.environmentFor(project, this.cli);
+    }
+    return this.projectEnvironment(project);
+  }
+
   validateOptions(project) {
     return {
       cwd: projectRoot(project),
       env: {
         ...envWithGaugeHome(this.env, { vscode: this.vscode }),
         ...this.projectEnvironment(project),
+      },
+    };
+  }
+
+  async validateOptionsAsync(project) {
+    return {
+      cwd: projectRoot(project),
+      env: {
+        ...envWithGaugeHome(this.env, { vscode: this.vscode }),
+        ...await this.projectEnvironmentAsync(project),
       },
     };
   }
@@ -372,20 +400,20 @@ class GaugeValidateDiagnosticsProvider {
     return parseGaugeValidateErrors(output);
   }
 
-  runValidateAsync(project) {
+  async runValidateAsync(project) {
     if (!this.cli || typeof this.cli.gaugeCommand !== "function") {
-      return Promise.resolve([]);
+      return [];
     }
     const command = this.cli.gaugeCommand();
     if (!command || !projectRoot(project)) {
-      return Promise.resolve([]);
+      return [];
     }
-    const options = this.validateOptions(project);
+    const options = await this.validateOptionsAsync(project);
     if (requiresProjectClasspath(project) && !hasProjectClasspath(options.env)) {
-      return Promise.resolve([]);
+      return [];
     }
     if (typeof command.spawn !== "function") {
-      return Promise.resolve(this.runValidate(project));
+      return this.runValidate(project);
     }
 
     return new Promise((resolve) => {
@@ -704,33 +732,7 @@ class GaugeValidateDiagnosticsProvider {
     }
 
     const collection = this.vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
-    const workspace = this.vscode.workspace || {};
     const disposables = [collection];
-    const registerListener = (name, listener) => {
-      if (typeof workspace[name] === "function") {
-        const disposable = workspace[name](listener);
-        if (disposable) {
-          disposables.push(disposable);
-        }
-      }
-    };
-    const scheduleForDocument = (document) => {
-      if (!this.shouldDiagnose(document)) {
-        return;
-      }
-      this.scheduleRootRefresh(collection, this.rootForDocument(document));
-    };
-
-    for (const document of workspace.textDocuments || []) {
-      scheduleForDocument(document);
-    }
-    registerListener("onDidOpenTextDocument", scheduleForDocument);
-    registerListener("onDidSaveTextDocument", scheduleForDocument);
-    registerListener("onDidCloseTextDocument", (document) => {
-      if (document && document.uri && typeof collection.delete === "function") {
-        collection.delete(document.uri);
-      }
-    });
 
     const provider = this;
     return {

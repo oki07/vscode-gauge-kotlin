@@ -433,6 +433,7 @@ class DependencyStepIndex {
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
+    this.projectEnvironmentService = options.projectEnvironmentService;
     this.scanArchive = options.scanArchive || scanJarArchive;
     this.vscode = getVscode(options.vscode);
     this.classpathProvider = options.classpathProvider || ((root) => this.projectClasspath(root));
@@ -442,12 +443,26 @@ class DependencyStepIndex {
     this.generation = 0;
   }
 
-  projectClasspath(root) {
+  async projectClasspath(root) {
     const project = projectForRoot(this.projectFactory, root);
-    if (!project || typeof project.envs !== "function") {
+    if (
+      !project
+      || (
+        typeof project.envs !== "function"
+        && typeof project.envsAsync !== "function"
+        && !this.projectEnvironmentService
+      )
+    ) {
       return [];
     }
-    const environment = project.envs(this.cli) || {};
+    const environment = this.projectEnvironmentService
+      && typeof this.projectEnvironmentService.environmentFor === "function"
+      ? await this.projectEnvironmentService.environmentFor(project, this.cli)
+      : await (
+        typeof project.envsAsync === "function"
+          ? project.envsAsync(this.cli)
+          : Promise.resolve(project.envs(this.cli) || {})
+      );
     const classpath = environment[GAUGE_CUSTOM_CLASSPATH];
     return typeof classpath === "string" ? classpath.split(this.pathModule.delimiter) : [];
   }
@@ -579,12 +594,35 @@ class DependencyStepIndex {
 
   register() {
     const workspace = this.vscode.workspace || {};
-    if (typeof workspace.registerTextDocumentContentProvider !== "function") {
-      return { dispose() {} };
+    const disposables = [];
+    if (
+      this.projectEnvironmentService
+      && typeof this.projectEnvironmentService.onDidInvalidate === "function"
+    ) {
+      disposables.push(this.projectEnvironmentService.onDidInvalidate((root) => {
+        if (root) {
+          this.invalidate(root);
+          return;
+        }
+        for (const indexedRoot of [...this.indices.keys()]) {
+          this.invalidate(indexedRoot);
+        }
+      }));
     }
-    return workspace.registerTextDocumentContentProvider(GAUGE_DEPENDENCY_SCHEME, {
-      provideTextDocumentContent: (uri) => this.content(uri),
-    });
+    if (typeof workspace.registerTextDocumentContentProvider === "function") {
+      disposables.push(workspace.registerTextDocumentContentProvider(GAUGE_DEPENDENCY_SCHEME, {
+        provideTextDocumentContent: (uri) => this.content(uri),
+      }));
+    }
+    return {
+      dispose() {
+        for (const disposable of disposables) {
+          if (disposable && typeof disposable.dispose === "function") {
+            disposable.dispose();
+          }
+        }
+      },
+    };
   }
 }
 

@@ -134,6 +134,10 @@ class GaugeProject {
       [GAUGE_CUSTOM_CLASSPATH]: classpath,
     };
   }
+
+  envsAsync(cli) {
+    return Promise.resolve(this.envs(cli));
+  }
 }
 
 module.exports = {

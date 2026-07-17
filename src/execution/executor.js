@@ -654,9 +654,11 @@ function createGaugeExecutionController(options = {}) {
   let sawExecutionTestEvent = false;
   let cachedCli;
   const executionEnvCache = new Map();
+  const projectEnvironmentService = options.projectEnvironmentService;
   let buildFileWatcher;
   if (
-    vscode.workspace
+    !projectEnvironmentService
+    && vscode.workspace
     && typeof vscode.workspace.createFileSystemWatcher === "function"
   ) {
     try {
@@ -677,6 +679,12 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function resolveBuildToolExecutionEnvironment(project, cli, projectRoot) {
+    if (
+      projectEnvironmentService
+      && typeof projectEnvironmentService.executionEnvironmentFor === "function"
+    ) {
+      return projectEnvironmentService.executionEnvironmentFor(project, cli);
+    }
     const cached = executionEnvCache.get(projectRoot);
     const env = await project.executionEnvsAsync(cli, cached);
     if (env) {

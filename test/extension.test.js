@@ -332,7 +332,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 4
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 5
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -1892,6 +1892,18 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeProjectEnvironmentService {
+    constructor(options) {
+      this.options = options;
+      this.disposeCalls = 0;
+      created.projectEnvironmentService = this;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  }
+
   class FakeWorkspaceStepIndex {
     constructor(options) {
       this.options = options;
@@ -1921,6 +1933,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
     GaugeClients: FakeGaugeClients,
     DependencyStepIndex: FakeDependencyStepIndex,
+    ProjectEnvironmentService: FakeProjectEnvironmentService,
     WorkspaceStepIndex: FakeWorkspaceStepIndex,
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
@@ -1970,6 +1983,14 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.state.context, context);
   assert.equal(created.workspace.options.vscode, fakeVscode);
   assert.equal(created.dependencyStepIndex.options.cli, cli);
+  assert.equal(
+    created.dependencyStepIndex.options.projectEnvironmentService,
+    created.projectEnvironmentService,
+  );
+  assert.equal(created.executionOptions.projectEnvironmentService, created.projectEnvironmentService);
+  assert.equal(created.workspace.options.projectEnvironmentService, created.projectEnvironmentService);
+  assert.equal(created.validateDiagnosticsProvider, undefined);
+  assert.equal(context.subscriptions.includes(created.projectEnvironmentService), true);
   assert.equal(
     created.dependencyStepIndex.options.projectFactory,
     created.workspace.options.projectFactory,
@@ -2027,7 +2048,6 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(renameProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
-  assert.equal(context.subscriptions.includes(created.validateDiagnosticsProvider.disposable), true);
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   for (const subscription of context.subscriptions) {
     if (subscription && typeof subscription.dispose === "function") {
@@ -2035,6 +2055,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
   assert.equal(created.workspaceStepIndex.disposeCalls, 1);
+  assert.equal(created.projectEnvironmentService.disposeCalls, 1);
   assert.equal(
     textDocumentListeners.every((entry) => entry.disposable.disposeCalls > 0),
     true,
@@ -2130,9 +2151,6 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.stepCodeActionProvider.options.vscode, fakeVscode);
   assert.equal(created.stepDiagnosticsProvider.options.vscode, fakeVscode);
   assert.equal(created.stepDiagnosticsProvider.options.projectFactory, created.workspace.options.projectFactory);
-  assert.equal(created.validateDiagnosticsProvider.options.vscode, fakeVscode);
-  assert.equal(created.validateDiagnosticsProvider.options.cli, cli);
-  assert.equal(created.validateDiagnosticsProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(context.subscriptions.includes(configurationListeners[0].disposable), true);
   assert.deepEqual(editorUpdates[0], {
     key: "semanticTokenColorCustomizations",

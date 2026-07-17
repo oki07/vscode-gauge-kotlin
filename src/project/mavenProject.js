@@ -20,6 +20,10 @@ class MavenProject extends BuildToolProject {
     return this.classpathEnv(cli.mavenCommand(), "-q gauge:classpath");
   }
 
+  envsAsync(cli) {
+    return this.classpathEnvAsync(cli.mavenCommand(), "-q gauge:classpath");
+  }
+
   executionEnvs(cli) {
     return this.classpathEnv(
       cli.mavenCommand(),

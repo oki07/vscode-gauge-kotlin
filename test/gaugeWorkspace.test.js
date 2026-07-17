@@ -394,7 +394,9 @@ test("GaugeWorkspace exposes the project client before runner installation compl
   });
 
   const start = workspace.startServerFor("/workspace/gauge");
-  await Promise.resolve();
+  for (let attempt = 0; attempt < 10 && !releaseInstall; attempt += 1) {
+    await Promise.resolve();
+  }
 
   const entry = clients.get("/workspace/gauge/specs/example.spec");
   assert.ok(entry);

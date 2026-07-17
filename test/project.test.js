@@ -370,6 +370,30 @@ test("build project envs report missing build tool commands", () => {
   ]);
 });
 
+test("GradleProject resolves its classpath asynchronously without execSync", async () => {
+  const { Command } = require("../src/cli");
+  const { GradleProject } = require("../src/project/gradleProject");
+  const project = new GradleProject("/workspace/gauge", { Language: "kotlin" }, {
+    exec(command, options, callback) {
+      assert.equal(command, "gradle -q classpath");
+      assert.equal(options.cwd, "/workspace/gauge");
+      callback(undefined, Buffer.from("/workspace/classes"));
+    },
+    execSync() {
+      throw new Error("interactive classpath lookup must not use execSync");
+    },
+    fileSystem: { existsSync() { return false; } },
+  });
+
+  const environment = await project.envsAsync({
+    gradleCommand() {
+      return new Command("gradle");
+    },
+  });
+
+  assert.deepEqual(environment, { gauge_custom_classpath: "/workspace/classes" });
+});
+
 test("GaugeProject compares by class and root", () => {
   const { GaugeProject } = require("../src/project/gaugeProject");
   const { GradleProject } = require("../src/project/gradleProject");

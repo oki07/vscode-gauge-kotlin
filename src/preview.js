@@ -397,7 +397,10 @@ async function previewGaugeDocument(options = {}) {
   ensureDirectory(fileSystem, previewRoot);
   ensureDirectory(fileSystem, docsDir);
   const env = envWithGaugeHome(options.env || process.env, { vscode });
-  const projectEnv = projectEnvironment(project, cli);
+  const projectEnv = options.projectEnvironmentService
+    && typeof options.projectEnvironmentService.environmentFor === "function"
+    ? await options.projectEnvironmentService.environmentFor(project, cli)
+    : projectEnvironment(project, cli);
 
   const result = await waitForProcess(
     command,

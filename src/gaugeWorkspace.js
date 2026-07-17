@@ -198,6 +198,7 @@ class GaugeWorkspace {
     this.fileSystem = options.fileSystem || nodeFs;
     this.cli = options.cli;
     this.dependencyStepIndex = options.dependencyStepIndex;
+    this.projectEnvironmentService = options.projectEnvironmentService;
     this.localDefinitionOwnedExternally = options.localDefinitionOwnedExternally === true;
     this.stepDefinitionProvider = options.stepDefinitionProvider;
     this.clientsMap = options.clientsMap || new GaugeClients();
@@ -536,7 +537,13 @@ class GaugeWorkspace {
     }
   }
 
-  cachedProjectEnvs(project) {
+  async cachedProjectEnvs(project) {
+    if (
+      this.projectEnvironmentService
+      && typeof this.projectEnvironmentService.environmentFor === "function"
+    ) {
+      return this.projectEnvironmentService.environmentFor(project, this.cli);
+    }
     const projectRoot = project.root();
     if (this.projectEnvironmentCache.has(projectRoot)) {
       return this.projectEnvironmentCache.get(projectRoot);
@@ -546,7 +553,7 @@ class GaugeWorkspace {
     return envs;
   }
 
-  serverOptionsFor(project) {
+  async serverOptionsFor(project) {
     const command = this.cli.gaugeCommand();
     const args = command.argsForSpawnType(["daemon", "--lsp", "--dir", project.root()]);
     const launchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
@@ -558,7 +565,7 @@ class GaugeWorkspace {
     const env = {
       ...this.env,
       GAUGE_IGNORE_RUNNER_BUILD_FAILURES: "true",
-      ...this.cachedProjectEnvs(project),
+      ...await this.cachedProjectEnvs(project),
       gauge_lsp_reference_codelens: "false",
     };
 
@@ -629,7 +636,7 @@ class GaugeWorkspace {
     }
 
     const javaConfigGenerated = this.generateJavaConfig(project);
-    const serverOptions = this.serverOptionsFor(project);
+    const serverOptions = await this.serverOptionsFor(project);
     const languageClient = new this.LanguageClient(
       "gauge",
       "Gauge",
@@ -640,7 +647,7 @@ class GaugeWorkspace {
     try {
       await this.installRunnerFor(project);
       if (!javaConfigGenerated && this.generateJavaConfig(project)) {
-        const refreshedServerOptions = this.serverOptionsFor(project);
+        const refreshedServerOptions = await this.serverOptionsFor(project);
         serverOptions.command = refreshedServerOptions.command;
         serverOptions.args = refreshedServerOptions.args;
         serverOptions.options = refreshedServerOptions.options;

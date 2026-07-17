@@ -164,3 +164,38 @@ test("DependencyStepIndex resolves indexed dependency methods to virtual declara
     { line: 8, character: 11 },
   );
 });
+
+test("DependencyStepIndex gets classpath from the asynchronous environment service", async () => {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+  };
+  const calls = [];
+  const index = new DependencyStepIndex({
+    fileSystem: {
+      existsSync(file) {
+        return file === "/workspace/dependency.jar";
+      },
+    },
+    pathModule: require("node:path").posix,
+    projectEnvironmentService: {
+      async environmentFor(candidate) {
+        calls.push(candidate);
+        return { gauge_custom_classpath: "/workspace/dependency.jar" };
+      },
+    },
+    projectFactory: {
+      get() {
+        return project;
+      },
+    },
+    async scanArchive() {},
+    vscode: {},
+  });
+
+  await index.refresh("/workspace/gauge");
+
+  assert.deepEqual(calls, [project]);
+});

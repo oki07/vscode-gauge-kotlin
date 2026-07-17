@@ -29,6 +29,7 @@ const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
 const { ProjectInitializer } = require("./init/projectInit");
 const { previewGaugeDocument } = require("./preview");
+const { ProjectEnvironmentService } = require("./projectEnvironmentService");
 const { createProjectFactory } = require("./project/projectFactory");
 const {
   GaugeSemanticTokensProvider,
@@ -38,7 +39,6 @@ const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const { GaugeTestController } = require("./testController");
 const { TerminalProvider } = require("./terminalProvider");
-const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const { WorkspaceDocumentStore } = require("./workspaceDocumentStore");
 const { WorkspaceStepIndex } = require("./workspaceStepIndex");
 const {
@@ -207,6 +207,7 @@ async function formatActiveGaugeDocument(vscode, options = {}) {
     env: options.env,
     fileSystem: options.fileSystem,
     projectFactory: options.projectFactory,
+    projectEnvironmentService: options.projectEnvironmentService,
     vscode,
   });
   const edits = await provider.provideDocumentFormattingEdits(document);
@@ -507,6 +508,7 @@ function registerFormatProvider(context, vscode, options) {
     createCli: options.createCli,
     fileSystem: options.fileSystem,
     projectFactory: options.projectFactory,
+    projectEnvironmentService: options.projectEnvironmentService,
     vscode,
   });
   const disposable = vscode.languages.registerDocumentFormattingEditProvider(
@@ -608,21 +610,6 @@ function registerStepDefinitionProvider(context, vscode, options) {
     context.subscriptions.push(disposable);
   }
   return provider;
-}
-
-function registerValidateDiagnosticsProvider(context, vscode, options) {
-  const ValidateDiagnosticsProviderCtor = options.GaugeValidateDiagnosticsProvider
-    || GaugeValidateDiagnosticsProvider;
-  const provider = new ValidateDiagnosticsProviderCtor({
-    cli: options.cli,
-    env: options.env,
-    projectFactory: options.projectFactory,
-    vscode,
-  });
-  const disposable = typeof provider.register === "function" ? provider.register() : undefined;
-  if (disposable) {
-    context.subscriptions.push(disposable);
-  }
 }
 
 function registerRenameProvider(context, vscode, options) {
@@ -884,6 +871,7 @@ function startGaugeServices(context, vscode, options = {}) {
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     projectFactory,
+    projectEnvironmentService: options.projectEnvironmentService,
     vscode,
   });
   const dependencyStepIndexDisposable = typeof dependencyStepIndex.register === "function"
@@ -978,11 +966,6 @@ function startGaugeServices(context, vscode, options = {}) {
     stepDiagnosticsProvider,
     workspaceStepIndex,
   });
-  registerValidateDiagnosticsProvider(context, vscode, {
-    ...options,
-    cli,
-    projectFactory,
-  });
   registerSemanticTokensProvider(context, vscode, {
     ...options,
     projectFactory,
@@ -1008,6 +991,7 @@ function startGaugeServices(context, vscode, options = {}) {
     LanguageClient: options.LanguageClient,
     pathModule: options.pathModule,
     projectFactory,
+    projectEnvironmentService: options.projectEnvironmentService,
     RevealOutputChannelOn: options.RevealOutputChannelOn,
     state,
     stepDefinitionProvider,
@@ -1061,12 +1045,23 @@ function activate(context, vscodeApi, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
+  const ProjectEnvironmentServiceCtor = options.ProjectEnvironmentService
+    || ProjectEnvironmentService;
+  const projectEnvironmentService = options.projectEnvironmentService
+    || new ProjectEnvironmentServiceCtor({
+      projectFactory,
+      vscode,
+    });
+  if (!options.projectEnvironmentService) {
+    context.subscriptions.push(projectEnvironmentService);
+  }
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
   const serviceOptions = {
     ...options,
     clientsMap,
     projectFactory,
+    projectEnvironmentService,
   };
   const GaugeTestControllerCtor = options.GaugeTestController || GaugeTestController;
   const testController = new GaugeTestControllerCtor({ clientsMap, projectFactory, vscode });
@@ -1085,6 +1080,7 @@ function activate(context, vscodeApi, options = {}) {
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     projectFactory,
+    projectEnvironmentService,
     executionEventSink,
     runner: options.runner,
     scenariosProvider: options.scenariosProvider || createGaugeScenariosProvider(

@@ -42,6 +42,10 @@ class GradleProject extends BuildToolProject {
     return this.classpathEnv(this.getBuildCommand(cli), "-q classpath");
   }
 
+  envsAsync(cli) {
+    return this.classpathEnvAsync(this.getBuildCommand(cli), "-q classpath");
+  }
+
   executionEnvs(cli) {
     return this.classpathEnv(
       this.getBuildCommand(cli),
