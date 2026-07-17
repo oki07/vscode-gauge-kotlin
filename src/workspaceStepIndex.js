@@ -2,7 +2,12 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
-const { usedStepEntriesFromDocument } = require("./dynamicArgumentCompletion");
+const {
+  isTagSourceDocument,
+  parameterEntriesFromDocument,
+  tagValues,
+  usedStepEntriesFromDocument,
+} = require("./dynamicArgumentCompletion");
 const {
   localGaugeStepReferenceEntries,
   superStepAliasesForEntry,
@@ -44,8 +49,10 @@ function emptyRecord(document) {
   return {
     concepts: [],
     document,
+    parameters: undefined,
     references: [],
     stepEntries: [],
+    tags: [],
     usedSteps: [],
   };
 }
@@ -64,6 +71,7 @@ function emptyState(root) {
     semanticCompletionKeys: new Set(),
     stepAliasesByEntry: new Map(),
     stepDefinitionsByTemplate: new Map(),
+    tags: [],
     usedStepOccurrencesByTemplate: new Map(),
   };
 }
@@ -103,6 +111,22 @@ class WorkspaceStepIndex {
           pathModule: this.pathModule,
           projectRoot: root,
         }),
+      })
+    ));
+    this.tagEntriesProvider = options.tagEntriesProvider || ((document) => (
+      tagValues(document.getText())
+    ));
+    this.parameterEntriesProvider = options.parameterEntriesProvider || ((document, root) => (
+      parameterEntriesFromDocument(document, {
+        allowMultilineStep: allowMultilineStep({
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: root,
+        }),
+        filePath: documentPath(document),
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectRoot: root,
       })
     ));
     this.states = new Map();
@@ -238,6 +262,12 @@ class WorkspaceStepIndex {
         }),
       });
     }
+    if (isTagSourceDocument(document)) {
+      record.tags = await Promise.resolve(this.tagEntriesProvider(document, root));
+    }
+    if (isGaugeReferenceDocument(document)) {
+      record.parameters = await Promise.resolve(this.parameterEntriesProvider(document, root));
+    }
     return record;
   }
 
@@ -247,8 +277,10 @@ class WorkspaceStepIndex {
     state.referenceEntriesByTemplate = new Map();
     state.semanticCompletionKeys = new Set();
     state.stepDefinitionsByTemplate = new Map();
+    state.tags = [];
     state.usedStepOccurrencesByTemplate = new Map();
     const completionSeen = new Set();
+    const tagSeen = new Set();
     const addCompletion = (label, detail) => {
       const key = normalizedKey(label);
       if (!label || !key || completionSeen.has(key)) {
@@ -292,6 +324,12 @@ class WorkspaceStepIndex {
         const occurrences = state.usedStepOccurrencesByTemplate.get(key);
         const file = documentPath(document);
         occurrences.set(file, (occurrences.get(file) || 0) + 1);
+      }
+      for (const tag of record.tags) {
+        if (!tagSeen.has(tag)) {
+          tagSeen.add(tag);
+          state.tags.push(tag);
+        }
       }
       for (const entry of record.references) {
         addMapEntry(state.referenceEntriesByTemplate, entry.template, entry);
@@ -476,6 +514,32 @@ class WorkspaceStepIndex {
     const state = await this.snapshotForPath(sourcePath);
     return (state.referenceEntriesByTemplate.get(normalizedKey(template)) || [])
       .map((entry) => entry.location);
+  }
+
+  async tagEntries(sourceDocument) {
+    const state = await this.snapshotFor(sourceDocument);
+    return state.tags.slice();
+  }
+
+  async parameterEntries(sourceDocument, position, argumentType) {
+    const state = await this.snapshotFor(sourceDocument);
+    const record = state.records.get(documentPath(sourceDocument));
+    const parameters = record && record.parameters;
+    if (!parameters) {
+      return [];
+    }
+    if (argumentType === "static") {
+      return parameters.staticValues.slice();
+    }
+    const currentLine = position && position.line;
+    return [...new Set([
+      ...parameters.specHeaders,
+      ...(parameters.scenarioHeadersByLine.get(currentLine) || []),
+      ...parameters.dynamicValues,
+      ...parameters.dynamicOccurrences
+        .filter((entry) => entry.line !== currentLine)
+        .map((entry) => entry.value),
+    ])];
   }
 
   async documentsFor(sourceDocument) {

@@ -590,6 +590,9 @@ function registerDocumentSymbolProvider(context, vscode, options) {
       context.subscriptions.push(disposable);
     }
   }
+  if (typeof provider.dispose === "function") {
+    context.subscriptions.push(provider);
+  }
 }
 
 function registerStepDiagnosticsProvider(context, vscode, options) {

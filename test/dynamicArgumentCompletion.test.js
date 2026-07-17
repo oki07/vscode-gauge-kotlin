@@ -108,6 +108,9 @@ test("GaugeDynamicArgumentCompletionProvider uses the shared workspace step inde
     "## Successful checkout",
     "* ",
   ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+  document.getText = () => {
+    throw new Error("indexed step completion must read only the current line");
+  };
   const calls = [];
   const provider = new GaugeDynamicArgumentCompletionProvider({
     projectFactory: createProjectFactory(),
@@ -128,6 +131,68 @@ test("GaugeDynamicArgumentCompletionProvider uses the shared workspace step inde
 
   assert.deepEqual(labels(items), ["Open cart"]);
   assert.deepEqual(calls, [{ position, sourceDocument: document }]);
+});
+
+test("GaugeDynamicArgumentCompletionProvider uses indexed Gauge tags", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "tags: ",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+  document.getText = () => {
+    throw new Error("indexed tag completion must read only nearby lines");
+  };
+  const calls = [];
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      tagEntries(sourceDocument) {
+        calls.push(sourceDocument);
+        return ["smoke", "regression"];
+      },
+    },
+  });
+  provider.workspaceDocuments = () => {
+    throw new Error("tag completion must not rescan workspace documents");
+  };
+
+  const items = await provider.provideCompletionItems(document, new vscode.Position(1, 6));
+
+  assert.deepEqual(labels(items), ["smoke", "regression"]);
+  assert.deepEqual(calls, [document]);
+});
+
+test("GaugeDynamicArgumentCompletionProvider uses indexed parameters", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "## Pay",
+    "* Pay with <cu>",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+  document.getText = () => {
+    throw new Error("indexed parameter completion must read only nearby lines");
+  };
+  const calls = [];
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      parameterEntries(sourceDocument, position, argumentType) {
+        calls.push({ argumentType, position, sourceDocument });
+        return ["customer", "account"];
+      },
+    },
+  });
+
+  const position = new vscode.Position(2, 14);
+  const items = await provider.provideCompletionItems(document, position);
+
+  assert.deepEqual(labels(items), ["customer", "account"]);
+  assert.deepEqual(calls, [{ argumentType: "dynamic", position, sourceDocument: document }]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table headers inside dynamic arguments", () => {

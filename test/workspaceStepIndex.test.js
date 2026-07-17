@@ -213,3 +213,74 @@ test("WorkspaceStepIndex excludes the current used step from position-aware comp
 
   assert.deepEqual(entries.map((entry) => entry.label), ["Second step"]);
 });
+
+test("WorkspaceStepIndex reparses tags only for changed Gauge documents", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const first = createDocument(
+    "# First\ntags: smoke, fast",
+    "/workspace/gauge/specs/first.spec",
+    "gauge",
+    1,
+  );
+  const second = createDocument(
+    "# Second\ntags: regression",
+    "/workspace/gauge/specs/second.spec",
+    "gauge",
+    1,
+  );
+  const store = new FakeDocumentStore([first, second]);
+  let tagAnalyses = 0;
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    tagEntriesProvider(document) {
+      tagAnalyses += 1;
+      return document.getText().match(/(?:smoke|fast|regression|focused)/g) || [];
+    },
+    vscode: { workspace: { textDocuments: [first] } },
+  });
+
+  assert.deepEqual(await index.tagEntries(first), ["smoke", "fast", "regression"]);
+  assert.equal(tagAnalyses, 2);
+  assert.deepEqual(await index.tagEntries(first), ["smoke", "fast", "regression"]);
+  assert.equal(tagAnalyses, 2);
+
+  store.replace(createDocument(
+    "# Second\ntags: focused",
+    second.uri.fsPath,
+    "gauge",
+    2,
+  ));
+
+  assert.deepEqual(await index.tagEntries(first), ["smoke", "fast", "focused"]);
+  assert.equal(tagAnalyses, 3);
+});
+
+test("WorkspaceStepIndex caches parameter values and excludes the current step", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const specification = createDocument([
+    "# Checkout",
+    "| customer | account |",
+    "| Alice | primary |",
+    "## Pay",
+    "| method |",
+    "| card |",
+    "* Seed <tenant> for \"admin\"",
+    "* Pay with <customer>",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge", 1);
+  const store = new FakeDocumentStore([specification]);
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    vscode: { workspace: { textDocuments: [specification] } },
+  });
+
+  assert.deepEqual(
+    await index.parameterEntries(specification, { line: 7, character: 20 }, "dynamic"),
+    ["customer", "account", "method", "tenant"],
+  );
+  assert.deepEqual(
+    await index.parameterEntries(specification, { line: 6, character: 20 }, "static"),
+    ["admin"],
+  );
+});

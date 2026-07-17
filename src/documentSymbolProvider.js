@@ -29,6 +29,12 @@ function isSpecDocument(document) {
   return SPEC_FILE_PATTERN.test(documentPath(document));
 }
 
+function isWorkspaceSymbolPath(file) {
+  return SPEC_FILE_PATTERN.test(file)
+    || MARKDOWN_SPEC_FILE_PATTERN.test(file)
+    || CONCEPT_FILE_PATTERN.test(file);
+}
+
 function isConceptDocument(document) {
   return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
     || CONCEPT_FILE_PATTERN.test(documentPath(document));
@@ -209,6 +215,38 @@ class GaugeDocumentSymbolProvider {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
+    this.workspaceSymbolRecords = new Map();
+    this.workspaceSymbolEntries = [];
+    this.workspaceSymbolDirtyFiles = new Set();
+    this.workspaceSymbolFullDirty = true;
+    this.workspaceSymbolReady = false;
+    this.workspaceSymbolPending = undefined;
+    this.documentStoreSubscription = undefined;
+    if (
+      this.documentStore
+      && typeof this.documentStore.onDidChangeDocuments === "function"
+    ) {
+      this.documentStoreSubscription = this.documentStore.onDidChangeDocuments((change) => {
+        const file = change && change.file;
+        if (file && isWorkspaceSymbolPath(file)) {
+          this.workspaceSymbolDirtyFiles.add(file);
+        } else if (!file) {
+          this.workspaceSymbolFullDirty = true;
+        }
+      });
+    }
+  }
+
+  dispose() {
+    if (
+      this.documentStoreSubscription
+      && typeof this.documentStoreSubscription.dispose === "function"
+    ) {
+      this.documentStoreSubscription.dispose();
+    }
+    this.documentStoreSubscription = undefined;
+    this.workspaceSymbolRecords.clear();
+    this.workspaceSymbolEntries = [];
   }
 
   provideDocumentSymbols(document) {
@@ -297,6 +335,67 @@ class GaugeDocumentSymbolProvider {
     return documents;
   }
 
+  async refreshWorkspaceSymbolCache() {
+    const refreshAll = this.workspaceSymbolFullDirty;
+    this.workspaceSymbolFullDirty = false;
+    const dirtyFiles = new Set(this.workspaceSymbolDirtyFiles);
+    for (const file of dirtyFiles) {
+      this.workspaceSymbolDirtyFiles.delete(file);
+    }
+
+    const documents = await this.workspaceDocuments();
+    const currentByPath = new Map(
+      documents.map((document) => [documentPath(document), document]),
+    );
+    for (const file of [...this.workspaceSymbolRecords.keys()]) {
+      if (!currentByPath.has(file)) {
+        this.workspaceSymbolRecords.delete(file);
+      }
+    }
+    for (const document of documents) {
+      const file = documentPath(document);
+      if (
+        refreshAll
+        || dirtyFiles.has(file)
+        || !this.workspaceSymbolRecords.has(file)
+      ) {
+        this.workspaceSymbolRecords.set(file, {
+          document,
+          symbols: this.provideDocumentSymbols(document),
+        });
+      }
+    }
+    this.workspaceSymbolEntries = documents.flatMap((document) => {
+      const record = this.workspaceSymbolRecords.get(documentPath(document));
+      return record ? record.symbols : [];
+    });
+    this.workspaceSymbolReady = true;
+    return this.workspaceSymbolEntries;
+  }
+
+  async cachedWorkspaceSymbols() {
+    if (!this.documentStore) {
+      return undefined;
+    }
+    if (
+      this.workspaceSymbolReady
+      && !this.workspaceSymbolFullDirty
+      && this.workspaceSymbolDirtyFiles.size === 0
+    ) {
+      return this.workspaceSymbolEntries;
+    }
+    if (!this.workspaceSymbolPending) {
+      this.workspaceSymbolPending = this.refreshWorkspaceSymbolCache().finally(() => {
+        this.workspaceSymbolPending = undefined;
+      });
+    }
+    await this.workspaceSymbolPending;
+    if (this.workspaceSymbolFullDirty || this.workspaceSymbolDirtyFiles.size > 0) {
+      return this.cachedWorkspaceSymbols();
+    }
+    return this.workspaceSymbolEntries;
+  }
+
   async provideWorkspaceSymbols(query) {
     const normalizedQuery = workspaceSymbolQuery(query);
     if (normalizedQuery.length < 2) {
@@ -306,18 +405,19 @@ class GaugeDocumentSymbolProvider {
     const queryText = normalizedQuery.toLowerCase();
     const specSymbols = [];
     const scenarioSymbols = [];
-    const documents = await this.workspaceDocuments();
-    for (const document of documents) {
-      const symbols = this.provideDocumentSymbols(document);
-      for (const symbol of symbols) {
-        if (!symbol.name.toLowerCase().includes(queryText)) {
-          continue;
-        }
-        if (symbol.name.startsWith("##")) {
-          scenarioSymbols.push(symbol);
-        } else if (symbol.name.startsWith("#")) {
-          specSymbols.push(symbol);
-        }
+    let symbols = await this.cachedWorkspaceSymbols();
+    if (!symbols) {
+      const documents = await this.workspaceDocuments();
+      symbols = documents.flatMap((document) => this.provideDocumentSymbols(document));
+    }
+    for (const symbol of symbols) {
+      if (!symbol.name.toLowerCase().includes(queryText)) {
+        continue;
+      }
+      if (symbol.name.startsWith("##")) {
+        scenarioSymbols.push(symbol);
+      } else if (symbol.name.startsWith("#")) {
+        specSymbols.push(symbol);
       }
     }
 

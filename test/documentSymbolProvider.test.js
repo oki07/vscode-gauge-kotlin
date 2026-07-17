@@ -481,6 +481,58 @@ test("GaugeDocumentSymbolProvider uses the shared document store without workspa
   assert.deepEqual(openedFiles, []);
 });
 
+test("GaugeDocumentSymbolProvider reparses only changed workspace symbol documents", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const listeners = [];
+  let documents = [
+    createDocument("# Spec Alpha\n## Scenario Alpha", "/workspace/gauge/specs/a.spec", "gauge"),
+    createDocument("# Spec Beta\n## Scenario Beta", "/workspace/gauge/specs/b.spec", "gauge"),
+    createDocument("# Shared Concept\n* Reuse", "/workspace/gauge/specs/shared.cpt", "gauge-concept"),
+  ];
+  const documentStore = {
+    documents() {
+      return documents;
+    },
+    onDidChangeDocuments(listener) {
+      listeners.push(listener);
+      return { dispose() {} };
+    },
+    async whenReady() {},
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const analyze = provider.provideDocumentSymbols.bind(provider);
+  let analyses = 0;
+  provider.provideDocumentSymbols = (document) => {
+    analyses += 1;
+    return analyze(document);
+  };
+
+  await provider.provideWorkspaceSymbols("Spec");
+  assert.equal(analyses, 3);
+
+  await provider.provideWorkspaceSymbols("Scenario");
+  assert.equal(analyses, 3, "an unchanged query must reuse parsed workspace symbols");
+
+  documents = documents.map((document) => (
+    document.uri.fsPath === "/workspace/gauge/specs/b.spec"
+      ? createDocument(
+        "# Updated Beta\n## Updated Scenario",
+        "/workspace/gauge/specs/b.spec",
+        "gauge",
+      )
+      : document
+  ));
+  listeners[0]({ file: "/workspace/gauge/specs/b.spec" });
+  const updated = await provider.provideWorkspaceSymbols("Updated");
+
+  assert.equal(analyses, 4, "a watcher update must reparse only the changed document");
+  assert.deepEqual(updated.map((symbol) => symbol.name), [
+    "# Updated Beta",
+    "## Updated Scenario",
+  ]);
+});
+
 test("GaugeDocumentSymbolProvider returns no workspace symbols for one-character queries", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();

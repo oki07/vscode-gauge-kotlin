@@ -73,6 +73,18 @@ function documentUri(document) {
   return file ? `file://${file}` : undefined;
 }
 
+function documentLineText(document, lineNumber) {
+  if (!document || lineNumber < 0 || typeof document.lineAt !== "function") {
+    return "";
+  }
+  try {
+    const line = document.lineAt(lineNumber);
+    return line && typeof line.text === "string" ? line.text : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
 function isConceptDocument(document) {
   return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
     || CONCEPT_FILE_PATTERN.test(documentPath(document));
@@ -269,6 +281,10 @@ function isCompletionTableBlockLine(lines, lineNumber) {
 }
 
 function isTableHeaderLine(document, lineNumber, options = {}) {
+  if (document && typeof document.lineAt === "function") {
+    return isTableBlockStartLine(documentLineText(document, lineNumber), options)
+      && !isTableLine(documentLineText(document, lineNumber - 1));
+  }
   const lines = document.getText().split(/\r?\n/);
   return isFirstTableLine(lines, lineNumber, options);
 }
@@ -432,6 +448,31 @@ function isTagsContext(lines, lineNumber) {
   return false;
 }
 
+function isDocumentTagsContext(document, lineNumber) {
+  for (let currentLine = lineNumber; currentLine >= 0; currentLine -= 1) {
+    const line = documentLineText(document, currentLine);
+    if (isTagLine(line)) {
+      return true;
+    }
+    if (
+      isTagContinuationBoundary(line)
+      || isLegacyHeadingAt([
+        line,
+        documentLineText(document, currentLine + 1),
+      ], 0)
+    ) {
+      return false;
+    }
+    if (
+      currentLine === 0
+      || !isTagLineEndingWithComma(documentLineText(document, currentLine - 1))
+    ) {
+      return false;
+    }
+  }
+  return false;
+}
+
 function tagCompletionRange(line, position) {
   const prefix = line.slice(0, position.character);
   const commaIndex = prefix.lastIndexOf(",");
@@ -453,12 +494,19 @@ function tagCompletionRange(line, position) {
 function tagValues(text) {
   const values = [];
   const lines = String(text || "").split(/\r?\n/);
+  let tagsContinuation = false;
   for (let index = 0; index < lines.length; index += 1) {
-    if (!isTagsContext(lines, index)) {
+    const line = lines[index];
+    const tagLine = isTagLine(line);
+    const continuationLine = tagsContinuation
+      && !isTagContinuationBoundary(line)
+      && !isLegacyHeadingAt(lines, index);
+    if (!tagLine && !continuationLine) {
+      tagsContinuation = false;
       continue;
     }
-    const line = lines[index];
-    const valueStart = isTagLine(line) ? line.indexOf(":") + 1 : 0;
+    tagsContinuation = isTagLineEndingWithComma(line);
+    const valueStart = tagLine ? line.indexOf(":") + 1 : 0;
     for (const rawValue of line.slice(valueStart).split(",")) {
       const value = rawValue.trim();
       if (value) {
@@ -992,12 +1040,84 @@ function staticArguments(text, options = {}) {
   return unique(values);
 }
 
+function scenarioDataTableHeadersByLine(lines) {
+  const headersByLine = new Map();
+  let inScenario = false;
+  let headerSearchBlocked = false;
+  let headers = [];
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    const line = lines[lineNumber] || "";
+    if (isScenarioHeadingAt(lines, lineNumber)) {
+      inScenario = true;
+      headerSearchBlocked = false;
+      headers = [];
+    } else if (
+      inScenario
+      && !headerSearchBlocked
+      && headers.length === 0
+      && isTableLine(line)
+      && !isTableLine(lines[lineNumber - 1] || "")
+    ) {
+      headers = unique(tableCells(line));
+    } else if (inScenario && headers.length === 0 && isStepLine(line)) {
+      headerSearchBlocked = true;
+    }
+    headersByLine.set(lineNumber, inScenario ? headers : []);
+  }
+  return headersByLine;
+}
+
+function parameterEntriesFromDocument(document, options = {}) {
+  if (!document || typeof document.getText !== "function") {
+    return undefined;
+  }
+  const text = document.getText();
+  if (isConceptDocument(document)) {
+    return {
+      dynamicOccurrences: [],
+      dynamicValues: conceptDynamicArguments(text),
+      scenarioHeadersByLine: new Map(),
+      specHeaders: [],
+      staticValues: staticArguments(text, { includeConceptHeadings: true }),
+    };
+  }
+  if (!isSpecDocument(document) && !isMarkdownSpecDocument(document)) {
+    return undefined;
+  }
+  const lines = text.split(/\r?\n/);
+  const dynamicOccurrences = [];
+  const multiline = Boolean(options.allowMultilineStep);
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    const line = lines[lineNumber] || "";
+    if (!isStepLine(line)) {
+      continue;
+    }
+    const stepText = multiline ? multilineStepText(lines, lineNumber) : line;
+    for (const value of dynamicArgumentsInLine(stepText)) {
+      dynamicOccurrences.push({ line: lineNumber, value });
+    }
+  }
+  return {
+    dynamicOccurrences,
+    dynamicValues: [],
+    scenarioHeadersByLine: scenarioDataTableHeadersByLine(lines),
+    specHeaders: specDataTableHeaders(text, options),
+    staticValues: staticArguments(text, { excludeTeardown: true }),
+  };
+}
+
 function allowsDynamicArgumentCompletion(line, document, lineNumber) {
-  const lines = document.getText().split(/\r?\n/);
-  if (isConceptDocument(document) && isConceptHeadingAt(lines, lineNumber)) {
+  if (
+    isConceptDocument(document)
+    && isConceptHeadingAt([
+      line,
+      documentLineText(document, lineNumber + 1),
+      documentLineText(document, lineNumber + 2),
+    ], 0)
+  ) {
     return true;
   }
-  return isStepLine(line) || isCompletionTableBlockLine(lines, lineNumber);
+  return isStepLine(line) || isTableLine(line);
 }
 
 function allowsStaticArgumentCompletion(line) {
@@ -1445,13 +1565,16 @@ class GaugeDynamicArgumentCompletionProvider {
     return mergeCompletionItems(localItems, serverItems);
   }
 
-  tagCompletionItems(document, position, targetRange, workspaceDocuments) {
+  tagCompletionItems(document, position, targetRange, workspaceDocuments, indexedEntries) {
     if (!this.isCompletionDocument(document)) {
       return [];
     }
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Variable;
-    const localItems = this.tagCompletionEntries(document, workspaceDocuments).map((label) => completionItem(
+    const entries = indexedEntries === undefined
+      ? this.tagCompletionEntries(document, workspaceDocuments)
+      : indexedEntries;
+    const localItems = entries.map((label) => completionItem(
       this.vscode,
       label,
       range,
@@ -1475,8 +1598,7 @@ class GaugeDynamicArgumentCompletionProvider {
       return [];
     }
     const line = document.lineAt(position.line).text;
-    const lines = document.getText().split(/\r?\n/);
-    const tagRange = isTagsContext(lines, position.line)
+    const tagRange = isDocumentTagsContext(document, position.line)
       ? tagCompletionRange(line, position)
       : undefined;
     const argumentRange = dynamicArgumentRange(line, position);
@@ -1489,6 +1611,18 @@ class GaugeDynamicArgumentCompletionProvider {
       return [];
     }
     if (tagRange) {
+      if (
+        this.workspaceStepIndex
+        && typeof this.workspaceStepIndex.tagEntries === "function"
+      ) {
+        const indexedEntries = this.workspaceStepIndex.tagEntries(document);
+        if (isThenable(indexedEntries)) {
+          return indexedEntries.then((entries) => (
+            this.tagCompletionItems(document, position, tagRange, [], entries)
+          ));
+        }
+        return this.tagCompletionItems(document, position, tagRange, [], indexedEntries);
+      }
       const workspaceDocuments = this.workspaceDocuments();
       if (isThenable(workspaceDocuments)) {
         return workspaceDocuments.then((documents) => (
@@ -1507,6 +1641,36 @@ class GaugeDynamicArgumentCompletionProvider {
       return [];
     }
     if (argumentRange || quotedArgumentRange) {
+      const targetRange = argumentRange || quotedArgumentRange;
+      const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
+      const argumentType = argumentRange ? "dynamic" : "static";
+      const completionItemsForLabels = (labels) => {
+        const localItems = labels.map((label) => completionItem(
+          this.vscode,
+          label,
+          range,
+          argumentCompletionOptions(label, argumentType, line, targetRange),
+        ));
+        const serverItems = this.serverCompletionItems(document, position, range);
+        if (isThenable(serverItems)) {
+          return serverItems.then((items) => mergeCompletionItemsByLabel(localItems, items));
+        }
+        return mergeCompletionItemsByLabel(localItems, serverItems);
+      };
+      if (
+        this.workspaceStepIndex
+        && typeof this.workspaceStepIndex.parameterEntries === "function"
+      ) {
+        const indexedEntries = this.workspaceStepIndex.parameterEntries(
+          document,
+          position,
+          argumentType,
+        );
+        if (isThenable(indexedEntries)) {
+          return indexedEntries.then(completionItemsForLabels);
+        }
+        return completionItemsForLabels(indexedEntries);
+      }
       const labels = argumentRange
         ? (
           isConceptDocument(document)
@@ -1532,20 +1696,7 @@ class GaugeDynamicArgumentCompletionProvider {
           excludeTeardown: !isConceptDocument(document),
           includeConceptHeadings: isConceptDocument(document),
         });
-      const targetRange = argumentRange || quotedArgumentRange;
-      const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
-      const argumentType = argumentRange ? "dynamic" : "static";
-      const localItems = labels.map((label) => completionItem(
-        this.vscode,
-        label,
-        range,
-        argumentCompletionOptions(label, argumentType, line, targetRange),
-      ));
-      const serverItems = this.serverCompletionItems(document, position, range);
-      if (isThenable(serverItems)) {
-        return serverItems.then((items) => mergeCompletionItemsByLabel(localItems, items));
-      }
-      return mergeCompletionItemsByLabel(localItems, serverItems);
+      return completionItemsForLabels(labels);
     }
 
     if (!stepRange) {
@@ -1581,5 +1732,8 @@ module.exports = {
   scenarioDataTableHeaders,
   specDataTableHeaders,
   staticArguments,
+  isTagSourceDocument,
+  parameterEntriesFromDocument,
+  tagValues,
   usedStepEntriesFromDocument,
 };
