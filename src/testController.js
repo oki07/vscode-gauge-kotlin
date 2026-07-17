@@ -167,9 +167,14 @@ function testResultsOutput(value) {
   return String(value || "").replace(/\r\n|\r|\n/g, "\r\n");
 }
 
-function appendTestResultsOutput(run, value) {
+function appendTestResultsOutput(run, value, item) {
   if (run && typeof run.appendOutput === "function") {
-    run.appendOutput(testResultsOutput(value));
+    const output = testResultsOutput(value);
+    if (item) {
+      run.appendOutput(output, undefined, item);
+    } else {
+      run.appendOutput(output);
+    }
   }
 }
 
@@ -1191,7 +1196,7 @@ class GaugeTestController {
     switch (event.type) {
       case "suiteStarted": {
         const item = this.ensureItem(event);
-        appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN));
+        appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN), item);
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
@@ -1200,7 +1205,11 @@ class GaugeTestController {
       case "testStarted": {
         const attemptEvent = this.resolveAttemptEvent(event);
         const item = this.ensureItem(attemptEvent);
-        appendTestResultsOutput(run, highlightedHeading(attemptEvent, "  ## ", ANSI_YELLOW));
+        appendTestResultsOutput(
+          run,
+          highlightedHeading(attemptEvent, "  ## ", ANSI_YELLOW),
+          item,
+        );
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
@@ -1212,7 +1221,11 @@ class GaugeTestController {
       case "testFinished": {
         const attemptEvent = this.resolveAttemptEvent(event);
         const status = this.finishItem(attemptEvent);
-        appendTestResultsOutput(run, highlightedResult(status));
+        appendTestResultsOutput(
+          run,
+          highlightedResult(status),
+          this.items.get(attemptEvent.id),
+        );
         this.forgetActiveAttempt(event);
         break;
       }
