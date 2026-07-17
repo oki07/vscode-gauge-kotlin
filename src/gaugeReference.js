@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { offsetAt: indexedOffsetAt } = require("./documentPosition");
 
 const SHOW_REFERENCES = "editor.action.showReferences";
 const SHOW_REFERENCES_AT_CURSOR = "gauge.showReferences.atCursor";
@@ -94,20 +95,6 @@ function documentUri(document) {
   }
   const file = documentPath(document);
   return file ? `file://${file}` : undefined;
-}
-
-function offsetAt(text, position) {
-  let offset = 0;
-  let line = 0;
-  while (line < position.line && offset < text.length) {
-    const nextLine = text.indexOf("\n", offset);
-    if (nextLine === -1) {
-      return text.length;
-    }
-    offset = nextLine + 1;
-    line += 1;
-  }
-  return Math.min(offset + position.character, text.length);
 }
 
 function commentEnd(text, index) {
@@ -1273,7 +1260,7 @@ class ReferenceProvider {
     }
 
     const text = document.getText();
-    const offset = offsetAt(text, position);
+    const offset = indexedOffsetAt(document, text, position);
     const indexed = this.workspaceStepIndex
       && typeof this.workspaceStepIndex.stepEntriesForDocument === "function";
     const implementationDocuments = indexed

@@ -709,8 +709,8 @@ class GaugeCodeLensProvider {
       ? await this.workspaceStepIndex.stepEntriesForDocument(document, document)
       : findStepFunctionsForDocument(document, externalConstants);
     for (const entry of entries) {
-      const start = positionAt(text, entry.declarationStart);
-      const end = positionAt(text, entry.declarationEnd);
+      const start = positionAt(text, entry.declarationStart, document);
+      const end = positionAt(text, entry.declarationEnd, document);
       const range = createRangeFromPositions(this.vscode, start, end);
       const aliases = indexed
         && typeof this.workspaceStepIndex.stepAliasesForEntry === "function"

@@ -1,5 +1,7 @@
 "use strict";
 
+const { offsetAt: indexedOffsetAt } = require("./documentPosition");
+
 const {
   findConceptHeadings,
   GaugeStepDiagnosticsProvider,
@@ -56,8 +58,12 @@ function createRange(vscode, start, end) {
   return { start: startPosition, end: endPosition };
 }
 
-function createRangeFromOffsets(vscode, text, startOffset, endOffset) {
-  return createRange(vscode, positionAt(text, startOffset), positionAt(text, endOffset));
+function createRangeFromOffsets(vscode, text, startOffset, endOffset, document) {
+  return createRange(
+    vscode,
+    positionAt(text, startOffset, document),
+    positionAt(text, endOffset, document),
+  );
 }
 
 function createToken(vscode) {
@@ -368,20 +374,6 @@ function gaugeReplacementName(value, hasInlineTable) {
 
 function kotlinReplacementName(value, hasInlineTable, options = {}) {
   return implementationStepName(value, hasInlineTable, options);
-}
-
-function offsetAt(text, position) {
-  let offset = 0;
-  let line = 0;
-  while (line < position.line && offset < text.length) {
-    const nextLine = text.indexOf("\n", offset);
-    if (nextLine === -1) {
-      return text.length;
-    }
-    offset = nextLine + 1;
-    line += 1;
-  }
-  return Math.min(offset + position.character, text.length);
 }
 
 function multilineStepStartLine(lines, lineNumber) {
@@ -770,7 +762,7 @@ function findKotlinConstLiteralRange(vscode, document, reference, alias) {
     if (referenceMatchesConstScope(reference, scopePath, constName)) {
       return {
         literal,
-        range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd),
+        range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd, document),
       };
     }
     match = pattern.exec(text);
@@ -872,7 +864,7 @@ function findJavaConstLiteralRange(vscode, document, reference, alias) {
     if (referenceMatchesJavaConstScope(reference, packageName, scopePath, constName)) {
       return {
         literal,
-        range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd),
+        range: createRangeFromOffsets(vscode, text, literal.contentStart, literal.contentEnd, document),
       };
     }
     match = pattern.exec(text);
@@ -1404,7 +1396,7 @@ class GaugeRenameProvider {
       return undefined;
     }
     const text = document.getText();
-    const offset = offsetAt(text, position);
+    const offset = indexedOffsetAt(document, text, position);
     for (const entry of stepEntries || []) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
@@ -1427,7 +1419,13 @@ class GaugeRenameProvider {
         return {
           hasInlineTable: /\s+<table>\s*$/.test(alias),
           engineRename: false,
-          range: createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd),
+          range: createRangeFromOffsets(
+            this.vscode,
+            text,
+            literal.contentStart,
+            literal.contentEnd,
+            document,
+          ),
           template,
           text: alias,
         };
@@ -1441,7 +1439,13 @@ class GaugeRenameProvider {
             return {
               hasInlineTable: /\s+<table>\s*$/.test(alias),
               engineRename: false,
-              range: createRangeFromOffsets(this.vscode, text, reference.start, reference.end),
+              range: createRangeFromOffsets(
+                this.vscode,
+                text,
+                reference.start,
+                reference.end,
+                document,
+              ),
               template,
               text: alias,
             };
@@ -1642,7 +1646,13 @@ class GaugeRenameProvider {
     if (replacement === undefined) {
       return;
     }
-    const range = createRangeFromOffsets(this.vscode, text, entry.parameterStart, entry.parameterEnd);
+    const range = createRangeFromOffsets(
+      this.vscode,
+      text,
+      entry.parameterStart,
+      entry.parameterEnd,
+      document,
+    );
     if (editHasReplacement(edit, document.uri, range)) {
       return;
     }
@@ -1657,7 +1667,13 @@ class GaugeRenameProvider {
     if (replacement === undefined) {
       return;
     }
-    const range = createRangeFromOffsets(this.vscode, text, entry.parameterStart, entry.parameterEnd);
+    const range = createRangeFromOffsets(
+      this.vscode,
+      text,
+      entry.parameterStart,
+      entry.parameterEnd,
+      document,
+    );
     if (editHasReplacement(edit, document.uri, range)) {
       return;
     }
@@ -1713,7 +1729,13 @@ class GaugeRenameProvider {
         this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
         continue;
       }
-      const range = createRangeFromOffsets(this.vscode, text, literal.contentStart, literal.contentEnd);
+      const range = createRangeFromOffsets(
+        this.vscode,
+        text,
+        literal.contentStart,
+        literal.contentEnd,
+        document,
+      );
       if (editHasReplacement(edit, document.uri, range)) {
         this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
         continue;

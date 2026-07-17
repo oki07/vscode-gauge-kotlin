@@ -161,6 +161,11 @@ test("ReferenceProvider uses the shared workspace step index for local reference
     declarationEnd: document.getText().length,
     declarationStart: 0,
   };
+  const offsetPositions = [];
+  document.offsetAt = (position) => {
+    offsetPositions.push(position);
+    return 10;
+  };
   const location = {
     uri: "file:///workspace/specs/cart.spec",
     range: { start: { line: 2, character: 0 }, end: { line: 2, character: 11 } },
@@ -211,6 +216,7 @@ test("ReferenceProvider uses the shared workspace step index for local reference
     { sourceDocument: document, template: "Open cart" },
     { sourcePath: document.uri.fsPath, template: "Open cart" },
   ]);
+  assert.deepEqual(offsetPositions, [{ line: 1, character: 4 }]);
 });
 
 test("ReferenceProvider reports when no step references are available", async () => {

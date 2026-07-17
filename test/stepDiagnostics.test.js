@@ -66,12 +66,19 @@ function createProjectFactory() {
 
 test("GaugeStepDiagnosticsProvider reports Kotlin Step parameter count mismatches", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { fallbackPositionAt } = require("../src/documentPosition");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
-  const document = createDocument([
+  const text = [
     "@Step(\"Say <what> to <who>\")",
     "fun say(what: String) {",
     "}",
-  ].join("\n"));
+  ].join("\n");
+  const document = createDocument(text);
+  const positionOffsets = [];
+  document.positionAt = (offset) => {
+    positionOffsets.push(offset);
+    return fallbackPositionAt(text, offset);
+  };
 
   const diagnostics = provider.provideDiagnostics(document);
 
@@ -83,6 +90,7 @@ test("GaugeStepDiagnosticsProvider reports Kotlin Step parameter count mismatche
   assert.equal(diagnostics[0].severity, "error");
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 8 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 20 });
+  assert.equal(positionOffsets.length, 2);
 });
 
 test("GaugeStepDiagnosticsProvider accepts docstring Step parameters used by Gauge specs", () => {

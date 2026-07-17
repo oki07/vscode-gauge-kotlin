@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { positionAt: indexedPositionAt } = require("./documentPosition");
 
 const COLLECTION_NAME = "gauge-kotlin";
 const GAUGE_LANGUAGE = "gauge";
@@ -115,16 +116,8 @@ function createDiagnostic(vscode, range, message, options = {}) {
   return diagnostic;
 }
 
-function positionAt(text, offset) {
-  let line = 0;
-  let lineStart = 0;
-  for (let index = 0; index < offset; index += 1) {
-    if (text[index] === "\n") {
-      line += 1;
-      lineStart = index + 1;
-    }
-  }
-  return { line, character: offset - lineStart };
+function positionAt(text, offset, document) {
+  return indexedPositionAt(document, text, offset);
 }
 
 function findLineEnd(text, startIndex) {
@@ -8627,8 +8620,8 @@ class GaugeStepDiagnosticsProvider {
       : new Set();
     for (const entry of this.stepFunctionsFor(document, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
-      const start = positionAt(text, entry.parameterStart);
-      const end = positionAt(text, entry.parameterEnd);
+      const start = positionAt(text, entry.parameterStart, document);
+      const end = positionAt(text, entry.parameterEnd, document);
       const range = createRange(this.vscode, start, end);
       for (const alias of entry.aliases) {
         const expected = countStepParameters(alias)

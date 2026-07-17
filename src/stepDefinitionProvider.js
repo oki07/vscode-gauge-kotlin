@@ -440,7 +440,7 @@ function uriPath(uri) {
   return uri && uri.fsPath;
 }
 
-function targetRange(vscode, text, entry) {
+function targetRange(vscode, document, text, entry) {
   const startOffset = entry.declarationStart !== undefined
     ? entry.declarationStart
     : entry.parameterStart;
@@ -449,8 +449,8 @@ function targetRange(vscode, text, entry) {
     : entry.parameterEnd;
   return createRange(
     vscode,
-    positionAt(text, startOffset),
-    positionAt(text, endOffset),
+    positionAt(text, startOffset, document),
+    positionAt(text, endOffset, document),
   );
 }
 
@@ -763,7 +763,7 @@ class GaugeStepDefinitionProvider {
         definitions.push(createLocation(
           this.vscode,
           candidate.uri,
-          targetRange(this.vscode, text, entry),
+          targetRange(this.vscode, candidate, text, entry),
         ));
       }
     }
@@ -824,6 +824,7 @@ class GaugeStepDefinitionProvider {
           indexedEntry.document.uri,
           targetRange(
             this.vscode,
+            indexedEntry.document,
             indexedEntry.document.getText(),
             indexedEntry.entry,
           ),

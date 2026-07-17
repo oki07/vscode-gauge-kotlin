@@ -101,6 +101,11 @@ test("GaugeCodeLensProvider uses the shared workspace step index for reference l
     "@Step(\"Open cart\")",
     "fun openCart() {}",
   ].join("\n"), "/workspace/tests/CartSteps.kt", "kotlin");
+  const positionOffsets = [];
+  document.positionAt = (offset) => {
+    positionOffsets.push(offset);
+    return offset === 0 ? { line: 0, character: 0 } : { line: 1, character: 17 };
+  };
   const entry = {
     aliases: ["Open cart"],
     declarationEnd: document.getText().length,
@@ -149,6 +154,7 @@ test("GaugeCodeLensProvider uses the shared workspace step index for reference l
     title: lens.command.title,
   })), [{ argument: "Open cart", title: "3 reference(s)" }]);
   assert.deepEqual(referenceQueries, [{ sourceDocument: document, template: "Open cart" }]);
+  assert.deepEqual(positionOffsets, [0, document.getText().length]);
 });
 
 test("GaugeCodeLensProvider allows execution CodeLens text to be disabled", () => {

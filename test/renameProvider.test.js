@@ -179,6 +179,11 @@ test("GaugeRenameProvider uses the shared workspace step index", async () => {
     parameterEnd: 17,
     parameterStart: 6,
   };
+  const offsetPositions = [];
+  document.offsetAt = (position) => {
+    offsetPositions.push(position);
+    return 10;
+  };
   const calls = [];
   const vscode = createFakeVscode([document]);
   const provider = new GaugeRenameProvider({
@@ -202,6 +207,9 @@ test("GaugeRenameProvider uses the shared workspace step index", async () => {
     ["documents", document],
     ["steps", document, document],
     ["steps", document, document],
+  ]);
+  assert.deepEqual(offsetPositions.map((position) => ({ ...position })), [
+    { line: 0, character: 10 },
   ]);
 });
 
