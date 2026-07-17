@@ -653,6 +653,66 @@ test("GaugeTestController resolves unopened workspace specs from Gauge LSP", asy
   });
 });
 
+test("GaugeTestController discovers and refreshes tests through Test Explorer handlers", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  let specs = [
+    {
+      heading: "Checkout",
+      executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+    },
+  ];
+  const clientsMap = new Map([
+    [
+      "/workspace/gauge",
+      {
+        client: {
+          sendRequest(method) {
+            if (method === "gauge/specs") {
+              return Promise.resolve(specs);
+            }
+            if (method === "gauge/scenarios") {
+              return Promise.resolve([
+                {
+                  heading: "Successful checkout",
+                  executionIdentifier: `${specs[0].executionIdentifier}:12`,
+                  lineNo: 12,
+                },
+              ]);
+            }
+            return Promise.resolve([]);
+          },
+        },
+      },
+    ],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+
+  gaugeTests.register();
+
+  assert.equal(typeof controller.resolveHandler, "function");
+  assert.equal(typeof controller.refreshHandler, "function");
+
+  await controller.resolveHandler(undefined);
+
+  const checkout = controller.items.get("/workspace/gauge/specs/checkout.spec");
+  assert.equal(checkout.label, "Checkout");
+  assert.deepEqual(checkout.children.values().map((item) => item.label), [
+    "Successful checkout",
+  ]);
+
+  specs = [
+    {
+      heading: "Accounts",
+      executionIdentifier: "/workspace/gauge/specs/accounts.spec",
+    },
+  ];
+  await controller.refreshHandler();
+
+  assert.equal(controller.items.get("/workspace/gauge/specs/checkout.spec"), undefined);
+  assert.equal(controller.items.get("/workspace/gauge/specs/accounts.spec").label, "Accounts");
+});
+
 test("GaugeTestController refreshes and prunes workspace tests on spec file changes", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode, watcherListeners } = createFakeVscode();

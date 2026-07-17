@@ -490,6 +490,10 @@ class GaugeTestController {
       return undefined;
     }
     this.controller = this.vscode.tests.createTestController(CONTROLLER_ID, CONTROLLER_LABEL);
+    this.controller.resolveHandler = (item) => (
+      item ? undefined : this.refreshWorkspaceTests()
+    );
+    this.controller.refreshHandler = () => this.refreshWorkspaceTests();
     this.registerRunProfiles();
     const disposables = this.registerDocumentDiscovery();
     addDisposable(disposables, this.registerProjectChangeListener(this.projectChanges));
