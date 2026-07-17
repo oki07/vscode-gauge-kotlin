@@ -111,6 +111,48 @@ test("WorkspaceDocumentStore scans the workspace once and reads files from disk"
   assert.equal(isWorkspaceStepImplementationScanComplete(documents), true);
 });
 
+test("WorkspaceDocumentStore bounds concurrent initial file reads", async () => {
+  const {
+    DEFAULT_INITIAL_READ_CONCURRENCY,
+    WorkspaceDocumentStore,
+  } = require("../src/workspaceDocumentStore");
+  const files = Array.from(
+    { length: DEFAULT_INITIAL_READ_CONCURRENCY + 2 },
+    (_value, index) => `/ws/src/Steps${index}.kt`,
+  );
+  let activeReads = 0;
+  let maximumReads = 0;
+  let releaseReads;
+  const readGate = new Promise((resolve) => {
+    releaseReads = resolve;
+  });
+  const { vscode } = createFakeVscode({ files });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        async readFile() {
+          activeReads += 1;
+          maximumReads = Math.max(maximumReads, activeReads);
+          await readGate;
+          activeReads -= 1;
+          return "package steps\n";
+        },
+      },
+    },
+    vscode,
+  });
+
+  const started = store.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  const observedBeforeRelease = maximumReads;
+  releaseReads();
+  await started;
+
+  assert.equal(observedBeforeRelease, DEFAULT_INITIAL_READ_CONCURRENCY);
+  assert.equal(maximumReads, DEFAULT_INITIAL_READ_CONCURRENCY);
+});
+
 test("WorkspaceDocumentStore prefers open text documents over disk content", async () => {
   const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
   const files = { "/ws/src/Steps.kt": "stale disk content" };

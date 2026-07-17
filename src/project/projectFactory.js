@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { concurrencyLimit, mapWithConcurrency } = require("../asyncWork");
 const { GaugeProject } = require("./gaugeProject");
 const { GradleProject } = require("./gradleProject");
 const { MavenProject } = require("./mavenProject");
@@ -14,6 +15,7 @@ const {
 
 const MAVEN_BUILD_FILE = "pom.xml";
 const GRADLE_BUILD_FILES = ["build.gradle", "build.gradle.kts"];
+const DEFAULT_PROJECT_DISCOVERY_CONCURRENCY = 16;
 const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".gradle",
@@ -54,13 +56,21 @@ function createProjectFactory(options = {}) {
   const gaugeProjectCache = new Map();
   const rootLookupCache = new Map();
   const rootsDiscoveryCache = new Map();
+  const rootsDiscoveryPending = new Map();
+  const projectDiscoveryConcurrency = concurrencyLimit(
+    options.projectDiscoveryConcurrency,
+    DEFAULT_PROJECT_DISCOVERY_CONCURRENCY,
+  );
+  let discoveryGeneration = 0;
   const NO_ROOT = Symbol("noGaugeRoot");
 
   function invalidate() {
+    discoveryGeneration += 1;
     projectCache.clear();
     gaugeProjectCache.clear();
     rootLookupCache.clear();
     rootsDiscoveryCache.clear();
+    rootsDiscoveryPending.clear();
   }
 
   function registerManifestWatcher() {
@@ -143,6 +153,128 @@ function createProjectFactory(options = {}) {
     const roots = discoverGaugeProjectRoots(root);
     rootsDiscoveryCache.set(root, roots);
     return roots;
+  }
+
+  async function isDirectoryAsync(filename) {
+    const promises = fileSystem && fileSystem.promises;
+    if (promises && typeof promises.stat === "function") {
+      try {
+        const stat = await promises.stat(filename);
+        return Boolean(stat && typeof stat.isDirectory === "function" && stat.isDirectory());
+      } catch (_error) {
+        return false;
+      }
+    }
+    return isDirectory(filename);
+  }
+
+  async function directoryEntriesAsync(dirname) {
+    const promises = fileSystem && fileSystem.promises;
+    if (promises && typeof promises.readdir === "function") {
+      try {
+        return (await promises.readdir(dirname))
+          .map((entry) => (typeof entry === "string" ? entry : entry.name))
+          .filter(Boolean)
+          .sort();
+      } catch (_error) {
+        return [];
+      }
+    }
+    return directoryEntries(dirname);
+  }
+
+  async function isGaugeProjectAsync(root) {
+    if (gaugeProjectCache.has(root)) {
+      return gaugeProjectCache.get(root);
+    }
+    const promises = fileSystem && fileSystem.promises;
+    const manifest = pathModule.join(root, GAUGE_MANIFEST_FILE);
+    if (promises && typeof promises.access === "function") {
+      try {
+        await promises.access(manifest);
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    }
+    if (promises && typeof promises.stat === "function") {
+      try {
+        const stat = await promises.stat(manifest);
+        return Boolean(stat && (typeof stat.isFile !== "function" || stat.isFile()));
+      } catch (_error) {
+        return false;
+      }
+    }
+    return isGaugeProject(root);
+  }
+
+  async function discoverGaugeProjectRootsAsync(root) {
+    if (!await isDirectoryAsync(root)) {
+      return await isGaugeProjectAsync(root) ? [root] : [];
+    }
+
+    const roots = await isGaugeProjectAsync(root) ? [root] : [];
+    const pending = [root];
+    const seen = new Set();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      const entries = await directoryEntriesAsync(current);
+      const children = await mapWithConcurrency(
+        entries,
+        projectDiscoveryConcurrency,
+        async (entry) => {
+          if (NESTED_PROJECT_EXCLUDED_DIRECTORIES.has(entry)) {
+            return undefined;
+          }
+          const child = pathModule.join(current, entry);
+          if (!await isDirectoryAsync(child)) {
+            return undefined;
+          }
+          return {
+            child,
+            gaugeProject: await isGaugeProjectAsync(child),
+          };
+        },
+      );
+      for (const child of children) {
+        if (!child) {
+          continue;
+        }
+        if (child.gaugeProject) {
+          roots.push(child.child);
+        }
+        pending.push(child.child);
+      }
+    }
+    return roots.sort();
+  }
+
+  function findGaugeProjectRootsAsync(root) {
+    if (rootsDiscoveryCache.has(root)) {
+      return Promise.resolve(rootsDiscoveryCache.get(root));
+    }
+    if (rootsDiscoveryPending.has(root)) {
+      return rootsDiscoveryPending.get(root);
+    }
+    const generation = discoveryGeneration;
+    const discovery = discoverGaugeProjectRootsAsync(root)
+      .then((roots) => {
+        if (discoveryGeneration === generation) {
+          rootsDiscoveryCache.set(root, roots);
+        }
+        return roots;
+      })
+      .finally(() => {
+        if (rootsDiscoveryPending.get(root) === discovery) {
+          rootsDiscoveryPending.delete(root);
+        }
+      });
+    rootsDiscoveryPending.set(root, discovery);
+    return discovery;
   }
 
   function discoverGaugeProjectRoots(root) {
@@ -238,6 +370,7 @@ function createProjectFactory(options = {}) {
   return {
     get,
     findGaugeProjectRoots,
+    findGaugeProjectRootsAsync,
     getGaugeRootFromFilePath,
     getProjectByFilepath,
     invalidate,
@@ -246,6 +379,7 @@ function createProjectFactory(options = {}) {
 }
 
 module.exports = {
+  DEFAULT_PROJECT_DISCOVERY_CONCURRENCY,
   ProjectFactory: createProjectFactory(),
   createProjectFactory,
 };

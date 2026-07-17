@@ -88,6 +88,57 @@ test("ProjectFactory finds nested Gauge project roots", () => {
   assert.deepEqual(factory.findGaugeProjectRoots("/workspace/missing"), []);
 });
 
+test("ProjectFactory discovers nested roots without synchronous directory I/O", async () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const directories = new Map([
+    ["/workspace", ["service-a", "tools"]],
+    ["/workspace/service-a", ["manifest.json"]],
+    ["/workspace/tools", ["service-b"]],
+    ["/workspace/tools/service-b", ["manifest.json"]],
+  ]);
+  const manifests = new Set([
+    "/workspace/service-a/manifest.json",
+    "/workspace/tools/service-b/manifest.json",
+  ]);
+  const fileSystem = {
+    existsSync() {
+      throw new Error("synchronous exists must not run during async discovery");
+    },
+    readdirSync() {
+      throw new Error("synchronous readdir must not run during async discovery");
+    },
+    statSync() {
+      throw new Error("synchronous stat must not run during async discovery");
+    },
+    promises: {
+      async access(filename) {
+        if (!manifests.has(filename)) {
+          throw new Error(`Missing ${filename}`);
+        }
+      },
+      async readdir(dirname) {
+        if (!directories.has(dirname)) {
+          throw new Error(`Missing ${dirname}`);
+        }
+        return directories.get(dirname);
+      },
+      async stat(filename) {
+        return {
+          isDirectory() {
+            return directories.has(filename);
+          },
+        };
+      },
+    },
+  };
+  const factory = createProjectFactory({ fileSystem, pathModule: path.posix });
+
+  assert.deepEqual(await factory.findGaugeProjectRootsAsync("/workspace"), [
+    "/workspace/service-a",
+    "/workspace/tools/service-b",
+  ]);
+});
+
 test("ProjectFactory finds nested Gauge project roots under Gauge roots", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
   const factory = createProjectFactory({

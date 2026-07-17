@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
+const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
 const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
 const { GaugeClients } = require("./gaugeClients");
@@ -41,6 +42,7 @@ const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
   "out",
   "target",
 ]);
+const DEFAULT_CLIENT_START_CONCURRENCY = 4;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -199,6 +201,10 @@ class GaugeWorkspace {
     this.cli = options.cli;
     this.dependencyStepIndex = options.dependencyStepIndex;
     this.projectEnvironmentService = options.projectEnvironmentService;
+    this.clientStartConcurrency = concurrencyLimit(
+      options.clientStartConcurrency,
+      DEFAULT_CLIENT_START_CONCURRENCY,
+    );
     this.localDefinitionOwnedExternally = options.localDefinitionOwnedExternally === true;
     this.stepDefinitionProvider = options.stepDefinitionProvider;
     this.clientsMap = options.clientsMap || new GaugeClients();
@@ -270,9 +276,17 @@ class GaugeWorkspace {
 
   async startWorkspaceProjects() {
     const folders = this.vscode.workspace.workspaceFolders || [];
-    for (const folder of folders) {
-      await this.startServersForWorkspaceFolder(folder.uri.fsPath);
-    }
+    const discoveredRoots = await mapWithConcurrency(
+      folders,
+      this.clientStartConcurrency,
+      (folder) => this.discoverGaugeProjectRoots(folder.uri.fsPath),
+    );
+    const projectRoots = [...new Set(discoveredRoots.flat())];
+    await mapWithConcurrency(
+      projectRoots,
+      this.clientStartConcurrency,
+      (projectRoot) => this.startServerFor(projectRoot),
+    );
     await this.startServerForActiveGaugeDocument();
     await this.setMultiProjectContext();
   }
@@ -475,7 +489,10 @@ class GaugeWorkspace {
     }
   }
 
-  discoverGaugeProjectRoots(workspaceRoot) {
+  async discoverGaugeProjectRoots(workspaceRoot) {
+    if (typeof this.projectFactory.findGaugeProjectRootsAsync === "function") {
+      return this.projectFactory.findGaugeProjectRootsAsync(workspaceRoot);
+    }
     if (typeof this.projectFactory.findGaugeProjectRoots === "function") {
       return this.projectFactory.findGaugeProjectRoots(workspaceRoot);
     }
@@ -510,9 +527,12 @@ class GaugeWorkspace {
   }
 
   async startServersForWorkspaceFolder(workspaceRoot) {
-    for (const projectRoot of this.discoverGaugeProjectRoots(workspaceRoot)) {
-      await this.startServerFor(projectRoot);
-    }
+    const projectRoots = await this.discoverGaugeProjectRoots(workspaceRoot);
+    await mapWithConcurrency(
+      projectRoots,
+      this.clientStartConcurrency,
+      (projectRoot) => this.startServerFor(projectRoot),
+    );
   }
 
   async stopServersForWorkspaceFolder(workspaceRoot) {
@@ -781,6 +801,7 @@ class GaugeWorkspace {
 }
 
 module.exports = {
+  DEFAULT_CLIENT_START_CONCURRENCY,
   GaugeWorkspace,
   clientMiddleware,
 };

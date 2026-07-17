@@ -1742,11 +1742,15 @@ test("GaugeTestController displays Gauge notification events through VS Code mes
   ]);
 });
 
-test("GaugeTestController discovers spec scenarios concurrently", async () => {
-  const { GaugeTestController } = require("../src/testController");
+test("GaugeTestController bounds concurrent spec scenario requests", async () => {
+  const {
+    DEFAULT_SCENARIO_REQUEST_CONCURRENCY,
+    GaugeTestController,
+  } = require("../src/testController");
   const { vscode } = createFakeVscode();
   const scenarioRequests = [];
-  const resolutionSnapshots = [];
+  let activeRequests = 0;
+  let maximumRequests = 0;
   const clientsMap = new Map([
     [
       "/workspace/gauge",
@@ -1754,22 +1758,21 @@ test("GaugeTestController discovers spec scenarios concurrently", async () => {
         client: {
           sendRequest(method, params) {
             if (method === "gauge/specs") {
-              return Promise.resolve([
-                {
-                  heading: "Checkout",
-                  executionIdentifier: "/workspace/gauge/specs/checkout.spec",
-                },
-                {
-                  heading: "Login",
-                  executionIdentifier: "/workspace/gauge/specs/login.spec",
-                },
-              ]);
+              return Promise.resolve(Array.from(
+                { length: DEFAULT_SCENARIO_REQUEST_CONCURRENCY + 2 },
+                (_value, index) => ({
+                  heading: `Spec ${index}`,
+                  executionIdentifier: `/workspace/gauge/specs/spec-${index}.spec`,
+                }),
+              ));
             }
             if (method === "gauge/scenarios") {
               scenarioRequests.push(params.textDocument.uri);
+              activeRequests += 1;
+              maximumRequests = Math.max(maximumRequests, activeRequests);
               return new Promise((resolve) => {
                 setImmediate(() => {
-                  resolutionSnapshots.push(scenarioRequests.length);
+                  activeRequests -= 1;
                   resolve([]);
                 });
               });
@@ -1785,10 +1788,6 @@ test("GaugeTestController discovers spec scenarios concurrently", async () => {
   gaugeTests.register();
   await gaugeTests.discoverWorkspaceTests();
 
-  assert.equal(scenarioRequests.length, 2);
-  assert.equal(
-    resolutionSnapshots[0],
-    2,
-    "both scenario requests must be in flight before the first one resolves",
-  );
+  assert.equal(scenarioRequests.length, DEFAULT_SCENARIO_REQUEST_CONCURRENCY + 2);
+  assert.equal(maximumRequests, DEFAULT_SCENARIO_REQUEST_CONCURRENCY);
 });

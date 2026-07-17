@@ -1,6 +1,7 @@
 "use strict";
 
 const nodePath = require("node:path");
+const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { headingMarkers } = require("./gaugeHeadings");
 
 const CONTROLLER_ID = "gauge";
@@ -28,6 +29,7 @@ const ANSI_RED = "\x1b[31m";
 const ANSI_RESET = "\x1b[0m";
 const ANSI_YELLOW = "\x1b[33m";
 const NON_GAUGE_PROJECT_ROOT = Symbol("nonGaugeProjectRoot");
+const DEFAULT_SCENARIO_REQUEST_CONCURRENCY = 8;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -464,6 +466,10 @@ class GaugeTestController {
     this.executionController = options.executionController;
     this.projectChanges = options.projectChanges;
     this.projectFactory = options.projectFactory;
+    this.scenarioRequestConcurrency = concurrencyLimit(
+      options.scenarioRequestConcurrency,
+      DEFAULT_SCENARIO_REQUEST_CONCURRENCY,
+    );
     this.controller = undefined;
     this.currentRun = undefined;
     this.items = new Map();
@@ -763,22 +769,26 @@ class GaugeTestController {
     const specEntries = (specs || []).filter((spec) => (
       spec && spec.heading && spec.executionIdentifier
     ));
-    const scenarioLists = await Promise.all(specEntries.map((spec) => {
-      let request;
-      try {
-        request = client.sendRequest(
-          SCENARIOS_REQUEST,
-          {
-            textDocument: { uri: spec.executionIdentifier },
-            position: createPosition(this.vscode, 1, 1),
-          },
-          createToken(this.vscode),
-        );
-      } catch (_error) {
-        return [];
-      }
-      return Promise.resolve(request).catch(() => []);
-    }));
+    const scenarioLists = await mapWithConcurrency(
+      specEntries,
+      this.scenarioRequestConcurrency,
+      (spec) => {
+        let request;
+        try {
+          request = client.sendRequest(
+            SCENARIOS_REQUEST,
+            {
+              textDocument: { uri: spec.executionIdentifier },
+              position: createPosition(this.vscode, 1, 1),
+            },
+            createToken(this.vscode),
+          );
+        } catch (_error) {
+          return [];
+        }
+        return Promise.resolve(request).catch(() => []);
+      },
+    );
     for (const [specIndex, spec] of specEntries.entries()) {
       const specId = spec.executionIdentifier;
       discoveredIds.add(specId);
@@ -1238,5 +1248,6 @@ class GaugeTestController {
 }
 
 module.exports = {
+  DEFAULT_SCENARIO_REQUEST_CONCURRENCY,
   GaugeTestController,
 };

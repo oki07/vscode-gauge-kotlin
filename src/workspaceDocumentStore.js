@@ -2,9 +2,11 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 
 const WORKSPACE_DOCUMENT_GLOB = "**/*.{kt,java,cpt,spec,md}";
 const WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE = "__gaugeStepImplementationScanComplete";
+const DEFAULT_INITIAL_READ_CONCURRENCY = 16;
 
 const LANGUAGE_IDS_BY_EXTENSION = [
   [/\.kts?$/i, "kotlin"],
@@ -70,6 +72,10 @@ class WorkspaceDocumentStore {
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
+    this.initialReadConcurrency = concurrencyLimit(
+      options.initialReadConcurrency,
+      DEFAULT_INITIAL_READ_CONCURRENCY,
+    );
     this.diskDocuments = new Map();
     this.cachedDocuments = undefined;
     this.changeListeners = new Set();
@@ -238,13 +244,13 @@ class WorkspaceDocumentStore {
     } catch (_error) {
       uris = [];
     }
-    await Promise.all(uris.map(async (uri) => {
+    await mapWithConcurrency(uris, this.initialReadConcurrency, async (uri) => {
       const file = uriPath(uri);
       if (!file || !isWorkspaceDocumentPath(file) || !this.belongsToGaugeProject(file)) {
         return;
       }
       await this.loadDiskDocument(file, { silent: true });
-    }));
+    });
     this.scanComplete = true;
     this.notifyChange(undefined);
   }
@@ -313,6 +319,7 @@ class WorkspaceDocumentStore {
 }
 
 module.exports = {
+  DEFAULT_INITIAL_READ_CONCURRENCY,
   WORKSPACE_DOCUMENT_GLOB,
   WorkspaceDocumentStore,
   isWorkspaceStepImplementationScanComplete,

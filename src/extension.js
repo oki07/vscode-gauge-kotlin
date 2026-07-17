@@ -308,6 +308,9 @@ function hasGaugeProject(vscode, projectFactory) {
     if (projectFactory.isGaugeProject(folderPath)) {
       return true;
     }
+    if (typeof projectFactory.findGaugeProjectRootsAsync === "function") {
+      return false;
+    }
     if (typeof projectFactory.findGaugeProjectRoots === "function") {
       return projectFactory.findGaugeProjectRoots(folderPath).length > 0;
     }
@@ -315,10 +318,35 @@ function hasGaugeProject(vscode, projectFactory) {
   });
 }
 
+async function hasGaugeProjectAsync(vscode, projectFactory) {
+  for (const folder of workspaceFolders(vscode)) {
+    const folderPath = folder.uri.fsPath;
+    try {
+      if (projectFactory.isGaugeProject(folderPath)) {
+        return true;
+      }
+      if (typeof projectFactory.findGaugeProjectRootsAsync === "function") {
+        const roots = await projectFactory.findGaugeProjectRootsAsync(folderPath);
+        if (roots.length > 0) {
+          return true;
+        }
+      }
+    } catch (_error) {
+      // Continue checking the remaining workspace folders.
+    }
+  }
+  return false;
+}
+
 function shouldStartGaugeServices(vscode, projectFactory) {
   return hasActiveGaugeDocument(vscode, projectFactory)
     || hasActiveImplementationGaugeDocument(vscode, projectFactory)
     || hasGaugeProject(vscode, projectFactory);
+}
+
+async function shouldStartGaugeServicesAsync(vscode, projectFactory) {
+  return shouldStartGaugeServices(vscode, projectFactory)
+    || hasGaugeProjectAsync(vscode, projectFactory);
 }
 
 function registerGaugeLanguageConfiguration(context, vscode) {
@@ -845,8 +873,19 @@ function startGaugeServices(context, vscode, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
-  if (!shouldStartGaugeServices(vscode, projectFactory)) {
-    return undefined;
+  if (!options.gaugeServiceGateResolved && !shouldStartGaugeServices(vscode, projectFactory)) {
+    if (typeof projectFactory.findGaugeProjectRootsAsync !== "function") {
+      return undefined;
+    }
+    return shouldStartGaugeServicesAsync(vscode, projectFactory).then((shouldStart) => (
+      shouldStart
+        ? startGaugeServices(context, vscode, {
+          ...options,
+          gaugeServiceGateResolved: true,
+          projectFactory,
+        })
+        : undefined
+    ));
   }
 
   const cli = createCli(vscode, options);
@@ -1130,24 +1169,31 @@ function activate(context, vscodeApi, options = {}) {
     executionController,
     state,
   });
-  if (
-    gaugeWorkspace
-    && typeof testController.registerProjectChangeListener === "function"
-  ) {
-    const disposable = testController.registerProjectChangeListener(gaugeWorkspace);
-    if (disposable) {
-      context.subscriptions.push(disposable);
+  const connectGaugeWorkspace = (resolvedWorkspace) => {
+    if (
+      resolvedWorkspace
+      && typeof testController.registerProjectChangeListener === "function"
+    ) {
+      const disposable = testController.registerProjectChangeListener(resolvedWorkspace);
+      if (disposable) {
+        context.subscriptions.push(disposable);
+      }
     }
+    if (
+      resolvedWorkspace
+      && typeof resolvedWorkspace.ready === "function"
+      && typeof testController.discoverWorkspaceTests === "function"
+    ) {
+      Promise.resolve(resolvedWorkspace.ready())
+        .then(() => testController.discoverWorkspaceTests())
+        .catch(() => undefined);
+    }
+  };
+  if (gaugeWorkspace && typeof gaugeWorkspace.then === "function") {
+    return Promise.resolve(gaugeWorkspace).then(connectGaugeWorkspace);
   }
-  if (
-    gaugeWorkspace
-    && typeof gaugeWorkspace.ready === "function"
-    && typeof testController.discoverWorkspaceTests === "function"
-  ) {
-    Promise.resolve(gaugeWorkspace.ready())
-      .then(() => testController.discoverWorkspaceTests())
-      .catch(() => undefined);
-  }
+  connectGaugeWorkspace(gaugeWorkspace);
+  return undefined;
 }
 
 function deactivate() {

@@ -643,6 +643,42 @@ test("GaugeWorkspace suppresses external implementation definition errors from G
   );
 });
 
+test("GaugeWorkspace starts clients concurrently within an explicit bound", async () => {
+  const {
+    DEFAULT_CLIENT_START_CONCURRENCY,
+    GaugeWorkspace,
+  } = require("../src/gaugeWorkspace");
+  const roots = Array.from(
+    { length: DEFAULT_CLIENT_START_CONCURRENCY + 2 },
+    (_value, index) => `/workspace/project-${index}`,
+  );
+  let activeStarts = 0;
+  let maximumStarts = 0;
+  let releaseStarts;
+  const startGate = new Promise((resolve) => {
+    releaseStarts = resolve;
+  });
+  const workspace = Object.create(GaugeWorkspace.prototype);
+  workspace.clientStartConcurrency = DEFAULT_CLIENT_START_CONCURRENCY;
+  workspace.discoverGaugeProjectRoots = () => roots;
+  workspace.startServerFor = async () => {
+    activeStarts += 1;
+    maximumStarts = Math.max(maximumStarts, activeStarts);
+    await startGate;
+    activeStarts -= 1;
+  };
+
+  const started = workspace.startServersForWorkspaceFolder("/workspace");
+  await Promise.resolve();
+  await Promise.resolve();
+  const observedBeforeRelease = maximumStarts;
+  releaseStarts();
+  await started;
+
+  assert.equal(observedBeforeRelease, DEFAULT_CLIENT_START_CONCURRENCY);
+  assert.equal(maximumStarts, DEFAULT_CLIENT_START_CONCURRENCY);
+});
+
 test("GaugeWorkspace suppresses the external implementation source popup from Gauge LSP", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

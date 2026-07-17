@@ -860,6 +860,50 @@ test("activation ignores Gauge files by extension when project root is unresolve
   assert.deepEqual(debugProviders, []);
 });
 
+test("activation uses asynchronous nested project discovery", async () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let asyncDiscoveries = 0;
+  let cliCreations = 0;
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      cliCreations += 1;
+      return {
+        isGaugeInstalled() {
+          return false;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      async findGaugeProjectRootsAsync(root) {
+        asyncDiscoveries += 1;
+        assert.equal(root, "/workspace");
+        return ["/workspace/gauge"];
+      },
+      findGaugeProjectRoots() {
+        throw new Error("synchronous nested discovery must not run during activation");
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showInstallGaugeNotification() {},
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(cliCreations, 0);
+  await activation;
+  assert.equal(asyncDiscoveries, 1);
+  assert.equal(cliCreations, 1);
+});
+
 test("create specification command delegates to the specification creator", () => {
   const extension = require("../src/extension");
 
