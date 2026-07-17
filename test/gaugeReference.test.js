@@ -136,6 +136,83 @@ test("ReferenceProvider shows references for the step at the active cursor", asy
   ]);
 });
 
+test("ReferenceProvider uses the shared workspace step index for local references", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const document = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/CartSteps.kt",
+      toString() {
+        return "file:///workspace/tests/CartSteps.kt";
+      },
+    },
+    getText() {
+      return [
+        "@Step(\"Open cart\")",
+        "fun openCart() {}",
+      ].join("\n");
+    },
+  };
+  const entry = {
+    aliases: ["Open cart"],
+    annotationEnd: 18,
+    annotationStart: 0,
+    declarationEnd: document.getText().length,
+    declarationStart: 0,
+  };
+  const location = {
+    uri: "file:///workspace/specs/cart.spec",
+    range: { start: { line: 2, character: 0 }, end: { line: 2, character: 11 } },
+  };
+  const calls = [];
+  const { vscode } = createFakeVscode();
+  const provider = new ReferenceProvider(new GaugeClients(), {
+    vscode,
+    workspaceStepIndex: {
+      referenceLocationsForPath(sourcePath, template) {
+        calls.push({ sourcePath, template });
+        return [location];
+      },
+      referenceLocations(sourceDocument, template) {
+        calls.push({ sourceDocument, template });
+        return [location];
+      },
+      stepAliasesForEntry(sourceDocument, targetDocument, targetEntry) {
+        assert.equal(sourceDocument, document);
+        assert.equal(targetDocument, document);
+        assert.equal(targetEntry, entry);
+        return ["Open cart"];
+      },
+      stepEntriesForDocument(sourceDocument, targetDocument) {
+        assert.equal(sourceDocument, document);
+        assert.equal(targetDocument, document);
+        return [entry];
+      },
+    },
+  });
+  provider.stepImplementationDocuments = () => {
+    throw new Error("legacy implementation scan should not run");
+  };
+  provider.gaugeDocuments = () => {
+    throw new Error("legacy reference scan should not run");
+  };
+
+  const aliases = await provider.stepImplementationValuesAt(document, { line: 1, character: 4 });
+  const references = await provider.localStepReferences(aliases[0], { sourceDocument: document });
+  const commandReferences = await provider.localStepReferences(aliases[0], {
+    sourcePath: document.uri.fsPath,
+  });
+
+  assert.deepEqual(aliases, ["Open cart"]);
+  assert.deepEqual(references, [location]);
+  assert.deepEqual(commandReferences, [location]);
+  assert.deepEqual(calls, [
+    { sourceDocument: document, template: "Open cart" },
+    { sourcePath: document.uri.fsPath, template: "Open cart" },
+  ]);
+});
+
 test("ReferenceProvider reports when no step references are available", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");

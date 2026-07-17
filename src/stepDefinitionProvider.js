@@ -462,14 +462,17 @@ class GaugeStepDefinitionProvider {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
+    this.workspaceStepIndex = options.workspaceStepIndex;
     this.externalConstantsProvider = undefined;
-    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      documentStore: this.documentStore,
-      fileSystem: this.fileSystem,
-      pathModule: this.pathModule,
-      projectFactory: this.projectFactory,
-      vscode: this.vscode,
-    });
+    this.diagnosticsProvider = options.diagnosticsProvider
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
+      || new GaugeStepDiagnosticsProvider({
+        documentStore: this.documentStore,
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
   }
 
   isGaugeProjectDocument(document) {
@@ -798,6 +801,46 @@ class GaugeStepDefinitionProvider {
       return [];
     }
     const sourceRoot = this.gaugeProjectRoot(document);
+
+    if (
+      this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.definitionEntries === "function"
+    ) {
+      const indexedEntries = await this.workspaceStepIndex.definitionEntries(document, wantedSteps);
+      const indexedDefinitions = indexedEntries.map((indexedEntry) => {
+        if (indexedEntry.kind === "concept") {
+          return createLocation(
+            this.vscode,
+            indexedEntry.document.uri,
+            createRange(
+              this.vscode,
+              indexedEntry.heading.start,
+              indexedEntry.heading.end,
+            ),
+          );
+        }
+        return createLocation(
+          this.vscode,
+          indexedEntry.document.uri,
+          targetRange(
+            this.vscode,
+            indexedEntry.document.getText(),
+            indexedEntry.entry,
+          ),
+        );
+      });
+      if (indexedDefinitions.length > 0) {
+        return indexedDefinitions;
+      }
+      if (
+        this.dependencyStepIndex
+        && typeof this.dependencyStepIndex.findDefinitions === "function"
+        && sourceRoot !== undefined
+      ) {
+        return (await this.dependencyStepIndex.findDefinitions(sourceRoot, wantedSteps)) || [];
+      }
+      return [];
+    }
 
     const {
       externalDocuments,

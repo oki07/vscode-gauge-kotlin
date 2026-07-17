@@ -1680,8 +1680,11 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   const {
     contexts,
     codeActionProviders,
+    codeLensProviders,
+    completionProviders,
     configurationListeners,
     debugProviders,
+    definitionProviders,
     editorUpdates,
     fakeVscode,
     foldingRangeProviders,
@@ -1889,6 +1892,24 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeWorkspaceStepIndex {
+    constructor(options) {
+      this.options = options;
+      this.diagnosticsProvider = options.diagnosticsProvider;
+      this.disposeCalls = 0;
+      this.startCalls = 0;
+      created.workspaceStepIndex = this;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+
+    start() {
+      this.startCalls += 1;
+    }
+  }
+
   extension.activate(context, fakeVscode, {
     createCli(options) {
       created.cliOptions = options;
@@ -1900,6 +1921,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     },
     GaugeClients: FakeGaugeClients,
     DependencyStepIndex: FakeDependencyStepIndex,
+    WorkspaceStepIndex: FakeWorkspaceStepIndex,
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
@@ -1965,6 +1987,16 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
   assert.equal(created.referenceProvider.options.projectFactory, created.workspace.options.projectFactory);
+  assert.equal(created.workspaceStepIndex.startCalls, 1);
+  assert.equal(created.workspaceStepIndex.diagnosticsProvider, created.stepDiagnosticsProvider);
+  assert.equal(completionProviders[0].provider.diagnosticsProvider, created.stepDiagnosticsProvider);
+  assert.equal(codeLensProviders[0].provider.diagnosticsProvider, created.stepDiagnosticsProvider);
+  assert.equal(definitionProviders[0].provider.diagnosticsProvider, created.stepDiagnosticsProvider);
+  assert.equal(completionProviders[0].provider.workspaceStepIndex, created.workspaceStepIndex);
+  assert.equal(codeLensProviders[0].provider.workspaceStepIndex, created.workspaceStepIndex);
+  assert.equal(definitionProviders[0].provider.workspaceStepIndex, created.workspaceStepIndex);
+  assert.equal(created.referenceProvider.options.workspaceStepIndex, created.workspaceStepIndex);
+  assert.equal(context.subscriptions.includes(created.workspaceStepIndex), true);
   assert.equal(created.configProvider.context, context);
   assert.equal(created.configProvider.options.vscode, fakeVscode);
   assert.equal(created.extractConceptProvider.clients, created.clientsMap);
@@ -2002,6 +2034,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       subscription.dispose();
     }
   }
+  assert.equal(created.workspaceStepIndex.disposeCalls, 1);
   assert.equal(
     textDocumentListeners.every((entry) => entry.disposable.disposeCalls > 0),
     true,

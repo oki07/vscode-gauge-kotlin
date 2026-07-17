@@ -95,6 +95,62 @@ test("GaugeCodeLensProvider adds one local execution surface for TestController 
   ]);
 });
 
+test("GaugeCodeLensProvider uses the shared workspace step index for reference lenses", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "@Step(\"Open cart\")",
+    "fun openCart() {}",
+  ].join("\n"), "/workspace/tests/CartSteps.kt", "kotlin");
+  const entry = {
+    aliases: ["Open cart"],
+    declarationEnd: document.getText().length,
+    declarationStart: 0,
+  };
+  const referenceQueries = [];
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    vscode: createFakeVscode(),
+    workspaceStepIndex: {
+      referenceCount(sourceDocument, template) {
+        referenceQueries.push({ sourceDocument, template });
+        return 3;
+      },
+      stepAliasesForEntry(sourceDocument, targetDocument, targetEntry) {
+        assert.equal(sourceDocument, document);
+        assert.equal(targetDocument, document);
+        assert.equal(targetEntry, entry);
+        return ["Open cart"];
+      },
+      stepEntriesForDocument(sourceDocument, targetDocument) {
+        assert.equal(sourceDocument, document);
+        assert.equal(targetDocument, document);
+        return [entry];
+      },
+    },
+  });
+  provider.stepImplementationDocuments = () => {
+    throw new Error("legacy implementation scan should not run");
+  };
+  provider.gaugeReferenceDocuments = () => {
+    throw new Error("legacy reference scan should not run");
+  };
+
+  const lenses = await provider.provideCodeLenses(document);
+
+  assert.deepEqual(lenses.map((lens) => ({
+    argument: lens.command.arguments[2],
+    title: lens.command.title,
+  })), [{ argument: "Open cart", title: "3 reference(s)" }]);
+  assert.deepEqual(referenceQueries, [{ sourceDocument: document, template: "Open cart" }]);
+});
+
 test("GaugeCodeLensProvider allows execution CodeLens text to be disabled", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider({

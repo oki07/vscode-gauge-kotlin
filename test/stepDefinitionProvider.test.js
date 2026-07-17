@@ -138,6 +138,50 @@ test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions",
   );
 });
 
+test("GaugeStepDefinitionProvider uses the shared workspace step index", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument([
+    "# Login specification",
+    "",
+    "## Successful login",
+    "* Log in as \"alice\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const kotlinDocument = createDocument([
+    "@Step(\"Log in as <user>\")",
+    "fun login(user: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/LoginSteps.kt");
+  const calls = [];
+  const provider = new GaugeStepDefinitionProvider({
+    projectFactory: createProjectFactory(),
+    vscode: createFakeVscode([specDocument, kotlinDocument]),
+    workspaceStepIndex: {
+      definitionEntries(sourceDocument, templates) {
+        calls.push({ sourceDocument, templates });
+        return [{
+          document: kotlinDocument,
+          entry: {
+            declarationEnd: kotlinDocument.getText().length,
+            declarationStart: 0,
+          },
+          kind: "step",
+        }];
+      },
+    },
+  });
+  provider.stepImplementationDocumentGroups = () => {
+    throw new Error("legacy workspace scan should not run");
+  };
+
+  const definitions = await provider.provideDefinition(specDocument, { line: 3, character: 8 });
+
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(calls, [{
+    sourceDocument: specDocument,
+    templates: ["Log in as {}"],
+  }]);
+});
+
 test("GaugeStepDefinitionProvider follows Gauge reserved brace parsing", async () => {
   const { GaugeStepDefinitionProvider, normalizeStepTemplate } = require("../src/stepDefinitionProvider");
   const validSpecDocument = createDocument([

@@ -99,6 +99,37 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
 
+test("GaugeDynamicArgumentCompletionProvider uses the shared workspace step index", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "* ",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+  const calls = [];
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      completionEntries(sourceDocument, position) {
+        calls.push({ position, sourceDocument });
+        return [{ detail: "step", label: "Open cart" }];
+      },
+    },
+  });
+  provider.workspaceDocuments = () => {
+    throw new Error("legacy workspace scan should not run");
+  };
+
+  const position = new vscode.Position(3, 2);
+  const items = await provider.provideCompletionItems(document, position);
+
+  assert.deepEqual(labels(items), ["Open cart"]);
+  assert.deepEqual(calls, [{ position, sourceDocument: document }]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests external CSV data table headers inside dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

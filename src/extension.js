@@ -40,6 +40,7 @@ const { GaugeTestController } = require("./testController");
 const { TerminalProvider } = require("./terminalProvider");
 const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const { WorkspaceDocumentStore } = require("./workspaceDocumentStore");
+const { WorkspaceStepIndex } = require("./workspaceStepIndex");
 const {
   createConcept,
   createGaugeSpecDirsProvider,
@@ -419,6 +420,7 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
     documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
+    workspaceStepIndex: options.workspaceStepIndex,
   });
   const disposable = vscode.languages.registerCompletionItemProvider(
     [
@@ -450,6 +452,7 @@ function registerCodeLensProvider(context, vscode, options) {
     documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
+    workspaceStepIndex: options.workspaceStepIndex,
   });
   const disposable = vscode.languages.registerCodeLensProvider(
     [
@@ -561,7 +564,7 @@ function registerDocumentSymbolProvider(context, vscode, options) {
 
 function registerStepDiagnosticsProvider(context, vscode, options) {
   const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider || GaugeStepDiagnosticsProvider;
-  const provider = new StepDiagnosticsProviderCtor({
+  const provider = options.stepDiagnosticsProvider || new StepDiagnosticsProviderCtor({
     dependencyStepIndex: options.dependencyStepIndex,
     documentStore: options.documentStore,
     projectFactory: options.projectFactory,
@@ -571,6 +574,7 @@ function registerStepDiagnosticsProvider(context, vscode, options) {
   if (disposable) {
     context.subscriptions.push(disposable);
   }
+  return provider;
 }
 
 function registerStepDefinitionProvider(context, vscode, options) {
@@ -581,6 +585,7 @@ function registerStepDefinitionProvider(context, vscode, options) {
     documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
+    workspaceStepIndex: options.workspaceStepIndex,
   });
   const disposable = typeof provider.register === "function"
     ? provider.register()
@@ -628,6 +633,7 @@ function registerRenameProvider(context, vscode, options) {
     documentStore: options.documentStore,
     projectFactory: options.projectFactory,
     vscode,
+    workspaceStepIndex: options.workspaceStepIndex,
   });
   const disposable = typeof provider.register === "function"
     ? provider.register()
@@ -900,16 +906,40 @@ function startGaugeServices(context, vscode, options = {}) {
     context.subscriptions.push(documentStore);
   }
   documentStore.start();
+  const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider
+    || GaugeStepDiagnosticsProvider;
+  const stepDiagnosticsProvider = options.stepDiagnosticsProvider
+    || new StepDiagnosticsProviderCtor({
+      dependencyStepIndex,
+      documentStore,
+      projectFactory,
+      vscode,
+    });
+  const WorkspaceStepIndexCtor = options.WorkspaceStepIndex || WorkspaceStepIndex;
+  const workspaceStepIndex = options.workspaceStepIndex || new WorkspaceStepIndexCtor({
+    diagnosticsProvider: stepDiagnosticsProvider,
+    documentStore,
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    projectFactory,
+    vscode,
+  });
+  if (!options.workspaceStepIndex) {
+    context.subscriptions.push(workspaceStepIndex);
+  }
+  workspaceStepIndex.start();
   registerDynamicArgumentCompletionProvider(context, vscode, {
     ...options,
     clientsMap,
     documentStore,
     projectFactory,
+    workspaceStepIndex,
   });
   registerCodeLensProvider(context, vscode, {
     ...options,
     documentStore,
     projectFactory,
+    workspaceStepIndex,
   });
   registerFoldingRangeProvider(context, vscode, {
     ...options,
@@ -930,6 +960,7 @@ function startGaugeServices(context, vscode, options = {}) {
     dependencyStepIndex,
     documentStore,
     projectFactory,
+    workspaceStepIndex,
   });
   registerRenameProvider(context, vscode, {
     ...options,
@@ -937,12 +968,15 @@ function startGaugeServices(context, vscode, options = {}) {
     cli,
     documentStore,
     projectFactory,
+    workspaceStepIndex,
   });
   registerStepDiagnosticsProvider(context, vscode, {
     ...options,
     dependencyStepIndex,
     documentStore,
     projectFactory,
+    stepDiagnosticsProvider,
+    workspaceStepIndex,
   });
   registerValidateDiagnosticsProvider(context, vscode, {
     ...options,
@@ -983,6 +1017,7 @@ function startGaugeServices(context, vscode, options = {}) {
     documentStore,
     projectFactory,
     vscode,
+    workspaceStepIndex,
   });
   const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
     pathModule: options.pathModule,

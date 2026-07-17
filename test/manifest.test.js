@@ -138,6 +138,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     theme: "light",
   });
   assert.deepEqual(manifest.scripts, {
+    "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
     typecheck: "node scripts/check-js-syntax.js",
     lint: "node scripts/check-js-syntax.js",
     "test:unit": "node --test",

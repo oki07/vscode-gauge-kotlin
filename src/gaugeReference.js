@@ -759,13 +759,13 @@ function conceptHeadingTextAt(document, position) {
   return heading && heading.text;
 }
 
-function localGaugeStepReferences(document, targetTemplate, options = {}) {
+function localGaugeStepReferenceEntries(document, options = {}) {
   const uri = documentUri(document);
-  if (!targetTemplate || !uri || typeof document.getText !== "function") {
+  if (!uri || typeof document.getText !== "function") {
     return [];
   }
 
-  const locations = [];
+  const entries = [];
   const lines = document.getText().split(/\r?\n/);
   const docStringLines = closedDocStringLines(lines);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -779,15 +779,19 @@ function localGaugeStepReferences(document, targetTemplate, options = {}) {
     }
     lineIndex = entry.endLine;
     const normalized = entry.stepText ? normalizeStepTemplate(entry.stepText) : undefined;
-    if (!normalized || normalized !== targetTemplate) {
+    if (!normalized) {
       continue;
     }
-    locations.push({
-      uri,
-      range: {
-        start: { line: startLine, character: entry.marker },
-        end: { line: entry.endLine, character: entry.endCharacter },
+    entries.push({
+      kind: "step",
+      location: {
+        uri,
+        range: {
+          start: { line: startLine, character: entry.marker },
+          end: { line: entry.endLine, character: entry.endCharacter },
+        },
       },
+      template: normalized,
     });
   }
   if (isConceptReferenceDocument(document)) {
@@ -795,19 +799,32 @@ function localGaugeStepReferences(document, targetTemplate, options = {}) {
       if (docStringLines.has(heading.start.line)) {
         continue;
       }
-      if (heading.normalized !== targetTemplate) {
+      if (!heading.normalized) {
         continue;
       }
-      locations.push({
-        uri,
-        range: {
-          start: heading.start,
-          end: heading.end,
+      entries.push({
+        kind: "concept",
+        location: {
+          uri,
+          range: {
+            start: heading.start,
+            end: heading.end,
+          },
         },
+        template: heading.normalized,
       });
     }
   }
-  return locations;
+  return entries;
+}
+
+function localGaugeStepReferences(document, targetTemplate, options = {}) {
+  if (!targetTemplate) {
+    return [];
+  }
+  return localGaugeStepReferenceEntries(document, options)
+    .filter((entry) => entry.template === targetTemplate)
+    .map((entry) => entry.location);
 }
 
 class ReferenceProvider {
@@ -818,13 +835,16 @@ class ReferenceProvider {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
-    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      documentStore: this.documentStore,
-      fileSystem: this.fileSystem,
-      pathModule: this.pathModule,
-      projectFactory: this.projectFactory,
-      vscode: this.vscode,
-    });
+    this.workspaceStepIndex = options.workspaceStepIndex;
+    this.diagnosticsProvider = options.diagnosticsProvider
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
+      || new GaugeStepDiagnosticsProvider({
+        documentStore: this.documentStore,
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
     this.disposables = [];
     this.registerCommands();
     const provider = this.registerReferenceProvider();
@@ -1254,17 +1274,33 @@ class ReferenceProvider {
 
     const text = document.getText();
     const offset = offsetAt(text, position);
-    const implementationDocuments = await this.stepImplementationDocuments(document);
-    const externalConstants = isStepImplementationDocument(document)
-      ? this.diagnosticsProvider.collectWorkspaceConstants(
-        document,
-        implementationDocuments,
-      )
+    const indexed = this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.stepEntriesForDocument === "function";
+    const implementationDocuments = indexed
+      ? []
+      : await this.stepImplementationDocuments(document);
+    const externalConstants = !indexed && isStepImplementationDocument(document)
+      ? this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments)
       : undefined;
-    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
+    const entries = indexed
+      ? await this.workspaceStepIndex.stepEntriesForDocument(document, document)
+      : findStepFunctionsForDocument(document, externalConstants);
+    for (const entry of entries) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset >= start && offset <= end) {
+        if (indexed && typeof this.workspaceStepIndex.stepAliasesForEntry === "function") {
+          const indexedAliases = await this.workspaceStepIndex.stepAliasesForEntry(
+            document,
+            document,
+            entry,
+          );
+          const declaredAliases = new Set(entry.aliases || []);
+          return uniqueValues([
+            ...aliasValuesAtOffset(entry, text, offset),
+            ...indexedAliases.filter((alias) => !declaredAliases.has(alias)),
+          ]);
+        }
         return uniqueValues([
           ...aliasValuesAtOffset(entry, text, offset),
           ...this.superStepAliasesForEntry(document, entry, [document, ...implementationDocuments]),
@@ -1325,6 +1361,28 @@ class ReferenceProvider {
     if (!targetTemplate) {
       return undefined;
     }
+    if (
+      options.sourceDocument
+      && this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.referenceLocations === "function"
+    ) {
+      const indexedLocations = await this.workspaceStepIndex.referenceLocations(
+        options.sourceDocument,
+        targetTemplate,
+      );
+      return indexedLocations.length > 0 ? indexedLocations : undefined;
+    }
+    if (
+      options.sourcePath
+      && this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.referenceLocationsForPath === "function"
+    ) {
+      const indexedLocations = await this.workspaceStepIndex.referenceLocationsForPath(
+        options.sourcePath,
+        targetTemplate,
+      );
+      return indexedLocations.length > 0 ? indexedLocations : undefined;
+    }
     const sourceRoot = this.sourceGaugeProjectRoot(options);
     const locations = [];
     for (const document of await this.gaugeDocuments(sourceRoot)) {
@@ -1357,5 +1415,6 @@ class ReferenceProvider {
 
 module.exports = {
   ReferenceProvider,
+  localGaugeStepReferenceEntries,
   superStepAliasesForEntry,
 };

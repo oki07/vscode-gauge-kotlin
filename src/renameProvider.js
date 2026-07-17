@@ -1239,11 +1239,14 @@ class GaugeRenameProvider {
     this.clientsMap = options.clientsMap;
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
-    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      documentStore: this.documentStore,
-      projectFactory: this.projectFactory,
-      vscode: this.vscode,
-    });
+    this.workspaceStepIndex = options.workspaceStepIndex;
+    this.diagnosticsProvider = options.diagnosticsProvider
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
+      || new GaugeStepDiagnosticsProvider({
+        documentStore: this.documentStore,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
     this.validateDiagnosticsProvider = options.validateDiagnosticsProvider
       || new GaugeValidateDiagnosticsProvider({
         cli: options.cli,
@@ -1276,6 +1279,12 @@ class GaugeRenameProvider {
   }
 
   async workspaceDocuments(sourceDocument) {
+    if (
+      this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.documentsFor === "function"
+    ) {
+      return this.workspaceStepIndex.documentsFor(sourceDocument);
+    }
     const workspace = this.vscode.workspace || {};
     const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
     const documents = [];
@@ -1359,6 +1368,27 @@ class GaugeRenameProvider {
     return documents.filter((document) => isStepImplementationDocument(document));
   }
 
+  async stepEntriesFor(sourceDocument, document, implementationDocuments) {
+    if (
+      this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.stepEntriesForDocument === "function"
+    ) {
+      return this.workspaceStepIndex.stepEntriesForDocument(sourceDocument, document);
+    }
+    let externalConstants;
+    if (isStepImplementationDocument(document)) {
+      try {
+        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(
+          document,
+          implementationDocuments,
+        );
+      } catch (_error) {
+        externalConstants = undefined;
+      }
+    }
+    return findStepFunctionsForDocument(document, externalConstants);
+  }
+
   stepAtGaugePosition(document, position) {
     if (!isGaugeDocument(document) || !position) {
       return undefined;
@@ -1369,21 +1399,13 @@ class GaugeRenameProvider {
       || conceptHeadingOnLine(this.vscode, document, position.line);
   }
 
-  stepAtImplementationPosition(document, position, implementationDocuments) {
+  stepAtImplementationPosition(document, position, implementationDocuments, stepEntries) {
     if (!isStepImplementationDocument(document) || !position || typeof document.getText !== "function") {
       return undefined;
     }
     const text = document.getText();
     const offset = offsetAt(text, position);
-    let externalConstants;
-    if (isStepImplementationDocument(document)) {
-      try {
-        externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
-      } catch (_error) {
-        externalConstants = undefined;
-      }
-    }
-    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
+    for (const entry of stepEntries || []) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset < start || offset > end) {
@@ -1433,34 +1455,38 @@ class GaugeRenameProvider {
   async stepAt(document, position) {
     const documents = await this.workspaceDocuments(document);
     const implementationDocuments = this.stepImplementationDocuments(documents);
+    const stepEntries = isStepImplementationDocument(document)
+      ? await this.stepEntriesFor(document, document, implementationDocuments)
+      : [];
     return {
       documents,
       step: this.stepAtGaugePosition(document, position)
-        || this.stepAtImplementationPosition(document, position, implementationDocuments),
+        || this.stepAtImplementationPosition(
+          document,
+          position,
+          implementationDocuments,
+          stepEntries,
+        ),
     };
   }
 
   async prepareRename(document, position) {
     const { documents, step } = await this.stepAt(document, position);
-    this.validateRenameTarget(documents, step);
+    await this.validateRenameTarget(document, documents, step);
     return step ? { range: step.range, placeholder: step.text } : undefined;
   }
 
-  validateRenameTarget(documents, step) {
+  async validateRenameTarget(sourceDocument, documents, step) {
     if (!step) {
       return;
     }
     const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const document of this.stepImplementationDocuments(documents)) {
-      let externalConstants;
-      if (isStepImplementationDocument(document)) {
-        try {
-          externalConstants = this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments);
-        } catch (_error) {
-          externalConstants = undefined;
-        }
-      }
-      for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
+      for (const entry of await this.stepEntriesFor(
+        sourceDocument,
+        document,
+        implementationDocuments,
+      )) {
         if (entry.aliases.length > 1 && stepEntryHasTemplate(entry, step.template)) {
           throw new Error(ALIASED_STEP_RENAME_ERROR);
         }
@@ -1643,7 +1669,16 @@ class GaugeRenameProvider {
     this.addJavaFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
   }
 
-  addStepImplementationRenames(edit, document, implementationDocuments, template, newName, hasInlineTable, oldName) {
+  addStepImplementationRenames(
+    edit,
+    document,
+    implementationDocuments,
+    template,
+    newName,
+    hasInlineTable,
+    oldName,
+    stepEntries,
+  ) {
     const text = document.getText();
     let externalConstants;
     const kotlinDocument = isKotlinDocument(document);
@@ -1654,7 +1689,7 @@ class GaugeRenameProvider {
         externalConstants = undefined;
       }
     }
-    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
+    for (const entry of stepEntries || findStepFunctionsForDocument(document, externalConstants)) {
       const entryTemplate = entry.aliases.length === 1
         ? normalizeStepTemplate(entry.aliases[0])
         : undefined;
@@ -1702,13 +1737,18 @@ class GaugeRenameProvider {
     if (!step) {
       return undefined;
     }
-    this.validateRenameTarget(documents, step);
+    await this.validateRenameTarget(document, documents, step);
     await this.preflightRename(document);
     if (step.engineRename) {
       const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
       if (languageServerEdit) {
         const implementationDocuments = this.stepImplementationDocuments(documents);
         for (const candidate of this.stepImplementationDocuments(documents)) {
+          const stepEntries = await this.stepEntriesFor(
+            document,
+            candidate,
+            implementationDocuments,
+          );
           this.addStepImplementationRenames(
             languageServerEdit,
             candidate,
@@ -1717,6 +1757,7 @@ class GaugeRenameProvider {
             newName,
             step.hasInlineTable,
             step.text,
+            stepEntries,
           );
         }
         return languageServerEdit;
@@ -1729,6 +1770,11 @@ class GaugeRenameProvider {
       if (isGaugeDocument(candidate)) {
         this.addGaugeRenames(edit, candidate, step.template, newName);
       } else if (isStepImplementationDocument(candidate)) {
+        const stepEntries = await this.stepEntriesFor(
+          document,
+          candidate,
+          implementationDocuments,
+        );
         this.addStepImplementationRenames(
           edit,
           candidate,
@@ -1737,6 +1783,7 @@ class GaugeRenameProvider {
           newName,
           step.hasInlineTable,
           step.text,
+          stepEntries,
         );
       }
     }

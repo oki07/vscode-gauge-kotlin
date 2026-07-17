@@ -47,6 +47,7 @@
   ],
   "main": "./src/extension.js",
   "scripts": {
+    "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
     "typecheck": "node scripts/check-js-syntax.js",
     "lint": "node scripts/check-js-syntax.js",
     "test:unit": "node --test",

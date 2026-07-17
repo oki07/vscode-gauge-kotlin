@@ -1197,11 +1197,14 @@ class GaugeDynamicArgumentCompletionProvider {
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
-    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      documentStore: this.documentStore,
-      projectFactory: this.projectFactory,
-      vscode: this.vscode,
-    });
+    this.workspaceStepIndex = options.workspaceStepIndex;
+    this.diagnosticsProvider = options.diagnosticsProvider
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
+      || new GaugeStepDiagnosticsProvider({
+        documentStore: this.documentStore,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
   }
 
   isGaugeProjectDocument(document) {
@@ -1412,7 +1415,7 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.serverCompletionItems(document, position, fallbackRange);
   }
 
-  stepCompletionItems(document, position, targetRange, workspaceDocuments) {
+  stepCompletionItems(document, position, targetRange, workspaceDocuments, indexedEntries) {
     if (!this.isCompletionDocument(document)) {
       return [];
     }
@@ -1421,7 +1424,9 @@ class GaugeDynamicArgumentCompletionProvider {
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
     const insertPrefix = stepCompletionInsertPrefix(line, targetRange);
-    const localItems = this.stepCompletionEntries(document, workspaceDocuments, position).map((entry) => completionItem(
+    const completionEntries = indexedEntries
+      || this.stepCompletionEntries(document, workspaceDocuments, position);
+    const localItems = completionEntries.map((entry) => completionItem(
       this.vscode,
       entry.label,
       range,
@@ -1547,6 +1552,19 @@ class GaugeDynamicArgumentCompletionProvider {
       return [];
     }
 
+    if (
+      this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.completionEntries === "function"
+    ) {
+      const indexedEntries = this.workspaceStepIndex.completionEntries(document, position);
+      if (isThenable(indexedEntries)) {
+        return indexedEntries.then((entries) => (
+          this.stepCompletionItems(document, position, stepRange, [], entries)
+        ));
+      }
+      return this.stepCompletionItems(document, position, stepRange, [], indexedEntries);
+    }
+
     const workspaceDocuments = this.workspaceDocuments();
     if (isThenable(workspaceDocuments)) {
       return workspaceDocuments.then((documents) => (
@@ -1563,4 +1581,5 @@ module.exports = {
   scenarioDataTableHeaders,
   specDataTableHeaders,
   staticArguments,
+  usedStepEntriesFromDocument,
 };

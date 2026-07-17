@@ -378,13 +378,16 @@ class GaugeCodeLensProvider {
     this.vscode = getVscode(options.vscode);
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
-    this.diagnosticsProvider = new GaugeStepDiagnosticsProvider({
-      documentStore: this.documentStore,
-      fileSystem: this.fileSystem,
-      pathModule: this.pathModule,
-      projectFactory: this.projectFactory,
-      vscode: this.vscode,
-    });
+    this.workspaceStepIndex = options.workspaceStepIndex;
+    this.diagnosticsProvider = options.diagnosticsProvider
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
+      || new GaugeStepDiagnosticsProvider({
+        documentStore: this.documentStore,
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectFactory: this.projectFactory,
+        vscode: this.vscode,
+      });
   }
 
   isGaugeProjectFile(file) {
@@ -610,7 +613,9 @@ class GaugeCodeLensProvider {
 
     const lenses = [];
     const lines = document.getText().split(/\r?\n/);
-    const referenceDocuments = await this.gaugeReferenceDocuments(document);
+    const referenceDocuments = this.workspaceStepIndex
+      ? undefined
+      : await this.gaugeReferenceDocuments(document);
     for (const heading of findConceptHeadings(document.getText())) {
       if (!heading.normalized) {
         continue;
@@ -624,7 +629,10 @@ class GaugeCodeLensProvider {
         Math.max(marker, heading.end.character),
       );
       const position = createPosition(this.vscode, heading.start.line, marker);
-      const count = this.referenceCountInDocuments(referenceDocuments, heading.normalized);
+      const count = this.workspaceStepIndex
+        && typeof this.workspaceStepIndex.referenceCount === "function"
+        ? await this.workspaceStepIndex.referenceCount(document, heading.normalized)
+        : this.referenceCountInDocuments(referenceDocuments, heading.normalized);
       lenses.push(createCodeLens(this.vscode, range, {
         command: SHOW_REFERENCES_FOR_STEP,
         title: referenceTitle(count),
@@ -685,30 +693,42 @@ class GaugeCodeLensProvider {
     }
 
     const text = document.getText();
-    const implementationDocuments = await this.stepImplementationDocuments(document);
-    const externalConstants = isStepImplementationDocument(document)
-      ? this.diagnosticsProvider.collectWorkspaceConstants(
-        document,
-        implementationDocuments,
-      )
+    const indexed = this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.stepEntriesForDocument === "function";
+    const implementationDocuments = indexed
+      ? []
+      : await this.stepImplementationDocuments(document);
+    const externalConstants = !indexed && isStepImplementationDocument(document)
+      ? this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments)
       : undefined;
     const lenses = [];
-    const referenceDocuments = await this.gaugeReferenceDocuments(document);
-    for (const entry of findStepFunctionsForDocument(document, externalConstants)) {
+    const referenceDocuments = indexed
+      ? undefined
+      : await this.gaugeReferenceDocuments(document);
+    const entries = indexed
+      ? await this.workspaceStepIndex.stepEntriesForDocument(document, document)
+      : findStepFunctionsForDocument(document, externalConstants);
+    for (const entry of entries) {
       const start = positionAt(text, entry.declarationStart);
       const end = positionAt(text, entry.declarationEnd);
       const range = createRangeFromPositions(this.vscode, start, end);
-      const aliases = [
-        ...entry.aliases,
-        ...superStepAliasesForEntry(
-          document,
-          entry,
-          [document, ...implementationDocuments],
-          this.diagnosticsProvider,
-        ),
-      ];
+      const aliases = indexed
+        && typeof this.workspaceStepIndex.stepAliasesForEntry === "function"
+        ? await this.workspaceStepIndex.stepAliasesForEntry(document, document, entry)
+        : [
+          ...entry.aliases,
+          ...superStepAliasesForEntry(
+            document,
+            entry,
+            [document, ...implementationDocuments],
+            this.diagnosticsProvider,
+          ),
+        ];
       for (const stepValue of normalizedStepValues(aliases)) {
-        const count = this.referenceCountInDocuments(referenceDocuments, stepValue);
+        const count = indexed
+          && typeof this.workspaceStepIndex.referenceCount === "function"
+          ? await this.workspaceStepIndex.referenceCount(document, stepValue)
+          : this.referenceCountInDocuments(referenceDocuments, stepValue);
         lenses.push(createCodeLens(this.vscode, range, {
           command: SHOW_REFERENCES_FOR_STEP,
           title: referenceTitle(count),

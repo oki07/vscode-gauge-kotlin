@@ -164,6 +164,47 @@ test("GaugeRenameProvider delegates Gauge renames to the Gauge language server",
   );
 });
 
+test("GaugeRenameProvider uses the shared workspace step index", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const document = createDocument([
+    "@Step(\"Open cart\")",
+    "fun openCart() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/CartSteps.kt");
+  const entry = {
+    aliases: ["Open cart"],
+    annotationEnd: 18,
+    annotationStart: 0,
+    declarationEnd: document.getText().length,
+    declarationStart: 0,
+    parameterEnd: 17,
+    parameterStart: 6,
+  };
+  const calls = [];
+  const vscode = createFakeVscode([document]);
+  const provider = new GaugeRenameProvider({
+    vscode,
+    workspaceStepIndex: {
+      documentsFor(sourceDocument) {
+        calls.push(["documents", sourceDocument]);
+        return [document];
+      },
+      stepEntriesForDocument(sourceDocument, targetDocument) {
+        calls.push(["steps", sourceDocument, targetDocument]);
+        return [entry];
+      },
+    },
+  });
+
+  const prepared = await provider.prepareRename(document, new vscode.Position(0, 10));
+
+  assert.equal(prepared.placeholder, "Open cart");
+  assert.deepEqual(calls, [
+    ["documents", document],
+    ["steps", document, document],
+    ["steps", document, document],
+  ]);
+});
+
 test("GaugeRenameProvider augments language server Gauge renames with Kotlin Step annotations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
