@@ -262,7 +262,21 @@ function collectIgnoredKotlinRanges(text) {
 }
 
 function isInIgnoredRange(offset, ranges) {
-  return ranges.some((range) => offset >= range.start && offset < range.end);
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (ranges[middle].start <= offset) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  if (low === 0) {
+    return false;
+  }
+  const range = ranges[low - 1];
+  return offset < range.end;
 }
 
 function findMatchingParen(text, openIndex) {
@@ -870,7 +884,11 @@ function readKotlinImportStatement(lines, startIndex, importPattern) {
   return { endIndex: lines.length - 1, statement };
 }
 
-function collectKotlinTypeAliases(text, ignoredRanges = []) {
+function collectKotlinTypeAliases(
+  text,
+  ignoredRanges = [],
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
+) {
   const aliases = new Map();
   const importPattern = new RegExp(
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
@@ -880,7 +898,7 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
     "u",
   );
-  const lines = kotlinSourceLines(text, ignoredRanges);
+  const lines = sourceLines;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
@@ -911,12 +929,16 @@ function collectKotlinTypeAliases(text, ignoredRanges = []) {
   return aliases;
 }
 
-function collectKotlinPackageName(text, ignoredRanges = []) {
+function collectKotlinPackageName(
+  text,
+  ignoredRanges = [],
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
+) {
   const packagePattern = new RegExp(
     `^package\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
     "u",
   );
-  for (const line of kotlinSourceLines(text, ignoredRanges)) {
+  for (const line of sourceLines) {
     const match = packagePattern.exec(normalizeKotlinQualifiedPathDots(line));
     if (match) {
       return normalizeKotlinIdentifierPath(match[1]);
@@ -925,13 +947,17 @@ function collectKotlinPackageName(text, ignoredRanges = []) {
   return undefined;
 }
 
-function collectKotlinConstantImports(text, ignoredRanges = []) {
+function collectKotlinConstantImports(
+  text,
+  ignoredRanges = [],
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
+) {
   const imports = [];
   const importPattern = new RegExp(
     `^import\\s+(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*(?:\\.\\*)?)(?:\\s+as\\s+(${KOTLIN_IDENTIFIER_PATTERN}))?\\s*$`,
     "u",
   );
-  const lines = kotlinSourceLines(text, ignoredRanges);
+  const lines = sourceLines;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
     const match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
@@ -2515,10 +2541,51 @@ function rangeNames(range) {
   return Array.isArray(range.names) ? range.names : [range.name];
 }
 
+function indexNestedRanges(ranges) {
+  ranges.sort((left, right) => left.start - right.start || right.end - left.end);
+  const stack = [];
+  for (const range of ranges) {
+    while (
+      stack.length > 0
+      && (
+        stack[stack.length - 1].end <= range.start
+        || stack[stack.length - 1].end < range.end
+      )
+    ) {
+      stack.pop();
+    }
+    range.parent = stack[stack.length - 1];
+    stack.push(range);
+  }
+  return ranges;
+}
+
+function enclosingIndexedRanges(ranges, offset) {
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (ranges[middle].start <= offset) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  const enclosing = [];
+  let range = low > 0 ? ranges[low - 1] : undefined;
+  while (range) {
+    if (offset < range.end) {
+      enclosing.push(range);
+    }
+    range = range.parent;
+  }
+  enclosing.reverse();
+  return enclosing;
+}
+
 function enclosingObjectPaths(objectRanges, offset) {
-  const enclosingRanges = objectRanges
-    .filter((range) => offset >= range.start && offset < range.end)
-    .sort((left, right) => left.start - right.start);
+  const enclosingRanges = enclosingIndexedRanges(objectRanges, offset);
   let paths = [[]];
   for (const range of enclosingRanges) {
     paths = paths.flatMap((path) => rangeNames(range).map((name) => path.concat(name)));
@@ -2537,9 +2604,7 @@ function pathHasPrefix(path, prefix) {
 }
 
 function enclosingRanges(ranges, offset) {
-  return ranges
-    .filter((range) => offset >= range.start && offset < range.end)
-    .sort((left, right) => left.start - right.start);
+  return enclosingIndexedRanges(ranges, offset);
 }
 
 function classScopeMap(classRanges) {
@@ -2649,10 +2714,19 @@ function constantScopeSpecificity(scope) {
 }
 
 function visibleConstantScopeAtOffset(scopes, offset) {
-  const visibleScopes = scopes
-    .filter((scope) => isConstantScopeVisibleAtOffset(scope, offset))
-    .sort((left, right) => constantScopeSpecificity(left) - constantScopeSpecificity(right));
-  return visibleScopes[0];
+  let visibleScope;
+  let specificity = Number.MAX_SAFE_INTEGER;
+  for (const scope of scopes) {
+    if (!isConstantScopeVisibleAtOffset(scope, offset)) {
+      continue;
+    }
+    const candidateSpecificity = constantScopeSpecificity(scope);
+    if (visibleScope === undefined || candidateSpecificity < specificity) {
+      visibleScope = scope;
+      specificity = candidateSpecificity;
+    }
+  }
+  return visibleScope;
 }
 
 function isConstantVisibleAtOffset(name, visibility, offset) {
@@ -2667,28 +2741,71 @@ function isConstantVisibleAtOffset(name, visibility, offset) {
 }
 
 function constantsVisibleAtOffset(constants, constantTypes, visibility, offset) {
-  if (visibility === undefined || offset === undefined) {
+  if (
+    visibility === undefined
+    || offset === undefined
+    || constants.size === 0
+    || visibility.size === 0
+  ) {
     return { constants, constantTypes };
   }
 
-  const visibleConstants = new Map();
-  const visibleTypes = new Map();
-  for (const [name, value] of constants) {
-    if (!isConstantVisibleAtOffset(name, visibility, offset)) {
-      continue;
-    }
-
-    const scope = name.includes(".") ? undefined : visibleConstantScopeAtOffset(visibility.get(name) || [], offset);
-    const visibleValue = scope && Object.prototype.hasOwnProperty.call(scope, "value")
-      ? scope.value
-      : value;
-    visibleConstants.set(name, visibleValue);
-    if (scope && Object.prototype.hasOwnProperty.call(scope, "typeName")) {
-      visibleTypes.set(name, scope.typeName);
-    } else if (constantTypes && constantTypes.has(name)) {
-      visibleTypes.set(name, constantTypes.get(name));
-    }
-  }
+  const addedConstants = new Map();
+  const addedTypes = new Map();
+  const scopeFor = (name) => (
+    name.includes(".")
+      ? undefined
+      : visibleConstantScopeAtOffset(visibility.get(name) || [], offset)
+  );
+  const visibleConstants = {
+    get(name) {
+      if (addedConstants.has(name)) {
+        return addedConstants.get(name);
+      }
+      const scope = scopeFor(name);
+      if (scope && Object.prototype.hasOwnProperty.call(scope, "value")) {
+        return scope.value;
+      }
+      return constants.get(name);
+    },
+    has(name) {
+      return addedConstants.has(name)
+        || (constants.has(name) && isConstantVisibleAtOffset(name, visibility, offset));
+    },
+    set(name, value) {
+      addedConstants.set(name, value);
+      return this;
+    },
+  };
+  const visibleTypes = {
+    get(name) {
+      if (addedTypes.has(name)) {
+        return addedTypes.get(name);
+      }
+      const scope = scopeFor(name);
+      if (scope && Object.prototype.hasOwnProperty.call(scope, "typeName")) {
+        return scope.typeName;
+      }
+      return constantTypes && constantTypes.get(name);
+    },
+    has(name) {
+      if (addedTypes.has(name)) {
+        return true;
+      }
+      if (!constants.has(name) || !isConstantVisibleAtOffset(name, visibility, offset)) {
+        return false;
+      }
+      const scope = scopeFor(name);
+      return Boolean(
+        (scope && Object.prototype.hasOwnProperty.call(scope, "typeName"))
+        || (constantTypes && constantTypes.has(name)),
+      );
+    },
+    set(name, value) {
+      addedTypes.set(name, value);
+      return this;
+    },
+  };
   return {
     constants: visibleConstants,
     constantTypes: visibleTypes,
@@ -3216,23 +3333,27 @@ function readKotlinConstDeclaration(text, constIndex, typeAliases = new Map()) {
   };
 }
 
-function collectStringConstants(text, externalConstants = {}) {
+function collectStringConstants(
+  text,
+  externalConstants = {},
+  ignoredRanges = collectIgnoredKotlinRanges(text),
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
+) {
   const constants = new Map(externalConstants.constants || []);
   const constantTypes = new Map(externalConstants.constantTypes || []);
   const samePackageConstants = new Map(externalConstants.samePackageConstants || []);
   const samePackageConstantTypes = new Map(externalConstants.samePackageConstantTypes || []);
   const constantVisibility = new Map();
   const expressions = [];
-  const ignoredRanges = collectIgnoredKotlinRanges(text);
-  const classRanges = collectNamedTypeRanges(text, ignoredRanges);
-  const objectRanges = [
+  const classRanges = indexNestedRanges(collectNamedTypeRanges(text, ignoredRanges));
+  const objectRanges = indexNestedRanges([
     ...collectObjectRanges(text, ignoredRanges),
     ...collectCompanionObjectRanges(text, ignoredRanges, classRanges),
-  ];
+  ]);
   const classesByPath = classScopeMap(classRanges);
-  const typeAliases = collectKotlinTypeAliases(text, ignoredRanges);
-  const packageName = collectKotlinPackageName(text, ignoredRanges);
-  const constantImports = collectKotlinConstantImports(text, ignoredRanges);
+  const typeAliases = collectKotlinTypeAliases(text, ignoredRanges, sourceLines);
+  const packageName = collectKotlinPackageName(text, ignoredRanges, sourceLines);
+  const constantImports = collectKotlinConstantImports(text, ignoredRanges, sourceLines);
   const namedImportState = new Map();
   const wildcardImportState = new Map();
   const pattern = /\bconst\b/g;
@@ -6758,6 +6879,7 @@ function stepAnnotationImports(
   ignoredRanges = [],
   externalStepAliases = new Map(),
   samePackageClassifiers = new Set(),
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
 ) {
   const ambiguousNamed = new Set();
   const named = new Map();
@@ -6770,7 +6892,7 @@ function stepAnnotationImports(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
     "u",
   );
-  const lines = kotlinSourceLines(text, ignoredRanges);
+  const lines = sourceLines;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
@@ -6822,13 +6944,17 @@ function stepAnnotationImports(
   };
 }
 
-function collectKotlinStepTypeAliasDeclarations(text, ignoredRanges = []) {
+function collectKotlinStepTypeAliasDeclarations(
+  text,
+  ignoredRanges = [],
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
+) {
   const aliases = new Map();
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
     "u",
   );
-  const lines = kotlinSourceLines(text, ignoredRanges);
+  const lines = sourceLines;
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
@@ -6844,14 +6970,19 @@ function collectKotlinStepTypeAliasDeclarations(text, ignoredRanges = []) {
   return aliases;
 }
 
-function collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges = []) {
+function collectPackageQualifiedTypeAliasDeclarationNames(
+  text,
+  packageName,
+  ignoredRanges = [],
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
+) {
   const names = [];
   const typeAliasPattern = new RegExp(
     `^typealias\\s+(${KOTLIN_IDENTIFIER_PATTERN})\\s*=\\s*(${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*)\\s*$`,
     "u",
   );
   const packagePrefix = `${packageName}.`;
-  const lines = kotlinSourceLines(text, ignoredRanges);
+  const lines = sourceLines;
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const statement = readKotlinTypeAliasStatement(lines, lineIndex, typeAliasPattern);
@@ -6894,6 +7025,7 @@ function collectPackageQualifiedStepTypeAliases(
   ignoredRanges = [],
   externalStepAliases = new Map(),
   samePackageClassifiers = new Set(),
+  sourceLines = kotlinSourceLines(text, ignoredRanges),
 ) {
   const aliases = new Map();
   const stepImports = stepAnnotationImports(
@@ -6901,8 +7033,9 @@ function collectPackageQualifiedStepTypeAliases(
     ignoredRanges,
     externalStepAliases,
     samePackageClassifiers,
+    sourceLines,
   );
-  const declarations = collectKotlinStepTypeAliasDeclarations(text, ignoredRanges);
+  const declarations = collectKotlinStepTypeAliasDeclarations(text, ignoredRanges, sourceLines);
   const packagePrefix = `${packageName}.`;
 
   for (const aliasName of declarations.keys()) {
@@ -6918,19 +7051,125 @@ function collectPackageQualifiedStepTypeAliases(
 }
 
 function stepAnnotationClassifierNames(stepImports, localClassifierNames = new Set()) {
-  const names = new Set(localClassifierNames);
-  if (stepImports.samePackageClassifiers) {
-    for (const name of stepImports.samePackageClassifiers) {
-      names.add(name);
-    }
-  }
-  return names;
+  return {
+    has(name) {
+      return localClassifierNames.has(name)
+        || Boolean(
+          stepImports.samePackageClassifiers
+          && stepImports.samePackageClassifiers.has(name),
+        );
+    },
+  };
 }
 
-function isTopLevelOffset(text, offset) {
+function localClassifierNames(
+  text,
+  ignoredRanges,
+) {
+  return createClassifierScopeAnalysis(text, ignoredRanges).topLevelNames;
+}
+
+function collectClassifierScopeRanges(
+  text,
+  ignoredRanges,
+  searchableText = replaceKotlinCommentsWithSpaces(text),
+) {
+  const ranges = [];
+  const pattern = new RegExp(
+    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
+    "gu",
+  );
+  let match = pattern.exec(searchableText);
+  while (match) {
+    if (isInIgnoredRange(match.index, ignoredRanges)) {
+      match = pattern.exec(searchableText);
+      continue;
+    }
+
+    const bodyStart = findObjectBodyStart(text, pattern.lastIndex);
+    if (bodyStart !== -1) {
+      const bodyEnd = findMatchingBrace(text, bodyStart);
+      if (bodyEnd !== -1) {
+        ranges.push({
+          end: bodyEnd,
+          start: bodyStart + 1,
+        });
+        pattern.lastIndex = bodyStart + 1;
+      }
+    }
+    match = pattern.exec(searchableText);
+  }
+  return ranges;
+}
+
+function isInsideRange(offset, range) {
+  return offset >= range.start && offset < range.end;
+}
+
+function mergeOffsetRanges(ranges) {
+  const sorted = ranges.slice().sort((left, right) => (
+    left.start - right.start || left.end - right.end
+  ));
+  const merged = [];
+  for (const range of sorted) {
+    const previous = merged[merged.length - 1];
+    if (!previous || range.start > previous.end) {
+      merged.push({ end: range.end, start: range.start });
+    } else if (range.end > previous.end) {
+      previous.end = range.end;
+    }
+  }
+  return merged;
+}
+
+function containsOffset(ranges, offset) {
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (ranges[middle].start <= offset) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low > 0 && isInsideRange(offset, ranges[low - 1]);
+}
+
+function collectClassifierDeclarations(searchableText, ignoredRanges) {
+  const declarations = [];
+  const pattern = new RegExp(
+    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
+    "gu",
+  );
+  let match = pattern.exec(searchableText);
+  while (match) {
+    if (!isInIgnoredRange(match.index, ignoredRanges)) {
+      declarations.push({
+        name: normalizeKotlinIdentifier(match[1]),
+        start: match.index,
+      });
+    }
+    match = pattern.exec(searchableText);
+  }
+  return declarations;
+}
+
+function topLevelClassifierNames(text, declarations) {
+  const names = new Set();
   let braceDepth = 0;
+  let declarationIndex = 0;
   let quote;
-  for (let index = 0; index < offset; index += 1) {
+  for (let index = 0; index <= text.length && declarationIndex < declarations.length; index += 1) {
+    while (
+      declarationIndex < declarations.length
+      && declarations[declarationIndex].start === index
+    ) {
+      if (braceDepth === 0) {
+        names.add(declarations[declarationIndex].name);
+      }
+      declarationIndex += 1;
+    }
     const char = text[index];
     if (quote) {
       if (char === "\\") {
@@ -6964,102 +7203,84 @@ function isTopLevelOffset(text, offset) {
       braceDepth -= 1;
     }
   }
-  return braceDepth === 0;
-}
-
-function localClassifierNames(text, ignoredRanges) {
-  const names = new Set();
-  const searchableText = replaceKotlinCommentsWithSpaces(text);
-  const pattern = new RegExp(
-    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
-    "gu",
-  );
-  let match = pattern.exec(searchableText);
-  while (match) {
-    if (!isInIgnoredRange(match.index, ignoredRanges) && isTopLevelOffset(text, match.index)) {
-      names.add(normalizeKotlinIdentifier(match[1]));
-    }
-    match = pattern.exec(searchableText);
-  }
   return names;
 }
 
-function collectClassifierScopeRanges(text, ignoredRanges) {
-  const ranges = [];
-  const searchableText = replaceKotlinCommentsWithSpaces(text);
-  const pattern = new RegExp(
-    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
-    "gu",
-  );
-  let match = pattern.exec(searchableText);
-  while (match) {
-    if (isInIgnoredRange(match.index, ignoredRanges)) {
-      match = pattern.exec(searchableText);
-      continue;
-    }
-
-    const bodyStart = findObjectBodyStart(text, pattern.lastIndex);
-    if (bodyStart !== -1) {
-      const bodyEnd = findMatchingBrace(text, bodyStart);
-      if (bodyEnd !== -1) {
-        ranges.push({
-          end: bodyEnd,
-          start: bodyStart + 1,
-        });
-        pattern.lastIndex = bodyStart + 1;
-      }
-    }
-    match = pattern.exec(searchableText);
-  }
-  return ranges;
-}
-
-function isInsideRange(offset, range) {
-  return offset >= range.start && offset < range.end;
-}
-
-function isInsideChildScope(offset, scope, scopes) {
-  return scopes.some((candidate) => (
-    candidate.start > scope.start
-    && candidate.end <= scope.end
-    && isInsideRange(offset, candidate)
-  ));
-}
-
-function directClassifierNamesInScope(text, ignoredRanges, scope, scopes) {
-  const names = new Set();
-  const searchableText = replaceKotlinCommentsWithSpaces(text);
-  const pattern = new RegExp(
-    `\\b(?:annotation\\s+class|class|interface|object)\\s+(${KOTLIN_IDENTIFIER_PATTERN})`,
-    "gu",
-  );
-  pattern.lastIndex = scope.start;
-  let match = pattern.exec(searchableText);
-  while (match && match.index < scope.end) {
-    if (
-      !isInIgnoredRange(match.index, ignoredRanges)
-      && !isInsideChildScope(match.index, scope, scopes)
+function addDirectClassifierNames(scopes, declarations) {
+  const parentStack = [];
+  for (const scope of scopes) {
+    while (
+      parentStack.length > 0
+      && parentStack[parentStack.length - 1].end <= scope.start
     ) {
-      names.add(normalizeKotlinIdentifier(match[1]));
+      parentStack.pop();
     }
-    match = pattern.exec(searchableText);
+    scope.parent = parentStack[parentStack.length - 1];
+    parentStack.push(scope);
   }
-  return names;
+
+  let scopeIndex = 0;
+  const scopeStack = [];
+  for (const declaration of declarations) {
+    while (scopeIndex < scopes.length && scopes[scopeIndex].start <= declaration.start) {
+      while (
+        scopeStack.length > 0
+        && scopeStack[scopeStack.length - 1].end <= scopes[scopeIndex].start
+      ) {
+        scopeStack.pop();
+      }
+      scopeStack.push(scopes[scopeIndex]);
+      scopeIndex += 1;
+    }
+    while (
+      scopeStack.length > 0
+      && scopeStack[scopeStack.length - 1].end <= declaration.start
+    ) {
+      scopeStack.pop();
+    }
+    if (scopeStack.length > 0) {
+      scopeStack[scopeStack.length - 1].classifierNames.add(declaration.name);
+    }
+  }
 }
 
-function localClassifierNamesAtOffset(text, ignoredRanges, offset) {
-  const names = localClassifierNames(text, ignoredRanges);
-  const scopes = collectClassifierScopeRanges(text, ignoredRanges);
-  const enclosingScopes = scopes
-    .filter((scope) => isInsideRange(offset, scope))
-    .sort((left, right) => left.start - right.start);
+function createClassifierScopeAnalysis(text, ignoredRanges) {
+  const searchableText = replaceKotlinCommentsWithSpaces(text);
+  const declarations = collectClassifierDeclarations(searchableText, ignoredRanges);
+  const scopes = collectClassifierScopeRanges(text, ignoredRanges, searchableText)
+    .map((scope) => ({ ...scope, classifierNames: new Set() }));
+  addDirectClassifierNames(scopes, declarations);
+  return {
+    scopes,
+    topLevelNames: topLevelClassifierNames(text, declarations),
+  };
+}
 
-  for (const scope of enclosingScopes) {
-    for (const name of directClassifierNamesInScope(text, ignoredRanges, scope, scopes)) {
-      names.add(name);
+function localClassifierNamesAtOffset(analysis, offset) {
+  let low = 0;
+  let high = analysis.scopes.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (analysis.scopes[middle].start <= offset) {
+      low = middle + 1;
+    } else {
+      high = middle;
     }
   }
-  return names;
+  let scope = low > 0 ? analysis.scopes[low - 1] : undefined;
+  const enclosingClassifierNames = [];
+  while (scope) {
+    if (isInsideRange(offset, scope)) {
+      enclosingClassifierNames.push(scope.classifierNames);
+    }
+    scope = scope.parent;
+  }
+  return {
+    has(name) {
+      return analysis.topLevelNames.has(name)
+        || enclosingClassifierNames.some((names) => names.has(name));
+    },
+  };
 }
 
 function resolveStepAnnotationTarget(annotationName, namedImports, localClassifierNames = new Set(), seen = new Set()) {
@@ -7119,16 +7340,17 @@ function addStepFunctionEntry(
   ignoredRanges,
   stepImports,
   functionBodyRanges,
+  classifierScopeAnalysis,
   annotationName,
   openParen,
   functionSearchStart,
   findAttachedDeclaration = findAttachedFunction,
   annotationStart = -1,
 ) {
-  if (functionBodyRanges.some((range) => isInsideRange(openParen, range))) {
+  if (containsOffset(functionBodyRanges, openParen)) {
     return;
   }
-  const classifierNames = localClassifierNamesAtOffset(text, ignoredRanges, openParen);
+  const classifierNames = localClassifierNamesAtOffset(classifierScopeAnalysis, openParen);
   if (!isStepAnnotationAllowed(annotationName, stepImports, classifierNames)) {
     return;
   }
@@ -7162,6 +7384,7 @@ function addGroupedStepFunctions(
   ignoredRanges,
   stepImports,
   functionBodyRanges,
+  classifierScopeAnalysis,
 ) {
   const groupPattern = /@/g;
   let groupMatch = groupPattern.exec(text);
@@ -7224,6 +7447,7 @@ function addGroupedStepFunctions(
         ignoredRanges,
         stepImports,
         functionBodyRanges,
+        classifierScopeAnalysis,
         annotationName.path,
         openParen,
         () => closeBracket + 1,
@@ -7240,21 +7464,29 @@ function addGroupedStepFunctions(
 function findStepFunctions(text, externalConstants) {
   const entries = [];
   const annotationPattern = /@/g;
-  const { constants, constantTypes, constantVisibility } = collectStringConstants(text, externalConstants);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const sourceLines = kotlinSourceLines(text, ignoredRanges);
+  const { constants, constantTypes, constantVisibility } = collectStringConstants(
+    text,
+    externalConstants,
+    ignoredRanges,
+    sourceLines,
+  );
   const stepImports = stepAnnotationImports(
     text,
     ignoredRanges,
     externalConstants && externalConstants.stepAliases,
     externalConstants && externalConstants.samePackageClassifiers,
+    sourceLines,
   );
-  const functionBodyRanges = [
+  const functionBodyRanges = mergeOffsetRanges([
     ...collectFunctionBodyRanges(text, ignoredRanges),
     ...collectInitBlockBodyRanges(text, ignoredRanges),
     ...collectConstructorBodyRanges(text, ignoredRanges),
     ...collectPropertyAccessorBodyRanges(text, ignoredRanges),
     ...collectPropertyInitializerRanges(text, ignoredRanges),
-  ];
+  ]);
+  const classifierScopeAnalysis = createClassifierScopeAnalysis(text, ignoredRanges);
   addGroupedStepFunctions(
     entries,
     text,
@@ -7264,6 +7496,7 @@ function findStepFunctions(text, externalConstants) {
     ignoredRanges,
     stepImports,
     functionBodyRanges,
+    classifierScopeAnalysis,
   );
   let annotationMatch = annotationPattern.exec(text);
   while (annotationMatch) {
@@ -7294,6 +7527,7 @@ function findStepFunctions(text, externalConstants) {
       ignoredRanges,
       stepImports,
       functionBodyRanges,
+      classifierScopeAnalysis,
       annotation.annotationName,
       annotation.openParen,
       () => annotation.closeParen + 1,
@@ -7539,13 +7773,7 @@ function collectJavaTypeRanges(text, ignoredRanges = []) {
 }
 
 function enclosingJavaTypes(typeRanges, offset) {
-  return typeRanges
-    .filter((range) => offset >= range.start && offset < range.end)
-    .sort((left, right) => left.start - right.start);
-}
-
-function enclosingJavaTypePath(typeRanges, offset) {
-  return enclosingJavaTypes(typeRanges, offset).map((range) => range.name);
+  return enclosingIndexedRanges(typeRanges, offset);
 }
 
 function javaStringLiteralTerm(text) {
@@ -7740,7 +7968,7 @@ function collectJavaStringConstants(text, externalConstants = {}) {
   const samePackageConstantTypes = new Map(externalConstants.samePackageConstantTypes || []);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
   const packageName = collectJavaPackageName(text, ignoredRanges);
-  const typeRanges = collectJavaTypeRanges(text, ignoredRanges);
+  const typeRanges = indexNestedRanges(collectJavaTypeRanges(text, ignoredRanges));
   const declarations = [];
   const constantImports = collectJavaConstantImports(text, ignoredRanges);
   const pattern = /\b((?:(?:public|protected|private|static|final|transient|volatile)\s+)*)String\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/g;
@@ -7765,7 +7993,7 @@ function collectJavaStringConstants(text, externalConstants = {}) {
     const name = match[2];
     const expressionStart = pattern.lastIndex;
     const expressionEnd = findConstExpressionEnd(text, expressionStart);
-    const typePath = enclosingJavaTypePath(typeRanges, match.index);
+    const typePath = enclosingTypes.map((range) => range.name);
     const names = new Set([name, `${typePath.join(".")}.${name}`]);
     if (packageName !== undefined) {
       names.add(`${packageName}.${typePath.join(".")}.${name}`);
@@ -8069,22 +8297,28 @@ function computeCandidateAnalysis(candidate) {
   const candidateIsKotlin = isKotlinDocument(candidate);
   const candidateIsJava = isJavaDocument(candidate);
   const ignoredRanges = collectIgnoredKotlinRanges(text);
+  const sourceLines = candidateIsKotlin ? kotlinSourceLines(text, ignoredRanges) : undefined;
   const packageName = candidateIsJava
     ? collectJavaPackageName(text, ignoredRanges)
-    : collectKotlinPackageName(text, ignoredRanges);
+    : collectKotlinPackageName(text, ignoredRanges, sourceLines);
   return {
     aliasDeclarationNames: candidateIsKotlin && packageName !== undefined
-      ? collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges)
+      ? collectPackageQualifiedTypeAliasDeclarationNames(text, packageName, ignoredRanges, sourceLines)
       : undefined,
     classifiers: candidateIsKotlin ? localClassifierNames(text, ignoredRanges) : undefined,
     collected: packageName !== undefined && (candidateIsKotlin || candidateIsJava)
-      ? (candidateIsJava ? collectJavaStringConstants(text) : collectStringConstants(text))
+      ? (
+        candidateIsJava
+          ? collectJavaStringConstants(text)
+          : collectStringConstants(text, undefined, ignoredRanges, sourceLines)
+      )
       : undefined,
     hasTypeAliases: candidateIsKotlin && TYPE_ALIAS_TOKEN_PATTERN.test(text),
     ignoredRanges,
     isJava: candidateIsJava,
     isKotlin: candidateIsKotlin,
     packageName,
+    sourceLines,
     text,
   };
 }
@@ -8419,7 +8653,7 @@ class GaugeStepDiagnosticsProvider {
         }
 
         if (analysis.hasTypeAliases) {
-          stepAliasDocuments.push({ ignoredRanges, packageName, text });
+          stepAliasDocuments.push({ ignoredRanges, packageName, sourceLines: analysis.sourceLines, text });
         }
         for (const name of analysis.aliasDeclarationNames || []) {
           if (ambiguousWorkspaceStepAliases.has(name)) {
@@ -8477,6 +8711,7 @@ class GaugeStepDiagnosticsProvider {
           source.ignoredRanges,
           stepAliases,
           packageClassifiers.get(source.packageName),
+          source.sourceLines,
         );
         for (const [name, targetName] of collected) {
           if (ambiguousWorkspaceStepAliases.has(name)) {
