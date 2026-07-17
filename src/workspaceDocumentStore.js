@@ -55,10 +55,15 @@ function uriPath(uri) {
   return (uri && (uri.fsPath || uri.path)) || "";
 }
 
-function createDiskDocument(file, text) {
+function createDiskDocument(file, text, vscode) {
+  const uri = vscode
+    && vscode.Uri
+    && typeof vscode.Uri.file === "function"
+    ? vscode.Uri.file(file)
+    : { fsPath: file };
   return {
     languageId: languageIdForPath(file),
-    uri: { fsPath: file },
+    uri,
     version: 0,
     getText() {
       return text;
@@ -157,7 +162,7 @@ class WorkspaceDocumentStore {
       if (this.disposed) {
         return;
       }
-      this.diskDocuments.set(file, createDiskDocument(file, text));
+      this.diskDocuments.set(file, createDiskDocument(file, text, this.vscode));
     } catch (_error) {
       this.diskDocuments.delete(file);
     }

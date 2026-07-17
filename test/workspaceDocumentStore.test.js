@@ -46,7 +46,20 @@ function createFakeVscode(options = {}) {
   const state = {
     findFilesCalls: [],
     listeners: { open: [], change: [], close: [] },
+    uriFileCalls: [],
     watchers: [],
+  };
+  const Uri = {
+    file(file) {
+      state.uriFileCalls.push(file);
+      return {
+        fsPath: file,
+        scheme: "file",
+        toString() {
+          return `file://${file}`;
+        },
+      };
+    },
   };
   const workspace = {
     textDocuments: options.textDocuments || [],
@@ -72,7 +85,7 @@ function createFakeVscode(options = {}) {
       return watcher;
     },
   };
-  return { vscode: { workspace }, state };
+  return { vscode: { Uri, workspace }, state };
 }
 
 function createDocument(text, languageId, fsPath) {
@@ -109,6 +122,28 @@ test("WorkspaceDocumentStore scans the workspace once and reads files from disk"
   assert.equal(byPath.get("/ws/src/Steps.kt").getText(), "package steps\n");
   assert.equal(byPath.get("/ws/specs/login.spec").languageId, "gauge");
   assert.equal(isWorkspaceStepImplementationScanComplete(documents), true);
+});
+
+test("WorkspaceDocumentStore gives unopened definition targets real VS Code file URIs", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/specs/concepts/login.cpt": "# Login\n",
+    "/ws/src/Steps.kt": "@Step(\"Login\")\nfun login() {}\n",
+  };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  const documents = store.documents();
+
+  assert.deepEqual(
+    state.uriFileCalls.sort(),
+    Object.keys(files).sort(),
+  );
+  assert.equal(documents.every((document) => document.uri.scheme === "file"), true);
 });
 
 test("WorkspaceDocumentStore bounds concurrent initial file reads", async () => {
