@@ -8,6 +8,9 @@ test/**
 .vscode-test/**
 docs/**
 scripts/**
+src/**
+node_modules/**
+out/**/*.map
 package-lock.json
 coverage/**
 .nyc_output/**

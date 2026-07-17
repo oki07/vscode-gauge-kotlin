@@ -125,7 +125,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
 
   assert.equal(manifest.name, "vscode-gauge-kotlin");
   assert.equal(manifest.displayName, "Gauge Kotlin");
-  assert.equal(manifest.main, "./src/extension.js");
+  assert.equal(manifest.main, "./out/extension.js");
   assert.equal(manifest.author, "oki07");
   assert.equal(manifest.publisher, "oki07");
   assert.deepEqual(manifest.repository, {
@@ -139,6 +139,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.deepEqual(manifest.scripts, {
     "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
+    bundle: "node scripts/build-extension.js",
     typecheck: "node scripts/check-js-syntax.js",
     lint: "node scripts/check-js-syntax.js",
     "test:unit": "node --test",
@@ -149,6 +150,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     test: "npm run test:unit",
   });
   assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");
+  assert.equal(typeof manifest.devDependencies.esbuild, "string");
   assert.deepEqual(manifest.categories, ["Programming Languages", "Testing"]);
   assert.equal(Object.hasOwn(manifest, "files"), false);
   assert.equal(fs.existsSync(path.join(root, "README.md")), true);
@@ -588,7 +590,6 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   ]);
 
   for (const relativePath of [
-    manifest.main,
     language.configuration,
     grammar.path,
     conceptGrammar.path,
@@ -596,6 +597,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   ]) {
     assert.equal(fs.existsSync(path.join(root, relativePath)), true, relativePath);
   }
+  assert.equal(fs.existsSync(path.join(root, "scripts", "build-extension.js")), true);
 
   const languageConfiguration = JSON.parse(
     fs.readFileSync(path.join(root, language.configuration), "utf8"),
@@ -685,6 +687,23 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   ]) {
     assert.deepEqual(snippets[name].body, legacyTableSnippetBody(columns));
   }
+});
+
+test("packaging policy includes only the production bundle", () => {
+  const ignored = new Set(readVscodeIgnore());
+
+  assert.equal(ignored.has("src/**"), true);
+  assert.equal(ignored.has("node_modules/**"), true);
+  assert.equal(ignored.has("out/**/*.map"), true);
+
+  const packageScript = fs.readFileSync(
+    path.join(root, "scripts", "package-vsix.js"),
+    "utf8",
+  );
+  assert.match(packageScript, /MAX_VSIX_FILES/);
+  assert.match(packageScript, /MAX_VSIX_BYTES/);
+  assert.match(packageScript, /extension\/out\/extension\.js/);
+  assert.match(packageScript, /extension\/(?:src|node_modules)/);
 });
 
 test("extension manifest contributes a Gauge TextMate grammar", () => {
@@ -1101,7 +1120,7 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assert.deepEqual(frontMatter.patterns, [{ include: "source.yaml" }]);
 });
 
-test("extension package ignores development-only files while keeping runtime sources", () => {
+test("extension package ignores development files while keeping the production bundle", () => {
   const manifest = readPackageJson();
   const ignored = readVscodeIgnore();
 
@@ -1118,22 +1137,25 @@ test("extension package ignores development-only files while keeping runtime sou
     ".vscode-test/**",
     "docs/**",
     "scripts/**",
+    "src/**",
+    "node_modules/**",
+    "out/**/*.map",
     "package-lock.json",
   ]) {
     assert.ok(ignored.includes(pattern), `missing ${pattern}`);
   }
 
   for (const runtimePattern of [
-    "src/**",
+    "out/**",
     "resources/**",
     "snippets/**",
     "syntaxes/**",
     "language-configuration.json",
     "package.json",
-    "node_modules",
   ]) {
     assert.ok(!ignored.includes(runtimePattern), `runtime pattern must stay packaged: ${runtimePattern}`);
   }
+  assert.equal(manifest.main, "./out/extension.js");
 });
 
 test("extension package script requires repository metadata", () => {

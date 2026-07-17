@@ -22,6 +22,9 @@
     "vscode-languageclient": "~9.0.1",
     "yauzl": "^3.4.0"
   },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  },
   "categories": [
     "Programming Languages",
     "Testing"
@@ -45,9 +48,10 @@
     "onLanguage:java",
     "onDebugResolve:gauge"
   ],
-  "main": "./src/extension.js",
+  "main": "./out/extension.js",
   "scripts": {
     "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
+    "bundle": "node scripts/build-extension.js",
     "typecheck": "node scripts/check-js-syntax.js",
     "lint": "node scripts/check-js-syntax.js",
     "test:unit": "node --test",
