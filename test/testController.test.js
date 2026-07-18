@@ -241,7 +241,6 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["profile", "Run Repeat", 1, calls[4][3], false],
     ["run", { include: [] }],
     ["output", "\x1b[36m# Checkout\x1b[0m\r\n"],
-    ["started", "/workspace/specs/example.spec"],
     [
       "output",
       "\x1b[33m  ## Successful checkout\x1b[0m\r\n",
@@ -252,7 +251,6 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
       "output",
       "    \x1b[32m[PASS]\x1b[0m\r\n",
     ],
-    ["passed", "/workspace/specs/example.spec", 100],
     ["dispose"],
   ]);
 });
@@ -315,7 +313,6 @@ test("GaugeTestController does not pass a specification with a failed scenario",
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "failed"), [
     ["failed", "/workspace/specs/example.spec:20", "Expected success", 9],
-    ["failed", "/workspace/specs/example.spec", "Expected success", 100],
   ]);
 });
 
@@ -377,12 +374,10 @@ test("GaugeTestController keeps retry attempts distinct for repeated scenario id
     "passed",
     "started",
   ].includes(entry[0])), [
-    ["started", "/workspace/specs/example.spec"],
     ["started", "/workspace/specs/example.spec:12"],
     ["failed", "/workspace/specs/example.spec:12", "First attempt failed", 4],
     ["started", "/workspace/specs/example.spec:12#attempt=2"],
     ["passed", "/workspace/specs/example.spec:12#attempt=2", 5],
-    ["passed", "/workspace/specs/example.spec", 20],
   ]);
 });
 

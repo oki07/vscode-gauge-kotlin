@@ -353,34 +353,6 @@ function attemptItemName(name, id, attempt) {
   return `${name || id} (attempt ${attempt})`;
 }
 
-function summarizeChildResults(result) {
-  if (!result || !(result.children instanceof Map) || result.children.size === 0) {
-    return undefined;
-  }
-  const summary = {
-    failed: false,
-    message: undefined,
-    passed: false,
-    skipped: false,
-  };
-  for (const child of result.children.values()) {
-    if (child.status === "failed") {
-      summary.failed = true;
-      if (child.message && !summary.message) {
-        summary.message = child.message;
-      }
-    } else if (child.status === "skipped") {
-      summary.skipped = true;
-      if (child.message && !summary.message) {
-        summary.message = child.message;
-      }
-    } else {
-      summary.passed = true;
-    }
-  }
-  return summary;
-}
-
 function knownProjectRoots(clientsMap) {
   if (!clientsMap || typeof clientsMap.keys !== "function") {
     return [];
@@ -474,7 +446,6 @@ class GaugeTestController {
     this.currentRun = undefined;
     this.items = new Map();
     this.pendingResults = new Map();
-    this.childResults = new Map();
     this.attemptCounts = new Map();
     this.activeAttemptIds = new Map();
     this.workspaceDiscoveredIdsByClient = new Map();
@@ -895,7 +866,6 @@ class GaugeTestController {
     }
     this.currentRun = this.controller.createTestRun(request);
     this.pendingResults.clear();
-    this.childResults.clear();
     this.attemptCounts.clear();
     this.activeAttemptIds.clear();
     return this.currentRun;
@@ -1113,26 +1083,6 @@ class GaugeTestController {
     return applyLocation(this.vscode, item, event.location);
   }
 
-  recordChildResult(event, status, message) {
-    const parentId = event && event.parentId;
-    if (!parentId || parentId === ROOT_PARENT_ID) {
-      return;
-    }
-    const childId = event && (event.logicalId || event.id);
-    if (!childId) {
-      return;
-    }
-    const result = this.childResults.get(parentId) || {
-      children: new Map(),
-    };
-    const child = {
-      message,
-      status,
-    };
-    result.children.set(childId, child);
-    this.childResults.set(parentId, result);
-  }
-
   forgetActiveAttempt(event) {
     if (event && event.id) {
       this.activeAttemptIds.delete(event.id);
@@ -1145,33 +1095,16 @@ class GaugeTestController {
     if (!run || !item) {
       return;
     }
-    const childResult = event.type === "suiteFinished"
-      ? summarizeChildResults(this.childResults.get(event.id))
-      : undefined;
-    if (childResult) {
-      this.childResults.delete(event.id);
-      if (childResult.failed && typeof run.failed === "function") {
-        run.failed(item, createMessage(this.vscode, childResult.message || ""), event.duration);
-        return "failed";
-      }
-      if (childResult.skipped && !childResult.passed && typeof run.skipped === "function") {
-        run.skipped(item, createOptionalMessage(this.vscode, childResult.message));
-        return "skipped";
-      }
-    }
     const pending = this.pendingResults.get(event.id);
     this.pendingResults.delete(event.id);
     if (pending && pending.status === "failed" && typeof run.failed === "function") {
-      this.recordChildResult(event, "failed", pending.message);
       run.failed(item, createMessage(this.vscode, pending.message), event.duration);
       return "failed";
     }
     if (pending && pending.status === "skipped" && typeof run.skipped === "function") {
-      this.recordChildResult(event, "skipped", pending.message);
       run.skipped(item, createOptionalMessage(this.vscode, pending.message));
       return "skipped";
     }
-    this.recordChildResult(event, "passed");
     if (typeof run.passed === "function") {
       run.passed(item, event.duration);
     }
@@ -1194,11 +1127,8 @@ class GaugeTestController {
     const run = this.ensureRun();
     switch (event.type) {
       case "suiteStarted": {
-        const item = this.ensureItem(event);
+        this.ensureItem(event);
         appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN));
-        if (run && item && typeof run.started === "function") {
-          run.started(item);
-        }
         break;
       }
       case "testStarted": {
@@ -1214,7 +1144,6 @@ class GaugeTestController {
         break;
       }
       case "suiteFinished":
-        this.finishItem(event);
         break;
       case "testFinished": {
         const attemptEvent = this.resolveAttemptEvent(event);
