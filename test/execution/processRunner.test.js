@@ -131,6 +131,109 @@ test("process runner hides machine-readable JSON events from output", async () =
   );
 });
 
+test("process runner forwards Gauge output chunks unchanged for Test UI runs", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const chunks = [];
+  const spawnCalls = [];
+  const runner = createGaugeProcessRunner({
+    env: { PATH: "/bin" },
+    outputChannel,
+    processOutputChunk(chunk) {
+      chunks.push(chunk);
+    },
+    spawn(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "specs/example.spec"],
+    cwd: "/workspace",
+    forwardOutput: true,
+    saveExecutionResult: true,
+  });
+
+  child.stdout.emit("data", "\x1b[0;36m# Checkout\n\x1b[0mprogress\r");
+  child.stderr.emit("data", "runner warning\n");
+  child.emit("exit", 0);
+
+  assert.equal(await run, true);
+  assert.deepEqual(chunks, [
+    "\x1b[0;36m# Checkout\n\x1b[0mprogress\r",
+    "runner warning\n",
+  ]);
+  assert.deepEqual(spawnCalls[0].options.env, {
+    PATH: "/bin",
+    save_execution_result: "true",
+  });
+});
+
+test("process runner preserves UTF-8 split across Gauge output chunks", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const chunks = [];
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    processOutputChunk(chunk) {
+      chunks.push(chunk);
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "specs/example.spec"],
+    cwd: "/workspace",
+    forwardOutput: true,
+  });
+  const output = Buffer.from("# \u4ed5\u69d8\n", "utf8");
+  child.stdout.emit("data", output.subarray(0, 4));
+  child.stdout.emit("data", output.subarray(4));
+  child.emit("exit", 0);
+
+  assert.equal(await run, true);
+  assert.equal(chunks.join(""), "# \u4ed5\u69d8\n");
+});
+
+test("process runner preserves Gauge output delivered after process exit", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  child.stdout.readableEnded = false;
+  child.stderr.readableEnded = false;
+  const chunks = [];
+  const runner = createGaugeProcessRunner({
+    outputChannel: new FakeOutputChannel(),
+    processOutputChunk(chunk) {
+      chunks.push(chunk);
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "specs/example.spec"],
+    cwd: "/workspace",
+    forwardOutput: true,
+  });
+  child.emit("exit", 0);
+  child.stdout.emit("data", "final output\n");
+  child.stdout.readableEnded = true;
+  child.stderr.readableEnded = true;
+  child.emit("close", 0);
+
+  assert.equal(await run, true);
+  assert.equal(chunks.join(""), "final output\n");
+});
+
 test("process runner uses Command object spawning when available", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

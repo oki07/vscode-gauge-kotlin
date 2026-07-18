@@ -37,6 +37,7 @@ function createDocument(text, filename = "/workspace/specs/example.spec", langua
 
 function createFakeVscode(options = {}) {
   const calls = [];
+  const commandCalls = [];
   const documentListeners = {
     close: undefined,
   };
@@ -90,8 +91,15 @@ function createFakeVscode(options = {}) {
   };
   return {
     calls,
+    commandCalls,
     controller,
     vscode: {
+      commands: {
+        executeCommand(command) {
+          commandCalls.push(command);
+          return Promise.resolve(undefined);
+        },
+      },
       TestMessage: class TestMessage {
         constructor(message) {
           this.message = message;
@@ -240,17 +248,8 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["profile", "Run Failed", 1, calls[3][3], false],
     ["profile", "Run Repeat", 1, calls[4][3], false],
     ["run", { include: [] }],
-    ["output", "\x1b[36m# Checkout\x1b[0m\r\n"],
-    [
-      "output",
-      "\x1b[33m  ## Successful checkout\x1b[0m\r\n",
-    ],
     ["started", "/workspace/specs/example.spec:12"],
     ["passed", "/workspace/specs/example.spec:12", 42],
-    [
-      "output",
-      "    \x1b[32m[PASS]\x1b[0m\r\n",
-    ],
     ["dispose"],
   ]);
 });
@@ -903,14 +902,37 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   assert.deepEqual(executionCalls, [
     ["gauge.execute", "/workspace/specs/example.spec", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.execute", "/workspace/specs/example.spec:3", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "started"), [
+    ["started", "/workspace/specs/example.spec:3"],
+  ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
+test("GaugeTestController opens native Test Output when a run starts", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { commandCalls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand() {
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  await gaugeTests.run({});
+
+  assert.deepEqual(commandCalls, ["testing.showMostRecentOutput"]);
 });
 
 test("GaugeTestController starts a targeted TestRun for CodeLens execution", async () => {
@@ -953,7 +975,8 @@ test("GaugeTestController starts a targeted TestRun for CodeLens execution", asy
   assert.deepEqual(executionCalls, [
     ["gauge.execute", "/workspace/specs/example.spec:3", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -984,7 +1007,8 @@ test("GaugeTestController maps parallel CodeLens execution into TestRun flags", 
   assert.deepEqual(executionCalls, [
     ["gauge.execute", "/workspace/specs/example.spec", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
       parallel: true,
     }],
   ]);
@@ -1024,7 +1048,8 @@ test("GaugeTestController batches multiple included specification items into one
       "/workspace/specs/accounts.spec",
     ], {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1067,13 +1092,15 @@ test("GaugeTestController splits included specification batches by project root"
       "/workspace/checkout/specs/checkout.spec",
     ], {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.execute.specification", undefined, [
       "/workspace/accounts/specs/accounts.spec",
     ], {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1122,13 +1149,15 @@ test("GaugeTestController uses projectFactory roots to split specification batch
       "/workspace/checkout/specs/checkout.spec",
     ], {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.execute.specification", undefined, [
       "/workspace/accounts/specs/accounts.spec",
     ], {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1207,7 +1236,8 @@ test("GaugeTestController expands included specifications when scenarios are exc
   assert.deepEqual(executionCalls, [
     ["gauge.execute", "/workspace/specs/example.spec:3", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1257,11 +1287,13 @@ test("GaugeTestController runs known tests except excluded items", async () => {
   assert.deepEqual(executionCalls, [
     ["gauge.execute", "/workspace/specs/checkout.spec:3", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.execute", "/workspace/specs/accounts.spec", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1299,18 +1331,20 @@ test("GaugeTestController debug profile runs included Gauge test items in debug 
     ["gauge.execute", "/workspace/specs/example.spec", {
       debug: true,
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.execute", "/workspace/specs/example.spec:3", {
       debug: true,
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
-test("GaugeTestController forces machine-readable output for all-spec Test UI runs", async () => {
+test("GaugeTestController uses native Gauge output for all-spec Test UI runs", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { vscode } = createFakeVscode();
   const executionCalls = [];
@@ -1331,7 +1365,8 @@ test("GaugeTestController forces machine-readable output for all-spec Test UI ru
   assert.deepEqual(executionCalls, [
     ["gauge.execute.specification.all", undefined, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1362,11 +1397,13 @@ test("GaugeTestController runs all known project roots for Test UI run all", asy
   assert.deepEqual(executionCalls, [
     ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/checkout" }, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/accounts" }, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1397,7 +1434,8 @@ test("GaugeTestController registers a failed run profile for Test UI reruns", as
   assert.deepEqual(executionCalls, [
     ["gauge.execute.failed", undefined, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
@@ -1429,7 +1467,8 @@ test("GaugeTestController registers a repeat run profile for Test UI reruns", as
   assert.deepEqual(executionCalls, [
     ["gauge.execute.repeat", undefined, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
@@ -1466,7 +1505,8 @@ test("GaugeTestController scopes failed Test UI reruns to included project roots
   assert.deepEqual(executionCalls, [
     ["gauge.execute.failed", { projectRoot: "/workspace/checkout" }, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
@@ -1503,7 +1543,8 @@ test("GaugeTestController scopes repeat Test UI reruns to included project roots
   assert.deepEqual(executionCalls, [
     ["gauge.execute.repeat", { projectRoot: "/workspace/checkout" }, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
@@ -1570,7 +1611,8 @@ test("GaugeTestController debug profile debugs all specs when no tests are inclu
     ["gauge.execute.specification.all", undefined, {
       debug: true,
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
   ]);
 });
@@ -1616,7 +1658,8 @@ test("GaugeTestController stops queuing Test UI project runs after cancellation"
   assert.deepEqual(executionCalls, [
     ["gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: "/workspace/checkout" }, {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.stopExecution"],
   ]);
@@ -1660,7 +1703,8 @@ test("GaugeTestController stops Gauge execution when Test UI run is cancelled", 
   assert.deepEqual(executionCalls, [
     ["gauge.execute", "/workspace/specs/example.spec:3", {
       "hide-suggestion": true,
-      "machine-readable": true,
+      "simple-console": false,
+      testUi: true,
     }],
     ["gauge.stopExecution"],
   ]);
@@ -1738,12 +1782,11 @@ test("GaugeTestController writes Test Results output with CRLF line endings", ()
   sink({ type: "lineBreak" });
 
   assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
-    ["output", "\x1b[35mfirst\x1b[0m\r\nsecond\r\nthird\r\nfour"],
-    ["output", "\r\n"],
+    ["output", "\x1b[35mfirst\x1b[0m\r\nsecond\r\nthird\rfour"],
   ]);
 });
 
-test("GaugeTestController restores Gauge highlights in Test Results output", () => {
+test("GaugeTestController preserves Gauge output without synthetic formatting", () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, vscode } = createFakeVscode();
   const gaugeTests = new GaugeTestController({ vscode });
@@ -1753,6 +1796,10 @@ test("GaugeTestController restores Gauge highlights in Test Results output", () 
   const sink = gaugeTests.createExecutionEventSink();
   sink({ type: "suiteStarted", id: "spec", name: "Checkout" });
   sink({ type: "testStarted", id: "passing", parentId: "spec", name: "Successful checkout" });
+  sink({
+    type: "output",
+    message: "\x1b[0;36m# Checkout\n\x1b[0m\x1b[0;33m  ## Successful checkout\t\x1b[0m",
+  });
   sink({ type: "testFinished", id: "passing", parentId: "spec", name: "Successful checkout" });
   sink({ type: "testStarted", id: "failing", parentId: "spec", name: "Failed checkout" });
   sink({ type: "testFailed", id: "failing", parentId: "spec", message: "Expected success" });
@@ -1762,13 +1809,7 @@ test("GaugeTestController restores Gauge highlights in Test Results output", () 
   sink({ type: "testFinished", id: "skipped", parentId: "spec", name: "Skipped checkout" });
 
   assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
-    ["output", "\x1b[36m# Checkout\x1b[0m\r\n"],
-    ["output", "\x1b[33m  ## Successful checkout\x1b[0m\r\n"],
-    ["output", "    \x1b[32m[PASS]\x1b[0m\r\n"],
-    ["output", "\x1b[33m  ## Failed checkout\x1b[0m\r\n"],
-    ["output", "    \x1b[31m[FAIL]\x1b[0m\r\n"],
-    ["output", "\x1b[33m  ## Skipped checkout\x1b[0m\r\n"],
-    ["output", "    \x1b[33m[SKIP]\x1b[0m\r\n"],
+    ["output", "\x1b[0;36m# Checkout\r\n\x1b[0m\x1b[0;33m  ## Successful checkout\t\x1b[0m"],
   ]);
 });
 
@@ -1804,11 +1845,7 @@ test("GaugeTestController keeps Test Explorer hierarchy separate from Test Resul
   const spec = controller.items.get("/workspace/specs/example.spec");
   const scenario = spec.children.get("/workspace/specs/example.spec:3");
   assert.equal(scenario.label, "Successful checkout");
-  assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
-    ["output", "\x1b[36m# Checkout\x1b[0m\r\n"],
-    ["output", "\x1b[33m  ## Successful checkout\x1b[0m\r\n"],
-    ["output", "    \x1b[32m[PASS]\x1b[0m\r\n"],
-  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "output"), []);
 });
 
 test("GaugeTestController displays Gauge notification events through VS Code messages", () => {

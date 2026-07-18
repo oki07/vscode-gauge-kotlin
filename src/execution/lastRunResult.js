@@ -1,0 +1,635 @@
+"use strict";
+
+const nodeFs = require("node:fs");
+const nodePath = require("node:path");
+
+const ROOT_PARENT_ID = "suite";
+const LAST_RUN_RESULT_PATH = [".gauge", "last_run_result"];
+
+class ProtobufReader {
+  constructor(buffer) {
+    this.buffer = Buffer.from(buffer || []);
+    this.offset = 0;
+  }
+
+  get done() {
+    return this.offset >= this.buffer.length;
+  }
+
+  readVarint() {
+    let result = 0;
+    let multiplier = 1;
+    while (this.offset < this.buffer.length) {
+      const byte = this.buffer[this.offset];
+      this.offset += 1;
+      result += (byte & 0x7f) * multiplier;
+      if ((byte & 0x80) === 0) {
+        return result;
+      }
+      multiplier *= 128;
+      if (multiplier > Number.MAX_SAFE_INTEGER) {
+        throw new Error("Gauge result contains an unsupported integer");
+      }
+    }
+    throw new Error("Gauge result ended inside an integer");
+  }
+
+  readBytes() {
+    const length = this.readVarint();
+    const end = this.offset + length;
+    if (end > this.buffer.length) {
+      throw new Error("Gauge result ended inside a field");
+    }
+    const value = this.buffer.subarray(this.offset, end);
+    this.offset = end;
+    return value;
+  }
+
+  readString() {
+    return this.readBytes().toString("utf8");
+  }
+
+  skip(wireType) {
+    if (wireType === 0) {
+      this.readVarint();
+      return;
+    }
+    if (wireType === 1) {
+      this.offset += 8;
+      return;
+    }
+    if (wireType === 2) {
+      this.readBytes();
+      return;
+    }
+    if (wireType === 5) {
+      this.offset += 4;
+      return;
+    }
+    throw new Error(`Gauge result uses unsupported wire type ${wireType}`);
+  }
+}
+
+function decode(buffer, visit) {
+  const reader = new ProtobufReader(buffer);
+  while (!reader.done) {
+    const tag = reader.readVarint();
+    const field = Math.floor(tag / 8);
+    const wireType = tag & 7;
+    if (!visit(field, wireType, reader)) {
+      reader.skip(wireType);
+    }
+  }
+}
+
+function isWire(wireType, expected) {
+  return wireType === expected;
+}
+
+function decodeHookFailure(buffer) {
+  const hook = { errorMessage: "", stackTrace: "" };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      hook.stackTrace = reader.readString();
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 2)) {
+      hook.errorMessage = reader.readString();
+      return true;
+    }
+    return false;
+  });
+  return hook;
+}
+
+function decodeExecutionResult(buffer) {
+  const result = { errorMessage: "", failed: false, stackTrace: "" };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 0)) {
+      result.failed = Boolean(reader.readVarint());
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 2)) {
+      result.errorMessage = reader.readString();
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 2)) {
+      result.stackTrace = reader.readString();
+      return true;
+    }
+    return false;
+  });
+  return result;
+}
+
+function decodeStepExecutionResult(buffer) {
+  const result = {};
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      result.execution = decodeExecutionResult(reader.readBytes());
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 2)) {
+      result.beforeHook = decodeHookFailure(reader.readBytes());
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 2)) {
+      result.afterHook = decodeHookFailure(reader.readBytes());
+      return true;
+    }
+    return false;
+  });
+  return result;
+}
+
+function decodeStep(buffer) {
+  const step = { actualText: "" };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      step.actualText = reader.readString();
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 2)) {
+      step.result = decodeStepExecutionResult(reader.readBytes());
+      return true;
+    }
+    return false;
+  });
+  return step;
+}
+
+function decodeConcept(buffer) {
+  const concept = { items: [] };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      concept.step = decodeStep(reader.readBytes());
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 2)) {
+      concept.items.push(decodeItem(reader.readBytes()));
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 2)) {
+      concept.result = decodeStepExecutionResult(reader.readBytes());
+      return true;
+    }
+    return false;
+  });
+  return concept;
+}
+
+function decodeSpan(buffer) {
+  const span = { start: 0 };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 0)) {
+      span.start = reader.readVarint();
+      return true;
+    }
+    return false;
+  });
+  return span;
+}
+
+function decodeScenario(buffer) {
+  const scenario = {
+    executionTime: 0,
+    heading: "",
+    items: [],
+    skipErrors: [],
+    status: 0,
+    tearDownItems: [],
+  };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      scenario.heading = reader.readString();
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 2)) {
+      scenario.items.push(decodeItem(reader.readBytes()));
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 2)) {
+      scenario.items.push(decodeItem(reader.readBytes()));
+      return true;
+    }
+    if (field === 5 && isWire(wireType, 2)) {
+      scenario.beforeHook = decodeHookFailure(reader.readBytes());
+      return true;
+    }
+    if (field === 6 && isWire(wireType, 2)) {
+      scenario.afterHook = decodeHookFailure(reader.readBytes());
+      return true;
+    }
+    if (field === 8 && isWire(wireType, 0)) {
+      scenario.executionTime = reader.readVarint();
+      return true;
+    }
+    if (field === 10 && isWire(wireType, 2)) {
+      scenario.skipErrors.push(reader.readString());
+      return true;
+    }
+    if (field === 11 && isWire(wireType, 2)) {
+      scenario.id = reader.readString();
+      return true;
+    }
+    if (field === 12 && isWire(wireType, 2)) {
+      scenario.tearDownItems.push(decodeItem(reader.readBytes()));
+      return true;
+    }
+    if (field === 13 && isWire(wireType, 2)) {
+      scenario.span = decodeSpan(reader.readBytes());
+      return true;
+    }
+    if (field === 14 && isWire(wireType, 0)) {
+      scenario.status = reader.readVarint();
+      return true;
+    }
+    return false;
+  });
+  return scenario;
+}
+
+function decodeTableDrivenScenario(buffer) {
+  const table = {
+    isScenarioTableDriven: false,
+    isSpecTableDriven: false,
+    scenarioTableRowIndex: 0,
+    tableRowIndex: 0,
+  };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      table.scenario = decodeScenario(reader.readBytes());
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 0)) {
+      table.tableRowIndex = reader.readVarint();
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 0)) {
+      table.scenarioTableRowIndex = reader.readVarint();
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 0)) {
+      table.isSpecTableDriven = Boolean(reader.readVarint());
+      return true;
+    }
+    if (field === 5 && isWire(wireType, 0)) {
+      table.isScenarioTableDriven = Boolean(reader.readVarint());
+      return true;
+    }
+    return false;
+  });
+  return table;
+}
+
+function decodeItem(buffer) {
+  const item = { itemType: 0 };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 0)) {
+      item.itemType = reader.readVarint();
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 2)) {
+      item.step = decodeStep(reader.readBytes());
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 2)) {
+      item.concept = decodeConcept(reader.readBytes());
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 2)) {
+      item.scenario = decodeScenario(reader.readBytes());
+      return true;
+    }
+    if (field === 5 && isWire(wireType, 2)) {
+      item.tableDrivenScenario = decodeTableDrivenScenario(reader.readBytes());
+      return true;
+    }
+    if (field === 9 && isWire(wireType, 2)) {
+      item.filename = reader.readString();
+      return true;
+    }
+    return false;
+  });
+  return item;
+}
+
+function decodeSpec(buffer) {
+  const spec = {
+    afterHooks: [],
+    beforeHooks: [],
+    filename: "",
+    heading: "",
+    items: [],
+  };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      spec.heading = reader.readString();
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 2)) {
+      spec.items.push(decodeItem(reader.readBytes()));
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 2)) {
+      spec.beforeHooks.push(decodeHookFailure(reader.readBytes()));
+      return true;
+    }
+    if (field === 5 && isWire(wireType, 2)) {
+      spec.afterHooks.push(decodeHookFailure(reader.readBytes()));
+      return true;
+    }
+    if (field === 6 && isWire(wireType, 2)) {
+      spec.filename = reader.readString();
+      return true;
+    }
+    return false;
+  });
+  return spec;
+}
+
+function decodeSpecError(buffer) {
+  const error = { filename: "", line: 0, message: "" };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 2 && isWire(wireType, 2)) {
+      error.filename = reader.readString();
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 0)) {
+      error.line = reader.readVarint();
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 2)) {
+      error.message = reader.readString();
+      return true;
+    }
+    return false;
+  });
+  return error;
+}
+
+function decodeSpecResult(buffer) {
+  const result = { errors: [], failed: false, skipped: false };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      result.spec = decodeSpec(reader.readBytes());
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 0)) {
+      result.failed = Boolean(reader.readVarint());
+      return true;
+    }
+    if (field === 6 && isWire(wireType, 0)) {
+      result.executionTime = reader.readVarint();
+      return true;
+    }
+    if (field === 7 && isWire(wireType, 0)) {
+      result.skipped = Boolean(reader.readVarint());
+      return true;
+    }
+    if (field === 10 && isWire(wireType, 2)) {
+      result.errors.push(decodeSpecError(reader.readBytes()));
+      return true;
+    }
+    return false;
+  });
+  return result;
+}
+
+function decodeSuiteResult(buffer) {
+  const result = { specResults: [] };
+  decode(buffer, (field, wireType, reader) => {
+    if (field === 1 && isWire(wireType, 2)) {
+      result.specResults.push(decodeSpecResult(reader.readBytes()));
+      return true;
+    }
+    if (field === 2 && isWire(wireType, 2)) {
+      result.beforeHook = decodeHookFailure(reader.readBytes());
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 2)) {
+      result.afterHook = decodeHookFailure(reader.readBytes());
+      return true;
+    }
+    return false;
+  });
+  return result;
+}
+
+function failureMessage(label, failure) {
+  const parts = [`Failed: ${label}`];
+  if (failure && failure.errorMessage) {
+    parts.push(`Message: ${failure.errorMessage}`);
+  }
+  if (failure && failure.stackTrace) {
+    parts.push(`Stack Trace:\n${failure.stackTrace}`);
+  }
+  return parts.join("\n");
+}
+
+function hookEvents(failure, name, idPrefix, parentId) {
+  if (!failure) {
+    return [];
+  }
+  const id = `${idPrefix || ""}${name}`;
+  return [
+    { type: "testStarted", id, parentId, name },
+    {
+      type: "testFailed",
+      id,
+      parentId,
+      name,
+      message: failureMessage(name, failure),
+    },
+    { type: "testFinished", id, parentId, name },
+  ];
+}
+
+function stepFailureMessages(step, label) {
+  if (!step || !step.result) {
+    return [];
+  }
+  const messages = [];
+  const stepLabel = step.actualText || label || "Step";
+  if (step.result.beforeHook) {
+    messages.push(failureMessage(`BeforeStep hook for step: ${stepLabel}`, step.result.beforeHook));
+  }
+  if (step.result.execution && step.result.execution.failed) {
+    messages.push(failureMessage(stepLabel, step.result.execution));
+  }
+  if (step.result.afterHook) {
+    messages.push(failureMessage(`AfterStep hook for step: ${stepLabel}`, step.result.afterHook));
+  }
+  return messages;
+}
+
+function itemFailureMessages(item) {
+  if (!item) {
+    return [];
+  }
+  if (item.step) {
+    return stepFailureMessages(item.step);
+  }
+  if (item.concept) {
+    return [
+      ...stepFailureMessages(item.concept.step),
+      ...item.concept.items.flatMap(itemFailureMessages),
+    ];
+  }
+  return [];
+}
+
+function scenarioFailureMessage(scenario) {
+  const messages = [];
+  if (scenario.beforeHook) {
+    messages.push(failureMessage("Before Scenario", scenario.beforeHook));
+  }
+  messages.push(...scenario.items.flatMap(itemFailureMessages));
+  messages.push(...scenario.tearDownItems.flatMap(itemFailureMessages));
+  if (scenario.afterHook) {
+    messages.push(failureMessage("After Scenario", scenario.afterHook));
+  }
+  return messages.join("\n\n") || "Scenario failed.";
+}
+
+function scenarioInfo(item, filename) {
+  const table = item.tableDrivenScenario;
+  const scenario = item.scenario || (table && table.scenario);
+  if (!scenario) {
+    return undefined;
+  }
+  let id = scenario.id || `${filename}:${scenario.span ? scenario.span.start : 0}`;
+  let name = scenario.heading || id;
+  if (table && (table.isScenarioTableDriven || table.isSpecTableDriven)) {
+    const row = table.isScenarioTableDriven
+      ? table.scenarioTableRowIndex
+      : table.tableRowIndex;
+    id = `${id}_${row + 1}`;
+    name = `${name}_${row + 1}`;
+  }
+  return { id, name, scenario };
+}
+
+function scenarioEvents(item, filename) {
+  const info = scenarioInfo(item, filename);
+  if (!info || info.scenario.status === 0) {
+    return [];
+  }
+  const event = {
+    id: info.id,
+    parentId: filename,
+    name: info.name,
+  };
+  const events = [];
+  if (info.scenario.status === 2) {
+    events.push({
+      type: "testFailed",
+      ...event,
+      message: scenarioFailureMessage(info.scenario),
+    });
+  } else if (info.scenario.status === 3) {
+    events.push({
+      type: "testIgnored",
+      ...event,
+      message: info.scenario.skipErrors.join("\n"),
+    });
+  }
+  events.push({
+    type: "testFinished",
+    ...event,
+    duration: info.scenario.executionTime,
+  });
+  return events;
+}
+
+function specFallbackEvents(result, filename, hasLeafResults) {
+  if (hasLeafResults || (!result.failed && !result.skipped && result.errors.length === 0)) {
+    return [];
+  }
+  const name = result.skipped ? "Ignored" : "Failed";
+  const id = `${filename}${name}`;
+  const message = result.errors.map((error) => {
+    const location = error.filename
+      ? `${error.filename}${error.line ? `:${error.line}` : ""}\n`
+      : "";
+    return `${location}${error.message}`.trim();
+  }).filter(Boolean).join("\n\n") || " ";
+  return [
+    { type: "testStarted", id, parentId: filename, name },
+    {
+      type: result.skipped ? "testIgnored" : "testFailed",
+      id,
+      parentId: filename,
+      name,
+      message,
+    },
+    { type: "testFinished", id, parentId: filename, name },
+  ];
+}
+
+function executionEventsFromLastRunResult(buffer) {
+  const suite = decodeSuiteResult(buffer);
+  const events = [
+    ...hookEvents(suite.beforeHook, "Before Suite", "", ROOT_PARENT_ID),
+  ];
+  for (const result of suite.specResults) {
+    if (!result.spec || !result.spec.filename) {
+      continue;
+    }
+    const filename = result.spec.filename;
+    events.push(...result.spec.beforeHooks.flatMap((failure) => (
+      hookEvents(failure, "Before Specification", filename, filename)
+    )));
+    let scenarioCount = 0;
+    for (const item of result.spec.items) {
+      const itemEvents = scenarioEvents(item, filename);
+      if (itemEvents.length > 0) {
+        scenarioCount += 1;
+        events.push(...itemEvents);
+      }
+    }
+    events.push(...result.spec.afterHooks.flatMap((failure) => (
+      hookEvents(failure, "After Specification", filename, filename)
+    )));
+    const hasHookFailures = result.spec.beforeHooks.length > 0
+      || result.spec.afterHooks.length > 0;
+    events.push(...specFallbackEvents(
+      result,
+      filename,
+      scenarioCount > 0 || hasHookFailures,
+    ));
+  }
+  events.push(...hookEvents(suite.afterHook, "After Suite", "", ROOT_PARENT_ID));
+  return events;
+}
+
+function lastRunResultPath(projectRoot, pathModule = nodePath) {
+  return pathModule.join(projectRoot, ...LAST_RUN_RESULT_PATH);
+}
+
+function lastRunResultStamp(projectRoot, options = {}) {
+  const fs = options.fs || nodeFs;
+  const path = lastRunResultPath(projectRoot, options.pathModule);
+  try {
+    const stat = fs.statSync(path);
+    return `${stat.size}:${stat.mtimeMs}`;
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function readNewLastRunResultEvents(projectRoot, previousStamp, options = {}) {
+  const fs = options.fs || nodeFs;
+  const path = lastRunResultPath(projectRoot, options.pathModule);
+  const nextStamp = lastRunResultStamp(projectRoot, options);
+  if (!nextStamp || nextStamp === previousStamp) {
+    return [];
+  }
+  return executionEventsFromLastRunResult(fs.readFileSync(path));
+}
+
+module.exports = {
+  executionEventsFromLastRunResult,
+  lastRunResultStamp,
+  readNewLastRunResultEvents,
+};

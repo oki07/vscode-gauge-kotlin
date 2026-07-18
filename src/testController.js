@@ -21,13 +21,9 @@ const SPEC_WATCH_PATTERN = "**/*.{spec,md}";
 const ATTEMPT_ID_SEPARATOR = "#attempt=";
 const TEST_UI_RUN_FLAGS = {
   "hide-suggestion": true,
-  "machine-readable": true,
+  "simple-console": false,
+  testUi: true,
 };
-const ANSI_CYAN = "\x1b[36m";
-const ANSI_GREEN = "\x1b[32m";
-const ANSI_RED = "\x1b[31m";
-const ANSI_RESET = "\x1b[0m";
-const ANSI_YELLOW = "\x1b[33m";
 const NON_GAUGE_PROJECT_ROOT = Symbol("nonGaugeProjectRoot");
 const DEFAULT_SCENARIO_REQUEST_CONCURRENCY = 8;
 
@@ -164,28 +160,13 @@ function createOptionalMessage(vscode, message) {
 }
 
 function testResultsOutput(value) {
-  return String(value || "").replace(/\r\n|\r|\n/g, "\r\n");
+  return String(value || "").replace(/\r?\n/g, "\r\n");
 }
 
 function appendTestResultsOutput(run, value) {
   if (run && typeof run.appendOutput === "function") {
     run.appendOutput(testResultsOutput(value));
   }
-}
-
-function highlightedHeading(event, prefix, color) {
-  const name = String((event && (event.name || event.id)) || "");
-  return name ? `${color}${prefix}${name}${ANSI_RESET}\r\n` : "";
-}
-
-function highlightedResult(status) {
-  const styles = {
-    failed: [ANSI_RED, "FAIL"],
-    passed: [ANSI_GREEN, "PASS"],
-    skipped: [ANSI_YELLOW, "SKIP"],
-  };
-  const style = styles[status];
-  return style ? `    ${style[0]}[${style[1]}]${ANSI_RESET}\r\n` : "";
 }
 
 function notificationText(event) {
@@ -294,6 +275,28 @@ function executionTargetsForRequest(controller, request = {}) {
       .map(executionTargetForItem)
       .filter(Boolean),
   );
+}
+
+function runnableLeafItems(controller, request = {}) {
+  const includedItems = Array.isArray(request.include) && request.include.length > 0
+    ? request.include
+    : collectionValues(controller && controller.items);
+  const excludedIds = excludedItemIds(request);
+  const leaves = new Map();
+  function visit(item) {
+    const id = executionTargetForItem(item);
+    if (!id || isExcludedItemId(id, excludedIds)) {
+      return;
+    }
+    const children = collectionValues(item.children);
+    if (children.length > 0) {
+      children.forEach(visit);
+    } else if (/:\d+(?:_\d+)?$/.test(id)) {
+      leaves.set(id, item);
+    }
+  }
+  includedItems.forEach(visit);
+  return [...leaves.values()];
 }
 
 function isScenarioTarget(target) {
@@ -871,6 +874,30 @@ class GaugeTestController {
     return this.currentRun;
   }
 
+  startRequestedLeafItems(request, run) {
+    if (!run || typeof run.started !== "function") {
+      return;
+    }
+    for (const item of runnableLeafItems(this.controller, request)) {
+      run.started(item);
+    }
+  }
+
+  showTestOutput() {
+    const commands = this.vscode.commands;
+    if (!commands || typeof commands.executeCommand !== "function") {
+      return;
+    }
+    try {
+      const opening = commands.executeCommand("testing.showMostRecentOutput");
+      if (opening && typeof opening.catch === "function") {
+        opening.catch(() => {});
+      }
+    } catch (_error) {
+      // Test execution remains available when the output view cannot be opened.
+    }
+  }
+
   stopExecution() {
     if (!this.executionController || typeof this.executionController.handleCommand !== "function") {
       return;
@@ -891,6 +918,10 @@ class GaugeTestController {
 
   async runWithFlags(request = {}, flags = testUiRunFlags(), token) {
     const run = this.startTestRun(request);
+    if (flags.testUi) {
+      this.showTestOutput();
+      this.startRequestedLeafItems(request, run);
+    }
     const cancellation = this.registerCancellation(token);
     try {
       if (
@@ -970,6 +1001,8 @@ class GaugeTestController {
 
   async runProjectScopedCommand(command, request = {}, token) {
     const run = this.startTestRun(request);
+    this.showTestOutput();
+    this.startRequestedLeafItems(request, run);
     const cancellation = this.registerCancellation(token);
     try {
       if (
@@ -1128,16 +1161,11 @@ class GaugeTestController {
     switch (event.type) {
       case "suiteStarted": {
         this.ensureItem(event);
-        appendTestResultsOutput(run, highlightedHeading(event, "# ", ANSI_CYAN));
         break;
       }
       case "testStarted": {
         const attemptEvent = this.resolveAttemptEvent(event);
         const item = this.ensureItem(attemptEvent);
-        appendTestResultsOutput(
-          run,
-          highlightedHeading(attemptEvent, "  ## ", ANSI_YELLOW),
-        );
         if (run && item && typeof run.started === "function") {
           run.started(item);
         }
@@ -1147,11 +1175,7 @@ class GaugeTestController {
         break;
       case "testFinished": {
         const attemptEvent = this.resolveAttemptEvent(event);
-        const status = this.finishItem(attemptEvent);
-        appendTestResultsOutput(
-          run,
-          highlightedResult(status),
-        );
+        this.finishItem(attemptEvent);
         this.forgetActiveAttempt(event);
         break;
       }
@@ -1173,9 +1197,6 @@ class GaugeTestController {
       }
       case "output":
         appendTestResultsOutput(run, event.message);
-        break;
-      case "lineBreak":
-        appendTestResultsOutput(run, "\r\n");
         break;
       case "notification":
         this.showNotification(event);

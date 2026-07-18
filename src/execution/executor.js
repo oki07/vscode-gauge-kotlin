@@ -12,6 +12,10 @@ const {
 } = require("./lineProcessors");
 const { createGaugeProcessRunner } = require("./processRunner");
 const {
+  lastRunResultStamp,
+  readNewLastRunResultEvents,
+} = require("./lastRunResult");
+const {
   buildRunArgs,
   extractGaugeExecutionOption,
   extractGaugeRunOption,
@@ -33,6 +37,7 @@ const COMMAND_FLAG_KEYS = [
   "machine-readable",
   "parallel",
   "repeat",
+  "simple-console",
 ];
 
 const EXECUTION_COMMANDS = new Set([
@@ -738,10 +743,25 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
+  function processOutputChunk(chunk) {
+    emitExecutionEvent({ type: "output", message: String(chunk || "") });
+  }
+
+  const getLastRunResultStamp = options.lastRunResultStamp || ((projectRoot) => (
+    lastRunResultStamp(projectRoot, { fs: fileSystem, pathModule })
+  ));
+  const getNewLastRunResultEvents = options.readNewLastRunResultEvents
+    || ((projectRoot, previousStamp) => readNewLastRunResultEvents(
+      projectRoot,
+      previousStamp,
+      { fs: fileSystem, pathModule },
+    ));
+
   const runner = options.runner || createGaugeProcessRunner({
     vscode,
     pathModule,
     outputChannel: options.outputChannel,
+    processOutputChunk,
     processOutputLine,
     spawn: options.spawn,
     env: executionEnv,
@@ -807,6 +827,14 @@ function createGaugeExecutionController(options = {}) {
         cwd: executionCwd(projectRoot, launchExecutionOption.cwd, pathModule),
         status: runningStatus,
       };
+      const testUi = Boolean(flags.testUi);
+      const previousResultStamp = testUi
+        ? getLastRunResultStamp(projectRoot)
+        : undefined;
+      if (testUi) {
+        command.forwardOutput = true;
+        command.saveExecutionResult = true;
+      }
       if (executionTool) {
         command.tool = executionTool;
       }
@@ -837,7 +865,20 @@ function createGaugeExecutionController(options = {}) {
 
       activeRun = runner(command);
       result = await activeRun;
-      if (option["machine-readable"] && !sawExecutionTestEvent && !activeRunUserAborted) {
+      if (testUi && !activeRunUserAborted) {
+        let resultEvents = [];
+        try {
+          resultEvents = getNewLastRunResultEvents(projectRoot, previousResultStamp) || [];
+        } catch (_error) {
+          resultEvents = [];
+        }
+        for (const event of resultEvents) {
+          emitExecutionEvent(event);
+        }
+        if (resultEvents.length === 0 && !sawExecutionTestEvent) {
+          emitUnexpectedEndEvents(result === true);
+        }
+      } else if (option["machine-readable"] && !sawExecutionTestEvent && !activeRunUserAborted) {
         emitUnexpectedEndEvents(result === true);
       }
       return result;

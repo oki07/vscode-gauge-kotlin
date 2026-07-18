@@ -993,7 +993,7 @@ test("bare execution commands run the active project without a spec target", asy
   ]);
 });
 
-test("execute target accepts command flags for Test UI machine-readable runs", async () => {
+test("execute target uses the native Gauge console for Test UI runs", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];
   const { vscode } = createFakeVscode({
@@ -1023,16 +1023,17 @@ test("execute target accepts command flags for Test UI machine-readable runs", a
 
   await controller.handleCommand("gauge.execute", "/workspace/specs/example.spec", {
     "hide-suggestion": true,
-    "machine-readable": true,
+    "simple-console": false,
+    testUi: true,
   });
 
   assert.deepEqual(calls[0].args, [
     "run",
     "--hide-suggestion",
-    "--simple-console",
-    "--machine-readable",
     "/workspace/specs/example.spec",
   ]);
+  assert.equal(calls[0].forwardOutput, true);
+  assert.equal(calls[0].saveExecutionResult, true);
 });
 
 test("execute target passes project classpath environment to normal Gauge runs", async () => {
@@ -2047,7 +2048,7 @@ test("executor stores html report paths from machine-readable output", () => {
   assert.equal(controller.getReportPath(), "/workspace/reports/html-report/index.html");
 });
 
-test("machine-readable Test UI run emits synthetic failed event when Gauge exits before test events", async () => {
+test("Test UI run emits synthetic failed event when Gauge exits without a saved result", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const events = [];
   const { vscode } = createFakeVscode();
@@ -2069,7 +2070,8 @@ test("machine-readable Test UI run emits synthetic failed event when Gauge exits
   });
 
   await controller.handleCommand("gauge.execute.specification.all", undefined, {
-    "machine-readable": true,
+    "simple-console": false,
+    testUi: true,
   });
 
   assert.deepEqual(events, [
@@ -2093,6 +2095,56 @@ test("machine-readable Test UI run emits synthetic failed event when Gauge exits
       name: "Failed",
     },
   ]);
+});
+
+test("Test UI run publishes leaf events from the saved Gauge result", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const events = [];
+  const reads = [];
+  const { vscode } = createFakeVscode();
+  const resultEvents = [
+    {
+      type: "testFinished",
+      id: "/workspace/specs/example.spec:3",
+      parentId: "/workspace/specs/example.spec",
+      name: "Passing",
+      duration: 42,
+    },
+  ];
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionEventSink(event) {
+      events.push(event);
+    },
+    lastRunResultStamp(projectRoot) {
+      assert.equal(projectRoot, "/workspace");
+      return "before";
+    },
+    readNewLastRunResultEvents(projectRoot, stamp) {
+      reads.push([projectRoot, stamp]);
+      return resultEvents;
+    },
+    async runner(command) {
+      assert.equal(command.forwardOutput, true);
+      assert.equal(command.saveExecutionResult, true);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all", undefined, {
+    "simple-console": false,
+    testUi: true,
+  });
+
+  assert.deepEqual(reads, [["/workspace", "before"]]);
+  assert.deepEqual(events, resultEvents);
 });
 
 test("executor shows the last execution status in the status bar", async () => {
@@ -2286,7 +2338,8 @@ test("execute scenario at cursor accepts command flags for Test UI events", asyn
 
   await controller.handleCommand("gauge.execute.scenario", undefined, {
     "hide-suggestion": true,
-    "machine-readable": true,
+    "simple-console": false,
+    testUi: true,
   });
 
   assert.deepEqual(calls, [
@@ -2295,11 +2348,11 @@ test("execute scenario at cursor accepts command flags for Test UI events", asyn
       args: [
         "run",
         "--hide-suggestion",
-        "--simple-console",
-        "--machine-readable",
         "/workspace/specs/example.spec:8",
       ],
       cwd: "/workspace",
+      forwardOutput: true,
+      saveExecutionResult: true,
       status: "/workspace/specs/example.spec:8",
     },
   ]);
