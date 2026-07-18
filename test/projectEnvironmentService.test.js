@@ -14,8 +14,10 @@ function deferred() {
 function createVscode() {
   const watchers = [];
   const configurationListeners = [];
+  const saveListeners = [];
   return {
     configurationListeners,
+    saveListeners,
     vscode: {
       workspace: {
         createFileSystemWatcher(pattern) {
@@ -39,11 +41,81 @@ function createVscode() {
           configurationListeners.push(listener);
           return { dispose() {} };
         },
+        onDidSaveTextDocument(listener) {
+          saveListeners.push(listener);
+          return { dispose() {} };
+        },
       },
     },
     watchers,
   };
 }
+
+test("ProjectEnvironmentService reuses Maven preparation until source inputs change", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const calls = [];
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    executionPreparationCacheable() {
+      return true;
+    },
+    async executionEnvsAsync(_cli, cached, options) {
+      calls.push({
+        cached,
+        skipBuild: Boolean(options && options.skipBuild),
+      });
+      return cached || { gauge_custom_classpath: "/workspace/gauge/target/test-classes" };
+    },
+  };
+  const { saveListeners, vscode, watchers } = createVscode();
+  const service = new ProjectEnvironmentService({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  await service.executionEnvironmentFor(project);
+  await service.executionEnvironmentFor(project);
+
+  assert.equal(saveListeners.length, 1);
+  saveListeners[0]({
+    uri: { fsPath: "/workspace/gauge/src/test/kotlin/Steps.kt" },
+  });
+  await service.executionEnvironmentFor(project);
+  await service.executionEnvironmentFor(project);
+
+  const sourceWatcher = watchers.find(({ pattern }) => pattern === "**/src/**");
+  assert.notEqual(sourceWatcher, undefined);
+  sourceWatcher.listeners.change({
+    fsPath: "/workspace/gauge/src/test/resources/example.json",
+  });
+  await service.executionEnvironmentFor(project);
+
+  assert.deepEqual(calls, [
+    { cached: undefined, skipBuild: false },
+    {
+      cached: { gauge_custom_classpath: "/workspace/gauge/target/test-classes" },
+      skipBuild: true,
+    },
+    {
+      cached: { gauge_custom_classpath: "/workspace/gauge/target/test-classes" },
+      skipBuild: false,
+    },
+    {
+      cached: { gauge_custom_classpath: "/workspace/gauge/target/test-classes" },
+      skipBuild: true,
+    },
+    {
+      cached: { gauge_custom_classpath: "/workspace/gauge/target/test-classes" },
+      skipBuild: false,
+    },
+  ]);
+});
 
 test("ProjectEnvironmentService shares in-flight work and invalidates by root", async () => {
   const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");

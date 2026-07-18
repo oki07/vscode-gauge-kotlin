@@ -3253,10 +3253,27 @@ test("execute shows the running status before any build tool work", async () => 
   assert.equal(buildToolCalls[0].stopShown, true);
 });
 
-test("back-to-back runs reuse the resolved execution classpath", async () => {
+test("back-to-back Maven runs reuse compiled classes and the execution classpath", async () => {
   const { buildToolCalls, controller } = createMavenExecutionFixture();
 
   await controller.handleCommand("gauge.execute.specification");
+  await controller.handleCommand("gauge.execute.specification");
+
+  const classpathResolutions = buildToolCalls.filter((call) => call.command.includes("classpath"));
+  const compiles = buildToolCalls.filter((call) => call.command.includes("test-compile"));
+  assert.equal(classpathResolutions.length, 1);
+  assert.equal(compiles.length, 1);
+});
+
+test("Maven source changes recompile without recalculating the classpath", async () => {
+  const { buildToolCalls, controller, watchers } = createMavenExecutionFixture();
+
+  await controller.handleCommand("gauge.execute.specification");
+  const sourceWatcher = watchers.find((watcher) => watcher.glob === "**/src/**");
+  assert.notEqual(sourceWatcher, undefined);
+  sourceWatcher.changeListeners[0]({
+    fsPath: "/workspace/src/test/kotlin/StepImplementation.kt",
+  });
   await controller.handleCommand("gauge.execute.specification");
 
   const classpathResolutions = buildToolCalls.filter((call) => call.command.includes("classpath"));
@@ -3275,5 +3292,7 @@ test("build file changes invalidate the cached execution classpath", async () =>
   await controller.handleCommand("gauge.execute.specification");
 
   const classpathResolutions = buildToolCalls.filter((call) => call.command.includes("classpath"));
+  const compiles = buildToolCalls.filter((call) => call.command.includes("test-compile"));
   assert.equal(classpathResolutions.length, 2);
+  assert.equal(compiles.length, 2);
 });

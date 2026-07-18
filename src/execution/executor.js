@@ -24,8 +24,8 @@ const { CLI } = require("../cli");
 const { GradleProject } = require("../project/gradleProject");
 const { MavenProject } = require("../project/mavenProject");
 const { createProjectFactory } = require("../project/projectFactory");
+const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 
-const BUILD_FILE_GLOB = "**/{build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,pom.xml}";
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
@@ -666,46 +666,12 @@ function createGaugeExecutionController(options = {}) {
   let activeRunUserAborted = false;
   let sawExecutionTestEvent = false;
   let cachedCli;
-  const executionEnvCache = new Map();
-  const projectEnvironmentService = options.projectEnvironmentService;
-  let buildFileWatcher;
-  if (
-    !projectEnvironmentService
-    && vscode.workspace
-    && typeof vscode.workspace.createFileSystemWatcher === "function"
-  ) {
-    try {
-      buildFileWatcher = vscode.workspace.createFileSystemWatcher(BUILD_FILE_GLOB);
-      const clearExecutionEnvCache = () => executionEnvCache.clear();
-      if (typeof buildFileWatcher.onDidCreate === "function") {
-        buildFileWatcher.onDidCreate(clearExecutionEnvCache);
-      }
-      if (typeof buildFileWatcher.onDidChange === "function") {
-        buildFileWatcher.onDidChange(clearExecutionEnvCache);
-      }
-      if (typeof buildFileWatcher.onDidDelete === "function") {
-        buildFileWatcher.onDidDelete(clearExecutionEnvCache);
-      }
-    } catch (_error) {
-      buildFileWatcher = undefined;
-    }
-  }
+  const ownsProjectEnvironmentService = !options.projectEnvironmentService;
+  const projectEnvironmentService = options.projectEnvironmentService
+    || new ProjectEnvironmentService({ projectFactory, vscode });
 
-  async function resolveBuildToolExecutionEnvironment(project, cli, projectRoot) {
-    if (
-      projectEnvironmentService
-      && typeof projectEnvironmentService.executionEnvironmentFor === "function"
-    ) {
-      return projectEnvironmentService.executionEnvironmentFor(project, cli);
-    }
-    const cached = executionEnvCache.get(projectRoot);
-    const env = await project.executionEnvsAsync(cli, cached);
-    if (env) {
-      executionEnvCache.set(projectRoot, env);
-    } else {
-      executionEnvCache.delete(projectRoot);
-    }
-    return env;
+  async function resolveBuildToolExecutionEnvironment(project, cli) {
+    return projectEnvironmentService.executionEnvironmentFor(project, cli);
   }
 
   function setReportPath(nextReportPath) {
@@ -812,7 +778,7 @@ function createGaugeExecutionController(options = {}) {
       const executionTool = project ? commandFromProject(project, cli) : undefined;
       const usesBuildTool = Boolean(project && typeof project.executionEnvsAsync === "function");
       const projectEnv = usesBuildTool
-        ? await resolveBuildToolExecutionEnvironment(project, cli, projectRoot)
+        ? await resolveBuildToolExecutionEnvironment(project, cli)
         : projectExecutionEnvironment(project, cli);
       if (
         project
@@ -1328,8 +1294,12 @@ function createGaugeExecutionController(options = {}) {
     executeScenario,
     dispose() {
       executionStatusBar.dispose();
-      if (buildFileWatcher && typeof buildFileWatcher.dispose === "function") {
-        buildFileWatcher.dispose();
+      if (
+        ownsProjectEnvironmentService
+        && projectEnvironmentService
+        && typeof projectEnvironmentService.dispose === "function"
+      ) {
+        projectEnvironmentService.dispose();
       }
     },
     getReportPath,

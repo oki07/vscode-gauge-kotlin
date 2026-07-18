@@ -106,17 +106,19 @@ class BuildToolProject extends GaugeProject {
     }
   }
 
-  // Compiles per run, but only resolves the build-tool classpath when the
-  // caller has no cached value for this root.
-  async executionEnvsAsync(cli, cachedEnv) {
+  // Compiles when the caller has not preserved a valid preparation, and only
+  // resolves the build-tool classpath when this root has no cached value.
+  async executionEnvsAsync(cli, cachedEnv, options = {}) {
     const command = this.executionBuildToolCommand(cli);
     if (!command || !command.command) {
       this.showClasspathError(new Error("Build tool command is not available."));
       return undefined;
     }
-    const built = await this.runBuildCommandAsync(command, this.executionBuildArgs());
-    if (!built) {
-      return undefined;
+    if (!options.skipBuild) {
+      const built = await this.runBuildCommandAsync(command, this.executionBuildArgs());
+      if (!built) {
+        return undefined;
+      }
     }
     if (cachedEnv) {
       return cachedEnv;
