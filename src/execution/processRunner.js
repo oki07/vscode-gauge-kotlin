@@ -141,6 +141,7 @@ function createGaugeProcessRunner(options = {}) {
   const vscode = options.vscode || { window: {} };
   const spawn = options.spawn || childProcess.spawn;
   const pathModule = options.pathModule || nodePath;
+  const processStarted = options.processStarted || (() => {});
   const processOutputLine = options.processOutputLine || (() => {});
   const processOutputChunk = options.processOutputChunk || (() => {});
   const gaugeEnvOptions = { vscode, gaugeHome: options.gaugeHome };
@@ -206,6 +207,7 @@ function createGaugeProcessRunner(options = {}) {
       child = command.tool && typeof command.tool.spawn === "function"
         ? command.tool.spawn(command.args, spawnOptions)
         : spawn(command.command, command.args, spawnOptions);
+      processStarted(command);
       child.stdout.on("data", (chunk) => {
         if (command.forwardOutput) {
           emitStdoutChunk.write(chunk);

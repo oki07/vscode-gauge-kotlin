@@ -1057,28 +1057,39 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
       testUi: true,
     }],
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "started"), [
-    ["started", "/workspace/specs/example.spec:3"],
-  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "started"), []);
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
-test("GaugeTestController opens native Test Output when a run starts", async () => {
+test("GaugeTestController opens native Test Output only after Gauge starts", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { commandCalls, vscode } = createFakeVscode();
+  let finishExecution;
+  const execution = new Promise((resolve) => {
+    finishExecution = resolve;
+  });
   const gaugeTests = new GaugeTestController({
     vscode,
     executionController: {
       handleCommand() {
-        return Promise.resolve(undefined);
+        return execution;
       },
     },
   });
 
   gaugeTests.register();
-  await gaugeTests.run({});
+  const run = gaugeTests.run({});
+  await Promise.resolve();
+
+  assert.deepEqual(commandCalls, []);
+
+  gaugeTests.handleExecutionEvent({ type: "processStarted" });
+  gaugeTests.handleExecutionEvent({ type: "processStarted" });
 
   assert.deepEqual(commandCalls, ["testing.showMostRecentOutput"]);
+
+  finishExecution();
+  await run;
 });
 
 test("GaugeTestController starts a targeted TestRun for CodeLens execution", async () => {

@@ -295,28 +295,6 @@ function executionTargetsForRequest(controller, request = {}) {
   );
 }
 
-function runnableLeafItems(controller, request = {}) {
-  const includedItems = Array.isArray(request.include) && request.include.length > 0
-    ? request.include
-    : collectionValues(controller && controller.items);
-  const excludedIds = excludedItemIds(request);
-  const leaves = new Map();
-  function visit(item) {
-    const id = executionTargetForItem(item);
-    if (!id || isExcludedItemId(id, excludedIds)) {
-      return;
-    }
-    const children = collectionValues(item.children);
-    if (children.length > 0) {
-      children.forEach(visit);
-    } else if (/:\d+(?:_\d+)?$/.test(id)) {
-      leaves.set(id, item);
-    }
-  }
-  includedItems.forEach(visit);
-  return [...leaves.values()];
-}
-
 function isScenarioTarget(target) {
   return /:\d+$/.test(String(target || ""));
 }
@@ -466,6 +444,7 @@ class GaugeTestController {
     this.controller = undefined;
     this.currentRun = undefined;
     this.currentRequest = undefined;
+    this.testOutputShown = false;
     this.items = new Map();
     this.pendingResults = new Map();
     this.resultOnlyItemIds = new Set();
@@ -917,23 +896,19 @@ class GaugeTestController {
     this.pendingResults.clear();
     this.attemptCounts.clear();
     this.activeAttemptIds.clear();
+    this.testOutputShown = false;
     return this.currentRun;
   }
 
-  startRequestedLeafItems(request, run) {
-    if (!run || typeof run.started !== "function") {
+  showTestOutput() {
+    if (this.testOutputShown) {
       return;
     }
-    for (const item of runnableLeafItems(this.controller, request)) {
-      run.started(item);
-    }
-  }
-
-  showTestOutput() {
     const commands = this.vscode.commands;
     if (!commands || typeof commands.executeCommand !== "function") {
       return;
     }
+    this.testOutputShown = true;
     try {
       const opening = commands.executeCommand("testing.showMostRecentOutput");
       if (opening && typeof opening.catch === "function") {
@@ -964,10 +939,6 @@ class GaugeTestController {
 
   async runWithFlags(request = {}, flags = testUiRunFlags(), token) {
     const run = this.startTestRun(request);
-    if (flags.testUi) {
-      this.showTestOutput();
-      this.startRequestedLeafItems(request, run);
-    }
     const cancellation = this.registerCancellation(token);
     try {
       if (
@@ -1049,8 +1020,6 @@ class GaugeTestController {
 
   async runProjectScopedCommand(command, request = {}, token) {
     const run = this.startTestRun(request);
-    this.showTestOutput();
-    this.startRequestedLeafItems(request, run);
     const cancellation = this.registerCancellation(token);
     try {
       if (
@@ -1252,6 +1221,9 @@ class GaugeTestController {
     }
     const run = this.ensureRun();
     switch (event.type) {
+      case "processStarted":
+        this.showTestOutput();
+        break;
       case "suiteStarted": {
         this.ensureItem(event);
         break;

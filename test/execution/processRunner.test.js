@@ -39,10 +39,14 @@ test("process runner spawns Gauge and routes stdout through output and line proc
   const outputChannel = new FakeOutputChannel();
   const spawnCalls = [];
   const processedLines = [];
+  const processStarts = [];
 
   const runner = createGaugeProcessRunner({
     pathModule: path.posix,
     outputChannel,
+    processStarted() {
+      processStarts.push("started");
+    },
     processOutputLine(lineText) {
       processedLines.push(lineText);
     },
@@ -57,6 +61,8 @@ test("process runner spawns Gauge and routes stdout through output and line proc
     args: ["run", "specs/example.spec"],
     cwd: "/workspace",
   });
+
+  assert.deepEqual(processStarts, ["started"]);
 
   child.stdout.emit(
     "data",

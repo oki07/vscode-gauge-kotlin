@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -161,6 +162,39 @@ test("execute specification saves workspace documents before starting Gauge", as
     ["saveAll", false],
     ["runner", "gradle"],
   ]);
+});
+
+test("execute shows the running status before saving workspace documents", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  let finishSave;
+  const save = new Promise((resolve) => {
+    finishSave = resolve;
+  });
+  const { statusBarItems, vscode } = createFakeVscode({
+    saveAll() {
+      return save;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner() {
+      return Promise.resolve(true);
+    },
+  });
+
+  const execution = controller.handleCommand("gauge.execute.specification.all");
+  await Promise.resolve();
+
+  assert.equal(statusBarItems[0].showCalls, 1);
+
+  finishSave(true);
+  assert.equal(await execution, true);
 });
 
 test("execute specification preserves launch parallel options", async () => {
@@ -2021,6 +2055,41 @@ test("executor routes Gauge machine-readable output to the execution event sink"
       location: "gauge:///workspace/specs/example.spec:1",
     },
   ]);
+});
+
+test("executor reports when the Gauge process starts", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const child = new EventEmitter();
+  child.pid = 2468;
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.killed = false;
+  const events = [];
+  const { vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionEventSink(event) {
+      events.push(event);
+    },
+    spawn() {
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    },
+  });
+
+  await controller.handleCommand(
+    "gauge.execute.specification.all",
+    undefined,
+    { testUi: true },
+  );
+
+  assert.equal(events[0].type, "processStarted");
 });
 
 test("executor stores html report paths from machine-readable output", () => {

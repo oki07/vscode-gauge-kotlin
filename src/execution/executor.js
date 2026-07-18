@@ -769,6 +769,11 @@ function createGaugeExecutionController(options = {}) {
     vscode,
     pathModule,
     outputChannel: options.outputChannel,
+    processStarted: (command) => {
+      if (command && command.forwardOutput) {
+        emitExecutionEvent({ type: "processStarted" });
+      }
+    },
     processOutputChunk,
     processOutputLine,
     spawn: options.spawn,
@@ -790,6 +795,11 @@ function createGaugeExecutionController(options = {}) {
     let result;
     try {
       setExecutingContext(vscode, true);
+      const runningStatus = flags.status || spec || pathModule.join(projectRoot, "All specs");
+      executionStatusBar.beforeExecute(
+        { env: flags.debug ? { DEBUGGING: true } : undefined, status: runningStatus },
+        formatRunningStatus(projectRoot, runningStatus, pathModule),
+      );
       const savePromise = saveWorkspaceDocuments(vscode);
       if (savePromise) {
         await savePromise;
@@ -800,11 +810,6 @@ function createGaugeExecutionController(options = {}) {
         || detectProjectKind(projectRoot, fileSystem, pathModule);
       const cli = getCli();
       const executionTool = project ? commandFromProject(project, cli) : undefined;
-      const runningStatus = flags.status || spec || pathModule.join(projectRoot, "All specs");
-      executionStatusBar.beforeExecute(
-        { env: flags.debug ? { DEBUGGING: true } : undefined, status: runningStatus },
-        formatRunningStatus(projectRoot, runningStatus, pathModule),
-      );
       const usesBuildTool = Boolean(project && typeof project.executionEnvsAsync === "function");
       const projectEnv = usesBuildTool
         ? await resolveBuildToolExecutionEnvironment(project, cli, projectRoot)
