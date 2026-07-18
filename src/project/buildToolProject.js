@@ -96,7 +96,78 @@ class BuildToolProject extends GaugeProject {
     }
   }
 
+  buildTask(command, args) {
+    const vscode = this.vscode;
+    if (
+      !vscode
+      || !vscode.tasks
+      || typeof vscode.tasks.executeTask !== "function"
+      || typeof vscode.tasks.onDidEndTaskProcess !== "function"
+      || typeof vscode.Task !== "function"
+    ) {
+      return undefined;
+    }
+
+    const options = { cwd: this.root() };
+    let execution;
+    if (command.shellMode && typeof vscode.ShellExecution === "function") {
+      execution = new vscode.ShellExecution(command.command, args, options);
+    } else if (typeof vscode.ProcessExecution === "function") {
+      execution = new vscode.ProcessExecution(command.command, args, options);
+    } else {
+      return undefined;
+    }
+
+    const task = new vscode.Task(
+      { type: "gauge-maven-prepare" },
+      vscode.TaskScope.Workspace,
+      "test-compile",
+      "Maven",
+      execution,
+    );
+    task.presentationOptions = {
+      clear: true,
+      echo: false,
+      focus: false,
+      panel: vscode.TaskPanelKind.Dedicated,
+      reveal: vscode.TaskRevealKind.Always,
+      showReuseMessage: false,
+    };
+    return task;
+  }
+
+  async runBuildTaskAsync(command, args) {
+    const task = this.buildTask(command, args);
+    if (!task) {
+      return undefined;
+    }
+
+    return new Promise((resolve, reject) => {
+      const subscription = this.vscode.tasks.onDidEndTaskProcess((event) => {
+        if (event.execution && event.execution.task === task) {
+          subscription.dispose();
+          resolve(event.exitCode === 0);
+        }
+      });
+      this.vscode.tasks.executeTask(task).catch((error) => {
+        subscription.dispose();
+        reject(error);
+      });
+    });
+  }
+
   async runBuildCommandAsync(command, args) {
+    if (typeof this.executionBuildTaskArgs === "function") {
+      try {
+        const result = await this.runBuildTaskAsync(command, this.executionBuildTaskArgs());
+        if (result !== undefined) {
+          return result;
+        }
+      } catch (error) {
+        this.showClasspathError(error);
+        return false;
+      }
+    }
     try {
       await this.execAsync(`${command.command} ${args}`, { cwd: this.root() });
       return true;

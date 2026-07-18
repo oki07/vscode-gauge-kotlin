@@ -2,6 +2,50 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
+function taskVscode(exitCode) {
+  let processListener;
+  const tasks = [];
+
+  class ProcessExecution {
+    constructor(process, args, options) {
+      this.process = process;
+      this.args = args;
+      this.options = options;
+    }
+  }
+
+  class Task {
+    constructor(definition, scope, name, source, execution) {
+      this.definition = definition;
+      this.scope = scope;
+      this.name = name;
+      this.source = source;
+      this.execution = execution;
+    }
+  }
+
+  return {
+    ProcessExecution,
+    Task,
+    TaskPanelKind: { Dedicated: "dedicated" },
+    TaskRevealKind: { Always: "always" },
+    TaskScope: { Workspace: "workspace" },
+    tasks: {
+      onDidEndTaskProcess(listener) {
+        processListener = listener;
+        return { dispose() {} };
+      },
+      async executeTask(task) {
+        const execution = { task };
+        tasks.push(task);
+        queueMicrotask(() => processListener({ execution, exitCode }));
+        return execution;
+      },
+    },
+    taskRuns: tasks,
+  };
+}
+
 test("GaugeProject detects files inside the project root", () => {
   const { GaugeProject } = require("../src/project/gaugeProject");
   const project = new GaugeProject("/workspace/gauge", {
@@ -157,6 +201,79 @@ test("MavenProject prepares test classes before direct Gauge execution", () => {
       options: { cwd: "/workspace/gauge" },
     },
   ]);
+});
+
+test("MavenProject reveals native Maven preparation output before Gauge execution", async () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const calls = [];
+  const vscode = taskVscode(0);
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("/workspace/gauge/target/test-classes\n");
+    },
+    vscode,
+  });
+
+  const env = await project.executionEnvsAsync({
+    mavenCommand() {
+      return { command: "mvn", shellMode: false };
+    },
+  });
+
+  assert.deepEqual(env, {
+    gauge_custom_classpath: "/workspace/gauge/target/test-classes",
+  });
+  assert.deepEqual(calls, [{
+    command: "mvn -q gauge:classpath",
+    options: { cwd: "/workspace/gauge" },
+  }]);
+  assert.equal(vscode.taskRuns.length, 1);
+  const [task] = vscode.taskRuns;
+  assert.deepEqual(task.definition, { type: "gauge-maven-prepare" });
+  assert.equal(task.scope, "workspace");
+  assert.equal(task.name, "test-compile");
+  assert.equal(task.source, "Maven");
+  assert.equal(task.execution.process, "mvn");
+  assert.deepEqual(task.execution.args, ["test-compile"]);
+  assert.deepEqual(task.execution.options, { cwd: "/workspace/gauge" });
+  assert.deepEqual(task.presentationOptions, {
+    clear: true,
+    echo: false,
+    focus: false,
+    panel: "dedicated",
+    reveal: "always",
+    showReuseMessage: false,
+  });
+});
+
+test("MavenProject stops when the native Maven preparation task fails", async () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const calls = [];
+  const vscode = taskVscode(1);
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("/workspace/gauge/target/test-classes\n");
+    },
+    vscode,
+  });
+
+  const env = await project.executionEnvsAsync({
+    mavenCommand() {
+      return { command: "mvn", shellMode: false };
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.equal(vscode.taskRuns.length, 1);
+  assert.deepEqual(calls, []);
 });
 
 test("MavenProject reports classpath calculation errors", () => {

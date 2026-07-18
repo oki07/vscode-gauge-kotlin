@@ -43,6 +43,10 @@ class MavenProject extends BuildToolProject {
     return "-q test-compile";
   }
 
+  executionBuildTaskArgs() {
+    return ["test-compile"];
+  }
+
   executionClasspathArgs() {
     return "-q gauge:classpath";
   }
