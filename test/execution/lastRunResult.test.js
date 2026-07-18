@@ -228,6 +228,27 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
   ]);
 });
 
+test("last run result namespaces suite hook leaves by Gauge project root", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const beforeSuite = message(fieldBytes(2, "suite setup failed"));
+  const suiteResult = fieldBytes(2, beforeSuite);
+
+  const shopEvents = executionEventsFromLastRunResult(suiteResult, {
+    projectRoot: "/workspace/shop",
+  });
+  const adminEvents = executionEventsFromLastRunResult(suiteResult, {
+    projectRoot: "/workspace/admin",
+  });
+
+  assert.deepEqual([
+    shopEvents[0].id,
+    adminEvents[0].id,
+  ], [
+    "/workspace/shop::hook:before-suite",
+    "/workspace/admin::hook:before-suite",
+  ]);
+});
+
 test("last run result does not duplicate a specification hook failure", () => {
   const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
   const filename = "/workspace/specs/setup.spec";

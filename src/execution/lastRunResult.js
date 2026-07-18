@@ -445,16 +445,16 @@ function failureMessage(label, failure) {
   return parts.join("\n");
 }
 
-function hookEvents(failure, name, idPrefix, parentId, occurrence = 0) {
+function hookEvents(failure, name, idPrefix, parentId, occurrence = 0, explicitId) {
   if (!failure) {
     return [];
   }
   const rowNumber = failure.tableRowIndex >= 0 ? failure.tableRowIndex + 1 : undefined;
   const rowSuffix = rowNumber === undefined ? "" : `:row:${rowNumber}`;
   const occurrenceSuffix = occurrence > 0 ? `:occurrence:${occurrence + 1}` : "";
-  const id = rowNumber === undefined
+  const id = explicitId || (rowNumber === undefined
     ? `${idPrefix || ""}${name}${occurrenceSuffix}`
-    : `${idPrefix || ""}::hook:${name.toLowerCase().replaceAll(" ", "-")}${rowSuffix}${occurrenceSuffix}`;
+    : `${idPrefix || ""}::hook:${name.toLowerCase().replaceAll(" ", "-")}${rowSuffix}${occurrenceSuffix}`);
   const displayName = rowNumber === undefined ? name : `${name} (row ${rowNumber})`;
   return [
     { type: "testStarted", id, parentId, name: displayName, resultOnly: true },
@@ -468,6 +468,13 @@ function hookEvents(failure, name, idPrefix, parentId, occurrence = 0) {
     },
     { type: "testFinished", id, parentId, name: displayName, resultOnly: true },
   ];
+}
+
+function suiteHookEvents(failure, name, projectRoot) {
+  const id = projectRoot
+    ? `${projectRoot}::hook:${name.toLowerCase().replaceAll(" ", "-")}`
+    : undefined;
+  return hookEvents(failure, name, "", ROOT_PARENT_ID, 0, id);
 }
 
 function hookFailureEvents(failures, name, idPrefix, parentId) {
@@ -604,10 +611,10 @@ function specFallbackEvents(result, filename, hasExplainingLeaf) {
   ];
 }
 
-function executionEventsFromLastRunResult(buffer) {
+function executionEventsFromLastRunResult(buffer, options = {}) {
   const suite = decodeSuiteResult(buffer);
   const events = [
-    ...hookEvents(suite.beforeHook, "Before Suite", "", ROOT_PARENT_ID),
+    ...suiteHookEvents(suite.beforeHook, "Before Suite", options.projectRoot),
   ];
   for (const result of suite.specResults) {
     if (!result.spec || !result.spec.filename) {
@@ -646,7 +653,7 @@ function executionEventsFromLastRunResult(buffer) {
       hasHookFailures || (result.skipped ? hasSkippedScenario : hasFailedScenario),
     ));
   }
-  events.push(...hookEvents(suite.afterHook, "After Suite", "", ROOT_PARENT_ID));
+  events.push(...suiteHookEvents(suite.afterHook, "After Suite", options.projectRoot));
   return events;
 }
 
@@ -672,7 +679,7 @@ function readNewLastRunResultEvents(projectRoot, previousStamp, options = {}) {
   if (!nextStamp || nextStamp === previousStamp) {
     return [];
   }
-  return executionEventsFromLastRunResult(fs.readFileSync(path));
+  return executionEventsFromLastRunResult(fs.readFileSync(path), { projectRoot });
 }
 
 module.exports = {
