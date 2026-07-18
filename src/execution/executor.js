@@ -561,36 +561,43 @@ function isExecutionTestEvent(event) {
   return Boolean(event && EXECUTION_TEST_EVENT_TYPES.has(event.type));
 }
 
-function unexpectedEndEvents(passed) {
+function unexpectedEndEvents(passed, projectRoot) {
   const name = passed ? "Ignored" : "Failed";
+  const id = projectRoot
+    ? `${projectRoot}::result:${name.toLowerCase()}`
+    : name;
   const resultEvent = passed
     ? {
       type: "testIgnored",
-      id: name,
+      id,
       parentId: "suite",
       name,
       message: " ",
+      resultOnly: true,
     }
     : {
       type: "testFailed",
-      id: name,
+      id,
       parentId: "suite",
       name,
       message: " ",
+      resultOnly: true,
     };
   return [
     {
       type: "testStarted",
-      id: name,
+      id,
       parentId: "suite",
       name,
+      resultOnly: true,
     },
     resultEvent,
     {
       type: "testFinished",
-      id: name,
+      id,
       parentId: "suite",
       name,
+      resultOnly: true,
     },
   ];
 }
@@ -654,6 +661,7 @@ function createGaugeExecutionController(options = {}) {
   });
   let executing = false;
   let activeRun;
+  let activeExecutionProjectRoot;
   let activeDebugger;
   let activeRunUserAborted = false;
   let sawExecutionTestEvent = false;
@@ -731,8 +739,8 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
-  function emitUnexpectedEndEvents(passed) {
-    for (const event of unexpectedEndEvents(passed)) {
+  function emitUnexpectedEndEvents(passed, projectRoot) {
+    for (const event of unexpectedEndEvents(passed, projectRoot)) {
       emitExecutionEvent(event);
     }
   }
@@ -776,6 +784,7 @@ function createGaugeExecutionController(options = {}) {
     }
 
     executing = true;
+    activeExecutionProjectRoot = projectRoot;
     activeRunUserAborted = false;
     sawExecutionTestEvent = false;
     let result;
@@ -876,16 +885,17 @@ function createGaugeExecutionController(options = {}) {
           emitExecutionEvent(event);
         }
         if (resultEvents.length === 0 && !sawExecutionTestEvent) {
-          emitUnexpectedEndEvents(result === true);
+          emitUnexpectedEndEvents(result === true, projectRoot);
         }
       } else if (option["machine-readable"] && !sawExecutionTestEvent && !activeRunUserAborted) {
-        emitUnexpectedEndEvents(result === true);
+        emitUnexpectedEndEvents(result === true, projectRoot);
       }
       return result;
     } finally {
       await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
       await setExecutingContext(vscode, false);
       executing = false;
+      activeExecutionProjectRoot = undefined;
       activeRun = undefined;
       activeDebugger = undefined;
       activeRunUserAborted = false;
@@ -1181,7 +1191,7 @@ function createGaugeExecutionController(options = {}) {
   }
 
   lineProcessors = [
-    new MachineReadableEventProcessor(emitExecutionEvent),
+    new MachineReadableEventProcessor(emitExecutionEvent, () => activeExecutionProjectRoot),
     new ReportEventProcessor({ setReportPath }),
     new DebuggerAttachedEventProcessor({ cancel: stopExecution }, vscode),
     new DebuggerNotAttachedEventProcessor({ cancel: stopExecution }, vscode),

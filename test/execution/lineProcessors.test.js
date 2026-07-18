@@ -568,6 +568,34 @@ test("MachineReadableEventProcessor maps top-level fail and skip events to synth
   ]);
 });
 
+test("MachineReadableEventProcessor scopes suite and fallback leaves to the active project", () => {
+  const { MachineReadableEventProcessor } = require("../../src/execution/lineProcessors");
+  const events = [];
+  const processor = new MachineReadableEventProcessor(
+    (event) => events.push(event),
+    () => "/workspace/shop",
+  );
+
+  processor.process(JSON.stringify({
+    type: "suiteEnd",
+    result: {
+      beforeHookFailure: { message: "setup failed" },
+    },
+  }));
+  processor.process(JSON.stringify({
+    type: "fail",
+    result: { status: "fail" },
+  }));
+
+  assert.deepEqual(
+    events.filter((event) => event.type === "testStarted").map((event) => event.id),
+    [
+      "/workspace/shop::hook:before-suite",
+      "/workspace/shop::result:failed",
+    ],
+  );
+});
+
 test("machine-readable events mark synthetic result leaves as result-only", () => {
   const { machineReadableEvents } = require("../../src/execution/lineProcessors");
   const hookEvents = machineReadableEvents({

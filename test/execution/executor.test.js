@@ -2077,22 +2077,25 @@ test("Test UI run emits synthetic failed event when Gauge exits without a saved 
   assert.deepEqual(events, [
     {
       type: "testStarted",
-      id: "Failed",
+      id: "/workspace::result:failed",
       parentId: "suite",
       name: "Failed",
+      resultOnly: true,
     },
     {
       type: "testFailed",
-      id: "Failed",
+      id: "/workspace::result:failed",
       parentId: "suite",
       name: "Failed",
       message: " ",
+      resultOnly: true,
     },
     {
       type: "testFinished",
-      id: "Failed",
+      id: "/workspace::result:failed",
       parentId: "suite",
       name: "Failed",
+      resultOnly: true,
     },
   ]);
 });

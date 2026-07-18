@@ -167,7 +167,14 @@ function addLocation(target, event) {
   return target;
 }
 
-function hookFailureEvents(event, beforeName, afterName, idPrefix, parentId) {
+function hookFailureEvents(
+  event,
+  beforeName,
+  afterName,
+  idPrefix,
+  parentId,
+  canonicalIds = false,
+) {
   const result = (event && event.result) || {};
   const hooks = [
     { failure: result.beforeHookFailure, name: beforeName },
@@ -178,7 +185,9 @@ function hookFailureEvents(event, beforeName, afterName, idPrefix, parentId) {
     if (!hook.failure) {
       continue;
     }
-    const id = `${idPrefix || ""}${hook.name}`;
+    const id = canonicalIds
+      ? `${idPrefix}::hook:${hook.name.toLowerCase().replaceAll(" ", "-")}`
+      : `${idPrefix || ""}${hook.name}`;
     events.push(addLocation({
       type: "testStarted",
       id,
@@ -210,22 +219,25 @@ function normalizeStatus(status) {
   return String(status || "").toLowerCase();
 }
 
-function unexpectedEndEvents(event) {
+function unexpectedEndEvents(event, projectRoot) {
   const status = normalizeStatus(event && event.result && event.result.status);
   const skipped = status === "skip" || normalizeStatus(event && event.type) === "skip";
   const name = skipped ? "Ignored" : "Failed";
+  const id = projectRoot
+    ? `${projectRoot}::result:${name.toLowerCase()}`
+    : name;
   const resultType = skipped ? "testIgnored" : "testFailed";
   return [
     {
       type: "testStarted",
-      id: name,
+      id,
       parentId: SUITE_ID,
       name,
       resultOnly: true,
     },
     {
       type: resultType,
-      id: name,
+      id,
       parentId: SUITE_ID,
       name,
       message: " ",
@@ -233,7 +245,7 @@ function unexpectedEndEvents(event) {
     },
     {
       type: "testFinished",
-      id: name,
+      id,
       parentId: SUITE_ID,
       name,
       resultOnly: true,
@@ -241,13 +253,20 @@ function unexpectedEndEvents(event) {
   ];
 }
 
-function machineReadableEvents(event) {
+function machineReadableEvents(event, options = {}) {
   const type = String(event.type || "").toLowerCase();
   switch (type) {
     case "suitestart":
       return [{ type: "lineBreak" }];
     case "suiteend":
-      return hookFailureEvents(event, "Before Suite", "After Suite", "", SUITE_ID);
+      return hookFailureEvents(
+        event,
+        "Before Suite",
+        "After Suite",
+        options.projectRoot || "",
+        SUITE_ID,
+        Boolean(options.projectRoot),
+      );
     case "specstart":
       return [
         addLocation({
@@ -340,15 +359,18 @@ function machineReadableEvents(event) {
       ];
     case "fail":
     case "skip":
-      return unexpectedEndEvents(event);
+      return unexpectedEndEvents(event, options.projectRoot);
     default:
       return [];
   }
 }
 
 class MachineReadableEventProcessor {
-  constructor(sink) {
+  constructor(sink, projectRootProvider) {
     this.sink = typeof sink === "function" ? sink : undefined;
+    this.projectRootProvider = typeof projectRootProvider === "function"
+      ? projectRootProvider
+      : undefined;
     this.seenSpecStart = false;
   }
 
@@ -365,7 +387,8 @@ class MachineReadableEventProcessor {
       this.seenSpecStart = true;
       this.sink({ type: "lineBreak" });
     }
-    for (const mapped of machineReadableEvents(event)) {
+    const projectRoot = this.projectRootProvider && this.projectRootProvider();
+    for (const mapped of machineReadableEvents(event, { projectRoot })) {
       this.sink(mapped);
     }
   }
