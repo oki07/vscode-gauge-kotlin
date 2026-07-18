@@ -240,6 +240,56 @@ test("last run result does not duplicate a specification hook failure", () => {
   ]);
 });
 
+test("last run result preserves unexplained specification failures alongside passing scenarios", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const filename = "/workspace/specs/validation.spec";
+  const spec = message(
+    fieldBytes(1, "Validation"),
+    fieldBytes(2, scenarioItem("Passing", 3, 1, 12)),
+    fieldBytes(6, filename),
+  );
+  const specError = message(
+    fieldBytes(2, filename),
+    fieldVarint(3, 8),
+    fieldBytes(4, "Specification validation failed"),
+  );
+  const specResult = message(
+    fieldBytes(1, spec),
+    fieldVarint(4, 1),
+    fieldBytes(10, specError),
+  );
+  const suiteResult = fieldBytes(1, specResult);
+
+  assert.deepEqual(executionEventsFromLastRunResult(suiteResult), [
+    {
+      type: "testFinished",
+      id: `${filename}:3`,
+      parentId: filename,
+      name: "Passing",
+      duration: 12,
+    },
+    {
+      type: "testStarted",
+      id: `${filename}Failed`,
+      parentId: filename,
+      name: "Failed",
+    },
+    {
+      type: "testFailed",
+      id: `${filename}Failed`,
+      parentId: filename,
+      name: "Failed",
+      message: `${filename}:8\nSpecification validation failed`,
+    },
+    {
+      type: "testFinished",
+      id: `${filename}Failed`,
+      parentId: filename,
+      name: "Failed",
+    },
+  ]);
+});
+
 test("last run result maps skipped and table-driven scenarios", () => {
   const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
   const filename = "/workspace/specs/table.spec";

@@ -542,8 +542,8 @@ function scenarioEvents(item, filename) {
   return events;
 }
 
-function specFallbackEvents(result, filename, hasLeafResults) {
-  if (hasLeafResults || (!result.failed && !result.skipped && result.errors.length === 0)) {
+function specFallbackEvents(result, filename, hasExplainingLeaf) {
+  if (hasExplainingLeaf || (!result.failed && !result.skipped && result.errors.length === 0)) {
     return [];
   }
   const name = result.skipped ? "Ignored" : "Failed";
@@ -580,13 +580,17 @@ function executionEventsFromLastRunResult(buffer) {
     events.push(...result.spec.beforeHooks.flatMap((failure) => (
       hookEvents(failure, "Before Specification", filename, filename)
     )));
-    let scenarioCount = 0;
+    let hasFailedScenario = false;
+    let hasSkippedScenario = false;
     for (const item of result.spec.items) {
+      const info = scenarioInfo(item, filename);
       const itemEvents = scenarioEvents(item, filename);
-      if (itemEvents.length > 0) {
-        scenarioCount += 1;
-        events.push(...itemEvents);
+      if (info && info.scenario.status === 2) {
+        hasFailedScenario = true;
+      } else if (info && info.scenario.status === 3) {
+        hasSkippedScenario = true;
       }
+      events.push(...itemEvents);
     }
     events.push(...result.spec.afterHooks.flatMap((failure) => (
       hookEvents(failure, "After Specification", filename, filename)
@@ -596,7 +600,7 @@ function executionEventsFromLastRunResult(buffer) {
     events.push(...specFallbackEvents(
       result,
       filename,
-      scenarioCount > 0 || hasHookFailures,
+      hasHookFailures || (result.skipped ? hasSkippedScenario : hasFailedScenario),
     ));
   }
   events.push(...hookEvents(suite.afterHook, "After Suite", "", ROOT_PARENT_ID));
