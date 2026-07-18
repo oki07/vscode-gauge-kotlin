@@ -137,6 +137,7 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
       id: `${filename}Before Specification`,
       parentId: filename,
       name: "Before Specification",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -144,12 +145,14 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
       parentId: filename,
       name: "Before Specification",
       message: "Failed: Before Specification\nMessage: spec setup failed\nStack Trace:\nspec stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: `${filename}Before Specification`,
       parentId: filename,
       name: "Before Specification",
+      resultOnly: true,
     },
     {
       type: "testFinished",
@@ -186,6 +189,7 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
       id: "After Suite",
       parentId: "suite",
       name: "After Suite",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -193,12 +197,14 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
       parentId: "suite",
       name: "After Suite",
       message: "Failed: After Suite\nMessage: suite cleanup failed\nStack Trace:\nsuite stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "After Suite",
       parentId: "suite",
       name: "After Suite",
+      resultOnly: true,
     },
   ]);
 });
@@ -223,6 +229,7 @@ test("last run result does not duplicate a specification hook failure", () => {
       id: `${filename}Before Specification`,
       parentId: filename,
       name: "Before Specification",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -230,12 +237,14 @@ test("last run result does not duplicate a specification hook failure", () => {
       parentId: filename,
       name: "Before Specification",
       message: "Failed: Before Specification\nMessage: spec setup failed\nStack Trace:\nspec stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: `${filename}Before Specification`,
       parentId: filename,
       name: "Before Specification",
+      resultOnly: true,
     },
   ]);
 });
@@ -273,6 +282,7 @@ test("last run result preserves unexplained specification failures alongside pas
       id: `${filename}Failed`,
       parentId: filename,
       name: "Failed",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -280,12 +290,14 @@ test("last run result preserves unexplained specification failures alongside pas
       parentId: filename,
       name: "Failed",
       message: `${filename}:8\nSpecification validation failed`,
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: `${filename}Failed`,
       parentId: filename,
       name: "Failed",
+      resultOnly: true,
     },
   ]);
 });
@@ -321,6 +333,7 @@ test("last run result maps skipped and table-driven scenarios", () => {
       id: `${filename}:12_2`,
       parentId: filename,
       name: "Row_2",
+      resultOnly: true,
       duration: 7,
     },
   ]);

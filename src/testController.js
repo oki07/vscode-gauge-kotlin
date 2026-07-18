@@ -14,6 +14,7 @@ const DEBUG_PROFILE_LABEL = "Debug";
 const FAILED_PROFILE_LABEL = "Run Failed";
 const REPEAT_PROFILE_LABEL = "Run Repeat";
 const RUN_PROFILE_LABEL = "Run";
+const RUNNABLE_TAG_ID = "gauge-runnable";
 const ROOT_PARENT_ID = "suite";
 const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPECS_REQUEST = "gauge/specs";
@@ -447,8 +448,13 @@ class GaugeTestController {
     );
     this.controller = undefined;
     this.currentRun = undefined;
+    this.currentRequest = undefined;
     this.items = new Map();
     this.pendingResults = new Map();
+    this.resultOnlyItemIds = new Set();
+    this.runnableTag = typeof this.vscode.TestTag === "function"
+      ? new this.vscode.TestTag(RUNNABLE_TAG_ID)
+      : undefined;
     this.attemptCounts = new Map();
     this.activeAttemptIds = new Map();
     this.workspaceDiscoveredIdsByClient = new Map();
@@ -489,24 +495,28 @@ class GaugeTestController {
       profileKind.Run,
       (request, token) => this.run(request, token),
       true,
+      this.runnableTag,
     );
     this.controller.createRunProfile(
       DEBUG_PROFILE_LABEL,
       profileKind.Debug,
       (request, token) => this.debug(request, token),
       false,
+      this.runnableTag,
     );
     this.controller.createRunProfile(
       FAILED_PROFILE_LABEL,
       profileKind.Run,
       (request, token) => this.runFailed(request, token),
       false,
+      this.runnableTag,
     );
     this.controller.createRunProfile(
       REPEAT_PROFILE_LABEL,
       profileKind.Run,
       (request, token) => this.runRepeat(request, token),
       false,
+      this.runnableTag,
     );
   }
 
@@ -626,9 +636,25 @@ class GaugeTestController {
       collectionDelete(item && item.children, id);
     }
     this.items.delete(id);
+    this.resultOnlyItemIds.delete(id);
   }
 
-  upsertItem(id, label, uri, range, parentId) {
+  cleanupResultOnlyItems() {
+    for (const id of [...this.resultOnlyItemIds]) {
+      this.removeItem(id);
+    }
+  }
+
+  setItemRunnable(item, runnable) {
+    if (!item || !this.runnableTag) {
+      return;
+    }
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    const withoutRunnable = tags.filter((tag) => tag && tag.id !== this.runnableTag.id);
+    item.tags = runnable ? [...withoutRunnable, this.runnableTag] : withoutRunnable;
+  }
+
+  upsertItem(id, label, uri, range, parentId, runnable = true) {
     if (!id || !this.controller) {
       return undefined;
     }
@@ -642,6 +668,7 @@ class GaugeTestController {
     if (range) {
       item.range = range;
     }
+    this.setItemRunnable(item, runnable);
 
     if (parentId && parentId !== ROOT_PARENT_ID) {
       const parent = this.upsertItem(parentId, parentId);
@@ -867,6 +894,8 @@ class GaugeTestController {
     if (!this.controller || typeof this.controller.createTestRun !== "function") {
       return undefined;
     }
+    this.cleanupResultOnlyItems();
+    this.currentRequest = request;
     this.currentRun = this.controller.createTestRun(request);
     this.pendingResults.clear();
     this.attemptCounts.clear();
@@ -985,8 +1014,10 @@ class GaugeTestController {
       if (run && typeof run.end === "function") {
         run.end();
       }
+      this.cleanupResultOnlyItems();
       if (this.currentRun === run) {
         this.currentRun = undefined;
+        this.currentRequest = undefined;
       }
     }
   }
@@ -1047,8 +1078,10 @@ class GaugeTestController {
       if (run && typeof run.end === "function") {
         run.end();
       }
+      this.cleanupResultOnlyItems();
       if (this.currentRun === run) {
         this.currentRun = undefined;
+        this.currentRequest = undefined;
       }
     }
   }
@@ -1083,6 +1116,7 @@ class GaugeTestController {
         id,
         logicalId,
         name: attemptItemName(event.name, logicalId, attempt),
+        resultOnly: event.resultOnly || attempt > 1,
       };
     }
     const id = this.activeAttemptIds.get(logicalId) || logicalId;
@@ -1092,6 +1126,7 @@ class GaugeTestController {
       id,
       logicalId,
       name: attemptItemName(event.name, logicalId, attempt),
+      resultOnly: event.resultOnly || attempt > 1,
     };
   }
 
@@ -1108,12 +1143,41 @@ class GaugeTestController {
         event.name || id,
         uri,
         undefined,
-        event.parentId && event.parentId !== ROOT_PARENT_ID ? event.parentId : undefined,
+        this.parentIdForEvent(event),
+        !event.resultOnly,
       );
     } else if (event.name) {
       item.label = event.name;
     }
+    this.setItemRunnable(item, !event.resultOnly);
+    if (event.resultOnly) {
+      this.resultOnlyItemIds.add(id);
+    }
     return applyLocation(this.vscode, item, event.location);
+  }
+
+  parentIdForEvent(event) {
+    const parentId = event.parentId && event.parentId !== ROOT_PARENT_ID
+      ? event.parentId
+      : undefined;
+    const included = this.currentRequest && Array.isArray(this.currentRequest.include)
+      ? this.currentRequest.include.filter((item) => item && item.id)
+      : [];
+    if (!event.resultOnly || included.length === 0) {
+      return parentId;
+    }
+    if (parentId && included.some((item) => (
+      item.id === parentId || parentId.startsWith(`${item.id}:`)
+    ))) {
+      return parentId;
+    }
+    if (parentId) {
+      const descendant = included.find((item) => item.id.startsWith(`${parentId}:`));
+      if (descendant) {
+        return descendant.id;
+      }
+    }
+    return included[0].id;
   }
 
   forgetActiveAttempt(event) {

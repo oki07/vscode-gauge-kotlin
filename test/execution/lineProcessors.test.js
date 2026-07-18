@@ -230,6 +230,7 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
       id: "/workspace/specs/example.spec:12_2",
       parentId: "/workspace/specs/example.spec",
       name: "Successful checkout_2",
+      resultOnly: true,
       location: "gauge:///workspace/specs/example.spec:12",
     },
     {
@@ -238,6 +239,7 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
       parentId: "/workspace/specs/example.spec",
       name: "Successful checkout_2",
       message: "| user |\n| alice |\nFailed: Expected payment to succeed\nFilename: /workspace/specs/example.spec:13\nMessage: payment failed\nStack Trace:\nstack line",
+      resultOnly: true,
     },
     {
       type: "testFinished",
@@ -245,6 +247,7 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
       parentId: "/workspace/specs/example.spec",
       name: "Successful checkout_2",
       duration: 45,
+      resultOnly: true,
     },
     {
       type: "suiteFinished",
@@ -401,6 +404,7 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       id: "Before Suite",
       parentId: "suite",
       name: "Before Suite",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -408,18 +412,21 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       parentId: "suite",
       name: "Before Suite",
       message: "Failed: Suite setup failed\nFilename: /workspace/env/default/hooks.kt:9\nMessage: database unavailable\nStack Trace:\nsuite stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "Before Suite",
       parentId: "suite",
       name: "Before Suite",
+      resultOnly: true,
     },
     {
       type: "testStarted",
       id: "After Suite",
       parentId: "suite",
       name: "After Suite",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -427,18 +434,21 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       parentId: "suite",
       name: "After Suite",
       message: "Failed: Suite teardown failed\nFilename: /workspace/env/default/hooks.kt\nMessage: cleanup failed\nStack Trace:\nsuite cleanup stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "After Suite",
       parentId: "suite",
       name: "After Suite",
+      resultOnly: true,
     },
     {
       type: "testStarted",
       id: "/workspace/specs/example.specBefore Specification",
       parentId: "/workspace/specs/example.spec",
       name: "Before Specification",
+      resultOnly: true,
       location: "gauge:///workspace/specs/example.spec:1",
     },
     {
@@ -447,18 +457,21 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       parentId: "/workspace/specs/example.spec",
       name: "Before Specification",
       message: "Failed: Spec setup failed\nFilename: /workspace/specs/example.spec:2\nMessage: missing fixture\nStack Trace:\nspec stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "/workspace/specs/example.specBefore Specification",
       parentId: "/workspace/specs/example.spec",
       name: "Before Specification",
+      resultOnly: true,
     },
     {
       type: "testStarted",
       id: "/workspace/specs/example.specAfter Specification",
       parentId: "/workspace/specs/example.spec",
       name: "After Specification",
+      resultOnly: true,
       location: "gauge:///workspace/specs/example.spec:1",
     },
     {
@@ -467,12 +480,14 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       parentId: "/workspace/specs/example.spec",
       name: "After Specification",
       message: "Failed: Spec teardown failed\nFilename: /workspace/specs/example.spec:19\nMessage: cleanup failed\nStack Trace:\nspec cleanup stack",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "/workspace/specs/example.specAfter Specification",
       parentId: "/workspace/specs/example.spec",
       name: "After Specification",
+      resultOnly: true,
     },
     {
       type: "suiteFinished",
@@ -508,6 +523,7 @@ test("MachineReadableEventProcessor maps top-level fail and skip events to synth
       id: "Failed",
       parentId: "suite",
       name: "Failed",
+      resultOnly: true,
     },
     {
       type: "testFailed",
@@ -515,18 +531,21 @@ test("MachineReadableEventProcessor maps top-level fail and skip events to synth
       parentId: "suite",
       name: "Failed",
       message: " ",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "Failed",
       parentId: "suite",
       name: "Failed",
+      resultOnly: true,
     },
     {
       type: "testStarted",
       id: "Ignored",
       parentId: "suite",
       name: "Ignored",
+      resultOnly: true,
     },
     {
       type: "testIgnored",
@@ -534,14 +553,46 @@ test("MachineReadableEventProcessor maps top-level fail and skip events to synth
       parentId: "suite",
       name: "Ignored",
       message: " ",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: "Ignored",
       parentId: "suite",
       name: "Ignored",
+      resultOnly: true,
     },
   ]);
+});
+
+test("machine-readable events mark synthetic result leaves as result-only", () => {
+  const { machineReadableEvents } = require("../../src/execution/lineProcessors");
+  const hookEvents = machineReadableEvents({
+    type: "specEnd",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    result: {
+      beforeHookFailure: { message: "setup failed" },
+    },
+  }).filter((event) => event.type.startsWith("test"));
+  const fallbackEvents = machineReadableEvents({
+    type: "fail",
+    result: { status: "fail" },
+  });
+  const tableRowEvents = machineReadableEvents({
+    type: "scenarioEnd",
+    id: "/workspace/specs/example.spec:3",
+    parentId: "/workspace/specs/example.spec",
+    name: "Table checkout",
+    result: {
+      status: "pass",
+      table: { rowIndex: 1 },
+    },
+  });
+
+  assert.equal(hookEvents.every((event) => event.resultOnly === true), true);
+  assert.equal(fallbackEvents.every((event) => event.resultOnly === true), true);
+  assert.equal(tableRowEvents.every((event) => event.resultOnly === true), true);
 });
 
 test("MachineReadableEventProcessor maps Gauge notifications and output events", () => {

@@ -184,6 +184,7 @@ function hookFailureEvents(event, beforeName, afterName, idPrefix, parentId) {
       id,
       parentId,
       name: hook.name,
+      resultOnly: true,
     }, event));
     events.push({
       type: "testFailed",
@@ -191,12 +192,14 @@ function hookFailureEvents(event, beforeName, afterName, idPrefix, parentId) {
       parentId,
       name: hook.name,
       message: formatExecutionError(hook.failure, "Failed: "),
+      resultOnly: true,
     });
     events.push({
       type: "testFinished",
       id,
       parentId,
       name: hook.name,
+      resultOnly: true,
     });
   }
   return events;
@@ -217,6 +220,7 @@ function unexpectedEndEvents(event) {
       id: name,
       parentId: SUITE_ID,
       name,
+      resultOnly: true,
     },
     {
       type: resultType,
@@ -224,12 +228,14 @@ function unexpectedEndEvents(event) {
       parentId: SUITE_ID,
       name,
       message: " ",
+      resultOnly: true,
     },
     {
       type: "testFinished",
       id: name,
       parentId: SUITE_ID,
       name,
+      resultOnly: true,
     },
   ];
 }
@@ -274,6 +280,7 @@ function machineReadableEvents(event) {
           id: tableIdentifier(event, event.id),
           parentId: specIdentifier(event.parentId),
           name: tableIdentifier(event, event.name),
+          ...(tableInfo(event) ? { resultOnly: true } : {}),
         }, event),
       ];
     case "scenarioend": {
@@ -281,6 +288,7 @@ function machineReadableEvents(event) {
       const name = tableIdentifier(event, event.name);
       const result = event.result || {};
       const status = normalizeStatus(result.status);
+      const resultOnly = tableInfo(event) ? { resultOnly: true } : {};
       const events = [];
       if (status === "fail") {
         events.push({
@@ -289,6 +297,7 @@ function machineReadableEvents(event) {
           parentId: specIdentifier(event.parentId),
           name,
           message: scenarioMessage(result, "Failed: "),
+          ...resultOnly,
         });
       } else if (status === "skip") {
         events.push({
@@ -297,6 +306,7 @@ function machineReadableEvents(event) {
           parentId: specIdentifier(event.parentId),
           name,
           message: scenarioMessage(result, "Skipped: "),
+          ...resultOnly,
         });
       }
       events.push({
@@ -305,6 +315,7 @@ function machineReadableEvents(event) {
         parentId: specIdentifier(event.parentId),
         name,
         duration: result.time,
+        ...resultOnly,
       });
       return events;
     }

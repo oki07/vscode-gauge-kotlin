@@ -433,15 +433,16 @@ function hookEvents(failure, name, idPrefix, parentId) {
   }
   const id = `${idPrefix || ""}${name}`;
   return [
-    { type: "testStarted", id, parentId, name },
+    { type: "testStarted", id, parentId, name, resultOnly: true },
     {
       type: "testFailed",
       id,
       parentId,
       name,
       message: failureMessage(name, failure),
+      resultOnly: true,
     },
-    { type: "testFinished", id, parentId, name },
+    { type: "testFinished", id, parentId, name, resultOnly: true },
   ];
 }
 
@@ -519,6 +520,7 @@ function scenarioEvents(item, filename) {
     id: info.id,
     parentId: filename,
     name: info.name,
+    ...(item.tableDrivenScenario ? { resultOnly: true } : {}),
   };
   const events = [];
   if (info.scenario.status === 2) {
@@ -555,15 +557,16 @@ function specFallbackEvents(result, filename, hasExplainingLeaf) {
     return `${location}${error.message}`.trim();
   }).filter(Boolean).join("\n\n") || " ";
   return [
-    { type: "testStarted", id, parentId: filename, name },
+    { type: "testStarted", id, parentId: filename, name, resultOnly: true },
     {
       type: result.skipped ? "testIgnored" : "testFailed",
       id,
       parentId: filename,
       name,
       message,
+      resultOnly: true,
     },
-    { type: "testFinished", id, parentId: filename, name },
+    { type: "testFinished", id, parentId: filename, name, resultOnly: true },
   ];
 }
 

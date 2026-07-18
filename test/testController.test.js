@@ -38,6 +38,7 @@ function createDocument(text, filename = "/workspace/specs/example.spec", langua
 function createFakeVscode(options = {}) {
   const calls = [];
   const commandCalls = [];
+  const profiles = [];
   const documentListeners = {
     close: undefined,
   };
@@ -48,9 +49,11 @@ function createFakeVscode(options = {}) {
   const controller = {
     id: "gauge",
     items: createCollection(),
-    createRunProfile(label, kind, handler, isDefault) {
+    createRunProfile(label, kind, handler, isDefault, tag) {
       calls.push(["profile", label, kind, handler, isDefault]);
-      return { dispose() {} };
+      const profile = { dispose() {}, tag };
+      profiles.push(profile);
+      return profile;
     },
     createTestItem(id, label, uri) {
       return {
@@ -93,6 +96,7 @@ function createFakeVscode(options = {}) {
     calls,
     commandCalls,
     controller,
+    profiles,
     vscode: {
       commands: {
         executeCommand(command) {
@@ -103,6 +107,11 @@ function createFakeVscode(options = {}) {
       TestMessage: class TestMessage {
         constructor(message) {
           this.message = message;
+        }
+      },
+      TestTag: class TestTag {
+        constructor(id) {
+          this.id = id;
         }
       },
       TestRunProfileKind: {
@@ -378,6 +387,103 @@ test("GaugeTestController keeps retry attempts distinct for repeated scenario id
     ["started", "/workspace/specs/example.spec:12#attempt=2"],
     ["passed", "/workspace/specs/example.spec:12#attempt=2", 5],
   ]);
+});
+
+test("GaugeTestController keeps result-only leaves non-runnable and clears them before the next run", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, profiles, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.discoverDocument(createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+  ].join("\n")));
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({
+    type: "testStarted",
+    id: "/workspace/specs/example.spec::hook:before-specification",
+    parentId: "/workspace/specs/example.spec",
+    name: "Before Specification",
+    resultOnly: true,
+  });
+  sink({
+    type: "testFailed",
+    id: "/workspace/specs/example.spec::hook:before-specification",
+    parentId: "/workspace/specs/example.spec",
+    name: "Before Specification",
+    message: "Setup failed",
+    resultOnly: true,
+  });
+  sink({
+    type: "testFinished",
+    id: "/workspace/specs/example.spec::hook:before-specification",
+    parentId: "/workspace/specs/example.spec",
+    name: "Before Specification",
+    resultOnly: true,
+  });
+
+  const spec = controller.items.get("/workspace/specs/example.spec");
+  const scenario = spec.children.get("/workspace/specs/example.spec:3");
+  const hook = spec.children.get("/workspace/specs/example.spec::hook:before-specification");
+  assert.deepEqual(spec.tags.map((tag) => tag.id), ["gauge-runnable"]);
+  assert.deepEqual(scenario.tags.map((tag) => tag.id), ["gauge-runnable"]);
+  assert.deepEqual(hook.tags, []);
+  assert.equal(profiles.length, 4);
+  assert.equal(profiles.every((profile) => profile.tag.id === "gauge-runnable"), true);
+
+  gaugeTests.startTestRun({});
+
+  assert.equal(
+    spec.children.get("/workspace/specs/example.spec::hook:before-specification"),
+    undefined,
+  );
+  assert.equal(controller.items.get("/workspace/specs/example.spec"), spec);
+});
+
+test("GaugeTestController anchors a result-only hook inside a scenario-only run and removes it after end", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  let gaugeTests;
+  let hookDuringRun;
+  const hookId = "/workspace/specs/example.spec::hook:before-specification";
+  const executionController = {
+    handleCommand() {
+      const sink = gaugeTests.createExecutionEventSink();
+      for (const type of ["testStarted", "testFailed", "testFinished"]) {
+        sink({
+          type,
+          id: hookId,
+          parentId: "/workspace/specs/example.spec",
+          name: "Before Specification",
+          message: type === "testFailed" ? "Setup failed" : undefined,
+          resultOnly: true,
+        });
+      }
+      const spec = controller.items.get("/workspace/specs/example.spec");
+      const scenario = spec.children.get("/workspace/specs/example.spec:3");
+      hookDuringRun = scenario.children.get(hookId);
+      return Promise.resolve(undefined);
+    },
+  };
+  gaugeTests = new GaugeTestController({ executionController, vscode });
+  gaugeTests.register();
+  gaugeTests.discoverDocument(createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+  ].join("\n")));
+  const spec = controller.items.get("/workspace/specs/example.spec");
+  const scenario = spec.children.get("/workspace/specs/example.spec:3");
+
+  await gaugeTests.run({ include: [scenario] });
+
+  assert.equal(hookDuringRun && hookDuringRun.id, hookId);
+  assert.equal(spec.children.get(hookId), undefined);
+  assert.equal(scenario.children.get(hookId), undefined);
+  assert.ok(calls.findIndex((call) => call[0] === "failed") < calls.findIndex((call) => call[0] === "end"));
 });
 
 test("GaugeTestController discovers specification and scenario test items from open Gauge documents", () => {
