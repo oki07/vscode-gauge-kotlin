@@ -16,22 +16,36 @@ class ProtobufReader {
     return this.offset >= this.buffer.length;
   }
 
-  readVarint() {
-    let result = 0;
-    let multiplier = 1;
+  readRawVarint() {
+    let result = 0n;
+    let shift = 0n;
+    let byteCount = 0;
     while (this.offset < this.buffer.length) {
       const byte = this.buffer[this.offset];
       this.offset += 1;
-      result += (byte & 0x7f) * multiplier;
+      result |= BigInt(byte & 0x7f) << shift;
+      byteCount += 1;
       if ((byte & 0x80) === 0) {
         return result;
       }
-      multiplier *= 128;
-      if (multiplier > Number.MAX_SAFE_INTEGER) {
+      if (byteCount >= 10) {
         throw new Error("Gauge result contains an unsupported integer");
       }
+      shift += 7n;
     }
     throw new Error("Gauge result ended inside an integer");
+  }
+
+  readVarint() {
+    const result = this.readRawVarint();
+    if (result > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("Gauge result contains an unsupported integer");
+    }
+    return Number(result);
+  }
+
+  readInt32() {
+    return Number(BigInt.asIntN(32, this.readRawVarint()));
   }
 
   readBytes() {
@@ -51,7 +65,7 @@ class ProtobufReader {
 
   skip(wireType) {
     if (wireType === 0) {
-      this.readVarint();
+      this.readRawVarint();
       return;
     }
     if (wireType === 1) {
@@ -87,7 +101,7 @@ function isWire(wireType, expected) {
 }
 
 function decodeHookFailure(buffer) {
-  const hook = { errorMessage: "", stackTrace: "" };
+  const hook = { errorMessage: "", stackTrace: "", tableRowIndex: -1 };
   decode(buffer, (field, wireType, reader) => {
     if (field === 1 && isWire(wireType, 2)) {
       hook.stackTrace = reader.readString();
@@ -95,6 +109,10 @@ function decodeHookFailure(buffer) {
     }
     if (field === 2 && isWire(wireType, 2)) {
       hook.errorMessage = reader.readString();
+      return true;
+    }
+    if (field === 4 && isWire(wireType, 0)) {
+      hook.tableRowIndex = reader.readInt32();
       return true;
     }
     return false;

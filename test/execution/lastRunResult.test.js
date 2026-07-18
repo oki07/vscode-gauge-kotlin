@@ -19,6 +19,24 @@ function fieldVarint(field, value) {
   return Buffer.concat([varint(field << 3), varint(value)]);
 }
 
+function signedInt32Varint(value) {
+  const bytes = [];
+  let remaining = BigInt.asUintN(64, BigInt(value));
+  do {
+    let byte = Number(remaining & 0x7fn);
+    remaining >>= 7n;
+    if (remaining > 0n) {
+      byte |= 0x80;
+    }
+    bytes.push(byte);
+  } while (remaining > 0n);
+  return Buffer.from(bytes);
+}
+
+function fieldInt32(field, value) {
+  return Buffer.concat([varint(field << 3), signedInt32Varint(value)]);
+}
+
 function fieldBytes(field, value) {
   const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value);
   return Buffer.concat([varint((field << 3) | 2), varint(bytes.length), bytes]);
@@ -104,6 +122,7 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
   const beforeSpec = message(
     fieldBytes(1, "spec stack"),
     fieldBytes(2, "spec setup failed"),
+    fieldInt32(4, -1),
   );
   const afterSuite = message(
     fieldBytes(1, "suite stack"),
