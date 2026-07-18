@@ -1194,6 +1194,10 @@ class GaugeTestController {
     }
     const pending = this.pendingResults.get(event.id);
     this.pendingResults.delete(event.id);
+    if (pending && pending.status === "errored" && typeof run.errored === "function") {
+      run.errored(item, createMessage(this.vscode, pending.message), event.duration);
+      return "errored";
+    }
     if (pending && pending.status === "failed" && typeof run.failed === "function") {
       run.failed(item, createMessage(this.vscode, pending.message), event.duration);
       return "failed";
@@ -1248,6 +1252,14 @@ class GaugeTestController {
         this.pendingResults.set(attemptEvent.id, {
           message: attemptEvent.message,
           status: "failed",
+        });
+        break;
+      }
+      case "testErrored": {
+        const attemptEvent = this.resolveAttemptEvent(event);
+        this.pendingResults.set(attemptEvent.id, {
+          message: attemptEvent.message,
+          status: "errored",
         });
         break;
       }

@@ -74,6 +74,9 @@ function createFakeVscode(options = {}) {
         end() {
           calls.push(["end"]);
         },
+        errored(item, message, duration) {
+          calls.push(["errored", item.id, message.message || message, duration]);
+        },
         failed(item, message, duration) {
           calls.push(["failed", item.id, message.message || message, duration]);
         },
@@ -322,6 +325,33 @@ test("GaugeTestController does not pass a specification with a failed scenario",
   assert.deepEqual(calls.filter((entry) => entry[0] === "failed"), [
     ["failed", "/workspace/specs/example.spec:20", "Expected success", 9],
   ]);
+});
+
+test("GaugeTestController maps specification diagnostics to TestRun errors", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  const event = {
+    id: "/workspace/specs/example.spec::result:specification-errors",
+    parentId: "/workspace/specs/example.spec",
+    name: "Specification Errors",
+    resultOnly: true,
+  };
+  sink({ type: "testStarted", ...event });
+  sink({ type: "testErrored", ...event, message: "Validation failed" });
+  sink({ type: "testFinished", ...event, duration: 7 });
+
+  assert.deepEqual(calls.filter((call) => call[0] === "errored"), [[
+    "errored",
+    event.id,
+    "Validation failed",
+    7,
+  ]]);
+  assert.deepEqual(calls.filter((call) => call[0] === "passed"), []);
 });
 
 test("GaugeTestController keeps retry attempts distinct for repeated scenario ids", () => {

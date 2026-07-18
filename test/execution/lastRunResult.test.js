@@ -348,26 +348,81 @@ test("last run result preserves unexplained specification failures alongside pas
     },
     {
       type: "testStarted",
-      id: `${filename}Failed`,
+      id: `${filename}::result:specification-errors`,
       parentId: filename,
-      name: "Failed",
+      name: "Specification Errors",
       resultOnly: true,
     },
     {
-      type: "testFailed",
-      id: `${filename}Failed`,
+      type: "testErrored",
+      id: `${filename}::result:specification-errors`,
       parentId: filename,
-      name: "Failed",
+      name: "Specification Errors",
       message: `${filename}:8\nSpecification validation failed`,
       resultOnly: true,
     },
     {
       type: "testFinished",
-      id: `${filename}Failed`,
+      id: `${filename}::result:specification-errors`,
       parentId: filename,
-      name: "Failed",
+      name: "Specification Errors",
       resultOnly: true,
     },
+  ]);
+});
+
+test("last run result preserves independent specification errors alongside failed scenarios", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const filename = "/workspace/specs/mixed-failures.spec";
+  const spec = message(
+    fieldBytes(1, "Mixed failures"),
+    fieldBytes(2, scenarioItem("Broken scenario", 3, 2, 5, "scenario boom")),
+    fieldBytes(6, filename),
+  );
+  const specError = message(
+    fieldBytes(2, filename),
+    fieldVarint(3, 9),
+    fieldBytes(4, "Independent validation error"),
+  );
+  const specResult = message(
+    fieldBytes(1, spec),
+    fieldVarint(4, 1),
+    fieldBytes(10, specError),
+  );
+
+  const failures = executionEventsFromLastRunResult(fieldBytes(1, specResult))
+    .filter((event) => event.type === "testFailed" || event.type === "testErrored");
+  assert.deepEqual(failures.map(({ id, type }) => ({ id, type })), [
+    { id: `${filename}:3`, type: "testFailed" },
+    { id: `${filename}::result:specification-errors`, type: "testErrored" },
+  ]);
+});
+
+test("last run result does not duplicate a spec error already shown by a skipped scenario", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const filename = "/workspace/specs/skipped.spec";
+  const spec = message(
+    fieldBytes(1, "Skipped"),
+    fieldBytes(2, skippedScenarioItem("Filtered scenario", 4, "filtered by tag")),
+    fieldBytes(6, filename),
+  );
+  const specError = message(
+    fieldBytes(2, filename),
+    fieldVarint(3, 4),
+    fieldBytes(4, "filtered by tag"),
+  );
+  const specResult = message(
+    fieldBytes(1, spec),
+    fieldVarint(7, 1),
+    fieldBytes(10, specError),
+  );
+
+  const resultEvents = executionEventsFromLastRunResult(fieldBytes(1, specResult))
+    .filter((event) => event.type === "testFailed"
+      || event.type === "testErrored"
+      || event.type === "testIgnored");
+  assert.deepEqual(resultEvents.map(({ id, type }) => ({ id, type })), [
+    { id: `${filename}:4`, type: "testIgnored" },
   ]);
 });
 

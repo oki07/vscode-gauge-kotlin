@@ -585,13 +585,29 @@ function scenarioEvents(item, filename) {
   return events;
 }
 
-function specFallbackEvents(result, filename, hasExplainingLeaf) {
-  if (hasExplainingLeaf || (!result.failed && !result.skipped && result.errors.length === 0)) {
+function normalizedDiagnostic(message) {
+  return String(message || "").trim().replaceAll(/\s+/g, " ");
+}
+
+function specFallbackEvents(result, filename, hasExplainingLeaf, representedErrors = []) {
+  const represented = new Set(representedErrors.map(normalizedDiagnostic));
+  const errors = result.errors.filter((error) => (
+    !represented.has(normalizedDiagnostic(error.message))
+  ));
+  const hasSpecificationErrors = errors.length > 0;
+  if (
+    !hasSpecificationErrors
+    && (hasExplainingLeaf || (!result.failed && !result.skipped))
+  ) {
     return [];
   }
-  const name = result.skipped ? "Ignored" : "Failed";
-  const id = `${filename}${name}`;
-  const message = result.errors.map((error) => {
+  const name = hasSpecificationErrors
+    ? "Specification Errors"
+    : (result.skipped ? "Ignored" : "Failed");
+  const id = hasSpecificationErrors
+    ? `${filename}::result:specification-errors`
+    : `${filename}${name}`;
+  const message = errors.map((error) => {
     const location = error.filename
       ? `${error.filename}${error.line ? `:${error.line}` : ""}\n`
       : "";
@@ -600,7 +616,9 @@ function specFallbackEvents(result, filename, hasExplainingLeaf) {
   return [
     { type: "testStarted", id, parentId: filename, name, resultOnly: true },
     {
-      type: result.skipped ? "testIgnored" : "testFailed",
+      type: hasSpecificationErrors
+        ? "testErrored"
+        : (result.skipped ? "testIgnored" : "testFailed"),
       id,
       parentId: filename,
       name,
@@ -629,6 +647,7 @@ function executionEventsFromLastRunResult(buffer, options = {}) {
     ));
     let hasFailedScenario = false;
     let hasSkippedScenario = false;
+    const representedErrors = [];
     for (const item of result.spec.items) {
       const info = scenarioInfo(item, filename);
       const itemEvents = scenarioEvents(item, filename);
@@ -636,6 +655,7 @@ function executionEventsFromLastRunResult(buffer, options = {}) {
         hasFailedScenario = true;
       } else if (info && info.scenario.status === 3) {
         hasSkippedScenario = true;
+        representedErrors.push(...info.scenario.skipErrors);
       }
       events.push(...itemEvents);
     }
@@ -651,6 +671,7 @@ function executionEventsFromLastRunResult(buffer, options = {}) {
       result,
       filename,
       hasHookFailures || (result.skipped ? hasSkippedScenario : hasFailedScenario),
+      representedErrors,
     ));
   }
   events.push(...suiteHookEvents(suite.afterHook, "After Suite", options.projectRoot));
