@@ -240,6 +240,7 @@ test("MachineReadableEventProcessor maps Gauge spec and scenario JSON events", (
       name: "Successful checkout_2",
       message: "| user |\n| alice |\nFailed: Expected payment to succeed\nFilename: /workspace/specs/example.spec:13\nMessage: payment failed\nStack Trace:\nstack line",
       resultOnly: true,
+      location: "gauge:///workspace/specs/example.spec:12",
     },
     {
       type: "testFinished",
@@ -458,6 +459,7 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       name: "Before Specification",
       message: "Failed: Spec setup failed\nFilename: /workspace/specs/example.spec:2\nMessage: missing fixture\nStack Trace:\nspec stack",
       resultOnly: true,
+      location: "gauge:///workspace/specs/example.spec:1",
     },
     {
       type: "testFinished",
@@ -481,6 +483,7 @@ test("MachineReadableEventProcessor maps suite and spec hook failures to synthet
       name: "After Specification",
       message: "Failed: Spec teardown failed\nFilename: /workspace/specs/example.spec:19\nMessage: cleanup failed\nStack Trace:\nspec cleanup stack",
       resultOnly: true,
+      location: "gauge:///workspace/specs/example.spec:1",
     },
     {
       type: "testFinished",

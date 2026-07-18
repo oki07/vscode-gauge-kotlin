@@ -613,6 +613,10 @@ function specFallbackEvents(result, filename, hasExplainingLeaf, representedErro
       : "";
     return `${location}${error.message}`.trim();
   }).filter(Boolean).join("\n\n") || " ";
+  const locatedError = errors.find((error) => error.filename && error.line > 0);
+  const location = locatedError
+    ? `gauge://${locatedError.filename}:${locatedError.line}`
+    : undefined;
   return [
     { type: "testStarted", id, parentId: filename, name, resultOnly: true },
     {
@@ -623,6 +627,7 @@ function specFallbackEvents(result, filename, hasExplainingLeaf, representedErro
       parentId: filename,
       name,
       message,
+      ...(location ? { location } : {}),
       resultOnly: true,
     },
     { type: "testFinished", id, parentId: filename, name, resultOnly: true },

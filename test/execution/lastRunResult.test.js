@@ -359,6 +359,7 @@ test("last run result preserves unexplained specification failures alongside pas
       parentId: filename,
       name: "Specification Errors",
       message: `${filename}:8\nSpecification validation failed`,
+      location: `gauge://${filename}:8`,
       resultOnly: true,
     },
     {

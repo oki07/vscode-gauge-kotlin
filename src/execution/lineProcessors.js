@@ -186,14 +186,15 @@ function hookFailureEvents(event, beforeName, afterName, idPrefix, parentId) {
       name: hook.name,
       resultOnly: true,
     }, event));
-    events.push({
+    const failureEvent = {
       type: "testFailed",
       id,
       parentId,
       name: hook.name,
       message: formatExecutionError(hook.failure, "Failed: "),
       resultOnly: true,
-    });
+    };
+    events.push(parentId === SUITE_ID ? failureEvent : addLocation(failureEvent, event));
     events.push({
       type: "testFinished",
       id,
@@ -291,23 +292,25 @@ function machineReadableEvents(event) {
       const resultOnly = tableInfo(event) ? { resultOnly: true } : {};
       const events = [];
       if (status === "fail") {
-        events.push({
+        const failureEvent = {
           type: "testFailed",
           id,
           parentId: specIdentifier(event.parentId),
           name,
           message: scenarioMessage(result, "Failed: "),
           ...resultOnly,
-        });
+        };
+        events.push(tableInfo(event) ? addLocation(failureEvent, event) : failureEvent);
       } else if (status === "skip") {
-        events.push({
+        const skippedEvent = {
           type: "testIgnored",
           id,
           parentId: specIdentifier(event.parentId),
           name,
           message: scenarioMessage(result, "Skipped: "),
           ...resultOnly,
-        });
+        };
+        events.push(tableInfo(event) ? addLocation(skippedEvent, event) : skippedEvent);
       }
       events.push({
         type: "testFinished",

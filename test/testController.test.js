@@ -75,7 +75,7 @@ function createFakeVscode(options = {}) {
           calls.push(["end"]);
         },
         errored(item, message, duration) {
-          calls.push(["errored", item.id, message.message || message, duration]);
+          calls.push(["errored", item.id, message.message || message, duration, message.location]);
         },
         failed(item, message, duration) {
           calls.push(["failed", item.id, message.message || message, duration]);
@@ -339,6 +339,7 @@ test("GaugeTestController maps specification diagnostics to TestRun errors", () 
     id: "/workspace/specs/example.spec::result:specification-errors",
     parentId: "/workspace/specs/example.spec",
     name: "Specification Errors",
+    location: "gauge:///workspace/specs/example.spec:9",
     resultOnly: true,
   };
   sink({ type: "testStarted", ...event });
@@ -350,8 +351,17 @@ test("GaugeTestController maps specification diagnostics to TestRun errors", () 
     event.id,
     "Validation failed",
     7,
+    {
+      uri: { fsPath: "/workspace/specs/example.spec" },
+      range: {
+        start: { line: 8, character: 0 },
+        end: { line: 8, character: 0 },
+      },
+    },
   ]]);
   assert.deepEqual(calls.filter((call) => call[0] === "passed"), []);
+  const spec = gaugeTests.controller.items.get("/workspace/specs/example.spec");
+  assert.equal(spec.children.get(event.id).uri, undefined);
 });
 
 test("GaugeTestController keeps retry attempts distinct for repeated scenario ids", () => {

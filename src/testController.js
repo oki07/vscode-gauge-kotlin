@@ -149,9 +149,26 @@ function applyLocation(vscode, item, location) {
   return item;
 }
 
-function createMessage(vscode, message) {
+function createMessageLocation(vscode, location) {
+  const parsed = parseGaugeLocation(location);
+  const uri = parsed && itemUri(vscode, location);
+  if (!parsed || !uri) {
+    return undefined;
+  }
+  const range = createRange(vscode, parsed.line);
+  return typeof vscode.Location === "function"
+    ? new vscode.Location(uri, range)
+    : { uri, range };
+}
+
+function createMessage(vscode, message, location) {
   if (typeof vscode.TestMessage === "function") {
-    return new vscode.TestMessage(message || "");
+    const testMessage = new vscode.TestMessage(message || "");
+    const resolvedLocation = createMessageLocation(vscode, location);
+    if (resolvedLocation) {
+      testMessage.location = resolvedLocation;
+    }
+    return testMessage;
   }
   return message || "";
 }
@@ -1137,7 +1154,7 @@ class GaugeTestController {
     }
     let item = this.items.get(id);
     if (!item) {
-      const uri = itemUri(this.vscode, event.location);
+      const uri = event.resultOnly ? undefined : itemUri(this.vscode, event.location);
       item = this.upsertItem(
         id,
         event.name || id,
@@ -1153,7 +1170,7 @@ class GaugeTestController {
     if (event.resultOnly) {
       this.resultOnlyItemIds.add(id);
     }
-    return applyLocation(this.vscode, item, event.location);
+    return event.resultOnly ? item : applyLocation(this.vscode, item, event.location);
   }
 
   parentIdForEvent(event) {
@@ -1195,11 +1212,19 @@ class GaugeTestController {
     const pending = this.pendingResults.get(event.id);
     this.pendingResults.delete(event.id);
     if (pending && pending.status === "errored" && typeof run.errored === "function") {
-      run.errored(item, createMessage(this.vscode, pending.message), event.duration);
+      run.errored(
+        item,
+        createMessage(this.vscode, pending.message, pending.location),
+        event.duration,
+      );
       return "errored";
     }
     if (pending && pending.status === "failed" && typeof run.failed === "function") {
-      run.failed(item, createMessage(this.vscode, pending.message), event.duration);
+      run.failed(
+        item,
+        createMessage(this.vscode, pending.message, pending.location),
+        event.duration,
+      );
       return "failed";
     }
     if (pending && pending.status === "skipped" && typeof run.skipped === "function") {
@@ -1250,6 +1275,7 @@ class GaugeTestController {
       case "testFailed": {
         const attemptEvent = this.resolveAttemptEvent(event);
         this.pendingResults.set(attemptEvent.id, {
+          location: attemptEvent.location,
           message: attemptEvent.message,
           status: "failed",
         });
@@ -1258,6 +1284,7 @@ class GaugeTestController {
       case "testErrored": {
         const attemptEvent = this.resolveAttemptEvent(event);
         this.pendingResults.set(attemptEvent.id, {
+          location: attemptEvent.location,
           message: attemptEvent.message,
           status: "errored",
         });
@@ -1266,6 +1293,7 @@ class GaugeTestController {
       case "testIgnored": {
         const attemptEvent = this.resolveAttemptEvent(event);
         this.pendingResults.set(attemptEvent.id, {
+          location: attemptEvent.location,
           message: attemptEvent.message,
           status: "skipped",
         });
