@@ -445,23 +445,39 @@ function failureMessage(label, failure) {
   return parts.join("\n");
 }
 
-function hookEvents(failure, name, idPrefix, parentId) {
+function hookEvents(failure, name, idPrefix, parentId, occurrence = 0) {
   if (!failure) {
     return [];
   }
-  const id = `${idPrefix || ""}${name}`;
+  const rowNumber = failure.tableRowIndex >= 0 ? failure.tableRowIndex + 1 : undefined;
+  const rowSuffix = rowNumber === undefined ? "" : `:row:${rowNumber}`;
+  const occurrenceSuffix = occurrence > 0 ? `:occurrence:${occurrence + 1}` : "";
+  const id = rowNumber === undefined
+    ? `${idPrefix || ""}${name}${occurrenceSuffix}`
+    : `${idPrefix || ""}::hook:${name.toLowerCase().replaceAll(" ", "-")}${rowSuffix}${occurrenceSuffix}`;
+  const displayName = rowNumber === undefined ? name : `${name} (row ${rowNumber})`;
   return [
-    { type: "testStarted", id, parentId, name, resultOnly: true },
+    { type: "testStarted", id, parentId, name: displayName, resultOnly: true },
     {
       type: "testFailed",
       id,
       parentId,
-      name,
-      message: failureMessage(name, failure),
+      name: displayName,
+      message: failureMessage(displayName, failure),
       resultOnly: true,
     },
-    { type: "testFinished", id, parentId, name, resultOnly: true },
+    { type: "testFinished", id, parentId, name: displayName, resultOnly: true },
   ];
+}
+
+function hookFailureEvents(failures, name, idPrefix, parentId) {
+  const occurrences = new Map();
+  return failures.flatMap((failure) => {
+    const rowKey = failure.tableRowIndex >= 0 ? failure.tableRowIndex : "none";
+    const occurrence = occurrences.get(rowKey) || 0;
+    occurrences.set(rowKey, occurrence + 1);
+    return hookEvents(failure, name, idPrefix, parentId, occurrence);
+  });
 }
 
 function stepFailureMessages(step, label) {
@@ -598,9 +614,12 @@ function executionEventsFromLastRunResult(buffer) {
       continue;
     }
     const filename = result.spec.filename;
-    events.push(...result.spec.beforeHooks.flatMap((failure) => (
-      hookEvents(failure, "Before Specification", filename, filename)
-    )));
+    events.push(...hookFailureEvents(
+      result.spec.beforeHooks,
+      "Before Specification",
+      filename,
+      filename,
+    ));
     let hasFailedScenario = false;
     let hasSkippedScenario = false;
     for (const item of result.spec.items) {
@@ -613,9 +632,12 @@ function executionEventsFromLastRunResult(buffer) {
       }
       events.push(...itemEvents);
     }
-    events.push(...result.spec.afterHooks.flatMap((failure) => (
-      hookEvents(failure, "After Specification", filename, filename)
-    )));
+    events.push(...hookFailureEvents(
+      result.spec.afterHooks,
+      "After Specification",
+      filename,
+      filename,
+    ));
     const hasHookFailures = result.spec.beforeHooks.length > 0
       || result.spec.afterHooks.length > 0;
     events.push(...specFallbackEvents(

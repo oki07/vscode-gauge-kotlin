@@ -268,6 +268,35 @@ test("last run result does not duplicate a specification hook failure", () => {
   ]);
 });
 
+test("last run result keeps table-driven specification hook failures distinct by row", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const filename = "/workspace/specs/table-hooks.spec";
+  const hookFailure = (rowIndex, messageText) => message(
+    fieldBytes(2, messageText),
+    fieldInt32(4, rowIndex),
+  );
+  const spec = message(
+    fieldBytes(1, "Table hooks"),
+    fieldBytes(4, hookFailure(0, "first row setup failed")),
+    fieldBytes(4, hookFailure(1, "second row setup failed")),
+    fieldBytes(6, filename),
+  );
+  const suiteResult = fieldBytes(1, message(fieldBytes(1, spec), fieldVarint(4, 1)));
+
+  const started = executionEventsFromLastRunResult(suiteResult)
+    .filter((event) => event.type === "testStarted");
+  assert.deepEqual(started.map(({ id, name }) => ({ id, name })), [
+    {
+      id: `${filename}::hook:before-specification:row:1`,
+      name: "Before Specification (row 1)",
+    },
+    {
+      id: `${filename}::hook:before-specification:row:2`,
+      name: "Before Specification (row 2)",
+    },
+  ]);
+});
+
 test("last run result preserves unexplained specification failures alongside passing scenarios", () => {
   const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
   const filename = "/workspace/specs/validation.spec";
