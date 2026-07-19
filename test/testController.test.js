@@ -1058,12 +1058,11 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
     }],
   ]);
   assert.deepEqual(calls.filter((entry) => entry[0] === "started"), []);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
-test("GaugeTestController opens native Test Output only after Gauge starts", async () => {
+test("GaugeTestController creates and opens native Test Output only after Gauge starts", async () => {
   const { GaugeTestController } = require("../src/testController");
-  const { commandCalls, vscode } = createFakeVscode();
+  const { calls, commandCalls, vscode } = createFakeVscode();
   let finishExecution;
   const execution = new Promise((resolve) => {
     finishExecution = resolve;
@@ -1082,14 +1081,37 @@ test("GaugeTestController opens native Test Output only after Gauge starts", asy
   await Promise.resolve();
 
   assert.deepEqual(commandCalls, []);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "run"), []);
 
   gaugeTests.handleExecutionEvent({ type: "processStarted" });
   gaugeTests.handleExecutionEvent({ type: "processStarted" });
 
   assert.deepEqual(commandCalls, ["testing.showMostRecentOutput"]);
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
 
   finishExecution();
   await run;
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
+test("GaugeTestController does not create an empty TestRun before Gauge starts", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, commandCalls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({
+    vscode,
+    executionController: {
+      handleCommand() {
+        return Promise.resolve(undefined);
+      },
+    },
+  });
+
+  gaugeTests.register();
+  await gaugeTests.run({});
+
+  assert.deepEqual(calls.filter((entry) => entry[0] === "run"), []);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), []);
+  assert.deepEqual(commandCalls, []);
 });
 
 test("GaugeTestController starts a targeted TestRun for CodeLens execution", async () => {
@@ -1111,11 +1133,13 @@ test("GaugeTestController starts a targeted TestRun for CodeLens execution", asy
     }
   };
   const executionCalls = [];
-  const gaugeTests = new GaugeTestController({
+  let gaugeTests;
+  gaugeTests = new GaugeTestController({
     vscode,
     executionController: {
       handleCommand(command, ...args) {
         executionCalls.push([command, ...args]);
+        gaugeTests.handleExecutionEvent({ type: "processStarted" });
         return Promise.resolve(undefined);
       },
     },
@@ -1498,7 +1522,6 @@ test("GaugeTestController debug profile runs included Gauge test items in debug 
       testUi: true,
     }],
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController uses native Gauge output for all-spec Test UI runs", async () => {
@@ -1595,7 +1618,6 @@ test("GaugeTestController registers a failed run profile for Test UI reruns", as
       testUi: true,
     }],
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController registers a repeat run profile for Test UI reruns", async () => {
@@ -1628,7 +1650,6 @@ test("GaugeTestController registers a repeat run profile for Test UI reruns", as
       testUi: true,
     }],
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController scopes failed Test UI reruns to included project roots", async () => {
@@ -1666,7 +1687,6 @@ test("GaugeTestController scopes failed Test UI reruns to included project roots
       testUi: true,
     }],
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController scopes repeat Test UI reruns to included project roots", async () => {
@@ -1704,7 +1724,6 @@ test("GaugeTestController scopes repeat Test UI reruns to included project roots
       testUi: true,
     }],
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
 });
 
 test("GaugeTestController skips project-scoped reruns resolved to non-Gauge projects", async () => {
@@ -1742,7 +1761,8 @@ test("GaugeTestController skips project-scoped reruns resolved to non-Gauge proj
   await repeatProfile[3]({ include: [draft] });
 
   assert.deepEqual(executionCalls, []);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "run"), []);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), []);
 });
 
 test("GaugeTestController debug profile debugs all specs when no tests are included", async () => {

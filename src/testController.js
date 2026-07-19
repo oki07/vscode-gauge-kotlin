@@ -886,17 +886,21 @@ class GaugeTestController {
     return (event) => this.handleExecutionEvent(event);
   }
 
-  startTestRun(request = {}) {
-    if (!this.controller || typeof this.controller.createTestRun !== "function") {
-      return undefined;
-    }
+  prepareTestRun(request = {}) {
     this.cleanupResultOnlyItems();
     this.currentRequest = request;
-    this.currentRun = this.controller.createTestRun(request);
     this.pendingResults.clear();
     this.attemptCounts.clear();
     this.activeAttemptIds.clear();
     this.testOutputShown = false;
+  }
+
+  startTestRun(request = {}) {
+    this.prepareTestRun(request);
+    if (!this.controller || typeof this.controller.createTestRun !== "function") {
+      return undefined;
+    }
+    this.currentRun = this.controller.createTestRun(request);
     return this.currentRun;
   }
 
@@ -938,7 +942,7 @@ class GaugeTestController {
   }
 
   async runWithFlags(request = {}, flags = testUiRunFlags(), token) {
-    const run = this.startTestRun(request);
+    this.prepareTestRun(request);
     const cancellation = this.registerCancellation(token);
     try {
       if (
@@ -999,6 +1003,7 @@ class GaugeTestController {
       if (cancellation && typeof cancellation.dispose === "function") {
         cancellation.dispose();
       }
+      const run = this.currentRun;
       if (run && typeof run.end === "function") {
         run.end();
       }
@@ -1019,7 +1024,7 @@ class GaugeTestController {
   }
 
   async runProjectScopedCommand(command, request = {}, token) {
-    const run = this.startTestRun(request);
+    this.prepareTestRun(request);
     const cancellation = this.registerCancellation(token);
     try {
       if (
@@ -1061,6 +1066,7 @@ class GaugeTestController {
       if (cancellation && typeof cancellation.dispose === "function") {
         cancellation.dispose();
       }
+      const run = this.currentRun;
       if (run && typeof run.end === "function") {
         run.end();
       }
@@ -1082,7 +1088,13 @@ class GaugeTestController {
 
   ensureRun() {
     if (!this.currentRun) {
-      this.startTestRun({});
+      const request = this.currentRequest || {};
+      if (this.currentRequest === undefined) {
+        this.prepareTestRun(request);
+      }
+      if (this.controller && typeof this.controller.createTestRun === "function") {
+        this.currentRun = this.controller.createTestRun(request);
+      }
     }
     return this.currentRun;
   }
