@@ -1826,9 +1826,10 @@ test("execute node resolves Windows drive-letter spec paths to the matching work
   ]);
 });
 
-test("executor rejects a new run while another run is in progress", async () => {
+test("executor stops the active run and starts the newest request", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
-  let finish;
+  const lifecycle = [];
+  const runs = [];
   const { vscode, errors } = createFakeVscode();
 
   const controller = createGaugeExecutionController({
@@ -1839,20 +1840,267 @@ test("executor rejects a new run while another run is in progress", async () => 
         return false;
       },
     },
-    runner() {
-      return new Promise((resolve) => {
+    runner(command) {
+      let finish;
+      const run = new Promise((resolve) => {
         finish = resolve;
       });
+      const record = {
+        cancelCalls: 0,
+        command,
+        finish,
+      };
+      run.cancel = () => {
+        record.cancelCalls += 1;
+        finish(false);
+      };
+      runs.push(record);
+      return run;
+    },
+  });
+
+  const firstRun = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onStart() {
+        lifecycle.push("first:start");
+      },
+      onSuperseded() {
+        lifecycle.push("first:superseded");
+      },
+    },
+    undefined,
+  );
+  await Promise.resolve();
+  const secondRun = controller.handleCommandWithMetadata(
+    "gauge.execute",
+    {
+      onStart() {
+        lifecycle.push("latest:start");
+      },
+    },
+    "/workspace/specs/latest.spec",
+  );
+
+  assert.equal(runs[0].cancelCalls, 1);
+  assert.deepEqual(lifecycle, ["first:start", "first:superseded"]);
+  assert.equal(await firstRun, false);
+  await Promise.resolve();
+  assert.equal(runs.length, 2);
+  assert.deepEqual(lifecycle, ["first:start", "first:superseded", "latest:start"]);
+  assert.equal(runs[1].command.status, "/workspace/specs/latest.spec");
+
+  runs[1].finish(true);
+
+  assert.equal(await secondRun, true);
+  assert.deepEqual(errors, []);
+});
+
+test("executor keeps only the latest request while the active run is stopping", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const runs = [];
+  const { vscode, errors } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner(command) {
+      let finish;
+      const run = new Promise((resolve) => {
+        finish = resolve;
+      });
+      const record = {
+        cancelCalls: 0,
+        command,
+        finish,
+      };
+      run.cancel = () => {
+        record.cancelCalls += 1;
+      };
+      runs.push(record);
+      return run;
     },
   });
 
   const firstRun = controller.handleCommand("gauge.execute.specification.all");
-  const secondRun = await controller.handleCommand("gauge.execute.specification.all");
-  finish(true);
-  await firstRun;
+  await Promise.resolve();
+  const supersededRun = controller.handleCommand(
+    "gauge.execute",
+    "/workspace/specs/superseded.spec",
+  );
+  const latestRun = controller.handleCommand(
+    "gauge.execute",
+    "/workspace/specs/latest.spec",
+  );
 
-  assert.equal(secondRun, undefined);
-  assert.deepEqual(errors, ["A Specification or Scenario is still running!"]);
+  assert.equal(runs[0].cancelCalls, 1);
+  assert.equal(await supersededRun, undefined);
+  assert.equal(runs.length, 1);
+
+  runs[0].finish(false);
+  assert.equal(await firstRun, false);
+  await Promise.resolve();
+
+  assert.equal(runs.length, 2);
+  assert.equal(runs[1].command.status, "/workspace/specs/latest.spec");
+  runs[1].finish(true);
+
+  assert.equal(await latestRun, true);
+  assert.deepEqual(errors, []);
+});
+
+test("executor skips a superseded run that is still preparing", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  let finishFirstSave;
+  let saveCalls = 0;
+  const firstSave = new Promise((resolve) => {
+    finishFirstSave = resolve;
+  });
+  const runnerCalls = [];
+  const { vscode, errors } = createFakeVscode({
+    saveAll() {
+      saveCalls += 1;
+      return saveCalls === 1 ? firstSave : Promise.resolve(true);
+    },
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+  });
+
+  const firstRun = controller.handleCommand("gauge.execute.specification.all");
+  await Promise.resolve();
+  const latestRun = controller.handleCommand(
+    "gauge.execute",
+    "/workspace/specs/latest.spec",
+  );
+
+  finishFirstSave(true);
+
+  assert.equal(await firstRun, undefined);
+  assert.equal(await latestRun, true);
+  assert.deepEqual(runnerCalls.map((command) => command.status), [
+    "/workspace/specs/latest.spec",
+  ]);
+  assert.deepEqual(errors, []);
+});
+
+test("executor stop command clears the pending latest request", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const runs = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    runner(command) {
+      let finish;
+      const run = new Promise((resolve) => {
+        finish = resolve;
+      });
+      run.cancel = () => {};
+      runs.push({ command, finish });
+      return run;
+    },
+  });
+
+  const firstRun = controller.handleCommand("gauge.execute.specification.all");
+  await Promise.resolve();
+  const pendingRun = controller.handleCommand(
+    "gauge.execute",
+    "/workspace/specs/pending.spec",
+  );
+
+  await controller.handleCommand("gauge.stopExecution");
+  assert.equal(await pendingRun, undefined);
+  runs[0].finish(false);
+  assert.equal(await firstRun, false);
+  await Promise.resolve();
+
+  assert.equal(runs.length, 1);
+});
+
+test("executor does not let an older resolving command replace a newer run", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  let finishOlderScenarioRequest;
+  let scenarioRequests = 0;
+  const olderScenarioRequest = new Promise((resolve) => {
+    finishOlderScenarioRequest = resolve;
+  });
+  const runs = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    scenariosProvider() {
+      scenarioRequests += 1;
+      if (scenarioRequests === 1) {
+        return olderScenarioRequest;
+      }
+      return Promise.resolve({
+        executionIdentifier: "/workspace/specs/example.spec:9",
+      });
+    },
+    runner(command) {
+      let finish;
+      const run = new Promise((resolve) => {
+        finish = resolve;
+      });
+      const record = { cancelCalls: 0, command, finish };
+      run.cancel = () => {
+        record.cancelCalls += 1;
+      };
+      runs.push(record);
+      return run;
+    },
+  });
+
+  const olderRun = controller.handleCommand("gauge.execute.scenario");
+  await Promise.resolve();
+  const latestRun = controller.handleCommand("gauge.execute.scenario");
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].command.status, "/workspace/specs/example.spec:9");
+
+  finishOlderScenarioRequest({
+    executionIdentifier: "/workspace/specs/example.spec:3",
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(runs[0].cancelCalls, 0);
+  assert.equal(await olderRun, undefined);
+  runs[0].finish(true);
+  assert.equal(await latestRun, true);
+  assert.equal(runs.length, 1);
 });
 
 test("executor shows a stop status bar item while a run is active", async () => {

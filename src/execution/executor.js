@@ -31,6 +31,8 @@ const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
 const EXECUTING_CONTEXT = "gauge:executing";
+const EXECUTION_METADATA = Symbol("executionMetadata");
+const EXECUTION_SEQUENCE = Symbol("executionSequence");
 const COMMAND_FLAG_KEYS = [
   "failed",
   "hide-suggestion",
@@ -659,11 +661,15 @@ function createGaugeExecutionController(options = {}) {
     vscode,
     gaugeHome: options.gaugeHome,
   });
-  let executing = false;
+  let activeExecutionRequest;
   let activeRun;
   let activeExecutionProjectRoot;
   let activeDebugger;
   let activeRunUserAborted = false;
+  let executionLoop;
+  let latestScheduledExecutionSequence = 0;
+  let nextExecutionSequence = 0;
+  let pendingExecutionRequest;
   let sawExecutionTestEvent = false;
   let cachedCli;
   const ownsProjectEnvironmentService = !options.projectEnvironmentService;
@@ -746,15 +752,8 @@ function createGaugeExecutionController(options = {}) {
     env: executionEnv,
   });
 
-  async function executeInProject(projectRoot, spec, flags = {}) {
-    if (executing) {
-      if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
-        await vscode.window.showErrorMessage("A Specification or Scenario is still running!");
-      }
-      return undefined;
-    }
-
-    executing = true;
+  async function runExecution(request) {
+    const { flags, projectRoot, spec } = request;
     activeExecutionProjectRoot = projectRoot;
     activeRunUserAborted = false;
     sawExecutionTestEvent = false;
@@ -770,6 +769,9 @@ function createGaugeExecutionController(options = {}) {
       if (savePromise) {
         await savePromise;
       }
+      if (request.cancelRequested) {
+        return undefined;
+      }
 
       const project = getProjectForExecution(projectFactory, projectRoot);
       const projectKind = projectKindFromProject(project)
@@ -780,6 +782,9 @@ function createGaugeExecutionController(options = {}) {
       const projectEnv = usesBuildTool
         ? await resolveBuildToolExecutionEnvironment(project, cli)
         : projectExecutionEnvironment(project, cli);
+      if (request.cancelRequested) {
+        return undefined;
+      }
       if (
         project
         && (usesBuildTool || typeof project.executionEnvs === "function")
@@ -837,14 +842,21 @@ function createGaugeExecutionController(options = {}) {
         });
         if (typeof activeDebugger.registerStopDebugger === "function") {
           activeDebugger.registerStopDebugger(() => {
-            stopExecution(false);
+            cancelExecutionRequest(request, false);
           });
         }
         command.env = await activeDebugger.addDebugEnv(command.env || executionEnv);
+        if (request.cancelRequested) {
+          return undefined;
+        }
       }
 
+      if (request.cancelRequested) {
+        return undefined;
+      }
       activeRun = runner(command);
       result = await activeRun;
+      activeRun = undefined;
       if (testUi && !activeRunUserAborted) {
         let resultEvents = [];
         try {
@@ -865,12 +877,87 @@ function createGaugeExecutionController(options = {}) {
     } finally {
       await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
       await setExecutingContext(vscode, false);
-      executing = false;
       activeExecutionProjectRoot = undefined;
       activeRun = undefined;
       activeDebugger = undefined;
       activeRunUserAborted = false;
     }
+  }
+
+  function settleExecutionRequest(request, method, value) {
+    if (!request || request.settled) {
+      return;
+    }
+    request.settled = true;
+    request[method](value);
+  }
+
+  function notifyExecutionRequest(request, event) {
+    const callback = request && request.metadata && request.metadata[event];
+    if (typeof callback === "function") {
+      callback();
+    }
+  }
+
+  function replacePendingExecution(request) {
+    if (pendingExecutionRequest) {
+      notifyExecutionRequest(pendingExecutionRequest, "onSuperseded");
+      settleExecutionRequest(pendingExecutionRequest, "resolve", undefined);
+    }
+    pendingExecutionRequest = request;
+  }
+
+  async function drainExecutionRequests() {
+    while (pendingExecutionRequest) {
+      const request = pendingExecutionRequest;
+      pendingExecutionRequest = undefined;
+      activeExecutionRequest = request;
+      try {
+        notifyExecutionRequest(request, "onStart");
+        const result = await runExecution(request);
+        settleExecutionRequest(request, "resolve", result);
+      } catch (error) {
+        settleExecutionRequest(request, "reject", error);
+      } finally {
+        if (activeExecutionRequest === request) {
+          activeExecutionRequest = undefined;
+        }
+      }
+      await Promise.resolve();
+    }
+    executionLoop = undefined;
+  }
+
+  function executeInProject(projectRoot, spec, flags = {}) {
+    const sequence = Number.isSafeInteger(flags[EXECUTION_SEQUENCE])
+      ? flags[EXECUTION_SEQUENCE]
+      : ++nextExecutionSequence;
+    if (sequence < latestScheduledExecutionSequence) {
+      notifyExecutionRequest({ metadata: flags[EXECUTION_METADATA] }, "onSuperseded");
+      return Promise.resolve(undefined);
+    }
+    latestScheduledExecutionSequence = sequence;
+    const execution = new Promise((resolve, reject) => {
+      const request = {
+        cancelRequested: false,
+        flags,
+        metadata: flags[EXECUTION_METADATA],
+        projectRoot,
+        reject,
+        resolve,
+        sequence,
+        settled: false,
+        spec,
+      };
+      replacePendingExecution(request);
+      if (activeExecutionRequest) {
+        cancelActiveExecution(true, "onSuperseded");
+      }
+      if (!executionLoop) {
+        executionLoop = drainExecutionRequests();
+      }
+    });
+    return execution;
   }
 
   function getActiveSpecificationContext(kind) {
@@ -1144,28 +1231,51 @@ function createGaugeExecutionController(options = {}) {
     return chooseAndExecuteScenario(scenarios, flags);
   }
 
-  async function stopExecution(aborted = true) {
-    if (activeRun && typeof activeRun.cancel === "function") {
-      try {
-        activeRunUserAborted = Boolean(aborted);
-        if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
-          activeDebugger.stopDebugger();
-        }
+  function cancelExecutionRequest(request, aborted = true, notification = "onCancelled") {
+    if (
+      !request
+      || activeExecutionRequest !== request
+      || request.cancelRequested
+    ) {
+      return undefined;
+    }
+    request.cancelRequested = true;
+    notifyExecutionRequest(request, notification);
+    activeRunUserAborted = Boolean(aborted);
+    try {
+      if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
+        activeDebugger.stopDebugger();
+      }
+      if (activeRun && typeof activeRun.cancel === "function") {
         return activeRun.cancel(aborted);
-      } catch (error) {
-        if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
-          return vscode.window.showErrorMessage(`Failed to Stop Run: ${error.message}`);
-        }
+      }
+    } catch (error) {
+      if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
+        return vscode.window.showErrorMessage(`Failed to Stop Run: ${error.message}`);
       }
     }
     return undefined;
   }
 
+  function cancelActiveExecution(aborted = true, notification = "onCancelled") {
+    return cancelExecutionRequest(activeExecutionRequest, aborted, notification);
+  }
+
+  async function stopExecution(aborted = true) {
+    latestScheduledExecutionSequence = ++nextExecutionSequence;
+    if (pendingExecutionRequest) {
+      notifyExecutionRequest(pendingExecutionRequest, "onCancelled");
+      settleExecutionRequest(pendingExecutionRequest, "resolve", undefined);
+      pendingExecutionRequest = undefined;
+    }
+    return cancelActiveExecution(aborted);
+  }
+
   lineProcessors = [
     new MachineReadableEventProcessor(emitExecutionEvent, () => activeExecutionProjectRoot),
     new ReportEventProcessor({ setReportPath }),
-    new DebuggerAttachedEventProcessor({ cancel: stopExecution }, vscode),
-    new DebuggerNotAttachedEventProcessor({ cancel: stopExecution }, vscode),
+    new DebuggerAttachedEventProcessor({ cancel: cancelActiveExecution }, vscode),
+    new DebuggerNotAttachedEventProcessor({ cancel: cancelActiveExecution }, vscode),
   ];
 
   async function openReport() {
@@ -1243,7 +1353,13 @@ function createGaugeExecutionController(options = {}) {
   function handleCommand(command, argument, flagsOrSelectedResources = {}, maybeFlags = {}) {
     const hasSelectedResources = Array.isArray(flagsOrSelectedResources);
     const selectedResources = hasSelectedResources ? flagsOrSelectedResources : undefined;
-    const flags = hasSelectedResources ? maybeFlags : flagsOrSelectedResources;
+    const suppliedFlags = hasSelectedResources ? maybeFlags : flagsOrSelectedResources;
+    const startsExecution = EXECUTION_COMMANDS.has(command)
+      && command !== SHOW_REPORT_COMMAND
+      && command !== STOP_EXECUTION_COMMAND;
+    const flags = startsExecution
+      ? { ...suppliedFlags, [EXECUTION_SEQUENCE]: ++nextExecutionSequence }
+      : suppliedFlags;
     switch (command) {
       case "gauge.execute":
         return executeCodeLensTarget(argument, flags);
@@ -1287,6 +1403,27 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
+  function handleCommandWithMetadata(
+    command,
+    metadata,
+    argument,
+    flagsOrSelectedResources = {},
+    maybeFlags = {},
+  ) {
+    if (Array.isArray(flagsOrSelectedResources)) {
+      return handleCommand(
+        command,
+        argument,
+        flagsOrSelectedResources,
+        { ...maybeFlags, [EXECUTION_METADATA]: metadata },
+      );
+    }
+    return handleCommand(command, argument, {
+      ...flagsOrSelectedResources,
+      [EXECUTION_METADATA]: metadata,
+    });
+  }
+
   return {
     executeActiveSpecification,
     executeAllSpecifications,
@@ -1304,6 +1441,7 @@ function createGaugeExecutionController(options = {}) {
     },
     getReportPath,
     handleCommand,
+    handleCommandWithMetadata,
     openReport,
     processOutputLine,
     repeatExecution,

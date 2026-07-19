@@ -442,6 +442,7 @@ class GaugeTestController {
       DEFAULT_SCENARIO_REQUEST_CONCURRENCY,
     );
     this.controller = undefined;
+    this.activeRunContext = undefined;
     this.currentRun = undefined;
     this.currentRequest = undefined;
     this.testOutputShown = false;
@@ -847,6 +848,74 @@ class GaugeTestController {
     this.executionController = executionController;
   }
 
+  createRunContext(request) {
+    const context = {
+      cancelled: false,
+      ended: false,
+      request,
+      run: undefined,
+    };
+    context.metadata = {
+      onCancelled: () => {
+        context.cancelled = true;
+      },
+      onStart: () => {
+        this.activateRunContext(context);
+      },
+      onSuperseded: () => {
+        context.cancelled = true;
+      },
+    };
+    return context;
+  }
+
+  activateRunContext(context) {
+    if (!context || context.ended || this.activeRunContext === context) {
+      return;
+    }
+    if (this.activeRunContext) {
+      this.finishRunContext(this.activeRunContext);
+    }
+    this.activeRunContext = context;
+    this.prepareTestRun(context.request);
+    this.currentRun = context.run;
+  }
+
+  finishRunContext(context) {
+    if (!context || context.ended) {
+      return;
+    }
+    context.ended = true;
+    if (context.run && typeof context.run.end === "function") {
+      context.run.end();
+    }
+    if (this.activeRunContext === context) {
+      this.cleanupResultOnlyItems();
+      this.activeRunContext = undefined;
+      this.currentRun = undefined;
+      this.currentRequest = undefined;
+    }
+  }
+
+  handleExecutionCommand(context, command, ...args) {
+    if (!this.executionController) {
+      return undefined;
+    }
+    if (typeof this.executionController.handleCommandWithMetadata === "function") {
+      return this.executionController.handleCommandWithMetadata(
+        command,
+        context.metadata,
+        ...args,
+      );
+    }
+    this.activateRunContext(context);
+    return this.executionController.handleCommand(command, ...args);
+  }
+
+  runContextCancelled(context, token) {
+    return context.cancelled || cancellationRequested(token);
+  }
+
   testItemForTarget(target) {
     const existing = this.items.get(target);
     if (existing) {
@@ -930,42 +999,53 @@ class GaugeTestController {
     Promise.resolve(this.executionController.handleCommand("gauge.stopExecution")).catch(() => {});
   }
 
-  registerCancellation(token) {
+  registerCancellation(token, context) {
     if (!token || typeof token.onCancellationRequested !== "function") {
       return undefined;
     }
-    const disposable = token.onCancellationRequested(() => this.stopExecution());
-    if (token.isCancellationRequested) {
+    const cancel = () => {
+      if (context) {
+        context.cancelled = true;
+      }
       this.stopExecution();
+    };
+    const disposable = token.onCancellationRequested(cancel);
+    if (token.isCancellationRequested) {
+      cancel();
     }
     return disposable;
   }
 
   async runWithFlags(request = {}, flags = testUiRunFlags(), token) {
-    this.prepareTestRun(request);
-    const cancellation = this.registerCancellation(token);
+    const context = this.createRunContext(request);
+    const cancellation = this.registerCancellation(token, context);
     try {
       if (
         this.executionController
-        && typeof this.executionController.handleCommand === "function"
-        && !cancellationRequested(token)
+        && (
+          typeof this.executionController.handleCommand === "function"
+          || typeof this.executionController.handleCommandWithMetadata === "function"
+        )
+        && !this.runContextCancelled(context, token)
       ) {
         const targets = executionTargetsForRequest(this.controller, request);
         if (targets === undefined) {
           const projectRoots = knownProjectRoots(this.clientsMap);
           if (projectRoots.length > 0) {
             for (const projectRoot of projectRoots) {
-              if (cancellationRequested(token)) {
+              if (this.runContextCancelled(context, token)) {
                 break;
               }
-              await this.executionController.handleCommand(
+              await this.handleExecutionCommand(
+                context,
                 "gauge.specexplorer.runAllActiveProjectSpecs",
                 { projectRoot },
                 flags,
               );
             }
           } else {
-            await this.executionController.handleCommand(
+            await this.handleExecutionCommand(
+              context,
               "gauge.execute.specification.all",
               undefined,
               flags,
@@ -979,10 +1059,11 @@ class GaugeTestController {
           }
           if (canBatchSpecificationTargets(runnableTargets)) {
             for (const group of targetGroups) {
-              if (cancellationRequested(token)) {
+              if (this.runContextCancelled(context, token)) {
                 break;
               }
-              await this.executionController.handleCommand(
+              await this.handleExecutionCommand(
+                context,
                 "gauge.execute.specification",
                 undefined,
                 group.targets,
@@ -991,10 +1072,15 @@ class GaugeTestController {
             }
           } else {
             for (const target of runnableTargets) {
-              if (cancellationRequested(token)) {
+              if (this.runContextCancelled(context, token)) {
                 break;
               }
-              await this.executionController.handleCommand("gauge.execute", target, flags);
+              await this.handleExecutionCommand(
+                context,
+                "gauge.execute",
+                target,
+                flags,
+              );
             }
           }
         }
@@ -1003,15 +1089,7 @@ class GaugeTestController {
       if (cancellation && typeof cancellation.dispose === "function") {
         cancellation.dispose();
       }
-      const run = this.currentRun;
-      if (run && typeof run.end === "function") {
-        run.end();
-      }
-      this.cleanupResultOnlyItems();
-      if (this.currentRun === run) {
-        this.currentRun = undefined;
-        this.currentRequest = undefined;
-      }
+      this.finishRunContext(context);
     }
   }
 
@@ -1024,13 +1102,16 @@ class GaugeTestController {
   }
 
   async runProjectScopedCommand(command, request = {}, token) {
-    this.prepareTestRun(request);
-    const cancellation = this.registerCancellation(token);
+    const context = this.createRunContext(request);
+    const cancellation = this.registerCancellation(token, context);
     try {
       if (
         this.executionController
-        && typeof this.executionController.handleCommand === "function"
-        && !cancellationRequested(token)
+        && (
+          typeof this.executionController.handleCommand === "function"
+          || typeof this.executionController.handleCommandWithMetadata === "function"
+        )
+        && !this.runContextCancelled(context, token)
       ) {
         const flags = testUiRunFlags();
         const targets = executionTargetsForRequest(this.controller, request);
@@ -1045,17 +1126,19 @@ class GaugeTestController {
           : projectRootsForGroups(targetGroups);
         if (projectRoots.length > 0) {
           for (const projectRoot of projectRoots) {
-            if (cancellationRequested(token)) {
+            if (this.runContextCancelled(context, token)) {
               break;
             }
-            await this.executionController.handleCommand(
+            await this.handleExecutionCommand(
+              context,
               command,
               { projectRoot },
               flags,
             );
           }
         } else {
-          await this.executionController.handleCommand(
+          await this.handleExecutionCommand(
+            context,
             command,
             undefined,
             flags,
@@ -1066,15 +1149,7 @@ class GaugeTestController {
       if (cancellation && typeof cancellation.dispose === "function") {
         cancellation.dispose();
       }
-      const run = this.currentRun;
-      if (run && typeof run.end === "function") {
-        run.end();
-      }
-      this.cleanupResultOnlyItems();
-      if (this.currentRun === run) {
-        this.currentRun = undefined;
-        this.currentRequest = undefined;
-      }
+      this.finishRunContext(context);
     }
   }
 
@@ -1094,6 +1169,9 @@ class GaugeTestController {
       }
       if (this.controller && typeof this.controller.createTestRun === "function") {
         this.currentRun = this.controller.createTestRun(request);
+        if (this.activeRunContext) {
+          this.activeRunContext.run = this.currentRun;
+        }
       }
     }
     return this.currentRun;

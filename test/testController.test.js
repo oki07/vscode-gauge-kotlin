@@ -1114,6 +1114,93 @@ test("GaugeTestController does not create an empty TestRun before Gauge starts",
   assert.deepEqual(commandCalls, []);
 });
 
+test("GaugeTestController creates TestRuns only for requests selected by the execution scheduler", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const scheduled = [];
+  let active;
+  let pending;
+  let gaugeTests;
+  const start = (entry) => {
+    active = entry;
+    entry.metadata.onStart();
+  };
+  const executionController = {
+    handleCommand() {
+      return Promise.resolve(undefined);
+    },
+    handleCommandWithMetadata(command, metadata, ...args) {
+      return new Promise((resolve) => {
+        const entry = { args, command, metadata, resolve };
+        scheduled.push(entry);
+        if (!active) {
+          start(entry);
+          return;
+        }
+        active.metadata.onSuperseded();
+        if (pending) {
+          pending.metadata.onSuperseded();
+          pending.resolve(undefined);
+        }
+        pending = entry;
+      });
+    },
+  };
+  gaugeTests = new GaugeTestController({ vscode, executionController });
+  gaugeTests.register();
+  const firstItem = controller.createTestItem(
+    "/workspace/specs/first.spec:3",
+    "First",
+    { fsPath: "/workspace/specs/first.spec" },
+  );
+  const supersededItem = controller.createTestItem(
+    "/workspace/specs/superseded.spec:3",
+    "Superseded",
+    { fsPath: "/workspace/specs/superseded.spec" },
+  );
+  const latestItem = controller.createTestItem(
+    "/workspace/specs/latest.spec:3",
+    "Latest",
+    { fsPath: "/workspace/specs/latest.spec" },
+  );
+  const firstRequest = { include: [firstItem] };
+  const supersededRequest = { include: [supersededItem] };
+  const latestRequest = { include: [latestItem] };
+
+  const firstRun = gaugeTests.run(firstRequest);
+  await Promise.resolve();
+  assert.equal(scheduled.length, 1);
+  gaugeTests.handleExecutionEvent({ type: "processStarted" });
+
+  const supersededRun = gaugeTests.run(supersededRequest);
+  const latestRun = gaugeTests.run(latestRequest);
+  await Promise.resolve();
+
+  assert.equal(scheduled.length, 3);
+  assert.equal(await supersededRun, undefined);
+
+  active.resolve(false);
+  active = undefined;
+  await firstRun;
+  await Promise.resolve();
+  const next = pending;
+  pending = undefined;
+  start(next);
+  gaugeTests.handleExecutionEvent({ type: "processStarted" });
+  active.resolve(true);
+  active = undefined;
+  await latestRun;
+
+  assert.deepEqual(calls.filter((entry) => entry[0] === "run"), [
+    ["run", firstRequest],
+    ["run", latestRequest],
+  ]);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [
+    ["end"],
+    ["end"],
+  ]);
+});
+
 test("GaugeTestController starts a targeted TestRun for CodeLens execution", async () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([
