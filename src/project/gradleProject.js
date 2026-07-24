@@ -4,6 +4,7 @@ const { Command } = require("../cli");
 const { BuildToolProject } = require("./buildToolProject");
 
 const GRADLE_COMMAND = "gradle";
+const GRADLE_CLASSPATH_ARGS = "-q classpath --rerun";
 const GRADLE_WRAPPER_FILES = ["gradlew", "gradlew.bat", "gradlew.cmd"];
 
 function systemGradleCommand() {
@@ -14,6 +15,14 @@ function systemGradleCommand() {
 }
 
 class GradleProject extends BuildToolProject {
+  classpathFromOutput(output) {
+    return output.toString()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(this.classpathDelimiter);
+  }
+
   getBuildCommand(cli) {
     if (this.hasGradleWrapper()) {
       return cli.gradleCommand();
@@ -39,17 +48,17 @@ class GradleProject extends BuildToolProject {
   }
 
   envs(cli) {
-    return this.classpathEnv(this.getBuildCommand(cli), "-q classpath");
+    return this.classpathEnv(this.getBuildCommand(cli), GRADLE_CLASSPATH_ARGS);
   }
 
   envsAsync(cli) {
-    return this.classpathEnvAsync(this.getBuildCommand(cli), "-q classpath");
+    return this.classpathEnvAsync(this.getBuildCommand(cli), GRADLE_CLASSPATH_ARGS);
   }
 
   executionEnvs(cli) {
     return this.classpathEnv(
       this.getBuildCommand(cli),
-      "-q testClasses classpath",
+      "-q testClasses classpath --rerun",
     );
   }
 
@@ -62,7 +71,7 @@ class GradleProject extends BuildToolProject {
   }
 
   executionClasspathArgs() {
-    return "-q classpath";
+    return GRADLE_CLASSPATH_ARGS;
   }
 }
 

@@ -331,10 +331,50 @@ test("GradleProject returns Gauge custom classpath environment", () => {
   });
   assert.deepEqual(calls, [
     {
-      command: "gradle -q classpath",
+      command: "gradle -q classpath --rerun",
       options: { cwd: "/workspace/gauge" },
     },
   ]);
+});
+
+test("GradleProject joins multi-project Gauge classpaths", () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync() {
+      return Buffer.from([
+        "/workspace/gauge/build/classes/kotlin/test:/workspace/gauge/build/resources/test",
+        "/workspace/gauge/fixtures/build/classes/kotlin/test:/workspace/gauge/fixtures/build/resources/test",
+        "",
+      ].join("\n"));
+    },
+    pathModule: path.posix,
+  });
+
+  assert.deepEqual(project.envs({
+    gradleCommand() {
+      return { command: "gradle" };
+    },
+  }), {
+    gauge_custom_classpath: [
+      "/workspace/gauge/build/classes/kotlin/test",
+      "/workspace/gauge/build/resources/test",
+      "/workspace/gauge/fixtures/build/classes/kotlin/test",
+      "/workspace/gauge/fixtures/build/resources/test",
+    ].join(path.posix.delimiter),
+  });
+});
+
+test("GradleProject reruns the classpath reporting task", () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  });
+
+  assert.equal(project.executionClasspathArgs(), "-q classpath --rerun");
 });
 
 test("GradleProject prepares Kotlin classes for direct Gauge execution", () => {
@@ -372,7 +412,7 @@ test("GradleProject prepares Kotlin classes for direct Gauge execution", () => {
   });
   assert.deepEqual(calls, [
     {
-      command: "./gradlew -q testClasses classpath",
+      command: "./gradlew -q testClasses classpath --rerun",
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -492,7 +532,7 @@ test("GradleProject resolves its classpath asynchronously without execSync", asy
   const { GradleProject } = require("../src/project/gradleProject");
   const project = new GradleProject("/workspace/gauge", { Language: "kotlin" }, {
     exec(command, options, callback) {
-      assert.equal(command, "gradle -q classpath");
+      assert.equal(command, "gradle -q classpath --rerun");
       assert.equal(options.cwd, "/workspace/gauge");
       callback(undefined, Buffer.from("/workspace/classes"));
     },

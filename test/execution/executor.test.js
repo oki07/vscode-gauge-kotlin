@@ -802,7 +802,7 @@ test("execute specification resolves the project root from the active Gauge file
       options: { cwd: "/outside/gauge" },
     },
     {
-      command: "gradle -q classpath",
+      command: "gradle -q classpath --rerun",
       options: { cwd: "/outside/gauge" },
     },
   ]);
@@ -2847,7 +2847,7 @@ test("execute Kotlin Gradle scenario prepares classes and runs Gauge directly", 
       options: { cwd: "/workspace" },
     },
     {
-      command: "./gradlew -q classpath",
+      command: "./gradlew -q classpath --rerun",
       options: { cwd: "/workspace" },
     },
   ]);
