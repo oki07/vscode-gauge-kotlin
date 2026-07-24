@@ -1,0 +1,2 @@
+rootProject.name = 'selected-scenario-lifecycle'
+include 'hooks'

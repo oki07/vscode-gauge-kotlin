@@ -1,0 +1,6 @@
+.gauge/
+.gradle/
+build/
+hooks/build/
+logs/
+reports/
