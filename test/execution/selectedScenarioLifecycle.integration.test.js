@@ -290,3 +290,26 @@ test("selected scenario preserves context and teardown lifecycle branches", {
     assert.deepEqual(events, lifecycleCase.expected);
   }
 });
+
+test("selected scenario initializes Gauge Java data stores before matching hooks", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const { events, result } = executeLifecycleFixture({
+    lifecycleCase: "data-stores",
+    scenarioHeading: "## Selected data store scenario",
+    specificationName: "data-store-lifecycle.spec",
+  });
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, commandOutput(result));
+  assert.deepEqual(events, [
+    "BeforeSuite:suite=null,spec=null,scenario=null",
+    "BeforeSpec:suite=suite,spec=null,scenario=suite-stale",
+    "BeforeScenario:suite=suite,spec=spec,scenario=null",
+    "Step:suite=suite,spec=spec,scenario=scenario",
+    "AfterScenario:suite=suite,spec=spec,scenario=scenario",
+    "AfterSpec:suite=suite,spec=spec,scenario=scenario",
+    "AfterSuite:suite=suite,spec=spec,scenario=scenario",
+  ]);
+});
