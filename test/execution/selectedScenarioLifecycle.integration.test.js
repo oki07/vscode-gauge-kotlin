@@ -75,6 +75,7 @@ function commandOutput(result) {
 function executeLifecycleFixture({
   additionalSpecificationNames = [],
   clearStateLevel,
+  environment = {},
   lifecycleCase = "baseline",
   scenarioHeading = "## Selected scenario",
   specificationName = "lifecycle.spec",
@@ -144,6 +145,7 @@ function executeLifecycleFixture({
         ...executionEnvironment,
         GAUGE_LIFECYCLE_CASE: lifecycleCase,
         GAUGE_LIFECYCLE_LOG: lifecycleLog,
+        ...environment,
       },
       timeout: 60_000,
     });
@@ -517,5 +519,61 @@ test("Gauge Java clears fixture instances at configured scenario and spec bounda
     assert.ifError(result.error);
     assert.equal(result.status, 0, commandOutput(result));
     assert.deepEqual(events, lifecycleCase.expected);
+  }
+});
+
+test("parallel Gauge Java execution preserves process and multithreaded suite lifecycles", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const cases = [
+    {
+      lifecycleCase: "parallel-process",
+      environment: { enable_multithreading: "false" },
+      expectedSuiteCount: 2,
+      expectedSuiteProcesses: 2,
+    },
+    {
+      lifecycleCase: "parallel-thread",
+      environment: { enable_multithreading: "true" },
+      expectedSuiteCount: 1,
+      expectedSuiteProcesses: 1,
+    },
+  ];
+
+  for (const lifecycleCase of cases) {
+    const { events, result } = executeLifecycleFixture({
+      ...lifecycleCase,
+      scenarioHeading: null,
+      specificationName: "parallel-one.spec",
+      additionalSpecificationNames: ["parallel-two.spec"],
+      gaugeArguments: ["--parallel", "-n", "2", "--strategy", "eager"],
+    });
+
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, commandOutput(result));
+
+    const eventsFor = (phase) => events.filter((event) => event.startsWith(`${phase}:`));
+    const processIds = (phase) => new Set(eventsFor(phase).map((event) => (
+      event.slice(event.lastIndexOf("@") + 1)
+    )));
+    assert.equal(eventsFor("BeforeSuite").length, lifecycleCase.expectedSuiteCount);
+    assert.equal(eventsFor("AfterSuite").length, lifecycleCase.expectedSuiteCount);
+    assert.equal(processIds("BeforeSuite").size, lifecycleCase.expectedSuiteProcesses);
+    assert.deepEqual(processIds("AfterSuite"), processIds("BeforeSuite"));
+    assert.deepEqual(
+      eventsFor("BeforeSpec").map((event) => event.slice(0, event.lastIndexOf("@"))).sort(),
+      [
+        "BeforeSpec:First parallel lifecycle",
+        "BeforeSpec:Second parallel lifecycle",
+      ],
+    );
+    assert.equal(eventsFor("AfterSpec").length, 2);
+    assert.equal(eventsFor("BeforeScenario").length, 2);
+    assert.equal(eventsFor("AfterScenario").length, 2);
+    assert.deepEqual(
+      eventsFor("Step").map((event) => event.slice(0, event.lastIndexOf("@"))).sort(),
+      ["Step:one", "Step:two"],
+    );
   }
 });
