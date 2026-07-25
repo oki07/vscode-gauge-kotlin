@@ -395,3 +395,61 @@ test("selected scenario repeats Gauge Java lifecycle for data table rows", {
     assert.deepEqual(events, lifecycleCase.expected);
   }
 });
+
+test("selected scenario repeats Gauge Java scenario lifecycle for retries", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const attempt = (number) => [
+    "BeforeScenario:scenario=null",
+    "BeforeStep:Prepare the retry fixture.",
+    "Context",
+    "AfterStep:Prepare the retry fixture.",
+    "BeforeStep:Run the retry fixture.",
+    `Step:attempt-${number}`,
+    "AfterStep:Run the retry fixture.",
+    "BeforeStep:Clean the retry fixture.",
+    "Teardown",
+    "AfterStep:Clean the retry fixture.",
+    "AfterScenario:scenario=set",
+  ];
+  const cases = [
+    {
+      lifecycleCase: "retry-match",
+      gaugeArguments: ["--max-retries-count", "2", "--retry-only", "retry-tag"],
+      expectedStatus: 0,
+      expected: [
+        "BeforeSuite",
+        "BeforeSpec",
+        ...attempt(1),
+        ...attempt(2),
+        "AfterSpec",
+        "AfterSuite",
+      ],
+    },
+    {
+      lifecycleCase: "retry-nonmatch",
+      gaugeArguments: ["--max-retries-count", "2", "--retry-only", "missing-tag"],
+      expectedStatus: 1,
+      expected: [
+        "BeforeSuite",
+        "BeforeSpec",
+        ...attempt(1),
+        "AfterSpec",
+        "AfterSuite",
+      ],
+    },
+  ];
+
+  for (const lifecycleCase of cases) {
+    const { events, result } = executeLifecycleFixture({
+      ...lifecycleCase,
+      scenarioHeading: "## Selected retry scenario",
+      specificationName: "retry-lifecycle.spec",
+    });
+
+    assert.ifError(result.error);
+    assert.equal(result.status, lifecycleCase.expectedStatus, commandOutput(result));
+    assert.deepEqual(events, lifecycleCase.expected);
+  }
+});
