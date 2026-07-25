@@ -577,3 +577,27 @@ test("parallel Gauge Java execution preserves process and multithreaded suite li
     );
   }
 });
+
+test("selected concept executes Gauge Java step hooks for each leaf step", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const { events, result } = executeLifecycleFixture({
+    lifecycleCase: "concept-leaves",
+    scenarioHeading: "## Selected concept scenario",
+    specificationName: "concept-lifecycle.spec",
+  });
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, commandOutput(result));
+  assert.deepEqual(events, [
+    "BeforeScenario",
+    "BeforeStep:Record concept leaf one.",
+    "Leaf:one",
+    "AfterStep:Record concept leaf one.",
+    "BeforeStep:Record concept leaf two.",
+    "Leaf:two",
+    "AfterStep:Record concept leaf two.",
+    "AfterScenario",
+  ]);
+});
