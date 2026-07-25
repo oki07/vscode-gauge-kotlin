@@ -26,9 +26,41 @@ const expectedLifecycle = [
   "AfterSuite",
 ];
 
-function selectedScenarioLine(specification) {
+const expectedTaggedLifecycle = [
+  "aBeforeSuite",
+  "zBeforeSuite",
+  "BeforeSpecContext:Selected tagged lifecycle",
+  "zBeforeSpec",
+  "bTaggedBeforeSpec",
+  "yTaggedBeforeSpec",
+  "BeforeScenarioContext:Selected tagged scenario",
+  "zBeforeScenario",
+  "bAndBeforeScenario",
+  "cOrBeforeScenario",
+  "BeforeStepContext:Record the tagged lifecycle.",
+  "zBeforeStep",
+  "bAndBeforeStep",
+  "cOrBeforeStep",
+  "TaggedStep",
+  "cOrAfterStep",
+  "bAndAfterStep",
+  "zAfterStep",
+  "AfterStepContext:Record the tagged lifecycle.",
+  "cOrAfterScenario",
+  "bAndAfterScenario",
+  "zAfterScenario",
+  "AfterScenarioContext:Selected tagged scenario",
+  "yTaggedAfterSpec",
+  "bTaggedAfterSpec",
+  "zAfterSpec",
+  "AfterSpecContext:Selected tagged lifecycle",
+  "zAfterSuite",
+  "aAfterSuite",
+];
+
+function selectedScenarioLine(specification, scenarioHeading = "## Selected scenario") {
   const lines = fs.readFileSync(specification, "utf8").split(/\r?\n/);
-  const index = lines.indexOf("## Selected scenario");
+  const index = lines.indexOf(scenarioHeading);
   assert.notEqual(index, -1, "Selected scenario heading is missing.");
   return index + 1;
 }
@@ -40,10 +72,12 @@ function commandOutput(result) {
     .trim();
 }
 
-test("selected Gradle scenario executes every Gauge lifecycle hook in order", {
-  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
-  timeout: 180_000,
-}, () => {
+function executeLifecycleFixture({
+  lifecycleCase = "baseline",
+  scenarioHeading = "## Selected scenario",
+  specificationName = "lifecycle.spec",
+  gaugeArguments = [],
+} = {}) {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-lifecycle-"));
   const projectRoot = path.join(temporaryRoot, "project");
   const lifecycleLog = path.join(temporaryRoot, "lifecycle.log");
@@ -71,12 +105,16 @@ test("selected Gradle scenario executes every Gauge lifecycle hook in order", {
       /hooks[/\\]build[/\\]classes[/\\]java[/\\]test/,
     );
 
-    const specification = path.join(projectRoot, "specs", "lifecycle.spec");
-    const selector = `${specification}:${selectedScenarioLine(specification)}`;
+    const specification = path.join(projectRoot, "specs", specificationName);
+    const selector = `${specification}:${selectedScenarioLine(
+      specification,
+      scenarioHeading,
+    )}`;
     const result = childProcess.spawnSync(gaugeCommand, [
       "run",
       "--hide-suggestion",
       "--simple-console",
+      ...gaugeArguments,
       selector,
     ], {
       cwd: projectRoot,
@@ -84,18 +122,45 @@ test("selected Gradle scenario executes every Gauge lifecycle hook in order", {
       env: {
         ...process.env,
         ...executionEnvironment,
+        GAUGE_LIFECYCLE_CASE: lifecycleCase,
         GAUGE_LIFECYCLE_LOG: lifecycleLog,
       },
       timeout: 60_000,
     });
 
-    assert.ifError(result.error);
-    assert.equal(result.status, 0, commandOutput(result));
-    assert.deepEqual(
-      fs.readFileSync(lifecycleLog, "utf8").trim().split(/\r?\n/),
-      expectedLifecycle,
-    );
+    return {
+      events: fs.existsSync(lifecycleLog)
+        ? fs.readFileSync(lifecycleLog, "utf8").trim().split(/\r?\n/).filter(Boolean)
+        : [],
+      result,
+    };
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }
+}
+
+test("selected Gradle scenario executes every Gauge lifecycle hook in order", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const { events, result } = executeLifecycleFixture();
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, commandOutput(result));
+  assert.deepEqual(events, expectedLifecycle);
+});
+
+test("selected scenario preserves Gauge Java tagged hook order and execution context", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const { events, result } = executeLifecycleFixture({
+    lifecycleCase: "tagged-order",
+    scenarioHeading: "## Selected tagged scenario",
+    specificationName: "tagged-lifecycle.spec",
+  });
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, commandOutput(result));
+  assert.deepEqual(events, expectedTaggedLifecycle);
 });

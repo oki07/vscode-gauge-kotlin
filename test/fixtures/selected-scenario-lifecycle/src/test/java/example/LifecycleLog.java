@@ -11,6 +11,7 @@ import java.util.Collections;
 final class LifecycleLog {
 
     private static final String LOG_ENVIRONMENT_VARIABLE = "GAUGE_LIFECYCLE_LOG";
+    private static final String CASE_ENVIRONMENT_VARIABLE = "GAUGE_LIFECYCLE_CASE";
 
     private LifecycleLog() {
     }
@@ -27,6 +28,14 @@ final class LifecycleLog {
         } catch (IOException error) {
             throw new IllegalStateException("Cannot append to the lifecycle log.", error);
         }
+    }
+
+    static boolean isCase(String expected) {
+        String lifecycleCase = System.getenv(CASE_ENVIRONMENT_VARIABLE);
+        if (lifecycleCase == null || lifecycleCase.trim().isEmpty()) {
+            lifecycleCase = "baseline";
+        }
+        return expected.equals(lifecycleCase);
     }
 
     private static Path logPath() {
