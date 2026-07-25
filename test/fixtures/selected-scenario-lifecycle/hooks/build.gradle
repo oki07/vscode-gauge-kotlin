@@ -8,7 +8,7 @@ repositories {
 }
 
 dependencies {
-    testImplementation 'com.thoughtworks.gauge:gauge-java:0.7.15'
+    testImplementation 'com.thoughtworks.gauge:gauge-java:1.0.1'
 }
 
 sourceCompatibility = 1.8

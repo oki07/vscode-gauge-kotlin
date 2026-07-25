@@ -313,3 +313,30 @@ test("selected scenario initializes Gauge Java data stores before matching hooks
     "AfterSuite:suite=suite,spec=spec,scenario=scenario",
   ]);
 });
+
+test("selected scenario preserves Gauge Java step skip cleanup lifecycle", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const { events, result } = executeLifecycleFixture({
+    lifecycleCase: "skip-step",
+    scenarioHeading: "## Selected skip scenario",
+    specificationName: "skip-lifecycle.spec",
+  });
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, commandOutput(result));
+  assert.deepEqual(events, [
+    "BeforeScenario",
+    "BeforeStep:Prepare the skip fixture.",
+    "Context",
+    "AfterStep:Prepare the skip fixture.",
+    "BeforeStep:Skip the selected scenario.",
+    "Step:skip",
+    "AfterStep:Skip the selected scenario.",
+    "BeforeStep:Clean the skip fixture.",
+    "Teardown",
+    "AfterStep:Clean the skip fixture.",
+    "AfterScenario",
+  ]);
+});
