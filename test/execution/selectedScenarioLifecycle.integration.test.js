@@ -164,3 +164,63 @@ test("selected scenario preserves Gauge Java tagged hook order and execution con
   assert.equal(result.status, 0, commandOutput(result));
   assert.deepEqual(events, expectedTaggedLifecycle);
 });
+
+test("selected scenario runs matching cleanup hooks after before hook failures", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const cases = [
+    {
+      lifecycleCase: "fail-before-suite",
+      expected: ["BeforeSuite:first", "BeforeSuite:fail", "AfterSuite"],
+    },
+    {
+      lifecycleCase: "fail-before-spec",
+      expected: [
+        "BeforeSuite",
+        "BeforeSpec:first",
+        "BeforeSpec:fail",
+        "AfterSpec",
+        "AfterSuite",
+      ],
+    },
+    {
+      lifecycleCase: "fail-before-scenario",
+      expected: [
+        "BeforeSuite",
+        "BeforeSpec",
+        "BeforeScenario:first",
+        "BeforeScenario:fail",
+        "AfterScenario",
+        "AfterSpec",
+        "AfterSuite",
+      ],
+    },
+    {
+      lifecycleCase: "fail-before-step",
+      expected: [
+        "BeforeSuite",
+        "BeforeSpec",
+        "BeforeScenario",
+        "BeforeStep:first",
+        "BeforeStep:fail",
+        "AfterStep",
+        "AfterScenario",
+        "AfterSpec",
+        "AfterSuite",
+      ],
+    },
+  ];
+
+  for (const lifecycleCase of cases) {
+    const { events, result } = executeLifecycleFixture({
+      lifecycleCase: lifecycleCase.lifecycleCase,
+      scenarioHeading: "## Selected failure scenario",
+      specificationName: "failure-lifecycle.spec",
+    });
+
+    assert.ifError(result.error);
+    assert.notEqual(result.status, 0, commandOutput(result));
+    assert.deepEqual(events, lifecycleCase.expected);
+  }
+});
