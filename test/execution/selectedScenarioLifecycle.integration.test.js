@@ -73,6 +73,8 @@ function commandOutput(result) {
 }
 
 function executeLifecycleFixture({
+  additionalSpecificationNames = [],
+  clearStateLevel,
   lifecycleCase = "baseline",
   scenarioHeading = "## Selected scenario",
   specificationName = "lifecycle.spec",
@@ -84,6 +86,21 @@ function executeLifecycleFixture({
 
   try {
     fs.cpSync(fixtureRoot, projectRoot, { recursive: true });
+    if (clearStateLevel) {
+      const javaProperties = path.join(
+        projectRoot,
+        "env",
+        "default",
+        "java.properties",
+      );
+      fs.writeFileSync(
+        javaProperties,
+        fs.readFileSync(javaProperties, "utf8").replace(
+          /^gauge_clear_state_level\s*=.*$/m,
+          `gauge_clear_state_level = ${clearStateLevel}`,
+        ),
+      );
+    }
     const project = new GradleProject(projectRoot, { Language: "kotlin" }, {
       fileSystem: {
         existsSync(filename) {
@@ -106,16 +123,19 @@ function executeLifecycleFixture({
     );
 
     const specification = path.join(projectRoot, "specs", specificationName);
-    const selector = `${specification}:${selectedScenarioLine(
-      specification,
-      scenarioHeading,
-    )}`;
+    const selector = scenarioHeading
+      ? `${specification}:${selectedScenarioLine(specification, scenarioHeading)}`
+      : specification;
+    const additionalSelectors = additionalSpecificationNames.map((name) => (
+      path.join(projectRoot, "specs", name)
+    ));
     const result = childProcess.spawnSync(gaugeCommand, [
       "run",
       "--hide-suggestion",
       "--simple-console",
       ...gaugeArguments,
       selector,
+      ...additionalSelectors,
     ], {
       cwd: projectRoot,
       encoding: "utf8",
@@ -450,6 +470,52 @@ test("selected scenario repeats Gauge Java scenario lifecycle for retries", {
 
     assert.ifError(result.error);
     assert.equal(result.status, lifecycleCase.expectedStatus, commandOutput(result));
+    assert.deepEqual(events, lifecycleCase.expected);
+  }
+});
+
+test("Gauge Java clears fixture instances at configured scenario and spec boundaries", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const lifecycle = (id) => [
+    `BeforeScenario:${id}`,
+    `Step:${id}`,
+    `AfterScenario:${id}`,
+  ];
+  const cases = [
+    {
+      lifecycleCase: "state-scenario",
+      clearStateLevel: "scenario",
+      scenarioHeading: null,
+      specificationName: "state-scenario-lifecycle.spec",
+      expected: [
+        "Initialize:StateLifecycleFixture",
+        ...lifecycle(1),
+        "Initialize:StateLifecycleFixture",
+        ...lifecycle(2),
+      ],
+    },
+    {
+      lifecycleCase: "state-spec",
+      clearStateLevel: "spec",
+      scenarioHeading: null,
+      specificationName: "state-spec-one.spec",
+      additionalSpecificationNames: ["state-spec-two.spec"],
+      expected: [
+        "Initialize:StateLifecycleFixture",
+        ...lifecycle(1),
+        "Initialize:StateLifecycleFixture",
+        ...lifecycle(2),
+      ],
+    },
+  ];
+
+  for (const lifecycleCase of cases) {
+    const { events, result } = executeLifecycleFixture(lifecycleCase);
+
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, commandOutput(result));
     assert.deepEqual(events, lifecycleCase.expected);
   }
 });
