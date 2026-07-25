@@ -340,3 +340,58 @@ test("selected scenario preserves Gauge Java step skip cleanup lifecycle", {
     "AfterScenario",
   ]);
 });
+
+test("selected scenario repeats Gauge Java lifecycle for data table rows", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const twoRows = [
+    "BeforeSuite",
+    "BeforeSpec",
+    "BeforeScenario:scenario=null",
+    "Step:one",
+    "AfterScenario:scenario=set",
+    "BeforeScenario:scenario=null",
+    "Step:two",
+    "AfterScenario:scenario=set",
+    "AfterSpec",
+    "AfterSuite",
+  ];
+  const cases = [
+    {
+      lifecycleCase: "spec-table",
+      scenarioHeading: "## Selected spec table scenario",
+      specificationName: "spec-table-lifecycle.spec",
+      expected: twoRows,
+    },
+    {
+      lifecycleCase: "scenario-table",
+      scenarioHeading: "## Selected scenario table",
+      specificationName: "scenario-table-lifecycle.spec",
+      expected: twoRows,
+    },
+    {
+      lifecycleCase: "spec-table",
+      scenarioHeading: "## Selected spec table scenario",
+      specificationName: "spec-table-lifecycle.spec",
+      gaugeArguments: ["--table-rows", "2"],
+      expected: [
+        "BeforeSuite",
+        "BeforeSpec",
+        "BeforeScenario:scenario=null",
+        "Step:two",
+        "AfterScenario:scenario=set",
+        "AfterSpec",
+        "AfterSuite",
+      ],
+    },
+  ];
+
+  for (const lifecycleCase of cases) {
+    const { events, result } = executeLifecycleFixture(lifecycleCase);
+
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, commandOutput(result));
+    assert.deepEqual(events, lifecycleCase.expected);
+  }
+});
