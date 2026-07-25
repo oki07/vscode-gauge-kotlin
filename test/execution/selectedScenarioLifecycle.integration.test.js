@@ -224,3 +224,69 @@ test("selected scenario runs matching cleanup hooks after before hook failures",
     assert.deepEqual(events, lifecycleCase.expected);
   }
 });
+
+test("selected scenario preserves context and teardown lifecycle branches", {
+  skip: gradleCommand ? false : "Set GAUGE_LIFECYCLE_GRADLE to run the Gauge integration fixture.",
+  timeout: 180_000,
+}, () => {
+  const beforeContext = [
+    "BeforeScenario",
+    "BeforeStep:Prepare the selected fixture.",
+  ];
+  const teardown = [
+    "BeforeStep:Clean the selected fixture.",
+    "Teardown",
+    "AfterStep:Clean the selected fixture.",
+    "AfterScenario",
+  ];
+  const cases = [
+    {
+      lifecycleCase: "context-success",
+      expectedStatus: 0,
+      expected: [
+        ...beforeContext,
+        "Context",
+        "AfterStep:Prepare the selected fixture.",
+        "BeforeStep:Run the selected fixture body.",
+        "Body",
+        "AfterStep:Run the selected fixture body.",
+        ...teardown,
+      ],
+    },
+    {
+      lifecycleCase: "context-failure",
+      expectedStatus: 1,
+      expected: [
+        ...beforeContext,
+        "Context:fail",
+        "AfterStep:Prepare the selected fixture.",
+        ...teardown,
+      ],
+    },
+    {
+      lifecycleCase: "body-failure",
+      expectedStatus: 1,
+      expected: [
+        ...beforeContext,
+        "Context",
+        "AfterStep:Prepare the selected fixture.",
+        "BeforeStep:Run the selected fixture body.",
+        "Body:fail",
+        "AfterStep:Run the selected fixture body.",
+        ...teardown,
+      ],
+    },
+  ];
+
+  for (const lifecycleCase of cases) {
+    const { events, result } = executeLifecycleFixture({
+      lifecycleCase: lifecycleCase.lifecycleCase,
+      scenarioHeading: "## Selected context scenario",
+      specificationName: "context-lifecycle.spec",
+    });
+
+    assert.ifError(result.error);
+    assert.equal(result.status, lifecycleCase.expectedStatus, commandOutput(result));
+    assert.deepEqual(events, lifecycleCase.expected);
+  }
+});
