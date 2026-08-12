@@ -1026,6 +1026,7 @@ function startGaugeServices(context, vscode, options = {}) {
     cli,
     clientsMap,
     dependencyStepIndex,
+    documentStore,
     localDefinitionOwnedExternally: true,
     env: options.env,
     execSync: options.execSync,
@@ -1037,6 +1038,7 @@ function startGaugeServices(context, vscode, options = {}) {
     RevealOutputChannelOn: options.RevealOutputChannelOn,
     state,
     stepDefinitionProvider,
+    stepDiagnosticsProvider,
     vscode,
   });
   const referenceProvider = new ReferenceProviderCtor(clientsMap, {

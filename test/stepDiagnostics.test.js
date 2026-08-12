@@ -7405,3 +7405,38 @@ test("GaugeStepDiagnosticsProvider scheduled refresh ignores non-file scheme doc
 
   assert.deepEqual(sets.filter((entry) => entry.uri && entry.uri.scheme === "git"), []);
 });
+
+test("GaugeStepDiagnosticsProvider reports local step implementation state by line", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Spec",
+    "",
+    "## Scenario",
+    "",
+    "* implemented step",
+    "* missing step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/e2e.spec");
+  const stepDocument = createDocument([
+    "@Step(\"implemented step\")",
+    "fun implemented() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const workspaceDocuments = [specDocument, stepDocument];
+
+  assert.equal(provider.stepImplementedAt(specDocument, 4, workspaceDocuments), true);
+  assert.equal(provider.stepImplementedAt(specDocument, 5, workspaceDocuments), false);
+  assert.equal(provider.stepImplementedAt(specDocument, 0, workspaceDocuments), undefined);
+  assert.equal(provider.stepImplementedAt(stepDocument, 0, workspaceDocuments), undefined);
+});
+
+test("GaugeStepDiagnosticsProvider reports unknown implementation state before the workspace scan completes", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument(
+    "# Spec\n\n## Scenario\n\n* some step",
+    "gauge",
+    "/workspace/gauge/specs/e2e.spec",
+  );
+
+  assert.equal(provider.stepImplementedAt(specDocument, 4, [specDocument]), undefined);
+});

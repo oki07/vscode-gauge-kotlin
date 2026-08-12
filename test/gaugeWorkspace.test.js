@@ -774,6 +774,148 @@ test("clientMiddleware suppresses LSP code lenses owned by the local provider", 
   assert.equal(remoteCalls, 0);
 });
 
+function missingImplementationDiagnostic(line) {
+  return {
+    message: "Step implementation not found",
+    range: { start: { line, character: 0 }, end: { line, character: 20 } },
+  };
+}
+
+test("clientMiddleware drops runner missing-step diagnostics for locally implemented steps", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const workspaceDocuments = [specDocument];
+  const implementedCalls = [];
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return workspaceDocuments;
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt(document, line, documents) {
+        implementedCalls.push({ document, line, documents });
+        return line === 4;
+      },
+    },
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [
+      missingImplementationDiagnostic(4),
+      missingImplementationDiagnostic(7),
+      {
+        message: "Multiple data table present",
+        range: { start: { line: 1, character: 0 }, end: { line: 1, character: 5 } },
+      },
+    ],
+    (uri, diagnostics) => published.push({ uri, diagnostics }),
+  );
+
+  assert.equal(published.length, 1);
+  assert.deepEqual(
+    published[0].diagnostics.map((diagnostic) => diagnostic.range.start.line),
+    [7, 1],
+  );
+  assert.deepEqual(
+    implementedCalls.map((call) => ({ document: call.document, line: call.line, documents: call.documents })),
+    [
+      { document: specDocument, line: 4, documents: workspaceDocuments },
+      { document: specDocument, line: 7, documents: workspaceDocuments },
+    ],
+  );
+});
+
+test("clientMiddleware keeps runner missing-step diagnostics when local state is unknown", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return [specDocument];
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return undefined;
+      },
+    },
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [missingImplementationDiagnostic(4)],
+    (uri, diagnostics) => published.push({ uri, diagnostics }),
+  );
+
+  assert.equal(published[0].diagnostics.length, 1);
+});
+
+test("clientMiddleware forwards diagnostics untouched without an arbitration provider", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const middleware = clientMiddleware({
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+  });
+  const published = [];
+  const diagnostics = [missingImplementationDiagnostic(2)];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    diagnostics,
+    (uri, forwarded) => published.push({ uri, forwarded }),
+  );
+
+  assert.equal(published.length, 1);
+  assert.equal(published[0].forwarded, diagnostics);
+});
+
+test("clientMiddleware keeps runner missing-step diagnostics for untracked documents", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return [];
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return true;
+      },
+    },
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [missingImplementationDiagnostic(4)],
+    (uri, diagnostics) => published.push({ uri, diagnostics }),
+  );
+
+  assert.equal(published[0].diagnostics.length, 1);
+});
+
 test("GaugeWorkspace shares one output channel across workspace project clients", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
@@ -1763,4 +1905,59 @@ test("GaugeWorkspace ignores configuration changes outside the gauge section", a
   });
 
   assert.equal(configurationReads, readsAfterStartup);
+});
+
+test("GaugeWorkspace arbitrates runner step diagnostics through the local step index", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const { vscode } = createFakeVscode({});
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  }, new Command("mvn"), new Command("gradle"));
+
+  const workspace = new GaugeWorkspace({
+    cli,
+    clientsMap: clients,
+    documentStore: {
+      documents() {
+        return [specDocument];
+      },
+    },
+    execSync() {
+      return Buffer.from("");
+    },
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    stepDiagnosticsProvider: {
+      stepImplementedAt(document, line) {
+        return line === 4;
+      },
+    },
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/e2e.spec");
+  const middleware = entry.client.clientOptions.middleware;
+  assert.equal(typeof middleware.handleDiagnostics, "function");
+  const published = [];
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [missingImplementationDiagnostic(4), missingImplementationDiagnostic(7)],
+    (uri, diagnostics) => published.push(diagnostics),
+  );
+
+  assert.deepEqual(published[0].map((diagnostic) => diagnostic.range.start.line), [7]);
 });

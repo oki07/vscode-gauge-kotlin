@@ -132,6 +132,49 @@ function errorMessages(error, seen = new Set()) {
   return messages;
 }
 
+const MISSING_IMPLEMENTATION_MESSAGE = "Step implementation not found";
+
+function isMissingImplementationDiagnostic(diagnostic) {
+  return Boolean(diagnostic)
+    && typeof diagnostic.message === "string"
+    && diagnostic.message.includes(MISSING_IMPLEMENTATION_MESSAGE);
+}
+
+// The Gauge Java runner builds its step registry once, from compiled classes,
+// and cannot re-scan Kotlin sources afterwards. Its "Step implementation not
+// found" verdicts therefore go stale for steps added or renamed after the
+// language server started. The local source index is authoritative for those,
+// so its positive answers override the runner while everything else passes
+// through unchanged.
+function arbitratedDiagnostics(uri, diagnostics, options) {
+  const provider = options.stepDiagnosticsProvider;
+  const store = options.documentStore;
+  if (
+    !provider
+    || typeof provider.stepImplementedAt !== "function"
+    || !store
+    || typeof store.documents !== "function"
+    || !Array.isArray(diagnostics)
+    || !diagnostics.some(isMissingImplementationDiagnostic)
+  ) {
+    return diagnostics;
+  }
+  const file = (uri && (uri.fsPath || uri.path)) || "";
+  const workspaceDocuments = store.documents();
+  const document = workspaceDocuments.find((candidate) => documentPath(candidate) === file);
+  if (!document) {
+    return diagnostics;
+  }
+  return diagnostics.filter((diagnostic) => {
+    if (!isMissingImplementationDiagnostic(diagnostic)) {
+      return true;
+    }
+    const start = diagnostic.range && diagnostic.range.start;
+    const line = start ? start.line : undefined;
+    return provider.stepImplementedAt(document, line, workspaceDocuments) !== true;
+  });
+}
+
 function clientMiddleware(options = {}) {
   const localDefinitionProvider = options.stepDefinitionProvider || new GaugeStepDefinitionProvider({
     dependencyStepIndex: options.dependencyStepIndex,
@@ -141,6 +184,9 @@ function clientMiddleware(options = {}) {
   return {
     provideCodeLenses() {
       return [];
+    },
+    handleDiagnostics(uri, diagnostics, next) {
+      next(uri, arbitratedDiagnostics(uri, diagnostics, options));
     },
     async provideDefinition(document, position, token, next) {
       let localDefinitions;
@@ -207,6 +253,8 @@ class GaugeWorkspace {
     );
     this.localDefinitionOwnedExternally = options.localDefinitionOwnedExternally === true;
     this.stepDefinitionProvider = options.stepDefinitionProvider;
+    this.stepDiagnosticsProvider = options.stepDiagnosticsProvider;
+    this.documentStore = options.documentStore;
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
     this.projectEnvironmentCache = new Map();
@@ -624,9 +672,11 @@ class GaugeWorkspace {
       revealOutputChannelOn: this.revealOutputChannelOnNever,
       middleware: clientMiddleware({
         dependencyStepIndex: this.dependencyStepIndex,
+        documentStore: this.documentStore,
         localDefinitionOwnedExternally: this.localDefinitionOwnedExternally,
         projectFactory: this.projectFactory,
         stepDefinitionProvider: this.stepDefinitionProvider,
+        stepDiagnosticsProvider: this.stepDiagnosticsProvider,
         vscode: this.vscode,
       }),
       synchronize: {

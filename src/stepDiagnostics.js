@@ -8982,6 +8982,41 @@ class GaugeStepDiagnosticsProvider {
       : this.computeImplementedStepTemplates(document, workspaceDocuments);
   }
 
+  // Tri-state contract for external diagnostic arbitration: true or false when
+  // the local implementation index can decide the step at the given line, and
+  // undefined when it cannot (no step on that line, a parse error, or the
+  // workspace implementation scan has not produced a template set yet).
+  stepImplementedAt(document, line, workspaceDocuments) {
+    if (
+      !document
+      || typeof document.getText !== "function"
+      || !isGaugeStepSourceDocument(document)
+      || typeof line !== "number"
+    ) {
+      return undefined;
+    }
+    const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
+    if (!implementedSteps) {
+      return undefined;
+    }
+    for (const entry of findGaugeSteps(document.getText(), {
+      allowMultilineStep: allowMultilineStep({
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectRoot: this.gaugeProjectRoot(document),
+      }),
+    })) {
+      if (line < entry.start.line || line > entry.end.line) {
+        continue;
+      }
+      if (!entry.text || entry.parseError) {
+        return undefined;
+      }
+      return implementedSteps.has(entry.normalized);
+    }
+    return undefined;
+  }
+
   implementedTemplatesCacheEntry(document, workspaceDocuments) {
     const store = this.storeFor(workspaceDocuments);
     if (!store || !isGaugeStepSourceDocument(document)) {
