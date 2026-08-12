@@ -253,7 +253,7 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
     fileSystem,
     env: { PATH: "/bin" },
     execSync() {
-      return Buffer.from("");
+      return Buffer.from("/workspace/gauge/build/classes\n");
     },
     LanguageClient: FakeLanguageClient,
     RevealOutputChannelOn: { Never: 4 },
@@ -272,7 +272,7 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
       env: {
         GAUGE_IGNORE_RUNNER_BUILD_FAILURES: "true",
         PATH: "/bin",
-        gauge_custom_classpath: "",
+        gauge_custom_classpath: "/workspace/gauge/build/classes",
         gauge_lsp_reference_codelens: "false",
       },
     },
@@ -702,7 +702,7 @@ test("GaugeWorkspace suppresses the external implementation source popup from Ga
     clientsMap: clients,
     fileSystem,
     execSync() {
-      return Buffer.from("");
+      return Buffer.from("/workspace/gauge/build/classes\n");
     },
     LanguageClient: FakeLanguageClient,
     ShowMessageNotification: { type: { method: "window/showMessage" } },
@@ -1035,7 +1035,7 @@ test("GaugeWorkspace reports language server runtime failures", async () => {
     clientsMap: clients,
     fileSystem,
     execSync() {
-      return Buffer.from("");
+      return Buffer.from("/workspace/gauge/build/classes\n");
     },
     LanguageClient: FakeLanguageClient,
     ErrorAction: { Continue: "continue" },
