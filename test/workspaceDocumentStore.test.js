@@ -392,3 +392,84 @@ test("WorkspaceDocumentStore dispose stops watcher and listener updates", async 
 
   assert.equal(state.watchers[0].disposed, true);
 });
+
+function createSchemeDocument(text, languageId, fsPath, scheme) {
+  return {
+    languageId,
+    uri: { fsPath, scheme },
+    version: 1,
+    getText() {
+      return text;
+    },
+  };
+}
+
+test("WorkspaceDocumentStore ignores non-file scheme documents that shadow tracked files", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const diskText = "@Step(\"new step\")\nfun fresh() {}\n";
+  const files = { "/ws/src/Steps.kt": diskText };
+  const gitDocument = createSchemeDocument(
+    "committed content without the new step",
+    "kotlin",
+    "/ws/src/Steps.kt",
+    "git",
+  );
+  const { vscode } = createFakeVscode({
+    files: Object.keys(files),
+    textDocuments: [gitDocument],
+  });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  const documents = store.documents();
+
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].getText(), diskText);
+});
+
+test("WorkspaceDocumentStore keeps file scheme editor documents ahead of disk content", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/src/Steps.kt": "stale disk content" };
+  const fileDocument = createSchemeDocument(
+    "fresh editor content",
+    "kotlin",
+    "/ws/src/Steps.kt",
+    "file",
+  );
+  const { vscode } = createFakeVscode({
+    files: Object.keys(files),
+    textDocuments: [fileDocument],
+  });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  const documents = store.documents();
+
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].getText(), "fresh editor content");
+});
+
+test("WorkspaceDocumentStore ignores document events from non-file schemes", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const gitDocument = createSchemeDocument("old", "kotlin", "/ws/src/Steps.kt", "git");
+  const { vscode, state } = createFakeVscode({ files: [], textDocuments: [] });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem({}),
+    vscode,
+  });
+  const changes = [];
+  store.onDidChangeDocuments((change) => changes.push(change));
+  await store.start();
+
+  state.listeners.open[0](gitDocument);
+  state.listeners.change[0]({ document: gitDocument });
+  state.listeners.close[0](gitDocument);
+
+  assert.deepEqual(changes.filter((change) => change.file !== undefined), []);
+});

@@ -8206,6 +8206,7 @@ function uriPath(uri) {
 
 const {
   WorkspaceDocumentStore,
+  isFileSchemeDocument,
   isWorkspaceStepImplementationScanComplete,
   markWorkspaceStepImplementationScanComplete,
 } = require("./workspaceDocumentStore");
@@ -9071,7 +9072,7 @@ class GaugeStepDiagnosticsProvider {
   }
 
   addWorkspaceDocument(documents, seenPaths, candidate) {
-    if (!candidate || typeof candidate.getText !== "function") {
+    if (!candidate || typeof candidate.getText !== "function" || !isFileSchemeDocument(candidate)) {
       return;
     }
     const file = documentPath(candidate);
@@ -9316,6 +9317,9 @@ class GaugeStepDiagnosticsProvider {
     const workspaceDocuments = store.documents();
     const workspace = this.vscode.workspace || {};
     for (const document of workspace.textDocuments || []) {
+      if (!isFileSchemeDocument(document)) {
+        continue;
+      }
       this.updateDocumentIfStale(collection, document, workspaceDocuments);
     }
     const dependencyRefresh = this.refreshDependencySteps(workspaceDocuments);

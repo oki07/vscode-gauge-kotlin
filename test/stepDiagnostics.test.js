@@ -7359,3 +7359,49 @@ test("GaugeStepDiagnosticsProvider refreshes gauge documents after watcher Kotli
   const lastDiagnostics = refreshed[refreshed.length - 1].diagnostics;
   assert.deepEqual(lastDiagnostics.map((diagnostic) => diagnostic.message), []);
 });
+
+test("GaugeStepDiagnosticsProvider scheduled refresh ignores non-file scheme documents", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const sets = [];
+  const gitSpecDocument = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/login.spec", scheme: "git" },
+    version: 1,
+    getText() {
+      return "# Login\n\n## Scenario\n\n* missing step\n";
+    },
+  };
+  const vscode = {
+    ...createFakeVscode(),
+    languages: {
+      createDiagnosticCollection() {
+        return {
+          set(uri, diagnostics) {
+            sets.push({ uri, diagnostics });
+          },
+          delete() {},
+          dispose() {},
+        };
+      },
+    },
+    workspace: {
+      textDocuments: [gitSpecDocument],
+      onDidOpenTextDocument() {
+        return { dispose() {} };
+      },
+      onDidChangeTextDocument() {
+        return { dispose() {} };
+      },
+      onDidCloseTextDocument() {
+        return { dispose() {} };
+      },
+    },
+  };
+  const provider = new GaugeStepDiagnosticsProvider({ refreshDelayMs: 0, vscode });
+
+  const disposable = provider.register();
+  await provider.waitForPendingRefresh();
+  disposable.dispose();
+
+  assert.deepEqual(sets.filter((entry) => entry.uri && entry.uri.scheme === "git"), []);
+});

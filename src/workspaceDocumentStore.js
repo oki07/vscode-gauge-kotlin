@@ -51,6 +51,14 @@ function documentPath(document) {
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
 }
 
+// Diff views and history providers open documents on other schemes (git:,
+// gitlens:, pr:) whose fsPath equals the real file. Letting them into the
+// store would shadow the current file content with an older revision.
+function isFileSchemeDocument(document) {
+  const scheme = document && document.uri && document.uri.scheme;
+  return !scheme || scheme === "file";
+}
+
 function uriPath(uri) {
   return (uri && (uri.fsPath || uri.path)) || "";
 }
@@ -191,7 +199,7 @@ class WorkspaceDocumentStore {
 
   handleDocumentEvent(document) {
     const file = documentPath(document);
-    if (!file || !isWorkspaceDocumentPath(file)) {
+    if (!file || !isWorkspaceDocumentPath(file) || !isFileSchemeDocument(document)) {
       return;
     }
     this.notifyChange(file);
@@ -199,7 +207,7 @@ class WorkspaceDocumentStore {
 
   handleDocumentClose(document) {
     const file = documentPath(document);
-    if (!file || !isWorkspaceDocumentPath(file)) {
+    if (!file || !isWorkspaceDocumentPath(file) || !isFileSchemeDocument(document)) {
       return Promise.resolve();
     }
     if (this.diskDocuments.has(file) || this.belongsToGaugeProject(file)) {
@@ -285,7 +293,7 @@ class WorkspaceDocumentStore {
     const documents = [];
     const seenPaths = new Set();
     for (const document of workspace.textDocuments || []) {
-      if (!document || typeof document.getText !== "function") {
+      if (!document || typeof document.getText !== "function" || !isFileSchemeDocument(document)) {
         continue;
       }
       const file = documentPath(document);
@@ -327,6 +335,7 @@ module.exports = {
   DEFAULT_INITIAL_READ_CONCURRENCY,
   WORKSPACE_DOCUMENT_GLOB,
   WorkspaceDocumentStore,
+  isFileSchemeDocument,
   isWorkspaceStepImplementationScanComplete,
   languageIdForPath,
   markWorkspaceStepImplementationScanComplete,
