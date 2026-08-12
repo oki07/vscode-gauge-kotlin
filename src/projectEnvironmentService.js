@@ -1,6 +1,6 @@
 "use strict";
 
-const PROJECT_ENVIRONMENT_GLOB = "**/{manifest.json,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties,gradlew,gradlew.bat,gradlew.cmd,*.properties}";
+const PROJECT_ENVIRONMENT_GLOB = "**/{manifest.json,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties,gradlew,gradlew.bat,gradlew.cmd,*.properties,*.toml}";
 const PROJECT_EXECUTION_INPUT_GLOB = "**/src/**";
 const GAUGE_ENVIRONMENT_CONFIGURATIONS = [
   "gauge.executablePath",

@@ -255,3 +255,33 @@ test("ProjectEnvironmentService shares one environment across consumers", async 
 
   assert.equal(computations, 1);
 });
+
+test("ProjectEnvironmentService watches Gradle version catalogs for environment changes", async () => {
+  const {
+    PROJECT_ENVIRONMENT_GLOB,
+    ProjectEnvironmentService,
+  } = require("../src/projectEnvironmentService");
+  assert.equal(PROJECT_ENVIRONMENT_GLOB.includes("*.toml"), true);
+
+  const { vscode, watchers } = createVscode();
+  let computations = 0;
+  const project = {
+    root: () => "/ws",
+    envsAsync: async () => ({ gauge_custom_classpath: `cp-${++computations}` }),
+  };
+  const projectFactory = {
+    get: () => project,
+    getGaugeRootFromFilePath: (file) => (
+      file === "/ws" || file.startsWith("/ws/") ? "/ws" : undefined
+    ),
+  };
+  const service = new ProjectEnvironmentService({ projectFactory, vscode });
+
+  const first = await service.environmentFor("/ws");
+  const environmentWatcher = watchers.find((entry) => entry.pattern === PROJECT_ENVIRONMENT_GLOB);
+  environmentWatcher.listeners.change({ fsPath: "/ws/gradle/libs.versions.toml" });
+  const second = await service.environmentFor("/ws");
+
+  assert.deepEqual(first, { gauge_custom_classpath: "cp-1" });
+  assert.deepEqual(second, { gauge_custom_classpath: "cp-2" });
+});
