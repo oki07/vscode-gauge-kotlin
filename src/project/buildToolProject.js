@@ -50,6 +50,20 @@ class BuildToolProject extends GaugeProject {
     return output.toString().trim();
   }
 
+  // An empty classpath must never reach gauge_custom_classpath: the Gauge
+  // Java launcher would silently fall back to a stale or empty gauge_bin and
+  // run with no steps or hooks registered.
+  classpathEnvFromOutput(output) {
+    const classpath = this.classpathFromOutput(output);
+    if (!classpath) {
+      this.showClasspathError(new Error("The build tool returned an empty classpath."));
+      return undefined;
+    }
+    return {
+      [GAUGE_CUSTOM_CLASSPATH]: classpath,
+    };
+  }
+
   classpathEnv(command, args) {
     if (!command || !command.command) {
       this.showClasspathError(new Error("Build tool command is not available."));
@@ -58,9 +72,7 @@ class BuildToolProject extends GaugeProject {
     try {
       const commandLine = `${command.command} ${args}`;
       const classpath = this.execSync(commandLine, { cwd: this.root() });
-      return {
-        [GAUGE_CUSTOM_CLASSPATH]: this.classpathFromOutput(classpath),
-      };
+      return this.classpathEnvFromOutput(classpath);
     } catch (error) {
       this.showClasspathError(error);
       return undefined;
@@ -87,9 +99,7 @@ class BuildToolProject extends GaugeProject {
   async classpathEnvAsync(command, args) {
     try {
       const classpath = await this.execAsync(`${command.command} ${args}`, { cwd: this.root() });
-      return {
-        [GAUGE_CUSTOM_CLASSPATH]: this.classpathFromOutput(classpath),
-      };
+      return this.classpathEnvFromOutput(classpath);
     } catch (error) {
       this.showClasspathError(error);
       return undefined;

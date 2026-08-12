@@ -566,3 +566,65 @@ test("GaugeProject compares by class and root", () => {
     new GaugeProject("/workspace/other", manifest),
   ), false);
 });
+
+test("GradleProject reports empty classpath output as an error", () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const errors = [];
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync() {
+      return Buffer.from("\n  \n");
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const env = project.envs({
+    gradleCommand() {
+      return { command: "gradle" };
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nThe build tool returned an empty classpath.",
+  ]);
+});
+
+test("GradleProject reports empty async classpath output as an error", async () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const errors = [];
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    exec(command, options, callback) {
+      callback(undefined, "");
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const env = await project.envsAsync({
+    gradleCommand() {
+      return { command: "gradle" };
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nThe build tool returned an empty classpath.",
+  ]);
+});
