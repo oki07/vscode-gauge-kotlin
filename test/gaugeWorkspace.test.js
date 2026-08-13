@@ -1961,3 +1961,75 @@ test("GaugeWorkspace arbitrates runner step diagnostics through the local step i
 
   assert.deepEqual(published[0].map((diagnostic) => diagnostic.range.start.line), [7]);
 });
+
+test("clientMiddleware arbitration composes with the real store and step index", async () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/specs/e2e.spec": [
+      "# Spec",
+      "",
+      "## Scenario",
+      "",
+      "* implemented step",
+      "* missing step",
+    ].join("\n"),
+    "/ws/src/test/kotlin/Steps.kt": [
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "class Steps {",
+      "  @Step(\"implemented step\")",
+      "  fun implemented() {}",
+      "}",
+    ].join("\n"),
+  };
+  const store = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        async readFile(file) {
+          if (!Object.prototype.hasOwnProperty.call(files, file)) {
+            throw new Error(`Missing ${file}`);
+          }
+          return files[file];
+        },
+      },
+    },
+    vscode: {
+      Uri: {
+        file(filename) {
+          return { fsPath: filename, scheme: "file" };
+        },
+      },
+      workspace: {
+        textDocuments: [],
+        async findFiles() {
+          return Object.keys(files).map((filename) => ({ fsPath: filename }));
+        },
+      },
+    },
+  });
+  await store.start();
+  const provider = new GaugeStepDiagnosticsProvider({ documentStore: store, vscode: {} });
+  const middleware = clientMiddleware({
+    documentStore: store,
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: provider,
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/ws/specs/e2e.spec", scheme: "file" },
+    [missingImplementationDiagnostic(4), missingImplementationDiagnostic(5)],
+    (uri, diagnostics) => published.push(diagnostics),
+  );
+
+  assert.deepEqual(
+    published[0].map((diagnostic) => diagnostic.range.start.line),
+    [5],
+  );
+});
