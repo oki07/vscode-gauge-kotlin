@@ -113,6 +113,10 @@ class BuildToolProject extends GaugeProject {
   }
 
   async classpathEnvAsync(command, args) {
+    if (!command || !command.command) {
+      this.showClasspathError(new Error("Build tool command is not available."));
+      return undefined;
+    }
     try {
       const classpath = await this.execAsync(`${command.command} ${args}`, { cwd: this.root() });
       return this.classpathEnvFromOutput(classpath);

@@ -695,3 +695,34 @@ test("GradleProject reports empty async classpath output as an error", async () 
     "Error calculating project classpath.\t\nThe build tool returned an empty classpath.",
   ]);
 });
+
+test("MavenProject reports a missing build tool command from the async classpath path", async () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const errors = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    exec() {
+      throw new Error("a missing build tool must not be spawned");
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const env = await project.envsAsync({
+    mavenCommand() {
+      return undefined;
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nBuild tool command is not available.",
+  ]);
+});
