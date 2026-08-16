@@ -227,7 +227,7 @@ async function installSpectacle(vscode, cli) {
 }
 
 async function promptToInstallSpectacle(vscode, cli) {
-  const selection = await showInformation(
+  const selection = await showError(
     vscode,
     MISSING_SPECTACLE_MESSAGE,
     INSTALL_SPECTACLE_ACTION,

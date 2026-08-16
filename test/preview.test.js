@@ -506,6 +506,7 @@ test("previewGaugeDocument removes deprecated Gauge lines from Spectacle failure
 test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is missing", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const {
+    errorPrompts,
     errors,
     informationPrompts,
     opened,
@@ -565,8 +566,8 @@ test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is 
     vscode,
   });
 
-  assert.deepEqual(errors, []);
-  assert.deepEqual(informationPrompts, [
+  assert.deepEqual(informationPrompts, []);
+  assert.deepEqual(errorPrompts, [
     {
       message: "Missing plugin: Spectacle. To install, run `gauge install spectacle` or click below.",
       actions: ["Install Spectacle"],
@@ -690,7 +691,7 @@ test("previewGaugeDocument formats fallback table blocks like IntelliJ preview",
 
 test("previewGaugeDocument installs Spectacle when the missing plugin action is selected", async () => {
   const { previewGaugeDocument } = require("../src/preview");
-  const { informationPrompts, opened, vscode } = createFakeVscode({
+  const { errorPrompts, informationPrompts, opened, vscode } = createFakeVscode({
     document: {
       languageId: "gauge",
       uri: { fsPath: "/workspace/gauge/specs/example.spec" },
@@ -699,7 +700,7 @@ test("previewGaugeDocument installs Spectacle when the missing plugin action is 
         return "# Checkout\n";
       },
     },
-    informationSelection: "Install Spectacle",
+    errorSelection: "Install Spectacle",
   });
   const installs = [];
   const writes = [];
@@ -734,7 +735,8 @@ test("previewGaugeDocument installs Spectacle when the missing plugin action is 
     vscode,
   });
 
-  assert.deepEqual(informationPrompts, [
+  assert.deepEqual(informationPrompts, []);
+  assert.deepEqual(errorPrompts, [
     {
       message: "Missing plugin: Spectacle. To install, run `gauge install spectacle` or click below.",
       actions: ["Install Spectacle"],
@@ -761,7 +763,7 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
         return "# Checkout\n";
       },
     },
-    informationSelection: "Install Spectacle",
+    errorSelection: "Install Spectacle",
   });
   let finishInstall;
   let assertionError;
