@@ -8,6 +8,12 @@ function errorOutput(error) {
   if (!error || error.output == null) {
     return String(error && error.message ? error.message : error);
   }
+  if (Array.isArray(error.output)) {
+    const parts = error.output
+      .map((part) => (part == null ? "" : part.toString().trim()))
+      .filter((part) => part !== "");
+    return parts.length > 0 ? parts.join("\n") : String(error.message || error);
+  }
   return error.output.toString();
 }
 
@@ -82,9 +88,19 @@ class BuildToolProject extends GaugeProject {
   execAsync(commandLine, options) {
     if (typeof this.exec === "function") {
       return new Promise((resolve, reject) => {
-        this.exec(commandLine, options, (error, stdout) => (
-          error ? reject(error) : resolve(stdout)
-        ));
+        this.exec(commandLine, options, (error, stdout, stderr) => {
+          if (!error) {
+            resolve(stdout);
+            return;
+          }
+          // Maven and Gradle report failures on stdout, which exec drops from
+          // error.message; mirror execSync's error.output so the classpath
+          // error toast carries the build tool's actual output.
+          if (error.output == null) {
+            error.output = [null, stdout, stderr];
+          }
+          reject(error);
+        });
       });
     }
     return new Promise((resolve, reject) => {

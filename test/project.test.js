@@ -598,6 +598,73 @@ test("GradleProject reports empty classpath output as an error", () => {
   ]);
 });
 
+test("MavenProject includes build tool output in async classpath errors", async () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const errors = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    exec(command, options, callback) {
+      callback(
+        new Error("Command failed: mvn -q gauge:classpath"),
+        "[ERROR] Failed to execute goal gauge:classpath: UnsupportedClassVersionError\n",
+        "",
+      );
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const env = await project.envsAsync({
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\n"
+      + "[ERROR] Failed to execute goal gauge:classpath: UnsupportedClassVersionError",
+  ]);
+});
+
+test("MavenProject falls back to the exec error message without build tool output", async () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const errors = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    exec(command, options, callback) {
+      callback(new Error("Command failed: mvn -q gauge:classpath"), "", "");
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const env = await project.envsAsync({
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  });
+
+  assert.equal(env, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nCommand failed: mvn -q gauge:classpath",
+  ]);
+});
+
 test("GradleProject reports empty async classpath output as an error", async () => {
   const { GradleProject } = require("../src/project/gradleProject");
   const errors = [];
