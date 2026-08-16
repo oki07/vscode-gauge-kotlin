@@ -285,3 +285,58 @@ test("ProjectEnvironmentService watches Gradle version catalogs for environment 
   assert.deepEqual(first, { gauge_custom_classpath: "cp-1" });
   assert.deepEqual(second, { gauge_custom_classpath: "cp-2" });
 });
+
+test("ProjectEnvironmentService never adopts a classpath-less environment as a preparation", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  let attempts = 0;
+  const preparations = [];
+  const project = {
+    root: () => "/ws",
+    executionPreparationCacheable: () => true,
+    async envsAsync() {
+      attempts += 1;
+      return attempts === 1 ? undefined : { gauge_custom_classpath: "/ws/build/classes" };
+    },
+    async executionEnvsAsync(_cli, cached) {
+      preparations.push(cached);
+      if (cached) {
+        return cached;
+      }
+      attempts += 1;
+      return { gauge_custom_classpath: "/ws/build/classes" };
+    },
+  };
+  const service = new ProjectEnvironmentService({
+    projectFactory: { get: () => project },
+    vscode: {},
+  });
+
+  const inFlight = service.environmentFor(project);
+  const firstRun = await service.executionEnvironmentFor(project);
+  await inFlight;
+  const secondRun = await service.executionEnvironmentFor(project);
+
+  assert.deepEqual(preparations[0], undefined);
+  assert.deepEqual(firstRun, { gauge_custom_classpath: "/ws/build/classes" });
+  assert.deepEqual(secondRun, { gauge_custom_classpath: "/ws/build/classes" });
+  assert.deepEqual(service.cachedEnvironment("/ws"), {
+    gauge_custom_classpath: "/ws/build/classes",
+  });
+});
+
+test("ProjectEnvironmentService does not cache an environment without a classpath", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const project = {
+    root: () => "/ws",
+    async executionEnvsAsync() {
+      return {};
+    },
+  };
+  const service = new ProjectEnvironmentService({
+    projectFactory: { get: () => project },
+    vscode: {},
+  });
+
+  assert.equal(await service.executionEnvironmentFor(project), undefined);
+  assert.equal(service.cachedEnvironment("/ws"), undefined);
+});

@@ -38,6 +38,17 @@ function documentPath(document) {
   return uriPath(document && document.uri) || (document && document.fileName) || "";
 }
 
+// A build tool that failed to report a classpath yields an empty environment.
+// Reusing or caching it would launch Gauge without gauge_custom_classpath, so
+// every step and hook would be missing from the runner registry.
+function isUsableEnvironment(environment) {
+  return Boolean(
+    environment
+    && typeof environment === "object"
+    && Object.keys(environment).length > 0,
+  );
+}
+
 class ProjectEnvironmentService {
   constructor(options = {}) {
     this.cli = options.cli;
@@ -260,7 +271,11 @@ class ProjectEnvironmentService {
     const rootGeneration = this.rootGenerations.get(root) || 0;
     let cached = this.environments.get(root);
     if (!cached && this.pending.has(root)) {
-      cached = await this.pending.get(root);
+      // Await the in-flight computation, then re-read the cache: a failed
+      // computation resolves to an empty object without ever being stored,
+      // and must not be mistaken for a completed preparation.
+      await this.pending.get(root);
+      cached = this.environments.get(root);
     }
     if (typeof project.executionEnvsAsync !== "function") {
       return this.environmentFor(project, cli);
@@ -272,7 +287,7 @@ class ProjectEnvironmentService {
     const skipBuild = preparationCacheable && this.preparedExecutionRoots.has(root);
     try {
       const environment = await project.executionEnvsAsync(cli, cached, { skipBuild });
-      if (environment && typeof environment === "object") {
+      if (isUsableEnvironment(environment)) {
         if (
           this.globalGeneration === globalGeneration
           && (this.rootGenerations.get(root) || 0) === rootGeneration
