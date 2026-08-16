@@ -1074,7 +1074,7 @@ test("GaugeWorkspace removes clients and reports language server startup failure
   ]);
 });
 
-test("GaugeWorkspace reports language server runtime failures", async () => {
+test("GaugeWorkspace leaves language server recovery to the default error handler", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
@@ -1093,24 +1093,14 @@ test("GaugeWorkspace reports language server runtime failures", async () => {
       return Buffer.from("/workspace/gauge/build/classes\n");
     },
     LanguageClient: FakeLanguageClient,
-    ErrorAction: { Continue: "continue" },
-    CloseAction: { DoNotRestart: "do-not-restart" },
     pathModule: path.posix,
     vscode,
   });
   await workspace.ready();
 
   const entry = clients.get("/workspace/gauge/specs/example.spec");
-  const handler = entry.client.clientOptions.errorHandler;
-  assert.equal(typeof handler.error, "function");
-  assert.equal(typeof handler.closed, "function");
-
-  assert.deepEqual(handler.error(new Error("connection reset")), { action: "continue" });
-  assert.deepEqual(handler.closed(), { action: "do-not-restart" });
-  assert.deepEqual(errors.map((entry) => entry.message), [
-    "Gauge language server for /workspace/gauge failed. connection reset",
-    "Gauge language server for /workspace/gauge stopped unexpectedly.",
-  ]);
+  assert.equal(entry.client.clientOptions.errorHandler, undefined);
+  assert.deepEqual(errors, []);
 });
 
 test("GaugeWorkspace generates Java config for mixed-case Java plugins", async () => {

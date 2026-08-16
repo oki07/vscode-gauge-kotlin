@@ -77,8 +77,6 @@ function getLanguageClientModule(options) {
       RevealOutputChannelOn: options.RevealOutputChannelOn,
       ShowMessageNotification: options.ShowMessageNotification,
       MessageType: options.MessageType,
-      ErrorAction: options.ErrorAction,
-      CloseAction: options.CloseAction,
     };
   }
   return require("vscode-languageclient/node");
@@ -298,8 +296,6 @@ class GaugeWorkspace {
       : "never";
     this.ShowMessageNotification = languageClientModule.ShowMessageNotification;
     this.MessageType = languageClientModule.MessageType;
-    this.ErrorAction = languageClientModule.ErrorAction || { Continue: 1 };
-    this.CloseAction = languageClientModule.CloseAction || { DoNotRestart: 1 };
     this.projectFactory = options.projectFactory || createProjectFactory({
       execSync: options.execSync,
       fileSystem: options.fileSystem,
@@ -701,16 +697,8 @@ class GaugeWorkspace {
       synchronize: {
         configurationSection: "gauge",
       },
-      errorHandler: {
-        error: (error) => {
-          this.showLanguageServerRuntimeError(project, error);
-          return { action: this.ErrorAction.Continue };
-        },
-        closed: () => {
-          this.showLanguageServerClosedError(project);
-          return { action: this.CloseAction.DoNotRestart };
-        },
-      },
+      // No errorHandler: the default one restarts the client when the Gauge
+      // daemon exits, which it does on any recovered LSP handler panic.
       workspaceFolder: this.vscode.workspace.getWorkspaceFolder(this.vscode.Uri.file(folder)),
     };
   }
@@ -764,24 +752,6 @@ class GaugeWorkspace {
     const detail = errorMessage(error);
     const suffix = detail ? ` ${detail}` : "";
     return window.showErrorMessage(`Unable to start Gauge language server for ${project.root()}.${suffix}`);
-  }
-
-  showLanguageServerRuntimeError(project, error) {
-    const window = this.vscode.window || {};
-    if (typeof window.showErrorMessage !== "function") {
-      return undefined;
-    }
-    const detail = errorMessage(error);
-    const suffix = detail ? ` ${detail}` : "";
-    return window.showErrorMessage(`Gauge language server for ${project.root()} failed.${suffix}`);
-  }
-
-  showLanguageServerClosedError(project) {
-    const window = this.vscode.window || {};
-    if (typeof window.showErrorMessage !== "function") {
-      return undefined;
-    }
-    return window.showErrorMessage(`Gauge language server for ${project.root()} stopped unexpectedly.`);
   }
 
   registerServerMessageFilter(languageClient) {
