@@ -732,6 +732,61 @@ test("GaugeWorkspace suppresses the external implementation source popup from Ga
   assert.deepEqual(infos.map((entry) => entry.message), ["runner ready"]);
 });
 
+test("GaugeWorkspace drops the misleading Java extension hint from Gauge LSP messages", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode, errors } = createFakeVscode({});
+  const cli = new CLI(new Command("gauge"), {
+    version: "1.2.3",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  }, new Command("mvn"), new Command("gradle"));
+
+  const workspace = new GaugeWorkspace({
+    cli,
+    clientsMap: clients,
+    fileSystem,
+    execSync() {
+      return Buffer.from("/workspace/gauge/build/classes\n");
+    },
+    LanguageClient: FakeLanguageClient,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = clients.get("/workspace/gauge/specs/example.spec");
+  const handler = entry.client.notificationHandlers.get("window/showMessage");
+  assert.equal(typeof handler, "function");
+
+  handler({
+    type: 1,
+    message: "Gauge could not initialize."
+      + " Install 'vscjava.vscode-java-pack' extension for code insights."
+      + " For more information see[Problems](command:workbench.actions.view.problems), check logs."
+      + "[Troubleshooting](https://docs.gauge.org/troubleshooting.html)",
+  });
+  assert.deepEqual(errors.map((error) => error.message), [
+    "Gauge could not initialize."
+      + " For more information see[Problems](command:workbench.actions.view.problems), check logs."
+      + "[Troubleshooting](https://docs.gauge.org/troubleshooting.html)",
+  ]);
+
+  errors.length = 0;
+  handler({ type: 1, message: "Gauge runner crashed" });
+  assert.deepEqual(errors.map((error) => error.message), ["Gauge runner crashed"]);
+});
+
 test("clientMiddleware suppresses LSP definitions owned by the stable local provider", async () => {
   const { clientMiddleware } = require("../src/gaugeWorkspace");
   const localDefinitions = [{ uri: { fsPath: "/workspace/gauge/Steps.kt" } }];

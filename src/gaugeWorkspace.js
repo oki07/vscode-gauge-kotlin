@@ -30,6 +30,8 @@ const RESTART_MESSAGE = "Gauge Language Server configuration changed, please res
 const RESTART_ACTION = "Restart Now";
 const EXTERNAL_IMPLEMENTATION_SOURCE_ERROR =
   "implementation source not found: Step implementation referred from an external project or library";
+const MISLEADING_JAVA_EXTENSION_HINT =
+  " Install 'vscjava.vscode-java-pack' extension for code insights.";
 const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".gradle",
@@ -106,6 +108,23 @@ function stateOrMemory(state) {
 
 function isExternalImplementationSourceError(error) {
   return errorMessages(error).some((message) => message.includes(EXTERNAL_IMPLEMENTATION_SOURCE_ERROR));
+}
+
+// Gauge appends this hint to every runner startup failure based solely on the
+// manifest language ("java"), not on the actual failure (see
+// references/gauge/api/lang/runner.go). The Java extension pack cannot build
+// Kotlin step implementations, so the hint misleads in this extension's
+// projects; drop only that sentence and keep the rest of Gauge's message.
+function withoutMisleadingJavaExtensionHint(params) {
+  if (!params
+    || typeof params.message !== "string"
+    || !params.message.includes(MISLEADING_JAVA_EXTENSION_HINT)) {
+    return params;
+  }
+  return {
+    ...params,
+    message: params.message.split(MISLEADING_JAVA_EXTENSION_HINT).join(""),
+  };
 }
 
 function errorMessages(error, seen = new Set()) {
@@ -778,7 +797,7 @@ class GaugeWorkspace {
       if (isExternalImplementationSourceError(params)) {
         return;
       }
-      this.showServerMessage(params);
+      this.showServerMessage(withoutMisleadingJavaExtensionHint(params));
     });
   }
 
