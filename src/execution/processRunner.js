@@ -161,7 +161,13 @@ function createGaugeProcessRunner(options = {}) {
         ? command.tool.argsForSpawnType(command.args)
         : command.args;
       const initial = ["Running tool:", command.command, displayArgs.join(" ")].join(" ");
-      const channel = new OutputChannel(outputChannel, initial, command.cwd, { pathModule });
+      // Gauge reveals its execution channel on every run. Runs that forward
+      // their output to the Test Results panel keep it hidden so the test UI
+      // stays in front.
+      const channel = new OutputChannel(outputChannel, initial, command.cwd, {
+        pathModule,
+        reveal: command.forwardOutput !== true,
+      });
       const machineReadable = isMachineReadableCommand(command);
       const emitStdoutLine = createLineEmitter((lineText) => {
         if (machineReadable) {

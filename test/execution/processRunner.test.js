@@ -6,6 +6,7 @@ const test = require("node:test");
 class FakeOutputChannel {
   constructor() {
     this.lines = [];
+    this.showCalls = [];
   }
 
   appendLine(value) {
@@ -16,7 +17,9 @@ class FakeOutputChannel {
     this.lines = [];
   }
 
-  show() {}
+  show(preserveFocus) {
+    this.showCalls.push(preserveFocus);
+  }
 }
 
 function createChildProcess() {
@@ -90,6 +93,55 @@ test("process runner spawns Gauge and routes stdout through output and line proc
   assert.equal(outputChannel.lines.at(-2), "warning");
   assert.equal(outputChannel.lines.at(-1), "Success: Tests passed.");
   assert.ok(outputChannel.lines.includes("      Specification: /workspace/specs/example.spec:19"));
+});
+
+test("process runner reveals the execution output channel for runs without a test UI", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+
+  const runner = createGaugeProcessRunner({
+    pathModule: path.posix,
+    outputChannel,
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "specs/example.spec"],
+    cwd: "/workspace",
+  });
+  child.emit("exit", 0);
+  await run;
+
+  assert.deepEqual(outputChannel.showCalls, [true]);
+});
+
+test("process runner keeps the output channel hidden when the test UI shows the run", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+
+  const runner = createGaugeProcessRunner({
+    pathModule: path.posix,
+    outputChannel,
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "specs/example.spec"],
+    cwd: "/workspace",
+    forwardOutput: true,
+  });
+  child.emit("exit", 0);
+  await run;
+
+  assert.deepEqual(outputChannel.showCalls, []);
 });
 
 test("process runner hides machine-readable JSON events from output", async () => {
