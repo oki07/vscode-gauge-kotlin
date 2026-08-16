@@ -732,7 +732,7 @@ test("GaugeWorkspace suppresses the external implementation source popup from Ga
   assert.deepEqual(infos.map((entry) => entry.message), ["runner ready"]);
 });
 
-test("GaugeWorkspace drops the misleading Java extension hint from Gauge LSP messages", async () => {
+test("GaugeWorkspace drops the misleading Java extension hint before the LSP handshake", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
@@ -744,7 +744,7 @@ test("GaugeWorkspace drops the misleading Java extension hint from Gauge LSP mes
     }),
     "/workspace/gauge/build.gradle.kts": "",
   });
-  const { vscode, errors } = createFakeVscode({});
+  const { vscode } = createFakeVscode({});
   const cli = new CLI(new Command("gauge"), {
     version: "1.2.3",
     plugins: [{ name: "kotlin", version: "0.9.0" }],
@@ -758,33 +758,40 @@ test("GaugeWorkspace drops the misleading Java extension hint from Gauge LSP mes
       return Buffer.from("/workspace/gauge/build/classes\n");
     },
     LanguageClient: FakeLanguageClient,
-    ShowMessageNotification: { type: { method: "window/showMessage" } },
-    MessageType: { Error: 1, Warning: 2, Info: 3 },
     pathModule: path.posix,
     vscode,
   });
   await workspace.ready();
 
   const entry = clients.get("/workspace/gauge/specs/example.spec");
-  const handler = entry.client.notificationHandlers.get("window/showMessage");
-  assert.equal(typeof handler, "function");
+  const strategy = entry.client.clientOptions.connectionOptions.messageStrategy;
+  assert.equal(typeof strategy.handleMessage, "function");
 
-  handler({
-    type: 1,
-    message: "Gauge could not initialize."
-      + " Install 'vscjava.vscode-java-pack' extension for code insights."
-      + " For more information see[Problems](command:workbench.actions.view.problems), check logs."
-      + "[Troubleshooting](https://docs.gauge.org/troubleshooting.html)",
-  });
-  assert.deepEqual(errors.map((error) => error.message), [
+  const dispatched = [];
+  const troubleshooting = "[Troubleshooting](https://docs.gauge.org/troubleshooting.html"
+    + "?language=javascript&ide=vscode#gauge-could-not-initialize-for-more-information-see-problems)";
+  strategy.handleMessage({
+    jsonrpc: "2.0",
+    method: "window/showMessage",
+    params: {
+      type: 1,
+      message: "Gauge could not initialize."
+        + " Install 'vscjava.vscode-java-pack' extension for code insights."
+        + " For more information see[Problems](command:workbench.actions.view.problems), check logs."
+        + troubleshooting,
+    },
+  }, (message) => dispatched.push(message));
+
+  assert.deepEqual(dispatched.map((message) => message.params.message), [
     "Gauge could not initialize."
       + " For more information see[Problems](command:workbench.actions.view.problems), check logs."
-      + "[Troubleshooting](https://docs.gauge.org/troubleshooting.html)",
+      + troubleshooting,
   ]);
 
-  errors.length = 0;
-  handler({ type: 1, message: "Gauge runner crashed" });
-  assert.deepEqual(errors.map((error) => error.message), ["Gauge runner crashed"]);
+  dispatched.length = 0;
+  const untouched = { jsonrpc: "2.0", method: "textDocument/publishDiagnostics", params: { uri: "u" } };
+  strategy.handleMessage(untouched, (message) => dispatched.push(message));
+  assert.deepEqual(dispatched, [untouched]);
 });
 
 test("clientMiddleware suppresses LSP definitions owned by the stable local provider", async () => {

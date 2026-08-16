@@ -32,6 +32,7 @@ const EXTERNAL_IMPLEMENTATION_SOURCE_ERROR =
   "implementation source not found: Step implementation referred from an external project or library";
 const MISLEADING_JAVA_EXTENSION_HINT =
   " Install 'vscjava.vscode-java-pack' extension for code insights.";
+const SHOW_MESSAGE_METHOD = "window/showMessage";
 const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".gradle",
@@ -113,15 +114,33 @@ function isExternalImplementationSourceError(error) {
 // references/gauge/api/lang/runner.go). The Java extension pack cannot build
 // Kotlin step implementations, so the hint misleads in this extension's
 // projects; drop only that sentence and keep the rest of Gauge's message.
-function withoutMisleadingJavaExtensionHint(params) {
-  if (!params
-    || typeof params.message !== "string"
-    || !params.message.includes(MISLEADING_JAVA_EXTENSION_HINT)) {
-    return params;
+//
+// Gauge reports a failed runner before it answers "initialize"
+// (references/gauge/api/lang/server.go Start), so this runs as a connection
+// message strategy: notification handlers are only attached once the handshake
+// has completed and would never see that message.
+function withoutMisleadingJavaExtensionHint(message) {
+  if (!message
+    || message.method !== SHOW_MESSAGE_METHOD
+    || !message.params
+    || typeof message.params.message !== "string"
+    || !message.params.message.includes(MISLEADING_JAVA_EXTENSION_HINT)) {
+    return message;
   }
   return {
-    ...params,
-    message: params.message.split(MISLEADING_JAVA_EXTENSION_HINT).join(""),
+    ...message,
+    params: {
+      ...message.params,
+      message: message.params.message.split(MISLEADING_JAVA_EXTENSION_HINT).join(""),
+    },
+  };
+}
+
+function serverMessageStrategy() {
+  return {
+    handleMessage(message, next) {
+      next(withoutMisleadingJavaExtensionHint(message));
+    },
   };
 }
 
@@ -699,6 +718,9 @@ class GaugeWorkspace {
       },
       // No errorHandler: the default one restarts the client when the Gauge
       // daemon exits, which it does on any recovered LSP handler panic.
+      connectionOptions: {
+        messageStrategy: serverMessageStrategy(),
+      },
       workspaceFolder: this.vscode.workspace.getWorkspaceFolder(this.vscode.Uri.file(folder)),
     };
   }
@@ -767,7 +789,7 @@ class GaugeWorkspace {
       if (isExternalImplementationSourceError(params)) {
         return;
       }
-      this.showServerMessage(withoutMisleadingJavaExtensionHint(params));
+      this.showServerMessage(params);
     });
   }
 
