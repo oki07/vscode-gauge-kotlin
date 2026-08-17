@@ -1,6 +1,9 @@
 "use strict";
 
-const PROJECT_ENVIRONMENT_GLOB = "**/{manifest.json,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties,gradlew,gradlew.bat,gradlew.cmd,*.properties,*.toml}";
+// Wildcards rather than the standard file names: a Gradle convention plugin
+// under buildSrc, or a script applied from gradle/, changes the classpath
+// without any file named build.gradle.kts being touched.
+const PROJECT_ENVIRONMENT_GLOB = "**/{manifest.json,pom.xml,gradlew,gradlew.bat,gradlew.cmd,*.gradle,*.gradle.kts,*.properties,*.toml}";
 const PROJECT_EXECUTION_INPUT_GLOB = "**/src/**";
 const GAUGE_ENVIRONMENT_CONFIGURATIONS = [
   "gauge.executablePath",
