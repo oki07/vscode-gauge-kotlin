@@ -813,3 +813,41 @@ test("MavenProject settles the build when the task ends without a process exit",
   assert.equal(result, undefined);
   assert.deepEqual(vscode.disposals.sort(), ["process", "task"]);
 });
+
+test("GradleProject reports a build tool failure that rejects with a frozen error", async () => {
+  const { GradleProject } = require("../src/project/gradleProject");
+  const errors = [];
+  const project = new GradleProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    exec(command, options, callback) {
+      const frozen = Object.freeze(new Error("Command failed: gradle -q classpath --rerun"));
+      queueMicrotask(() => callback(frozen, "", ""));
+    },
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+        },
+      },
+    },
+  });
+
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => resolve("timed out"), 200).unref();
+  });
+  const result = await Promise.race([
+    project.envsAsync({
+      gradleCommand() {
+        return { command: "gradle" };
+      },
+    }),
+    timeout,
+  ]);
+
+  assert.equal(result, undefined);
+  assert.deepEqual(errors, [
+    "Error calculating project classpath.\t\nCommand failed: gradle -q classpath --rerun",
+  ]);
+});

@@ -99,9 +99,15 @@ class BuildToolProject extends GaugeProject {
           }
           // Maven and Gradle report failures on stdout, which exec drops from
           // error.message; mirror execSync's error.output so the classpath
-          // error toast carries the build tool's actual output.
-          if (error.output == null) {
-            error.output = [null, stdout, stderr];
+          // error toast carries the build tool's actual output. A rejection
+          // value that cannot take the property must still reject, not throw
+          // out of this callback and leave the promise pending.
+          try {
+            if (error.output == null) {
+              error.output = [null, stdout, stderr];
+            }
+          } catch (_error) {
+            // Report the original failure without the build tool output.
           }
           reject(error);
         });
