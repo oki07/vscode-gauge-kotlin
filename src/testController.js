@@ -1262,6 +1262,17 @@ class GaugeTestController {
     }
   }
 
+  appendItemOutput(run, item, message, location) {
+    if (!run || typeof run.appendOutput !== "function" || !String(message || "").trim()) {
+      return;
+    }
+    run.appendOutput(
+      testResultsOutput(message),
+      createMessageLocation(this.vscode, location),
+      item,
+    );
+  }
+
   finishItem(event) {
     const run = this.ensureRun();
     const item = this.ensureItem(event);
@@ -1287,7 +1298,11 @@ class GaugeTestController {
       return "failed";
     }
     if (pending && pending.status === "skipped" && typeof run.skipped === "function") {
-      run.skipped(item, createOptionalMessage(this.vscode, pending.message));
+      // TestRun.skipped carries no message, so Gauge's skip reason (which
+      // names the file, line and unimplemented step) has to be attached to the
+      // item through appendOutput or the user gets an unexplained grey result.
+      this.appendItemOutput(run, item, pending.message, pending.location);
+      run.skipped(item);
       return "skipped";
     }
     if (typeof run.passed === "function") {

@@ -83,8 +83,10 @@ function createFakeVscode(options = {}) {
         passed(item, duration) {
           calls.push(["passed", item.id, duration]);
         },
-        skipped(item, message) {
-          calls.push(["skipped", item.id, message && (message.message || message)]);
+        skipped(item) {
+          // TestRun.skipped takes no message: vscode.d.ts declares
+          // skipped(test: TestItem): void
+          calls.push(["skipped", item.id]);
         },
         started(item) {
           calls.push(["started", item.id]);
@@ -2027,7 +2029,7 @@ test("GaugeTestController delays failed and skipped results until finish events 
     ["started", "scenario-1"],
     ["failed", "scenario-1", "Expected success", 7],
     ["started", "scenario-2"],
-    ["skipped", "scenario-2", "Skipped: missing dependency"],
+    ["skipped", "scenario-2"],
   ]);
 });
 
@@ -2072,9 +2074,10 @@ test("GaugeTestController preserves Gauge output without synthetic formatting", 
   sink({ type: "testIgnored", id: "skipped", parentId: "spec", message: "Not applicable" });
   sink({ type: "testFinished", id: "skipped", parentId: "spec", name: "Skipped checkout" });
 
-  assert.deepEqual(calls.filter((entry) => entry[0] === "output"), [
-    ["output", "\x1b[0;36m# Checkout\r\n\x1b[0m\x1b[0;33m  ## Successful checkout\t\x1b[0m"],
-  ]);
+  assert.deepEqual(
+    calls.filter((entry) => entry[0] === "output" && entry.length === 2),
+    [["output", "\x1b[0;36m# Checkout\r\n\x1b[0m\x1b[0;33m  ## Successful checkout\t\x1b[0m"]],
+  );
 });
 
 test("GaugeTestController keeps Test Explorer hierarchy separate from Test Results output", () => {
@@ -2193,4 +2196,37 @@ test("GaugeTestController bounds concurrent spec scenario requests", async () =>
 
   assert.equal(scenarioRequests.length, DEFAULT_SCENARIO_REQUEST_CONCURRENCY + 2);
   assert.equal(maximumRequests, DEFAULT_SCENARIO_REQUEST_CONCURRENCY);
+});
+
+test("GaugeTestController attaches Gauge skip reasons to the skipped test item", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+  const skipReason = "/workspace/specs/example.spec:7 Step implementation not found"
+    + " => 'the wiremock is initialized'";
+
+  sink({ type: "testStarted", id: "scenario-1", parentId: "spec", name: "Checkout" });
+  sink({
+    type: "testIgnored",
+    id: "scenario-1",
+    parentId: "spec",
+    location: "gauge:///workspace/specs/example.spec:7",
+    message: skipReason,
+  });
+  sink({ type: "testFinished", id: "scenario-1", parentId: "spec", name: "Checkout" });
+
+  assert.ok(controller);
+  const outputs = calls.filter((entry) => entry[0] === "output" && entry.length === 4);
+  assert.deepEqual(outputs.map((entry) => [entry[1], entry[3]]), [
+    [skipReason, "scenario-1"],
+  ]);
+  assert.notEqual(outputs[0][2], undefined);
+  assert.deepEqual(
+    calls.filter((entry) => entry[0] === "skipped"),
+    [["skipped", "scenario-1"]],
+  );
 });
