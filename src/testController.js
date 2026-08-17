@@ -982,6 +982,7 @@ class GaugeTestController {
 
   startTestRun(request = {}) {
     this.prepareTestRun(request);
+    this.forwardedOutput = new Set();
     if (!this.controller || typeof this.controller.createTestRun !== "function") {
       return undefined;
     }
@@ -1279,14 +1280,36 @@ class GaugeTestController {
   }
 
   appendItemOutput(run, item, message, location) {
-    if (!run || typeof run.appendOutput !== "function" || !String(message || "").trim()) {
+    const text = String(message || "").trim();
+    if (!run || typeof run.appendOutput !== "function" || !text) {
+      return;
+    }
+    // Gauge already prints its validation errors on stdout, which test UI runs
+    // stream into the same panel, so repeating one here would show it twice.
+    if (this.forwardedOutput && this.forwardedOutput.has(text)) {
       return;
     }
     run.appendOutput(
-      testResultsOutput(message),
+      `${testResultsOutput(text)}\r\n`,
       createMessageLocation(this.vscode, location),
       item,
     );
+  }
+
+  rememberForwardedOutput(message) {
+    const text = String(message || "");
+    if (!text.trim()) {
+      return;
+    }
+    if (!this.forwardedOutput) {
+      this.forwardedOutput = new Set();
+    }
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        this.forwardedOutput.add(trimmed.replace(/^\[ValidationError\]\s*/, ""));
+      }
+    }
   }
 
   finishItem(event) {
@@ -1400,6 +1423,7 @@ class GaugeTestController {
         break;
       }
       case "output":
+        this.rememberForwardedOutput(event.message);
         appendTestResultsOutput(run, event.message);
         break;
       case "notification":

@@ -2244,7 +2244,7 @@ test("GaugeTestController attaches Gauge skip reasons to the skipped test item",
   assert.ok(controller);
   const outputs = calls.filter((entry) => entry[0] === "output" && entry.length === 4);
   assert.deepEqual(outputs.map((entry) => [entry[1], entry[3]]), [
-    [skipReason, "scenario-1"],
+    [`${skipReason}\r\n`, "scenario-1"],
   ]);
   assert.notEqual(outputs[0][2], undefined);
   assert.deepEqual(
@@ -2268,10 +2268,37 @@ test("GaugeTestController explains a skip Gauge reported without a reason", () =
 
   const itemOutputs = calls.filter((entry) => entry[0] === "output" && entry.length === 4);
   assert.deepEqual(itemOutputs.map((entry) => [entry[1], entry[3]]), [
-    ["Gauge skipped this scenario without reporting a reason.", "scenario-1"],
+    ["Gauge skipped this scenario without reporting a reason.\r\n", "scenario-1"],
   ]);
   assert.deepEqual(
     calls.filter((entry) => entry[0] === "skipped"),
     [["skipped", "scenario-1"]],
   );
+});
+
+test("GaugeTestController terminates and de-duplicates skip reasons in the run output", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+  const reason = "/workspace/specs/example.spec:7 Step implementation not found => 'the step'";
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+
+  // Gauge prints its own validation line first; the extension forwards it.
+  sink({ type: "output", message: `[ValidationError] ${reason}\n` });
+  sink({ type: "testStarted", id: "scenario-1", parentId: "spec", name: "Checkout" });
+  sink({ type: "testIgnored", id: "scenario-1", parentId: "spec", message: reason });
+  sink({ type: "testFinished", id: "scenario-1", parentId: "spec", name: "Checkout" });
+
+  // A second scenario Gauge never explained still gets its own terminated line.
+  sink({ type: "testStarted", id: "scenario-2", parentId: "spec", name: "Payment" });
+  sink({ type: "testIgnored", id: "scenario-2", parentId: "spec", message: "" });
+  sink({ type: "testFinished", id: "scenario-2", parentId: "spec", name: "Payment" });
+
+  const itemOutputs = calls.filter((entry) => entry[0] === "output" && entry.length === 4);
+  assert.deepEqual(itemOutputs.map((entry) => [entry[1], entry[3]]), [
+    ["Gauge skipped this scenario without reporting a reason.\r\n", "scenario-2"],
+  ]);
 });
