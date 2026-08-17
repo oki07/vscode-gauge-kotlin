@@ -174,6 +174,10 @@ class WorkspaceDocumentStore {
     } catch (_error) {
       this.diskDocuments.delete(file);
     }
+    // A silent load skips waking the listeners, which is what the initial
+    // scan wants, but the memoised set must still see the new document or
+    // everything reading it during the scan works from a frozen snapshot.
+    this.cachedDocuments = undefined;
     if (!options.silent) {
       this.notifyChange(file);
     }

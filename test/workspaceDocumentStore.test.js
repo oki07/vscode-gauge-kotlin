@@ -473,3 +473,38 @@ test("WorkspaceDocumentStore ignores document events from non-file schemes", asy
 
   assert.deepEqual(changes.filter((change) => change.file !== undefined), []);
 });
+
+test("WorkspaceDocumentStore exposes documents loaded during the initial scan", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/specs/login.spec": "# Login\n",
+    "/ws/src/Steps.kt": "package steps\n",
+  };
+  const { vscode } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        return String(file).startsWith("/ws/") ? "/ws" : undefined;
+      },
+    },
+    vscode,
+  });
+
+  const changes = [];
+  store.onDidChangeDocuments((change) => changes.push(change));
+
+  // Something reads the set before the scan has loaded anything, which
+  // memoises an empty snapshot.
+  assert.deepEqual(store.documents().map((document) => document.uri.fsPath), []);
+
+  await store.loadDiskDocument("/ws/specs/login.spec", { silent: true });
+
+  assert.deepEqual(
+    store.documents().map((document) => document.uri.fsPath),
+    ["/ws/specs/login.spec"],
+  );
+  // A silent load must still not wake every listener, which is what the scan
+  // uses it for.
+  assert.deepEqual(changes, []);
+});
