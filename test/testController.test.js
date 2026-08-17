@@ -2230,3 +2230,26 @@ test("GaugeTestController attaches Gauge skip reasons to the skipped test item",
     [["skipped", "scenario-1"]],
   );
 });
+
+test("GaugeTestController explains a skip Gauge reported without a reason", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.startTestRun({});
+  const sink = gaugeTests.createExecutionEventSink();
+
+  sink({ type: "testStarted", id: "scenario-1", parentId: "spec", name: "Checkout" });
+  sink({ type: "testIgnored", id: "scenario-1", parentId: "spec", message: " " });
+  sink({ type: "testFinished", id: "scenario-1", parentId: "spec", name: "Checkout" });
+
+  const itemOutputs = calls.filter((entry) => entry[0] === "output" && entry.length === 4);
+  assert.deepEqual(itemOutputs.map((entry) => [entry[1], entry[3]]), [
+    ["Gauge skipped this scenario without reporting a reason.", "scenario-1"],
+  ]);
+  assert.deepEqual(
+    calls.filter((entry) => entry[0] === "skipped"),
+    [["skipped", "scenario-1"]],
+  );
+});

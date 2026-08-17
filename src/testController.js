@@ -6,6 +6,7 @@ const { headingMarkers } = require("./gaugeHeadings");
 
 const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";
+const UNEXPLAINED_SKIP_MESSAGE = "Gauge skipped this scenario without reporting a reason.";
 const GAUGE_LANGUAGE = "gauge";
 const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
@@ -1301,7 +1302,14 @@ class GaugeTestController {
       // TestRun.skipped carries no message, so Gauge's skip reason (which
       // names the file, line and unimplemented step) has to be attached to the
       // item through appendOutput or the user gets an unexplained grey result.
-      this.appendItemOutput(run, item, pending.message, pending.location);
+      // Every non-JSON Gauge reporter returns early for a skipped scenario, so
+      // when Gauge states no reason there is nothing in the run output either.
+      this.appendItemOutput(
+        run,
+        item,
+        String(pending.message || "").trim() || UNEXPLAINED_SKIP_MESSAGE,
+        pending.location,
+      );
       run.skipped(item);
       return "skipped";
     }
