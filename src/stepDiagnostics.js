@@ -8215,6 +8215,8 @@ const JAVA_FILE_PATTERN = /\.java$/i;
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
+const MARKDOWN_FILE_PATTERN = /\.md$/i;
+const GAUGE_SPECS_DIRECTORY = "specs";
 const JAVA_WORKSPACE_PATTERN = "**/*.java";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
@@ -8276,6 +8278,14 @@ function isConceptDocument(candidate) {
   return typeof file === "string" && CONCEPT_FILE_PATTERN.test(file);
 }
 
+// Gauge only reads Markdown as a specification inside its spec directories
+// (references/gauge/util/util.go GetSpecDirs, default "specs"). Without that
+// scope a README or CHANGELOG in a Gauge project is parsed as a spec and its
+// bullet list is reported as undefined steps.
+function isMarkdownSpecPath(file) {
+  return String(file).split(/[\\/]/).slice(0, -1).includes(GAUGE_SPECS_DIRECTORY);
+}
+
 function isGaugeSpecDocument(candidate) {
   if (!candidate) {
     return false;
@@ -8284,7 +8294,13 @@ function isGaugeSpecDocument(candidate) {
     return true;
   }
   const file = documentPath(candidate);
-  return typeof file === "string" && SPEC_FILE_PATTERN.test(file);
+  if (typeof file !== "string") {
+    return false;
+  }
+  if (MARKDOWN_FILE_PATTERN.test(file)) {
+    return isMarkdownSpecPath(file);
+  }
+  return SPEC_FILE_PATTERN.test(file);
 }
 
 function isGaugeStepSourceDocument(candidate) {

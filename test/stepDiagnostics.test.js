@@ -7440,3 +7440,53 @@ test("GaugeStepDiagnosticsProvider reports unknown implementation state before t
 
   assert.equal(provider.stepImplementedAt(specDocument, 4, [specDocument]), undefined);
 });
+
+test("GaugeStepDiagnosticsProvider leaves ordinary Markdown outside the spec directories alone", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const steps = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "class Steps {",
+    '  @Step("a real step")',
+    "  fun real() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const contributing = createDocument([
+    "# Contributing",
+    "",
+    "## Local setup",
+    "* Install Java 21",
+    "* Run the build",
+  ].join("\n"), "markdown", "/workspace/gauge/CONTRIBUTING.md");
+  const spec = createDocument([
+    "# Checkout",
+    "",
+    "## Buy",
+    "* a real step",
+    "* a missing step",
+  ].join("\n"), "markdown", "/workspace/gauge/specs/checkout.md");
+  const documents = [steps, contributing, spec];
+  const provider = new GaugeStepDiagnosticsProvider({
+    documentStore: {
+      documents: () => documents,
+      onDidChangeDocuments: () => ({ dispose() {} }),
+      start() {},
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: (file) => (
+        String(file).startsWith("/workspace/gauge") ? "/workspace/gauge" : undefined
+      ),
+      get: () => ({ root: () => "/workspace/gauge", isProjectLanguage: () => true }),
+    },
+    vscode: createFakeVscode(),
+  });
+
+  assert.deepEqual(provider.provideDiagnostics(contributing, documents), []);
+  assert.equal(provider.shouldDiagnose(contributing), false);
+  // A Markdown spec in the spec directory keeps its diagnostics.
+  assert.deepEqual(
+    provider.provideDiagnostics(spec, documents).map((entry) => entry.message),
+    ["Undefined Step"],
+  );
+});
