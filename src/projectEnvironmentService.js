@@ -24,14 +24,35 @@ function normalizedPath(value) {
   return String(value || "").replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
+// Directories the build tool and Gauge write into. Everything else under the
+// project root counts as build input, so editing a step or hook always forces
+// a recompile, the way the IntelliJ plugin rebuilds every module before a run.
+const GENERATED_DIRECTORIES = new Set([
+  ".gauge",
+  ".git",
+  ".gradle",
+  ".hg",
+  ".idea",
+  ".svn",
+  ".vscode",
+  "build",
+  "dist",
+  "logs",
+  "node_modules",
+  "out",
+  "reports",
+  "target",
+]);
+
 function isExecutionInput(file, root) {
   const normalizedFile = normalizedPath(file);
   const normalizedRoot = normalizedPath(root);
-  return Boolean(
-    normalizedFile
-    && normalizedRoot
-    && normalizedFile.startsWith(`${normalizedRoot}/src/`),
-  );
+  if (!normalizedFile || !normalizedRoot || !normalizedFile.startsWith(`${normalizedRoot}/`)) {
+    return false;
+  }
+  const relativeSegments = normalizedFile.slice(normalizedRoot.length + 1).split("/");
+  relativeSegments.pop();
+  return !relativeSegments.some((segment) => GENERATED_DIRECTORIES.has(segment));
 }
 
 function documentPath(document) {

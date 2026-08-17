@@ -340,3 +340,76 @@ test("ProjectEnvironmentService does not cache an environment without a classpat
   assert.equal(await service.executionEnvironmentFor(project), undefined);
   assert.equal(service.cachedEnvironment("/ws"), undefined);
 });
+
+test("ProjectEnvironmentService rebuilds when a source outside the root src directory changes", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const builds = [];
+  const project = {
+    root: () => "/workspace/gauge",
+    executionPreparationCacheable: () => true,
+    async executionEnvsAsync(_cli, cached, options) {
+      if (!options || !options.skipBuild) {
+        builds.push("test-compile");
+      }
+      return cached || { gauge_custom_classpath: "/workspace/gauge/target/test-classes" };
+    },
+  };
+  const { saveListeners, vscode } = createVscode();
+  const service = new ProjectEnvironmentService({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  await service.executionEnvironmentFor(project);
+  assert.deepEqual(builds, ["test-compile"]);
+
+  // A Maven or Gradle module keeps its sources under <root>/<module>/src.
+  saveListeners[0]({
+    uri: { fsPath: "/workspace/gauge/moduleA/src/test/kotlin/Steps.kt" },
+  });
+  await service.executionEnvironmentFor(project);
+
+  assert.deepEqual(builds, ["test-compile", "test-compile"]);
+});
+
+test("ProjectEnvironmentService ignores build output when deciding to rebuild", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const builds = [];
+  const project = {
+    root: () => "/workspace/gauge",
+    executionPreparationCacheable: () => true,
+    async executionEnvsAsync(_cli, cached, options) {
+      if (!options || !options.skipBuild) {
+        builds.push("test-compile");
+      }
+      return cached || { gauge_custom_classpath: "/workspace/gauge/target/test-classes" };
+    },
+  };
+  const { saveListeners, vscode } = createVscode();
+  const service = new ProjectEnvironmentService({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  await service.executionEnvironmentFor(project);
+  for (const file of [
+    "/workspace/gauge/target/test-classes/Steps.class",
+    "/workspace/gauge/build/generated/kotlin/Generated.kt",
+    "/workspace/gauge/logs/gauge.log",
+    "/workspace/gauge/reports/html-report/index.html",
+    "/workspace/gauge/.gauge/last_run_result",
+  ]) {
+    saveListeners[0]({ uri: { fsPath: file } });
+  }
+  await service.executionEnvironmentFor(project);
+
+  assert.deepEqual(builds, ["test-compile"]);
+});
