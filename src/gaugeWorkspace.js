@@ -183,6 +183,28 @@ function isMissingImplementationDiagnostic(diagnostic) {
 // language server started. The local source index is authoritative for those,
 // so its positive answers override the runner while everything else passes
 // through unchanged.
+// The runner and the document store can spell the same file differently, and a
+// miss here silently disables arbitration for that file. Comparing resolved
+// paths cannot introduce a wrong match, unlike relaxing case.
+function comparablePath(file) {
+  const segments = String(file || "").replace(/\\/g, "/").split("/");
+  const resolved = [];
+  for (const segment of segments) {
+    if (segment === "" && resolved.length > 0) {
+      continue;
+    }
+    if (segment === ".") {
+      continue;
+    }
+    if (segment === ".." && resolved.length > 0 && resolved[resolved.length - 1] !== "..") {
+      resolved.pop();
+      continue;
+    }
+    resolved.push(segment);
+  }
+  return resolved.join("/");
+}
+
 function diagnosticLine(diagnostic) {
   const start = diagnostic && diagnostic.range && diagnostic.range.start;
   return start ? start.line : undefined;
@@ -216,9 +238,11 @@ function arbitratedDiagnostics(uri, diagnostics, options) {
   ) {
     return diagnostics;
   }
-  const file = (uri && (uri.fsPath || uri.path)) || "";
+  const file = comparablePath((uri && (uri.fsPath || uri.path)) || "");
   const workspaceDocuments = store.documents();
-  const document = workspaceDocuments.find((candidate) => documentPath(candidate) === file);
+  const document = workspaceDocuments.find(
+    (candidate) => comparablePath(documentPath(candidate)) === file,
+  );
   if (!document) {
     return diagnostics;
   }

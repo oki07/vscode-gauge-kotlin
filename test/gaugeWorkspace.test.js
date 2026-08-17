@@ -2220,3 +2220,78 @@ test("clientMiddleware drops the runner missing-step row the local provider alre
     [7],
   );
 });
+
+test("clientMiddleware arbitrates diagnostics published under an unnormalised path", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const workspaceDocuments = [specDocument];
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return workspaceDocuments;
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return true;
+      },
+      publishedDiagnosticLines() {
+        return new Set();
+      },
+    },
+  });
+
+  for (const published of [
+    "/workspace/gauge/specs/e2e.spec",
+    "/workspace/gauge/./specs/e2e.spec",
+    "/workspace/gauge//specs/e2e.spec",
+    "/workspace/gauge/tmp/../specs/e2e.spec",
+    "\\workspace\\gauge\\specs\\e2e.spec",
+  ]) {
+    const forwarded = [];
+    middleware.handleDiagnostics(
+      { fsPath: published },
+      [missingImplementationDiagnostic(4)],
+      (uri, diagnostics) => forwarded.push(...diagnostics),
+    );
+    assert.deepEqual(forwarded, [], `not arbitrated for ${published}`);
+  }
+});
+
+test("clientMiddleware leaves diagnostics for an unrelated file untouched", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return [specDocument];
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return true;
+      },
+      publishedDiagnosticLines() {
+        return new Set();
+      },
+    },
+  });
+
+  const forwarded = [];
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/other.spec" },
+    [missingImplementationDiagnostic(4)],
+    (uri, diagnostics) => forwarded.push(...diagnostics),
+  );
+  assert.equal(forwarded.length, 1);
+});
