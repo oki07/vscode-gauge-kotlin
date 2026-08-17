@@ -71,18 +71,22 @@ function textWithLine(value) {
   return value.endsWith("\n") ? value : `${value}\n`;
 }
 
+// Returns the text a reader should see for this line, so the Test Results
+// panel can be fed the same filtered content as the output channel.
 function appendMachineReadableOutput(channel, lineText) {
   const event = parseMachineReadableEvent(lineText);
   if (!event) {
     channel.appendOutBuf(lineText);
-    return;
+    return lineText;
   }
   if (String(event.type || "").toLowerCase() === "out") {
     const message = textWithLine(event.message || "");
     if (message) {
       channel.appendOutBuf(message);
+      return message;
     }
   }
+  return "";
 }
 
 function loadProcessTree() {
@@ -171,7 +175,12 @@ function createGaugeProcessRunner(options = {}) {
       const machineReadable = isMachineReadableCommand(command);
       const emitStdoutLine = createLineEmitter((lineText) => {
         if (machineReadable) {
-          appendMachineReadableOutput(channel, lineText);
+          const visible = appendMachineReadableOutput(channel, lineText);
+          // Raw chunks would put the protocol JSON itself in the Test Results
+          // panel, so forward what the channel shows instead.
+          if (command.forwardOutput && visible) {
+            processOutputChunk(visible);
+          }
         } else {
           channel.appendOutBuf(lineText);
         }
@@ -215,7 +224,7 @@ function createGaugeProcessRunner(options = {}) {
         : spawn(command.command, command.args, spawnOptions);
       processStarted(command);
       child.stdout.on("data", (chunk) => {
-        if (command.forwardOutput) {
+        if (command.forwardOutput && !machineReadable) {
           emitStdoutChunk.write(chunk);
         }
         emitStdoutLine(chunk);

@@ -546,3 +546,36 @@ test("process runner cancel kills the Windows parent before async tree lookup co
   assert.deepEqual(child.killCalls, []);
   assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
 });
+
+test("process runner forwards machine-readable runs to the test UI without raw JSON", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const forwarded = [];
+
+  const runner = createGaugeProcessRunner({
+    pathModule: path.posix,
+    outputChannel,
+    processOutputChunk(chunk) {
+      forwarded.push(String(chunk));
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "--machine-readable", "specs/example.spec"],
+    cwd: "/workspace",
+    forwardOutput: true,
+  });
+
+  const specStart = "{\"type\":\"specStart\",\"id\":\"spec-1\",\"name\":\"Example\"}";
+  const output = "{\"type\":\"out\",\"message\":\"visible output\"}";
+  child.stdout.emit("data", `${specStart}\n${output}\n`);
+  child.emit("exit", 0);
+  await run;
+
+  assert.deepEqual(forwarded, ["visible output\n"]);
+});
