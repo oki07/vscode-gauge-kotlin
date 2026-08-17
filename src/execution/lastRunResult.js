@@ -563,17 +563,25 @@ function scenarioEvents(item, filename) {
     name: info.name,
     ...(item.tableDrivenScenario ? { resultOnly: true } : {}),
   };
+  // Gauge reports the scenario heading line, which is what the Test Results
+  // panel needs to link a result back to its source.
+  const span = info.scenario.span;
+  const location = filename && span && span.start
+    ? { location: `gauge://${filename}:${span.start}` }
+    : {};
   const events = [];
   if (info.scenario.status === 2) {
     events.push({
       type: "testFailed",
       ...event,
+      ...location,
       message: scenarioFailureMessage(info.scenario),
     });
   } else if (info.scenario.status === 3) {
     events.push({
       type: "testIgnored",
       ...event,
+      ...location,
       message: info.scenario.skipErrors.join("\n"),
     });
   }

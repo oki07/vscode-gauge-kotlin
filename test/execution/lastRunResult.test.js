@@ -185,6 +185,7 @@ test("last run result maps Gauge protobuf scenarios and hook failures to leaf ev
       id: `${filename}:10`,
       parentId: filename,
       name: "Failing",
+      location: `gauge://${filename}:10`,
       message: [
         [
           "Failed: BeforeStep hook for step: Failing step",
@@ -444,6 +445,7 @@ test("last run result maps skipped and table-driven scenarios", () => {
       id: `${filename}:4`,
       parentId: filename,
       name: "Skipped",
+      location: `gauge://${filename}:4`,
       message: "filtered",
     },
     {
