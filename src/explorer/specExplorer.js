@@ -224,10 +224,15 @@ class SpecNodeProvider {
         }
         return undefined;
       })
-      .catch((reason) => this.vscode.window.showErrorMessage(
-        "Failed to create test explorer.",
-        reason,
-      ));
+      // A second argument is read as options or an item, so the reason would
+      // be dropped: fold it in. This fires exactly when the Gauge daemon
+      // failed to start, which is when the user most needs to see why.
+      .catch((reason) => {
+        const detail = (reason && reason.message) || String(reason || "");
+        return this.vscode.window.showErrorMessage(
+          `Failed to create test explorer.${detail ? ` ${detail}` : ""}`,
+        );
+      });
   }
 
   shouldRefresh(fileUri) {

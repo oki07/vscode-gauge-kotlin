@@ -74,8 +74,11 @@ function createFakeVscode(overrides = {}) {
         treeProviders.push({ viewId, provider, disposable });
         return disposable;
       },
-      showErrorMessage(message, reason) {
-        errors.push({ message, reason });
+      showErrorMessage(message, ...rest) {
+        const items = rest.filter((entry) => (
+          typeof entry === "string" || (entry && typeof entry.title === "string")
+        ));
+        errors.push({ message, actions: items });
         return Promise.resolve(undefined);
       },
       showInformationMessage(message) {
@@ -480,4 +483,28 @@ test("SpecNodeProvider watcher listens for spec creation and deletion events", a
   assert.equal(watchers[0].ignoreCreate, false);
   assert.equal(watchers[0].ignoreChange, true);
   assert.equal(watchers[0].ignoreDelete, false);
+});
+
+test("SpecNodeProvider reports why the test explorer could not be created", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  client.start = () => Promise.reject(new Error("gauge daemon exited 1"));
+  const { errors, vscode } = createFakeVscode();
+  const workspace = createFakeWorkspace(client);
+
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      return { unref() {} };
+    },
+    vscode,
+  });
+  await provider.ready();
+
+  assert.deepEqual(errors, [
+    {
+      message: "Failed to create test explorer. gauge daemon exited 1",
+      actions: [],
+    },
+  ]);
 });

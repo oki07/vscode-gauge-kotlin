@@ -112,8 +112,17 @@ function createFakeVscode(overrides = {}) {
           warnings.push({ message, actions });
           return Promise.resolve(overrides.warningSelection || actions[0]);
         },
-        showErrorMessage(message, reason) {
-          errors.push({ message, reason });
+        // showErrorMessage(message, options?, ...items) - anything that is
+        // neither a string nor a MessageItem is read as options, so an Error
+        // contributes nothing the user can see.
+        showErrorMessage(message, ...rest) {
+          const items = rest.filter((entry) => (
+            typeof entry === "string" || (entry && typeof entry.title === "string")
+          ));
+          const options = rest.find((entry) => (
+            entry && typeof entry === "object" && typeof entry.title !== "string"
+          ));
+          errors.push({ message, actions: items, detail: options && options.detail });
           return Promise.resolve(undefined);
         },
         showInformationMessage(message, ...actions) {
@@ -1076,7 +1085,8 @@ test("GaugeWorkspace removes clients and reports language server startup failure
   assert.deepEqual(errors, [
     {
       message: "Unable to start Gauge language server for /workspace/gauge. daemon failed",
-      reason: undefined,
+      actions: [],
+      detail: undefined,
     },
   ]);
 });
@@ -1314,8 +1324,9 @@ test("GaugeWorkspace reports project selection failures", async () => {
   await assert.doesNotReject(() => workspace.showProjectOptions(() => "unused"));
   assert.deepEqual(errors, [
     {
-      message: "Unable to select project.",
-      reason: quickPickError,
+      message: "Unable to select project. picker failed",
+      actions: [],
+      detail: undefined,
     },
   ]);
 });

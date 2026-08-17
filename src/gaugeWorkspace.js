@@ -478,7 +478,12 @@ class GaugeWorkspace {
       }
       return onChange(selected.description);
     } catch (error) {
-      return this.vscode.window.showErrorMessage("Unable to select project.", error);
+      // showErrorMessage reads a second argument as options or an item, so an
+      // Error passed there is dropped: fold the cause into the message.
+      const detail = errorMessage(error);
+      return this.vscode.window.showErrorMessage(
+        `Unable to select project.${detail ? ` ${detail}` : ""}`,
+      );
     }
   }
 
