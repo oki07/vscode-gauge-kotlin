@@ -225,8 +225,23 @@ function executionTargetForItem(item) {
   return item && item.id;
 }
 
+// TestItemCollection exposes forEach and iteration over [id, item] pairs; it
+// has no values(). Reading a missing method silently emptied every traversal.
 function collectionValues(collection) {
-  return collection && typeof collection.values === "function" ? collection.values() : [];
+  if (!collection) {
+    return [];
+  }
+  if (typeof collection.forEach === "function") {
+    const items = [];
+    collection.forEach((item) => {
+      items.push(item);
+    });
+    return items;
+  }
+  if (typeof collection[Symbol.iterator] === "function") {
+    return [...collection].map((entry) => (Array.isArray(entry) ? entry[1] : entry));
+  }
+  return [];
 }
 
 function excludedItemIds(request) {

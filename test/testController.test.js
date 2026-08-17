@@ -1,6 +1,12 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function collectionItems(collection) {
+  const items = [];
+  collection.forEach((item) => items.push(item));
+  return items;
+}
+
 function createCollection() {
   const entries = new Map();
   return {
@@ -13,8 +19,24 @@ function createCollection() {
     get(id) {
       return entries.get(id);
     },
-    values() {
-      return [...entries.values()];
+    // TestItemCollection has no values(): vscode.d.ts declares size, replace,
+    // forEach, add, delete, get and Iterable<[id, TestItem]>.
+    get size() {
+      return entries.size;
+    },
+    replace(items) {
+      entries.clear();
+      for (const item of items) {
+        entries.set(item.id, item);
+      }
+    },
+    forEach(callback, thisArg) {
+      for (const item of [...entries.values()]) {
+        callback.call(thisArg, item, this);
+      }
+    },
+    [Symbol.iterator]() {
+      return entries.entries();
     },
   };
 }
@@ -249,10 +271,10 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
   });
   disposable.dispose();
 
-  assert.deepEqual(controller.items.values().map((item) => item.id), [
+  assert.deepEqual(collectionItems(controller.items).map((item) => item.id), [
     "/workspace/specs/example.spec",
   ]);
-  assert.deepEqual(controller.items.get("/workspace/specs/example.spec").children.values().map((item) => item.id), [
+  assert.deepEqual(collectionItems(controller.items.get("/workspace/specs/example.spec").children).map((item) => item.id), [
     "/workspace/specs/example.spec:12",
   ]);
   assert.deepEqual(calls, [
@@ -548,7 +570,7 @@ test("GaugeTestController discovers specification and scenario test items from o
   const spec = controller.items.get("/workspace/specs/example.spec");
   assert.equal(spec.label, "Checkout");
   assert.deepEqual(spec.uri, { fsPath: "/workspace/specs/example.spec" });
-  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+  assert.deepEqual(collectionItems(spec.children).map((item) => [item.id, item.label]), [
     ["/workspace/specs/example.spec:3", "Successful checkout"],
     ["/workspace/specs/example.spec:6", "Declined checkout"],
   ]);
@@ -583,7 +605,7 @@ test("GaugeTestController discovers specification and scenario test items from o
   const spec = controller.items.get("/workspace/gauge/specs/example.md");
   assert.equal(spec.label, "Checkout");
   assert.deepEqual(spec.uri, { fsPath: "/workspace/gauge/specs/example.md" });
-  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+  assert.deepEqual(collectionItems(spec.children).map((item) => [item.id, item.label]), [
     ["/workspace/gauge/specs/example.md:3", "Successful checkout"],
   ]);
 });
@@ -617,7 +639,7 @@ test("GaugeTestController discovers specification and scenario test items from o
   const spec = controller.items.get("/workspace/gauge/specs/plain.spec");
   assert.equal(spec.label, "Checkout");
   assert.deepEqual(spec.uri, { fsPath: "/workspace/gauge/specs/plain.spec" });
-  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+  assert.deepEqual(collectionItems(spec.children).map((item) => [item.id, item.label]), [
     ["/workspace/gauge/specs/plain.spec:3", "Successful checkout"],
   ]);
 });
@@ -644,7 +666,7 @@ test("GaugeTestController ignores open Gauge documents outside Gauge projects", 
 
   gaugeTests.register();
 
-  assert.deepEqual(controller.items.values(), []);
+  assert.deepEqual(collectionItems(controller.items), []);
 });
 
 test("GaugeTestController treats triple-hash headings as scenarios", () => {
@@ -663,7 +685,7 @@ test("GaugeTestController treats triple-hash headings as scenarios", () => {
 
   const spec = controller.items.get("/workspace/specs/example.spec");
   assert.equal(spec.label, "Checkout");
-  const scenarios = spec.children.values();
+  const scenarios = collectionItems(spec.children);
   assert.deepEqual(scenarios.map((scenario) => ({
     id: scenario.id,
     label: scenario.label,
@@ -692,7 +714,7 @@ test("GaugeTestController ignores headings inside closed step docstrings", () =>
   gaugeTests.register();
 
   const spec = controller.items.get("/workspace/specs/example.spec");
-  assert.deepEqual(spec.children.values().map((scenario) => scenario.id), [
+  assert.deepEqual(collectionItems(spec.children).map((scenario) => scenario.id), [
     "/workspace/specs/example.spec:6",
   ]);
 });
@@ -714,7 +736,7 @@ test("GaugeTestController discovers legacy underline headings", () => {
 
   const spec = controller.items.get("/workspace/specs/example.spec");
   assert.equal(spec.label, "Legacy specification");
-  assert.deepEqual(spec.children.values().map((scenario) => [scenario.id, scenario.label]), [
+  assert.deepEqual(collectionItems(spec.children).map((scenario) => [scenario.id, scenario.label]), [
     ["/workspace/specs/example.spec:4", "Legacy scenario"],
   ]);
 });
@@ -761,7 +783,7 @@ test("GaugeTestController resolves unopened workspace specs from Gauge LSP", asy
   const spec = controller.items.get("/workspace/gauge/specs/checkout.spec");
   assert.equal(spec.label, "Checkout");
   assert.deepEqual(spec.uri, { fsPath: "/workspace/gauge/specs/checkout.spec" });
-  assert.deepEqual(spec.children.values().map((item) => ({
+  assert.deepEqual(collectionItems(spec.children).map((item) => ({
     id: item.id,
     label: item.label,
     range: {
@@ -835,7 +857,7 @@ test("GaugeTestController discovers and refreshes tests through Test Explorer ha
 
   const checkout = controller.items.get("/workspace/gauge/specs/checkout.spec");
   assert.equal(checkout.label, "Checkout");
-  assert.deepEqual(checkout.children.values().map((item) => item.label), [
+  assert.deepEqual(collectionItems(checkout.children).map((item) => item.label), [
     "Successful checkout",
   ]);
 
@@ -1014,7 +1036,7 @@ test("GaugeTestController keeps workspace-discovered tests when documents close"
 
   const spec = controller.items.get("/workspace/gauge/specs/checkout.spec");
   assert.equal(spec.label, "Checkout");
-  assert.deepEqual(spec.children.values().map((item) => [item.id, item.label]), [
+  assert.deepEqual(collectionItems(spec.children).map((item) => [item.id, item.label]), [
     ["/workspace/gauge/specs/checkout.spec:12", "Successful checkout"],
   ]);
 });
