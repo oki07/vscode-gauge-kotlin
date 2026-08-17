@@ -8382,6 +8382,7 @@ class GaugeStepDiagnosticsProvider {
     this.storeTemplatesCache = new Map();
     this.storeDocStringsCache = new Map();
     this.lastDiagnosisKeys = new Map();
+    this.publishedLines = new Map();
     this.rootGenerations = new Map();
     this.fullGeneration = 0;
     this.pendingChanges = undefined;
@@ -9101,9 +9102,44 @@ class GaugeStepDiagnosticsProvider {
       if (typeof collection.delete === "function") {
         collection.delete(document.uri);
       }
+      this.publishedLines.delete(documentPath(document));
       return;
     }
-    collection.set(document.uri, this.provideDiagnostics(document, workspaceDocuments));
+    const diagnostics = this.provideDiagnostics(document, workspaceDocuments);
+    this.rememberPublishedLines(document, diagnostics);
+    collection.set(document.uri, diagnostics);
+  }
+
+  // The Gauge runner republishes the same parser messages over LSP for files
+  // this provider already owns. Remembering what was published keeps the
+  // arbitration in the language client a map lookup instead of a second,
+  // expensive analysis pass.
+  rememberPublishedLines(document, diagnostics) {
+    const file = documentPath(document);
+    if (!file) {
+      return;
+    }
+    const lines = new Map();
+    for (const diagnostic of diagnostics || []) {
+      const start = diagnostic && diagnostic.range && diagnostic.range.start;
+      if (!start || typeof start.line !== "number") {
+        continue;
+      }
+      const message = String(diagnostic.message || "");
+      if (!lines.has(message)) {
+        lines.set(message, new Set());
+      }
+      lines.get(message).add(start.line);
+    }
+    this.publishedLines.set(file, lines);
+  }
+
+  publishedDiagnosticLines(document, message) {
+    const lines = this.publishedLines.get(documentPath(document));
+    if (!lines) {
+      return undefined;
+    }
+    return lines.get(String(message || "")) || new Set();
   }
 
   addWorkspaceDocument(documents, seenPaths, candidate) {
@@ -9399,6 +9435,7 @@ class GaugeStepDiagnosticsProvider {
         const file = documentPath(document);
         if (file) {
           this.lastDiagnosisKeys.delete(file);
+          this.publishedLines.delete(file);
         }
       });
       if (closeDisposable) {

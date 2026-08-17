@@ -2085,3 +2085,138 @@ test("clientMiddleware arbitration composes with the real store and step index",
     [5],
   );
 });
+
+test("clientMiddleware drops LSP diagnostics the local provider already published", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const workspaceDocuments = [specDocument];
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return workspaceDocuments;
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return undefined;
+      },
+      publishedDiagnosticLines(document, message) {
+        return message === "Table header cannot have repeated column values"
+          ? new Set([6])
+          : new Set();
+      },
+    },
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [
+      {
+        message: "Table header cannot have repeated column values",
+        range: { start: { line: 6, character: 0 }, end: { line: 6, character: 12 } },
+      },
+      {
+        message: "Table header cannot have repeated column values",
+        range: { start: { line: 9, character: 0 }, end: { line: 9, character: 12 } },
+      },
+      {
+        message: "Multiple data table present, ignoring table",
+        range: { start: { line: 1, character: 0 }, end: { line: 1, character: 5 } },
+      },
+    ],
+    (uri, diagnostics) => published.push({ uri, diagnostics }),
+  );
+
+  assert.equal(published.length, 1);
+  assert.deepEqual(
+    published[0].diagnostics.map((diagnostic) => diagnostic.range.start.line),
+    [9, 1],
+  );
+});
+
+test("clientMiddleware keeps LSP diagnostics the local provider does not own", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const workspaceDocuments = [specDocument];
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return workspaceDocuments;
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return undefined;
+      },
+      publishedDiagnosticLines() {
+        return undefined;
+      },
+    },
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [
+      {
+        message: "Table header cannot have repeated column values",
+        range: { start: { line: 6, character: 0 }, end: { line: 6, character: 12 } },
+      },
+    ],
+    (uri, diagnostics) => published.push({ uri, diagnostics }),
+  );
+
+  assert.deepEqual(
+    published[0].diagnostics.map((diagnostic) => diagnostic.range.start.line),
+    [6],
+  );
+});
+
+test("clientMiddleware drops the runner missing-step row the local provider already flagged", () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const specDocument = createDocument("# Spec", "gauge", "/workspace/gauge/specs/e2e.spec");
+  const workspaceDocuments = [specDocument];
+  const middleware = clientMiddleware({
+    documentStore: {
+      documents() {
+        return workspaceDocuments;
+      },
+    },
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+    stepDiagnosticsProvider: {
+      stepImplementedAt() {
+        return false;
+      },
+      publishedDiagnosticLines(document, message) {
+        return message === "Undefined Step" ? new Set([4]) : new Set();
+      },
+    },
+  });
+  const published = [];
+
+  middleware.handleDiagnostics(
+    { fsPath: "/workspace/gauge/specs/e2e.spec" },
+    [missingImplementationDiagnostic(4), missingImplementationDiagnostic(7)],
+    (uri, diagnostics) => published.push({ uri, diagnostics }),
+  );
+
+  assert.deepEqual(
+    published[0].diagnostics.map((diagnostic) => diagnostic.range.start.line),
+    [7],
+  );
+});

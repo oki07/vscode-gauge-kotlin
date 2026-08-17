@@ -11,6 +11,7 @@ const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
 const { MavenProject } = require("./project/mavenProject");
 const { createProjectFactory } = require("./project/projectFactory");
 const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
+const { UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
 const GAUGE_LAUNCH_CONFIG = "gauge.launch";
@@ -182,6 +183,26 @@ function isMissingImplementationDiagnostic(diagnostic) {
 // language server started. The local source index is authoritative for those,
 // so its positive answers override the runner while everything else passes
 // through unchanged.
+function diagnosticLine(diagnostic) {
+  const start = diagnostic && diagnostic.range && diagnostic.range.start;
+  return start ? start.line : undefined;
+}
+
+// The local provider reproduces Gauge's own parser messages verbatim, so a
+// malformed spec would otherwise show two identical Problems rows for one
+// mistake: one from the runner over LSP and one from this extension.
+function isLocallyPublished(provider, document, diagnostic, message) {
+  if (typeof provider.publishedDiagnosticLines !== "function") {
+    return false;
+  }
+  const lines = provider.publishedDiagnosticLines(
+    document,
+    message === undefined ? diagnostic && diagnostic.message : message,
+  );
+  const line = diagnosticLine(diagnostic);
+  return Boolean(lines && line !== undefined && lines.has(line));
+}
+
 function arbitratedDiagnostics(uri, diagnostics, options) {
   const provider = options.stepDiagnosticsProvider;
   const store = options.documentStore;
@@ -191,7 +212,7 @@ function arbitratedDiagnostics(uri, diagnostics, options) {
     || !store
     || typeof store.documents !== "function"
     || !Array.isArray(diagnostics)
-    || !diagnostics.some(isMissingImplementationDiagnostic)
+    || diagnostics.length === 0
   ) {
     return diagnostics;
   }
@@ -202,11 +223,18 @@ function arbitratedDiagnostics(uri, diagnostics, options) {
     return diagnostics;
   }
   return diagnostics.filter((diagnostic) => {
+    if (isLocallyPublished(provider, document, diagnostic)) {
+      return false;
+    }
     if (!isMissingImplementationDiagnostic(diagnostic)) {
       return true;
     }
-    const start = diagnostic.range && diagnostic.range.start;
-    const line = start ? start.line : undefined;
+    // The runner words the same verdict differently, so an exact message match
+    // cannot catch this one.
+    if (isLocallyPublished(provider, document, diagnostic, UNDEFINED_STEP_MESSAGE)) {
+      return false;
+    }
+    const line = diagnosticLine(diagnostic);
     return provider.stepImplementedAt(document, line, workspaceDocuments) !== true;
   });
 }
