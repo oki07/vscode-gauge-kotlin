@@ -988,7 +988,27 @@ class ReferenceProvider {
     ) {
       return locations.map((location) => languageClient.protocol2CodeConverter.asLocation(location));
     }
-    return locations;
+    // Without a client the locations are still in the LSP wire shape, whose
+    // uri is a string. VS Code revives that field as a Uri and throws on a
+    // plain string, discarding the whole result, so build real API objects.
+    return locations.map((location) => this.toVscodeLocation(location));
+  }
+
+  toVscodeLocation(location) {
+    const vscode = this.vscode;
+    if (!vscode || typeof vscode.Location !== "function" || typeof vscode.Range !== "function") {
+      return location;
+    }
+    const uri = typeof location.uri === "string" && vscode.Uri && typeof vscode.Uri.parse === "function"
+      ? vscode.Uri.parse(location.uri)
+      : location.uri;
+    const range = location.range && typeof vscode.Position === "function"
+      ? new vscode.Range(
+        new vscode.Position(location.range.start.line, location.range.start.character),
+        new vscode.Position(location.range.end.line, location.range.end.character),
+      )
+      : location.range;
+    return new vscode.Location(uri, range);
   }
 
   async stepValueAt(document, position, languageClient) {

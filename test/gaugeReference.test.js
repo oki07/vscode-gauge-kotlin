@@ -1,6 +1,17 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function plainLocations(value) {
+  const locations = Array.isArray(value) ? value : [value];
+  return locations.map((location) => ({
+    uri: typeof location.uri === "string" ? location.uri : location.uri.uri,
+    range: {
+      start: { line: location.range.start.line, character: location.range.start.character },
+      end: { line: location.range.end.line, character: location.range.end.character },
+    },
+  }));
+}
+
 function createFakeVscode(overrides = {}) {
   const commands = [];
   const information = [];
@@ -25,6 +36,24 @@ function createFakeVscode(overrides = {}) {
         parse(uri) {
           return { fsPath: uri.replace("file://", ""), uri };
         },
+      },
+      Position: class Position {
+        constructor(line, character) {
+          this.line = line;
+          this.character = character;
+        }
+      },
+      Range: class Range {
+        constructor(start, end) {
+          this.start = start;
+          this.end = end;
+        }
+      },
+      Location: class Location {
+        constructor(uri, range) {
+          this.uri = uri;
+          this.range = range;
+        }
       },
       CancellationTokenSource: class CancellationTokenSource {
         constructor() {
@@ -848,7 +877,7 @@ test("ReferenceProvider excludes closed docstring payloads but keeps unterminate
 
   const result = await provider.provideReferences(activeDocument, { line: 3, character: 5 });
 
-  assert.deepEqual(result, [{
+  assert.deepEqual(plainLocations(result), [{
     uri: "file:///workspace/specs/unterminated.spec",
     range: {
       start: { line: 4, character: 0 },
@@ -929,7 +958,7 @@ test("ReferenceProvider matches multiline local Gauge references for Kotlin Step
       { line: 3, character: 5 },
     );
 
-    assert.deepEqual(result, [
+    assert.deepEqual(plainLocations(result), [
       {
         uri: "file:///workspace/gauge/specs/payment.spec",
         range: {
@@ -1003,7 +1032,7 @@ test("ReferenceProvider provides local references for Java Step aliases", async 
     { line: 6, character: 16 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/specs/example.spec",
       range: {
@@ -1082,7 +1111,7 @@ test("ReferenceProvider provides local references for every Kotlin Step alias at
     { line: 3, character: 5 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/specs/hello.spec",
       range: {
@@ -1175,7 +1204,7 @@ test("ReferenceProvider includes Kotlin super Step aliases for override methods"
     { line: 9, character: 19 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/specs/log-in.spec",
       range: {
@@ -1245,7 +1274,7 @@ test("ReferenceProvider provides local references from Gauge step cursor without
     { line: 3, character: 5 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/specs/example.spec",
       range: {
@@ -1333,7 +1362,7 @@ test("ReferenceProvider provides local references from multiline Gauge step curs
       { line: 2, character: 2 },
     );
 
-    assert.deepEqual(result, [
+    assert.deepEqual(plainLocations(result), [
       {
         uri: "file:///workspace/gauge/specs/payment.spec",
         range: {
@@ -1410,7 +1439,7 @@ test("ReferenceProvider accepts plaintext .spec documents for local references",
     { line: 3, character: 5 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/specs/example.spec",
       range: {
@@ -1566,7 +1595,7 @@ test("ReferenceProvider includes concept headings in local Step references", asy
     { line: 3, character: 5 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/specs/login.spec",
       range: {
@@ -1631,7 +1660,7 @@ test("ReferenceProvider includes gauge-concept headings in local Step references
     { line: 3, character: 5 },
   );
 
-  assert.deepEqual(result, [
+  assert.deepEqual(plainLocations(result), [
     {
       uri: "file:///workspace/concepts/login",
       range: {
@@ -1713,7 +1742,7 @@ test("ReferenceProvider provides local references from concept heading cursor wi
     { line: 0, character: 14 },
   );
 
-  assert.deepEqual(references, [
+  assert.deepEqual(plainLocations(references), [
     {
       uri: "file:///workspace/specs/concepts/shared.cpt",
       range: {
@@ -1809,7 +1838,7 @@ test("ReferenceProvider provides local references from gauge-concept heading cur
     { line: 0, character: 14 },
   );
 
-  assert.deepEqual(references, [
+  assert.deepEqual(plainLocations(references), [
     {
       uri: "file:///workspace/specs/concepts/shared",
       range: {
@@ -1881,7 +1910,7 @@ test("ReferenceProvider accepts plaintext .cpt concept headings for local refere
     { line: 0, character: 12 },
   );
 
-  assert.deepEqual(references, [
+  assert.deepEqual(plainLocations(references), [
     {
       uri: "file:///workspace/specs/concepts/shared.cpt",
       range: {
@@ -2494,15 +2523,21 @@ test("ReferenceProvider provides local references from Markdown Gauge spec steps
 
   const references = await provider.provideReferences(markdownDocument, { line: 2, character: 5 });
 
-  assert.deepEqual(references, [
-    {
-      uri: "file:///workspace/specs/example.md",
-      range: {
-        start: { line: 2, character: 0 },
-        end: { line: 2, character: 20 },
-      },
-    },
-  ]);
+  assert.equal(references.length, 1);
+  const [reference] = references;
+  assert.ok(reference instanceof vscode.Location);
+  assert.equal(reference.uri.fsPath, "/workspace/specs/example.md");
+  assert.equal(reference.uri.uri, "file:///workspace/specs/example.md");
+  assert.ok(reference.range instanceof vscode.Range);
+  assert.ok(reference.range.start instanceof vscode.Position);
+  assert.deepEqual(
+    [reference.range.start.line, reference.range.start.character],
+    [2, 0],
+  );
+  assert.deepEqual(
+    [reference.range.end.line, reference.range.end.character],
+    [2, 20],
+  );
 });
 
 test("ReferenceProvider registers reference commands", () => {
@@ -2698,7 +2733,7 @@ test("ReferenceProvider ignores local Gauge references from another Gauge projec
     { line: 3, character: 5 },
   );
 
-  assert.deepEqual(references, [
+  assert.deepEqual(plainLocations(references), [
     {
       uri: "file:///workspace/project-a/specs/example.spec",
       range: {
