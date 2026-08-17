@@ -726,3 +726,83 @@ test("MavenProject reports a missing build tool command from the async classpath
     "Error calculating project classpath.\t\nBuild tool command is not available.",
   ]);
 });
+
+function terminatedTaskVscode() {
+  let processListener;
+  let taskListener;
+  const disposals = [];
+
+  class ProcessExecution {
+    constructor(process, args, options) {
+      this.process = process;
+      this.args = args;
+      this.options = options;
+    }
+  }
+
+  class Task {
+    constructor(definition, scope, name, source, execution) {
+      this.definition = definition;
+      this.scope = scope;
+      this.name = name;
+      this.source = source;
+      this.execution = execution;
+    }
+  }
+
+  return {
+    ProcessExecution,
+    Task,
+    TaskPanelKind: { Dedicated: "dedicated" },
+    TaskRevealKind: { Always: "always" },
+    TaskScope: { Workspace: "workspace" },
+    disposals,
+    tasks: {
+      onDidEndTaskProcess(listener) {
+        processListener = listener;
+        return { dispose() { disposals.push("process"); } };
+      },
+      onDidEndTask(listener) {
+        taskListener = listener;
+        return { dispose() { disposals.push("task"); } };
+      },
+      async executeTask(task) {
+        // A task that runs no underlying process reports no process exit, so
+        // only the task end event arrives.
+        const execution = { task };
+        queueMicrotask(() => taskListener({ execution }));
+        return execution;
+      },
+    },
+    unusedProcessListener: () => processListener,
+  };
+}
+
+test("MavenProject settles the build when the task ends without a process exit", async () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const vscode = terminatedTaskVscode();
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    exec(command, options, callback) {
+      callback(undefined, Buffer.from("/workspace/gauge/target/test-classes\n"));
+    },
+    vscode,
+  });
+
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => resolve("timed out"), 200).unref();
+  });
+  const result = await Promise.race([
+    project.executionEnvsAsync({
+      mavenCommand() {
+        return { command: "mvn", shellMode: false };
+      },
+    }),
+    timeout,
+  ]);
+
+  assert.equal(result, undefined);
+  assert.deepEqual(vscode.disposals.sort(), ["process", "task"]);
+});

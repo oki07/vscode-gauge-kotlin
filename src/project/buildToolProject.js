@@ -173,15 +173,42 @@ class BuildToolProject extends GaugeProject {
     }
 
     return new Promise((resolve, reject) => {
-      const subscription = this.vscode.tasks.onDidEndTaskProcess((event) => {
-        if (event.execution && event.execution.task === task) {
-          subscription.dispose();
-          resolve(event.exitCode === 0);
+      const tasks = this.vscode.tasks;
+      const subscriptions = [];
+      let settled = false;
+      const settle = (finish) => {
+        if (settled) {
+          return;
         }
-      });
-      this.vscode.tasks.executeTask(task).catch((error) => {
-        subscription.dispose();
-        reject(error);
+        settled = true;
+        for (const subscription of subscriptions.splice(0)) {
+          if (subscription && typeof subscription.dispose === "function") {
+            subscription.dispose();
+          }
+        }
+        finish();
+      };
+      const isThisTask = (event) => Boolean(event && event.execution && event.execution.task === task);
+
+      subscriptions.push(tasks.onDidEndTaskProcess((event) => {
+        if (isThisTask(event)) {
+          settle(() => resolve(event.exitCode === 0));
+        }
+      }));
+      // A task that runs no underlying process, or that the user terminates,
+      // reports no process exit. The caller blocks the whole run on this
+      // promise, so the task end event has to settle it. VS Code raises the
+      // process exit first whenever there was one, so it still decides the
+      // result.
+      if (typeof tasks.onDidEndTask === "function") {
+        subscriptions.push(tasks.onDidEndTask((event) => {
+          if (isThisTask(event)) {
+            settle(() => resolve(false));
+          }
+        }));
+      }
+      tasks.executeTask(task).catch((error) => {
+        settle(() => reject(error));
       });
     });
   }
