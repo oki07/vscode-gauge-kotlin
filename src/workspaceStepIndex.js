@@ -25,6 +25,17 @@ const {
 
 const GAUGE_REFERENCE_FILE_PATTERN = /\.(?:cpt|md|spec)$/i;
 
+function documentLineText(document, line) {
+  if (!document || typeof document.lineAt !== "function") {
+    return "";
+  }
+  try {
+    return document.lineAt(line).text;
+  } catch (_error) {
+    return "";
+  }
+}
+
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
@@ -433,9 +444,9 @@ class WorkspaceStepIndex {
     if (!record || !isGaugeReferenceDocument(sourceDocument)) {
       return state.completionEntries.slice();
     }
-    const line = typeof sourceDocument.lineAt === "function"
-      ? sourceDocument.lineAt(position.line).text
-      : "";
+    // The document can shrink while the snapshot is awaited, and lineAt
+    // throws for a line the document no longer has.
+    const line = documentLineText(sourceDocument, position.line);
     const includeCurrentLine = String(line || "").slice(position.character).trim().length > 0;
     const excludedCurrentOccurrences = new Map();
     const currentLabels = includeCurrentLine

@@ -17,7 +17,11 @@ function createDocument(text, fsPath, languageId, version = 0) {
     getText() {
       return text;
     },
+    // TextDocument.lineAt throws for a line outside [0, lineCount).
     lineAt(line) {
+      if (typeof line !== "number" || line < 0 || line >= lines.length) {
+        throw new Error("Illegal value for `line`");
+      }
       return { text: lines[line] || "" };
     },
   };
@@ -288,4 +292,29 @@ test("WorkspaceStepIndex caches parameter values and excludes the current step",
     await index.parameterEntries(specification, { line: 6, character: 20 }, "static"),
     ["admin"],
   );
+});
+
+test("WorkspaceStepIndex survives a position past the end of the document", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const implementation = createDocument([
+    "@Step(\"Before\")",
+    "fun run() {}",
+  ].join("\n"), "/workspace/gauge/src/Steps.kt", "kotlin");
+  const specification = createDocument([
+    "# Example",
+    "* Before",
+  ].join("\n"), "/workspace/gauge/specs/example.spec", "gauge", 1);
+  const store = new FakeDocumentStore([implementation, specification]);
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    vscode: { workspace: { textDocuments: [specification] } },
+  });
+
+  // The document shrank while the index was awaiting its snapshot, so the
+  // position VS Code supplied no longer exists.
+  await assert.doesNotReject(() => index.completionEntries(
+    specification,
+    { line: 9, character: 3 },
+  ));
 });

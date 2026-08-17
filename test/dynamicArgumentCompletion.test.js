@@ -42,7 +42,11 @@ function createDocument(text, fsPath = "/workspace/specs/example.spec", language
     getText() {
       return text;
     },
+    // TextDocument.lineAt throws for a line outside [0, lineCount).
     lineAt(line) {
+      if (typeof line !== "number" || line < 0 || line >= lines.length) {
+        throw new Error("Illegal value for `line`");
+      }
       return { text: lines[line] };
     },
   };

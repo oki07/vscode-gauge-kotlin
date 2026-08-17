@@ -1546,7 +1546,9 @@ class GaugeDynamicArgumentCompletionProvider {
     if (!this.isCompletionDocument(document)) {
       return [];
     }
-    const line = document.lineAt(position.line).text;
+    // Reached after an await, by which point the document may have shrunk
+    // past this position and lineAt would throw.
+    const line = documentLineText(document, position.line);
     const prefix = line.slice(targetRange.start, position.character);
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
