@@ -465,3 +465,19 @@ test("last run result maps skipped and table-driven scenarios", () => {
     },
   ]);
 });
+
+test("last run result explains a failed specification that carries no errors", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const filename = "/workspace/specs/example.spec";
+  const spec = message(
+    fieldBytes(1, "Example"),
+    fieldBytes(6, filename),
+    fieldVarint(9, 1),
+  );
+  const suiteResult = fieldBytes(1, message(fieldBytes(1, spec), fieldVarint(4, 1)));
+
+  const failures = executionEventsFromLastRunResult(suiteResult)
+    .filter((event) => event.type === "testFailed");
+
+  assert.deepEqual(failures.map((event) => event.message), ["Specification failed."]);
+});

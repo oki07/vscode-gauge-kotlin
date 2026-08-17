@@ -615,12 +615,15 @@ function specFallbackEvents(result, filename, hasExplainingLeaf, representedErro
   const id = hasSpecificationErrors
     ? `${filename}::result:specification-errors`
     : `${filename}${name}`;
+  // A skipped specification with no stated reason is explained by the test
+  // controller; a failed one needs a message of its own or the Test Results
+  // panel shows an empty failure.
   const message = errors.map((error) => {
     const location = error.filename
       ? `${error.filename}${error.line ? `:${error.line}` : ""}\n`
       : "";
     return `${location}${error.message}`.trim();
-  }).filter(Boolean).join("\n\n") || " ";
+  }).filter(Boolean).join("\n\n") || (result.skipped ? "" : "Specification failed.");
   const locatedError = errors.find((error) => error.filename && error.line > 0);
   const location = locatedError
     ? `gauge://${locatedError.filename}:${locatedError.line}`
