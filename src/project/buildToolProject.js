@@ -38,7 +38,7 @@ class BuildToolProject extends GaugeProject {
     return this.root() === other.root();
   }
 
-  showClasspathError(error) {
+  showError(message) {
     let vscode = this.vscode;
     if (!vscode) {
       try {
@@ -48,8 +48,12 @@ class BuildToolProject extends GaugeProject {
       }
     }
     if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
-      vscode.window.showErrorMessage(`Error calculating project classpath.\t\n${errorOutput(error)}`);
+      vscode.window.showErrorMessage(message);
     }
+  }
+
+  showClasspathError(error) {
+    this.showError(`Error calculating project classpath.\t\n${errorOutput(error)}`);
   }
 
   classpathFromOutput(output) {
@@ -217,6 +221,12 @@ class BuildToolProject extends GaugeProject {
     if (typeof this.executionBuildTaskArgs === "function") {
       try {
         const result = await this.runBuildTaskAsync(command, this.executionBuildTaskArgs());
+        if (result === false) {
+          // The run aborts from here, so without this the user is left with a
+          // build terminal and a Run command that appeared to do nothing.
+          this.showError("Failed to build the project.");
+          return false;
+        }
         if (result !== undefined) {
           return result;
         }

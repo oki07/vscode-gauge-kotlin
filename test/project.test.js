@@ -254,6 +254,12 @@ test("MavenProject stops when the native Maven preparation task fails", async ()
   const { MavenProject } = require("../src/project/mavenProject");
   const calls = [];
   const vscode = taskVscode(1);
+  const errors = [];
+  vscode.window = {
+    showErrorMessage(message) {
+      errors.push(message);
+    },
+  };
   const project = new MavenProject("/workspace/gauge", {
     Language: "kotlin",
     Plugins: [],
@@ -274,6 +280,7 @@ test("MavenProject stops when the native Maven preparation task fails", async ()
   assert.equal(env, undefined);
   assert.equal(vscode.taskRuns.length, 1);
   assert.deepEqual(calls, []);
+  assert.deepEqual(errors, ["Failed to build the project."]);
 });
 
 test("MavenProject reports classpath calculation errors", () => {
