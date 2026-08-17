@@ -829,10 +829,11 @@ test("ProjectInitializer reports template list parsing failures", async () => {
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(errors, ["Failed to get list of templates."]);
-  assert.deepEqual(errorActions, [[
-    " Try running 'gauge template --list ----machine-readable' from command line",
-  ]]);
+  assert.deepEqual(errors, [
+    "Failed to get list of templates."
+    + " Try running 'gauge template --list --machine-readable' from the command line.",
+  ]);
+  assert.deepEqual(errorActions, [[]]);
   assert.deepEqual(quickPicks, []);
   assert.deepEqual(openDialogs, []);
   assert.deepEqual(inputs, []);

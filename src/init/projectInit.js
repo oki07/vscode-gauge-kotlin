@@ -292,9 +292,12 @@ class ProjectInitializer {
       }
       return this.sortTemplatesByPreference(kotlinTemplates);
     } catch (_error) {
+      // The suggestion belongs in the message: a second argument renders as a
+      // button that does nothing. The official extension spells the flag with
+      // four dashes, which Gauge does not accept (cmd/cmd.go machineReadableName).
       await this.vscode.window.showErrorMessage(
-        "Failed to get list of templates.",
-        " Try running 'gauge template --list ----machine-readable' from command line",
+        "Failed to get list of templates."
+        + " Try running 'gauge template --list --machine-readable' from the command line.",
       );
       return [];
     }
