@@ -39,6 +39,9 @@ const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { GaugeStepDiagnosticsProvider } = require("./stepDiagnostics");
 const { GaugeTestController } = require("./testController");
 const { TerminalProvider } = require("./terminalProvider");
+const {
+  GaugeUnusedReferenceDiagnosticsProvider,
+} = require("./unusedReferenceDiagnosticsProvider");
 const { WorkspaceDocumentStore } = require("./workspaceDocumentStore");
 const { WorkspaceStepIndex } = require("./workspaceStepIndex");
 const {
@@ -610,6 +613,21 @@ function registerStepDiagnosticsProvider(context, vscode, options) {
   return provider;
 }
 
+function registerUnusedReferenceDiagnosticsProvider(context, vscode, options) {
+  const UnusedReferenceDiagnosticsProviderCtor = options.GaugeUnusedReferenceDiagnosticsProvider
+    || GaugeUnusedReferenceDiagnosticsProvider;
+  const provider = new UnusedReferenceDiagnosticsProviderCtor({
+    documentStore: options.documentStore,
+    vscode,
+    workspaceStepIndex: options.workspaceStepIndex,
+  });
+  const disposable = typeof provider.register === "function" ? provider.register() : undefined;
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+  return provider;
+}
+
 function registerStepDefinitionProvider(context, vscode, options) {
   const StepDefinitionProviderCtor = options.GaugeStepDefinitionProvider
     || GaugeStepDefinitionProvider;
@@ -1006,6 +1024,11 @@ function startGaugeServices(context, vscode, options = {}) {
     documentStore,
     projectFactory,
     stepDiagnosticsProvider,
+    workspaceStepIndex,
+  });
+  registerUnusedReferenceDiagnosticsProvider(context, vscode, {
+    ...options,
+    documentStore,
     workspaceStepIndex,
   });
   registerSemanticTokensProvider(context, vscode, {

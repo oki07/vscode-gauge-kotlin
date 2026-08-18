@@ -1905,6 +1905,18 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     }
   }
 
+  class FakeUnusedReferenceDiagnosticsProvider {
+    constructor(options) {
+      this.options = options;
+      this.disposable = { dispose() {} };
+      created.unusedReferenceDiagnosticsProvider = this;
+    }
+
+    register() {
+      return this.disposable;
+    }
+  }
+
   class FakeValidateDiagnosticsProvider {
     constructor(options) {
       this.options = options;
@@ -1992,6 +2004,7 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     GaugeArgumentCodeActionProvider: FakeArgumentCodeActionProvider,
     GaugeStepCodeActionProvider: FakeStepCodeActionProvider,
     GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
+    GaugeUnusedReferenceDiagnosticsProvider: FakeUnusedReferenceDiagnosticsProvider,
     GaugeValidateDiagnosticsProvider: FakeValidateDiagnosticsProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
@@ -2054,6 +2067,15 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.referenceProvider.options.projectFactory, created.workspace.options.projectFactory);
   assert.equal(created.workspaceStepIndex.startCalls, 1);
   assert.equal(created.workspaceStepIndex.diagnosticsProvider, created.stepDiagnosticsProvider);
+  assert.equal(
+    created.unusedReferenceDiagnosticsProvider.options.documentStore,
+    created.workspaceStepIndex.options.documentStore,
+  );
+  assert.equal(
+    created.unusedReferenceDiagnosticsProvider.options.workspaceStepIndex,
+    created.workspaceStepIndex,
+  );
+  assert.equal(created.unusedReferenceDiagnosticsProvider.options.vscode, fakeVscode);
   assert.equal(completionProviders[0].provider.diagnosticsProvider, created.stepDiagnosticsProvider);
   assert.equal(codeLensProviders[0].provider.diagnosticsProvider, created.stepDiagnosticsProvider);
   assert.equal(definitionProviders[0].provider.diagnosticsProvider, created.stepDiagnosticsProvider);
@@ -2092,6 +2114,10 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(context.subscriptions.includes(foldingRangeProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(renameProviders[0].disposable), true);
   assert.equal(context.subscriptions.includes(created.stepDiagnosticsProvider.disposable), true);
+  assert.equal(
+    context.subscriptions.includes(created.unusedReferenceDiagnosticsProvider.disposable),
+    true,
+  );
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
   for (const subscription of context.subscriptions) {
     if (subscription && typeof subscription.dispose === "function") {
