@@ -113,6 +113,7 @@ class SpecNodeProvider {
     this.activation = Promise.resolve(undefined);
     this.clientGeneration = 0;
     this.disposed = false;
+    this.initialActivationPending = false;
     this.onDidChangeTreeDataEmitter = new this.vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -128,7 +129,16 @@ class SpecNodeProvider {
       const initialFolder = this.gaugeWorkspace.getDefaultFolder();
       this.activeFolder = initialFolder;
       const generation = ++this.clientGeneration;
-      this.activation = this.activateTreeDataProvider(initialFolder, generation);
+      const initialEntry = this.clientEntryFor(initialFolder);
+      if (
+        (!initialEntry || !initialEntry.client)
+        && typeof this.gaugeWorkspace.ready === "function"
+      ) {
+        this.initialActivationPending = true;
+        this.activation = this.activateInitialClientAfterWorkspaceReady(generation);
+      } else {
+        this.activation = this.activateTreeDataProvider(initialFolder, generation);
+      }
     }
   }
 
@@ -145,6 +155,7 @@ class SpecNodeProvider {
     this.activeFolder = undefined;
     this.activeClientGeneration = 0;
     this.languageClient = undefined;
+    this.initialActivationPending = false;
     this.cancelClientWork();
 
     const disposables = this.disposables;
@@ -171,6 +182,9 @@ class SpecNodeProvider {
 
   async getChildren(element) {
     if (this.disposed) {
+      return [];
+    }
+    if (this.initialActivationPending) {
       return [];
     }
     if (!this.activeFolder) {
@@ -401,11 +415,33 @@ class SpecNodeProvider {
       && this.isActiveClientCurrent(projectPath, client, generation);
   }
 
+  async activateInitialClientAfterWorkspaceReady(generation) {
+    try {
+      await this.gaugeWorkspace.ready();
+    } catch (_error) {
+      if (!this.disposed && generation === this.clientGeneration) {
+        this.initialActivationPending = false;
+      }
+      return undefined;
+    }
+    if (this.disposed || generation !== this.clientGeneration) {
+      return undefined;
+    }
+    this.initialActivationPending = false;
+    const projectPath = this.gaugeWorkspace.getDefaultFolder();
+    if (this.disposed || generation !== this.clientGeneration) {
+      return undefined;
+    }
+    this.activeFolder = projectPath;
+    return this.activateTreeDataProvider(projectPath, generation);
+  }
+
   changeClient(projectPath) {
     if (this.disposed) {
       return undefined;
     }
     const generation = ++this.clientGeneration;
+    this.initialActivationPending = false;
     this.cancelClientWork();
     setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
     if (this.disposed || generation !== this.clientGeneration) {

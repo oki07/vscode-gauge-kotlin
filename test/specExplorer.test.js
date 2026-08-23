@@ -1089,6 +1089,367 @@ test("SpecNodeProvider client generation handles timer cancellation reentrancy",
   });
 });
 
+test("SpecNodeProvider initial readiness activates a newly populated workspace client", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const workspaceReady = deferred();
+  const client = createFakeClient();
+  client.sendRequest = (method, params, token) => {
+    client.requests.push({ method, params, token });
+    return Promise.resolve([
+      {
+        heading: "Ready project",
+        executionIdentifier: "/workspace/gauge/specs/ready.spec",
+      },
+    ]);
+  };
+  const clientsMap = new Map();
+  let readyCalls = 0;
+  const workspace = createFakeWorkspace(client, {
+    clientsMap,
+    getDefaultFolder() {
+      return [...clientsMap.keys()].sort()[0];
+    },
+  });
+  workspace.ready = () => {
+    readyCalls += 1;
+    return workspaceReady.promise;
+  };
+  const timers = [];
+  const { contexts, errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  const refreshes = [];
+  provider.onDidChangeTreeData((value) => refreshes.push(value));
+  let readySettled = false;
+  const initialReady = provider.ready().then(() => {
+    readySettled = true;
+  });
+  const pendingChildren = await provider.getChildren();
+  await Promise.resolve();
+  const stateWhilePending = {
+    clientStarts: client.started,
+    errors: [...errors],
+    pendingChildren,
+    readyCalls,
+    readySettled,
+  };
+
+  clientsMap.set("/workspace/gauge", {
+    client,
+    project: {
+      root() {
+        return "/workspace/gauge";
+      },
+    },
+  });
+  workspaceReady.resolve(undefined);
+  await initialReady;
+  await provider.ready();
+  const children = await provider.getChildren();
+  if (timers[0]) {
+    await Promise.resolve(timers[0].callback());
+  }
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    children: children.map((child) => child.label),
+    contextTrueCalls: contexts.filter((context) => context.value === true).length,
+    languageClient: provider.languageClient,
+    readyCalls,
+    refreshes,
+    requests: client.requests.map((request) => request.method),
+    startCalls: client.started,
+    stateWhilePending,
+    timers: timers.map((timer) => timer.delay),
+  }, {
+    activeFolder: "/workspace/gauge",
+    children: ["Ready project"],
+    contextTrueCalls: 1,
+    languageClient: client,
+    readyCalls: 1,
+    refreshes: [undefined],
+    requests: ["gauge/specs"],
+    startCalls: 1,
+    stateWhilePending: {
+      clientStarts: 0,
+      errors: [],
+      pendingChildren: [],
+      readyCalls: 1,
+      readySettled: false,
+    },
+    timers: [1000],
+  });
+});
+
+test("SpecNodeProvider initial readiness does not replace a newer project selection", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const workspaceReady = deferred();
+  const initialClient = createFakeClient();
+  const selectedClient = createFakeClient();
+  const clientsMap = new Map();
+  let readyCalls = 0;
+  const workspace = createFakeWorkspace(initialClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return [...clientsMap.keys()].sort()[0];
+    },
+  });
+  workspace.ready = () => {
+    readyCalls += 1;
+    return workspaceReady.promise;
+  };
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  const initialReady = provider.ready();
+
+  clientsMap.set("/workspace/two", { client: selectedClient });
+  await provider.changeClient("/workspace/two");
+  clientsMap.set("/workspace/one", { client: initialClient });
+  workspaceReady.resolve(undefined);
+  await initialReady;
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    errors,
+    initialStarts: initialClient.started,
+    languageClient: provider.languageClient,
+    readyCalls,
+    selectedStarts: selectedClient.started,
+    timers: timers.length,
+  }, {
+    activeFolder: "/workspace/two",
+    errors: [],
+    initialStarts: 0,
+    languageClient: selectedClient,
+    readyCalls: 1,
+    selectedStarts: 1,
+    timers: 1,
+  });
+});
+
+test("SpecNodeProvider initial readiness suppresses workspace startup failures", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const workspaceReady = deferred();
+  const client = createFakeClient();
+  const clientsMap = new Map();
+  let readyCalls = 0;
+  const workspace = createFakeWorkspace(client, {
+    clientsMap,
+    getDefaultFolder() {
+      return undefined;
+    },
+  });
+  workspace.ready = () => {
+    readyCalls += 1;
+    return workspaceReady.promise;
+  };
+  workspaceReady.promise.catch(() => undefined);
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  workspaceReady.reject(new Error("workspace startup failed"));
+  await assert.doesNotReject(() => provider.ready());
+  const children = await provider.getChildren();
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    children,
+    clientStarts: client.started,
+    errors,
+    languageClient: provider.languageClient,
+    readyCalls,
+  }, {
+    activeFolder: undefined,
+    children: [],
+    clientStarts: 0,
+    errors: [{ message: "No dependency in empty workspace" }],
+    languageClient: undefined,
+    readyCalls: 1,
+  });
+});
+
+test("SpecNodeProvider initial readiness stays neutral after disposal", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const outcomes = [];
+
+  for (const settlement of ["resolve", "reject"]) {
+    const workspaceReady = deferred();
+    const client = createFakeClient();
+    const clientsMap = new Map();
+    const workspace = createFakeWorkspace(client, {
+      clientsMap,
+      getDefaultFolder() {
+        return [...clientsMap.keys()].sort()[0];
+      },
+    });
+    workspace.ready = () => workspaceReady.promise;
+    const timers = [];
+    const { errors, vscode } = createFakeVscode();
+    const provider = new SpecNodeProvider(workspace, {
+      pathModule: path.posix,
+      setTimeout(callback, delay) {
+        timers.push({ callback, delay });
+        return { unref() {} };
+      },
+      vscode,
+    });
+    const refreshes = [];
+    provider.onDidChangeTreeData((value) => refreshes.push(value));
+    const ready = provider.ready();
+
+    provider.dispose();
+    clientsMap.set("/workspace/gauge", { client });
+    if (settlement === "resolve") {
+      workspaceReady.resolve(undefined);
+    } else {
+      workspaceReady.reject(new Error("workspace failed after disposal"));
+    }
+    outcomes.push({
+      activeFolder: provider.activeFolder,
+      clientStarts: client.started,
+      errors,
+      languageClient: provider.languageClient,
+      ready: (await Promise.allSettled([ready]))[0],
+      refreshes,
+      timers: timers.length,
+    });
+  }
+
+  assert.deepEqual(outcomes, [
+    {
+      activeFolder: undefined,
+      clientStarts: 0,
+      errors: [],
+      languageClient: undefined,
+      ready: { status: "fulfilled", value: undefined },
+      refreshes: [],
+      timers: 0,
+    },
+    {
+      activeFolder: undefined,
+      clientStarts: 0,
+      errors: [],
+      languageClient: undefined,
+      ready: { status: "fulfilled", value: undefined },
+      refreshes: [],
+      timers: 0,
+    },
+  ]);
+});
+
+test("SpecNodeProvider initial readiness keeps the prepopulated fast path", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  const clientsMap = new Map([
+    ["/workspace/gauge", { client }],
+  ]);
+  let readyCalls = 0;
+  const workspace = createFakeWorkspace(client, { clientsMap });
+  workspace.ready = () => {
+    readyCalls += 1;
+    throw new Error("prepopulated workspace readiness must not be observed");
+  };
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
+    vscode,
+  });
+
+  await provider.ready();
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    clientStarts: client.started,
+    errors,
+    languageClient: provider.languageClient,
+    readyCalls,
+    timers: timers.map((timer) => timer.delay),
+  }, {
+    activeFolder: "/workspace/gauge",
+    clientStarts: 1,
+    errors: [],
+    languageClient: client,
+    readyCalls: 0,
+    timers: [1000],
+  });
+});
+
+test("SpecNodeProvider initial readiness stops after synchronous disposal", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const workspaceReady = deferred();
+  const client = createFakeClient();
+  const clientsMap = new Map();
+  let defaultFolderCalls = 0;
+  let provider;
+  const workspace = createFakeWorkspace(client, {
+    clientsMap,
+    getDefaultFolder() {
+      defaultFolderCalls += 1;
+      if (defaultFolderCalls === 2) {
+        provider.dispose();
+      }
+      return defaultFolderCalls === 1 ? undefined : "/workspace/gauge";
+    },
+  });
+  workspace.ready = () => workspaceReady.promise;
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
+    vscode,
+  });
+  clientsMap.set("/workspace/gauge", { client });
+
+  workspaceReady.resolve(undefined);
+  await provider.ready();
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    clientStarts: client.started,
+    defaultFolderCalls,
+    disposed: provider.disposed,
+    errors,
+    languageClient: provider.languageClient,
+    timers: timers.length,
+  }, {
+    activeFolder: undefined,
+    clientStarts: 0,
+    defaultFolderCalls: 2,
+    disposed: true,
+    errors: [],
+    languageClient: undefined,
+    timers: 0,
+  });
+});
+
 test("SpecNodeProvider disables the activated context when spec explorer is disabled", async () => {
   const { SpecNodeProvider } = require("../src/explorer/specExplorer");
   const client = createFakeClient();
