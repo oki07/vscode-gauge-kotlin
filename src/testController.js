@@ -821,8 +821,13 @@ class GaugeTestController {
         discovered.push(specItem);
       }
 
-      const scenarios = scenarioLists[specIndex];
-      for (const scenario of scenarios || []) {
+      const scenarioResponse = scenarioLists[specIndex];
+      const scenarios = Array.isArray(scenarioResponse)
+        ? scenarioResponse
+        : scenarioResponse
+          ? [scenarioResponse]
+          : [];
+      for (const scenario of scenarios) {
         if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
           continue;
         }

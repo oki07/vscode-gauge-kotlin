@@ -813,6 +813,47 @@ test("GaugeTestController resolves unopened workspace specs from Gauge LSP", asy
   });
 });
 
+test("GaugeTestController accepts a single scenario response from Gauge LSP", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const clientsMap = new Map([
+    [
+      "/workspace/gauge",
+      {
+        client: {
+          sendRequest(method) {
+            if (method === "gauge/specs") {
+              return Promise.resolve([
+                {
+                  heading: "Checkout",
+                  executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+                },
+              ]);
+            }
+            if (method === "gauge/scenarios") {
+              return Promise.resolve({
+                heading: "Successful checkout",
+                executionIdentifier: "/workspace/gauge/specs/checkout.spec:2",
+                lineNo: 2,
+              });
+            }
+            return Promise.resolve([]);
+          },
+        },
+      },
+    ],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+
+  gaugeTests.register();
+  await gaugeTests.discoverWorkspaceTests();
+
+  const spec = controller.items.get("/workspace/gauge/specs/checkout.spec");
+  assert.deepEqual(collectionItems(spec.children).map((item) => item.id), [
+    "/workspace/gauge/specs/checkout.spec:2",
+  ]);
+});
+
 test("GaugeTestController discovers and refreshes tests through Test Explorer handlers", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();
