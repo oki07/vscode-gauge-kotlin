@@ -2,6 +2,16 @@ const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
 const test = require("node:test");
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
+
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.config.saveRecommended",
@@ -1812,10 +1822,11 @@ test("activation wires Gauge Test UI execution events into the execution control
   assert.equal(context.subscriptions.includes(executionController), true);
 });
 
-test("activation starts Gauge workspace services for Gauge projects", () => {
+test("activation starts Gauge workspace services for Gauge projects", async () => {
   const extension = require("../src/extension");
 
   const created = {};
+  const workspaceDisposalGate = deferred();
   const checkedProjects = [];
   const versions = [];
   const welcomeCalls = [];
@@ -1860,6 +1871,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   class FakeGaugeWorkspace {
     constructor(options) {
       this.options = options;
+      this.disposeCalls = 0;
+      this.disposalPromise = undefined;
       created.workspace = this;
     }
 
@@ -1869,7 +1882,14 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
       return this.projectListenerDisposable;
     }
 
-    dispose() {}
+    dispose() {
+      if (!this.disposalPromise) {
+        this.disposeCalls += 1;
+        this.reentrantDeactivation = extension.deactivate();
+        this.disposalPromise = workspaceDisposalGate.promise;
+      }
+      return this.disposalPromise;
+    }
   }
 
   class FakeGaugeTestController {
@@ -2221,11 +2241,27 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
     true,
   );
   assert.equal(context.subscriptions.includes(semanticTokenProviders[0].disposable), true);
+  const deactivation = extension.deactivate();
+  const repeatedDeactivation = extension.deactivate();
+  let deactivationSettled = false;
+  deactivation.then(() => {
+    deactivationSettled = true;
+  });
+  await Promise.resolve();
+  const workspaceDisposalsAtDeactivation = created.workspace.disposeCalls;
+  const deactivationWasPending = !deactivationSettled;
   for (const subscription of context.subscriptions) {
     if (subscription && typeof subscription.dispose === "function") {
       subscription.dispose();
     }
   }
+  workspaceDisposalGate.resolve();
+  await Promise.all([deactivation, repeatedDeactivation]);
+  assert.equal(workspaceDisposalsAtDeactivation, 1);
+  assert.equal(deactivationWasPending, true);
+  assert.equal(created.workspace.disposeCalls, 1);
+  assert.equal(created.workspace.reentrantDeactivation, deactivation);
+  assert.equal(repeatedDeactivation, deactivation);
   assert.equal(created.workspaceStepIndex.disposeCalls, 1);
   assert.equal(created.projectEnvironmentService.disposeCalls, 1);
   assert.equal(

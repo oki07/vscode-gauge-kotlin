@@ -367,6 +367,7 @@ class GaugeWorkspace {
     this.workspaceFolderDiscoveryGenerations = new Map();
     this.stoppedLanguageClients = new WeakSet();
     this.disposed = false;
+    this.disposalPromise = undefined;
     this.env = envWithGaugeHome(options.env || process.env, {
       vscode: this.vscode,
       gaugeHome: options.gaugeHome,
@@ -409,21 +410,59 @@ class GaugeWorkspace {
   }
 
   dispose() {
+    if (this.disposalPromise) {
+      return this.disposalPromise;
+    }
+    let resolveDisposal;
+    let rejectDisposal;
+    this.disposalPromise = new Promise((resolve, reject) => {
+      resolveDisposal = resolve;
+      rejectDisposal = reject;
+    });
+    this.disposalPromise.catch(() => undefined);
     this.disposed = true;
+    const pendingServerStartRoots = new Set(this.pendingServerStarts.keys());
     this.pendingServerStarts.clear();
-    for (const disposable of this.disposables) {
+    const cleanupErrors = [];
+    const disposables = this.disposables;
+    this.disposables = [];
+    for (const disposable of disposables) {
       if (disposable && typeof disposable.dispose === "function") {
-        disposable.dispose();
+        try {
+          disposable.dispose();
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
       }
     }
+    this.projectChangeListeners.clear();
     const stopPromises = [];
     for (const [projectRoot, projectClient] of [...this.clientsMap.entries()]) {
-      stopPromises.push(this.cleanupLanguageClient(projectRoot, projectClient.client));
+      stopPromises.push(this.cleanupLanguageClient(
+        projectRoot,
+        projectClient.client,
+        pendingServerStartRoots.has(projectRoot),
+      ));
     }
-    if (this.outputChannel && typeof this.outputChannel.dispose === "function") {
-      this.outputChannel.dispose();
+    const outputChannel = this.outputChannel;
+    this.outputChannel = undefined;
+    if (outputChannel && typeof outputChannel.dispose === "function") {
+      try {
+        outputChannel.dispose();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
     }
-    return Promise.all(stopPromises).then(() => undefined);
+    Promise.allSettled(stopPromises).then((results) => {
+      const stopFailure = results.find((result) => result.status === "rejected");
+      const error = cleanupErrors[0] || (stopFailure && stopFailure.reason);
+      if (error) {
+        rejectDisposal(error);
+        return;
+      }
+      resolveDisposal(undefined);
+    });
+    return this.disposalPromise;
   }
 
   async startWorkspaceProjects() {
@@ -944,7 +983,7 @@ class GaugeWorkspace {
     return languageClient;
   }
 
-  async cleanupLanguageClient(projectRoot, languageClient) {
+  async cleanupLanguageClient(projectRoot, languageClient, suppressStopError = true) {
     const ownsClientRegistration = !this.clientsMap.has(projectRoot)
       || Map.prototype.get.call(this.clientsMap, projectRoot).client === languageClient;
     if (ownsClientRegistration) {
@@ -952,7 +991,7 @@ class GaugeWorkspace {
       this.clientLanguageMap.delete(projectRoot);
       this.projectEnvironmentCache.delete(projectRoot);
     }
-    await this.stopLanguageClient(languageClient, true);
+    await this.stopLanguageClient(languageClient, suppressStopError);
     return undefined;
   }
 

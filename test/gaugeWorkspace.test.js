@@ -3,6 +3,16 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
+
 function createFakeFileSystem(entries) {
   const files = new Map(Object.entries(entries));
   const directories = new Set();
@@ -392,6 +402,82 @@ test("GaugeWorkspace disposes active clients when the workspace is disposed", as
   assert.equal(entry.client.stopped, true);
   assert.equal(clients.get("/workspace/gauge/specs/example.spec"), undefined);
   assert.deepEqual([...workspace.getClientLanguageMap().keys()], []);
+});
+
+test("GaugeWorkspace disposal is single-flight while client shutdown is pending", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const stopGate = deferred();
+  const stopError = new Error("Unable to stop Gauge client.");
+  const disposalCounts = [0, 0, 0];
+  let outputDisposals = 0;
+  let stopCalls = 0;
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: clients,
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+  clients.set("/workspace/gauge", {
+    client: {
+      stop() {
+        stopCalls += 1;
+        return stopGate.promise;
+      },
+    },
+    project: {
+      hasFile() {
+        return true;
+      },
+      root() {
+        return "/workspace/gauge";
+      },
+    },
+  });
+  workspace.disposables = disposalCounts.map((_, index) => ({
+    dispose() {
+      disposalCounts[index] += 1;
+    },
+  }));
+  workspace.outputChannel = {
+    dispose() {
+      outputDisposals += 1;
+    },
+  };
+
+  const first = workspace.dispose();
+  const second = workspace.dispose();
+
+  assert.equal(first, second);
+  assert.deepEqual(disposalCounts, [1, 1, 1]);
+  assert.equal(outputDisposals, 1);
+  assert.equal(stopCalls, 1);
+  let settled = false;
+  first.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await Promise.resolve();
+  assert.equal(settled, false);
+
+  stopGate.reject(stopError);
+  const results = await Promise.allSettled([first, second]);
+
+  assert.deepEqual(results, [
+    { status: "rejected", reason: stopError },
+    { status: "rejected", reason: stopError },
+  ]);
+  assert.deepEqual(disposalCounts, [1, 1, 1]);
+  assert.equal(outputDisposals, 1);
+  assert.equal(stopCalls, 1);
 });
 
 test("GaugeWorkspace abandons an in-flight language server start after disposal", async () => {

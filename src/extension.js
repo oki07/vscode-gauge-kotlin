@@ -148,6 +148,8 @@ const EXECUTION_FLAG_KEYS = new Set([
 ]);
 
 let activeClientsMap;
+let activeGaugeWorkspace;
+let activeGaugeWorkspaceDisposal;
 
 function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");
@@ -1024,6 +1026,8 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   const configProvider = new ConfigProviderCtor(context, { vscode });
   activeClientsMap = clientsMap;
+  activeGaugeWorkspace = gaugeWorkspace;
+  activeGaugeWorkspaceDisposal = undefined;
   context.subscriptions.push(
     gaugeWorkspace,
     referenceProvider,
@@ -1219,16 +1223,31 @@ function activate(context, vscodeApi, options = {}) {
 }
 
 function deactivate() {
-  if (!activeClientsMap) {
-    return Promise.resolve(undefined);
+  if (activeGaugeWorkspaceDisposal) {
+    return activeGaugeWorkspaceDisposal;
   }
-  const stopPromises = [];
-  for (const entry of activeClientsMap.values()) {
-    if (entry.client && typeof entry.client.stop === "function") {
-      stopPromises.push(entry.client.stop());
-    }
+  const gaugeWorkspace = activeGaugeWorkspace;
+  activeGaugeWorkspace = undefined;
+  activeClientsMap = undefined;
+  if (!gaugeWorkspace || typeof gaugeWorkspace.dispose !== "function") {
+    activeGaugeWorkspaceDisposal = Promise.resolve(undefined);
+    return activeGaugeWorkspaceDisposal;
   }
-  return Promise.all(stopPromises).then(() => undefined);
+  let resolveDisposal;
+  let rejectDisposal;
+  activeGaugeWorkspaceDisposal = new Promise((resolve, reject) => {
+    resolveDisposal = resolve;
+    rejectDisposal = reject;
+  });
+  try {
+    Promise.resolve(gaugeWorkspace.dispose()).then(
+      () => resolveDisposal(undefined),
+      rejectDisposal,
+    );
+  } catch (error) {
+    rejectDisposal(error);
+  }
+  return activeGaugeWorkspaceDisposal;
 }
 
 module.exports = {
