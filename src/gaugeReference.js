@@ -30,6 +30,7 @@ const PROJECT_ROOT_NON_GAUGE = "nonGauge";
 const PROJECT_ROOT_UNKNOWN = "unknown";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
+const CANCELLED_REFERENCE_OPERATION = Symbol("cancelledReferenceOperation");
 
 const {
   GaugeStepDiagnosticsProvider,
@@ -832,12 +833,27 @@ class ReferenceProvider {
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       });
+    this.disposed = false;
+    this.activeOperations = new Set();
     this.disposables = [];
     this.registerCommands();
     const provider = this.registerReferenceProvider();
     if (provider) {
-      this.disposables.push(provider);
+      this.registerDisposable(provider);
     }
+  }
+
+  registerDisposable(disposable) {
+    if (!disposable) {
+      return;
+    }
+    if (this.disposed) {
+      if (typeof disposable.dispose === "function") {
+        disposable.dispose();
+      }
+      return;
+    }
+    this.disposables.push(disposable);
   }
 
   registerCommands() {
@@ -845,13 +861,13 @@ class ReferenceProvider {
       return;
     }
 
-    this.disposables.push(
+    this.registerDisposable(
       this.vscode.commands.registerCommand(
         SHOW_REFERENCES_AT_CURSOR,
         () => this.showStepReferencesAtCursor(),
       ),
     );
-    this.disposables.push(
+    this.registerDisposable(
       this.vscode.commands.registerCommand(
         SHOW_REFERENCES_FOR_STEP,
         (uri, position, stepValue) => this.showStepReferences(uri, position, stepValue),
@@ -860,48 +876,308 @@ class ReferenceProvider {
   }
 
   dispose() {
-    for (const disposable of this.disposables) {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      this.cancelOperation(operation);
+    }
+    const disposables = this.disposables;
+    this.disposables = [];
+    for (const disposable of disposables) {
       if (disposable && typeof disposable.dispose === "function") {
         disposable.dispose();
       }
     }
   }
 
+  createOperation() {
+    if (this.disposed) {
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      resolveCancellation,
+      sources: new Set(),
+    };
+    this.activeOperations.add(operation);
+    return operation;
+  }
+
+  isOperationActive(operation) {
+    return !this.disposed && operation && operation.active;
+  }
+
+  disposeRequestSource(source, cancel) {
+    if (!source) {
+      return;
+    }
+    if (cancel && typeof source.cancel === "function") {
+      try {
+        source.cancel();
+      } catch (_error) {
+        // Cancellation is advisory; owned source disposal must still complete.
+      }
+    }
+    if (typeof source.dispose === "function") {
+      try {
+        source.dispose();
+      } catch (_error) {
+        // A host cleanup failure must not reopen a terminal command operation.
+      }
+    }
+  }
+
+  cancelOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    const sources = [...operation.sources];
+    operation.sources.clear();
+    operation.resolveCancellation(CANCELLED_REFERENCE_OPERATION);
+    for (const source of sources) {
+      this.disposeRequestSource(source, true);
+    }
+  }
+
+  finishOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    const sources = [...operation.sources];
+    operation.sources.clear();
+    for (const source of sources) {
+      this.disposeRequestSource(source, false);
+    }
+  }
+
+  runCommandOperation(callback) {
+    const operation = this.createOperation();
+    if (!operation) {
+      return Promise.resolve(undefined);
+    }
+    let workflow;
+    try {
+      workflow = Promise.resolve(callback(operation));
+    } catch (error) {
+      workflow = Promise.reject(error);
+    }
+    return Promise.race([workflow, operation.cancellation])
+      .then((value) => value === CANCELLED_REFERENCE_OPERATION ? undefined : value)
+      .finally(() => this.finishOperation(operation));
+  }
+
+  callSyncForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    try {
+      const value = callback();
+      return this.isOperationActive(operation) ? value : CANCELLED_REFERENCE_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  async callForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    let result;
+    try {
+      result = callback();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      throw error;
+    }
+    const observed = Promise.resolve(result);
+    if (!this.isOperationActive(operation)) {
+      observed.catch(() => {});
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    try {
+      const value = await Promise.race([observed, operation.cancellation]);
+      return this.isOperationActive(operation) ? value : CANCELLED_REFERENCE_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  callDetachedForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    let result;
+    try {
+      result = callback();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      throw error;
+    }
+    if (result && typeof result.then === "function") {
+      Promise.resolve(result).catch(() => {});
+    }
+    return this.isOperationActive(operation) ? result : CANCELLED_REFERENCE_OPERATION;
+  }
+
+  createRequestSource(operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    if (typeof this.vscode.CancellationTokenSource !== "function") {
+      return undefined;
+    }
+    let source;
+    try {
+      source = new this.vscode.CancellationTokenSource();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      throw error;
+    }
+    if (!this.isOperationActive(operation)) {
+      this.disposeRequestSource(source, true);
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    operation.sources.add(source);
+    return source;
+  }
+
+  releaseRequestSource(operation, source) {
+    if (source && operation.sources.delete(source)) {
+      this.disposeRequestSource(source, false);
+    }
+  }
+
+  async requestForOperation(operation, languageClient, method, params) {
+    const source = this.createRequestSource(operation);
+    if (source === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    try {
+      return await this.callForOperation(
+        operation,
+        () => languageClient.sendRequest(method, params, source && source.token),
+      );
+    } finally {
+      this.releaseRequestSource(operation, source);
+    }
+  }
+
   showStepReferences(uri, position, stepValue) {
-    const sourceUri = this.vscode.Uri.parse(uri);
-    const languageClient = this.languageClientForUri(sourceUri);
-    return this.referenceLocationsForStepValues(languageClient, stepValue, {
+    return this.runCommandOperation(
+      (operation) => this.showStepReferencesForOperation(operation, uri, position, stepValue),
+    );
+  }
+
+  async showStepReferencesForOperation(operation, uri, position, stepValue) {
+    const sourceUri = this.callSyncForOperation(operation, () => this.vscode.Uri.parse(uri));
+    if (sourceUri === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const languageClient = this.callSyncForOperation(
+      operation,
+      () => this.languageClientForUri(sourceUri),
+    );
+    if (languageClient === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const locations = await this.referenceLocationsForStepValues(languageClient, stepValue, {
       requestEmpty: true,
       sourcePath: uriPath(sourceUri),
-    })
-      .then((locations) => this.showReferences(locations, uri, languageClient, position));
+    }, operation);
+    if (locations === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    return this.showReferencesForOperation(operation, locations, uri, languageClient, position);
   }
 
   showStepReferencesAtCursor() {
-    const editor = this.vscode.window.activeTextEditor;
-    const position = editor.selection.active;
-    const activeUri = editor.document.uri;
-    const documentId = textDocumentIdentifier(activeUri.toString());
-    const languageClient = this.languageClientForUri(activeUri);
+    return this.runCommandOperation(
+      (operation) => this.showStepReferencesAtCursorForOperation(operation),
+    );
+  }
+
+  async showStepReferencesAtCursorForOperation(operation) {
+    const editor = this.callSyncForOperation(
+      operation,
+      () => this.vscode.window.activeTextEditor,
+    );
+    if (editor === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const commandState = this.callSyncForOperation(operation, () => {
+      const position = editor.selection.active;
+      const activeUri = editor.document.uri;
+      return {
+        documentId: textDocumentIdentifier(activeUri.toString()),
+        languageClient: this.languageClientForUri(activeUri),
+        position,
+      };
+    });
+    if (commandState === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const { documentId, languageClient, position } = commandState;
     const params = { textDocument: documentId, position };
 
     if (!languageClient || typeof languageClient.sendRequest !== "function") {
-      return this.localStepValuesAt(editor.document, position)
-        .then((stepValues) => this.showStepReferences(documentId.uri, position, stepValues));
+      const stepValues = await this.callForOperation(
+        operation,
+        () => this.localStepValuesAt(editor.document, position, operation),
+      );
+      if (stepValues === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      return this.showStepReferencesForOperation(operation, documentId.uri, position, stepValues);
     }
 
-    return languageClient
-      .sendRequest(STEP_VALUE_AT_REQUEST, params, createCancellationToken(this.vscode))
-      .then(async (stepValue) => {
-        const localStepValues = stepValue
-          ? undefined
-          : await this.localStepValuesAt(editor.document, position);
-        return this.showStepReferences(
-          documentId.uri,
-          position,
-          stepValue || (localStepValues && localStepValues.length > 0 ? localStepValues : stepValue),
-        );
-      });
+    const stepValue = await this.requestForOperation(
+      operation,
+      languageClient,
+      STEP_VALUE_AT_REQUEST,
+      params,
+    );
+    if (stepValue === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const localStepValues = stepValue
+      ? undefined
+      : await this.callForOperation(
+        operation,
+        () => this.localStepValuesAt(editor.document, position, operation),
+      );
+    if (localStepValues === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    return this.showStepReferencesForOperation(
+      operation,
+      documentId.uri,
+      position,
+      stepValue || (localStepValues && localStepValues.length > 0 ? localStepValues : stepValue),
+    );
   }
 
   registerReferenceProvider() {
@@ -931,43 +1207,86 @@ class ReferenceProvider {
     return entry && entry.client;
   }
 
-  async referenceLocationsForStep(languageClient, stepValue, options = {}) {
+  async referenceLocationsForStep(languageClient, stepValue, options = {}, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     if (!stepValue && !options.requestEmpty) {
       return undefined;
     }
     let locations;
     if (languageClient && typeof languageClient.sendRequest === "function") {
-      locations = await languageClient.sendRequest(
-        STEP_REFERENCES_REQUEST,
-        stepValue,
-        createCancellationToken(this.vscode),
-      );
+      locations = operation
+        ? await this.requestForOperation(
+          operation,
+          languageClient,
+          STEP_REFERENCES_REQUEST,
+          stepValue,
+        )
+        : await languageClient.sendRequest(
+          STEP_REFERENCES_REQUEST,
+          stepValue,
+          createCancellationToken(this.vscode),
+        );
+      if (locations === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
     }
     if (Array.isArray(locations)) {
       if (locations.length > 0) {
         return locations;
       }
-      const localLocations = await this.localStepReferences(stepValue, options);
+      const localLocations = operation
+        ? await this.callForOperation(
+          operation,
+          () => this.localStepReferences(stepValue, options, operation),
+        )
+        : await this.localStepReferences(stepValue, options);
+      if (localLocations === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       return hasLocations(localLocations) ? localLocations : locations;
     }
-    return hasLocations(locations) ? locations : this.localStepReferences(stepValue, options);
+    if (hasLocations(locations)) {
+      return locations;
+    }
+    return operation
+      ? this.callForOperation(
+        operation,
+        () => this.localStepReferences(stepValue, options, operation),
+      )
+      : this.localStepReferences(stepValue, options);
   }
 
-  async referenceLocationsForStepValues(languageClient, stepValue, options = {}) {
+  async referenceLocationsForStepValues(languageClient, stepValue, options = {}, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     const stepValues = valuesForStep(stepValue);
     if (stepValues.length === 0) {
       if (Array.isArray(stepValue)) {
         return options.requestEmpty
-          ? this.referenceLocationsForStep(languageClient, undefined, options)
+          ? this.referenceLocationsForStep(languageClient, undefined, options, operation)
           : undefined;
       }
-      return this.referenceLocationsForStep(languageClient, stepValue, options);
+      return this.referenceLocationsForStep(languageClient, stepValue, options, operation);
     }
 
     const locations = [];
     let hasEmptyLocationList = false;
     for (const value of stepValues) {
-      const valueLocations = await this.referenceLocationsForStep(languageClient, value, options);
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      const valueLocations = await this.referenceLocationsForStep(
+        languageClient,
+        value,
+        options,
+        operation,
+      );
+      if (valueLocations === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       if (hasLocations(valueLocations)) {
         locations.push(...valueLocations);
       } else if (Array.isArray(valueLocations)) {
@@ -994,6 +1313,26 @@ class ReferenceProvider {
     return locations.map((location) => this.toVscodeLocation(location));
   }
 
+  convertLocationsForOperation(operation, locations, languageClient) {
+    if (!hasLocations(locations)) {
+      return [];
+    }
+    const convertedLocations = [];
+    const converter = languageClient
+      && languageClient.protocol2CodeConverter
+      && typeof languageClient.protocol2CodeConverter.asLocation === "function"
+      ? languageClient.protocol2CodeConverter.asLocation.bind(languageClient.protocol2CodeConverter)
+      : (location) => this.toVscodeLocation(location);
+    for (const location of locations) {
+      const converted = this.callSyncForOperation(operation, () => converter(location));
+      if (converted === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      convertedLocations.push(converted);
+    }
+    return convertedLocations;
+  }
+
   toVscodeLocation(location) {
     const vscode = this.vscode;
     if (!vscode || typeof vscode.Location !== "function" || typeof vscode.Range !== "function") {
@@ -1016,12 +1355,20 @@ class ReferenceProvider {
     return stepValues[0];
   }
 
-  async stepValuesAt(document, position, languageClient) {
+  async stepValuesAt(document, position, languageClient, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     if (!document || !position) {
       return [];
     }
     if (isStepImplementationDocument(document)) {
-      return this.stepImplementationValuesAt(document, position);
+      return operation
+        ? this.callForOperation(
+          operation,
+          () => this.stepImplementationValuesAt(document, position, operation),
+        )
+        : this.stepImplementationValuesAt(document, position);
     }
     if (!isGaugeReferenceDocument(document)) {
       return [];
@@ -1033,11 +1380,21 @@ class ReferenceProvider {
       textDocument: textDocumentIdentifier(documentUri(document)),
       position,
     };
-    const stepValue = await languageClient.sendRequest(
-      STEP_VALUE_AT_REQUEST,
-      params,
-      createCancellationToken(this.vscode),
-    );
+    const stepValue = operation
+      ? await this.requestForOperation(
+        operation,
+        languageClient,
+        STEP_VALUE_AT_REQUEST,
+        params,
+      )
+      : await languageClient.sendRequest(
+        STEP_VALUE_AT_REQUEST,
+        params,
+        createCancellationToken(this.vscode),
+      );
+    if (stepValue === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     return valuesForStep(stepValue || this.stepTextAt(document, position) || conceptHeadingTextAt(document, position));
   }
 
@@ -1046,12 +1403,15 @@ class ReferenceProvider {
     return stepValues[0];
   }
 
-  async localStepValuesAt(document, position) {
+  async localStepValuesAt(document, position, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     if (!document || !position) {
       return [];
     }
     if (isStepImplementationDocument(document)) {
-      return this.stepImplementationValuesAt(document, position);
+      return this.stepImplementationValuesAt(document, position, operation);
     }
     if (isGaugeReferenceDocument(document)) {
       return valuesForStep(this.stepTextAt(document, position) || conceptHeadingTextAt(document, position));
@@ -1131,10 +1491,26 @@ class ReferenceProvider {
     return sourceRoot === undefined || projectRootInfo.root === sourceRoot;
   }
 
-  async storeDocumentsMatching(filePatterns, includeFile) {
-    await this.documentStore.whenReady();
+  async storeDocumentsMatching(filePatterns, includeFile, operation) {
+    if (operation) {
+      const ready = await this.callForOperation(
+        operation,
+        () => this.documentStore.whenReady(),
+      );
+      if (ready === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+    } else {
+      await this.documentStore.whenReady();
+    }
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     const documents = [];
     for (const document of this.documentStore.documents()) {
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       const file = documentPath(document);
       if (
         !file
@@ -1148,11 +1524,12 @@ class ReferenceProvider {
     return documents;
   }
 
-  async findWorkspaceStepImplementationDocuments(sourceRoot) {
+  async findWorkspaceStepImplementationDocuments(sourceRoot, operation) {
     if (this.documentStore) {
       return this.storeDocumentsMatching(
         STEP_IMPLEMENTATION_FILE_PATTERNS,
         (file) => this.shouldOpenWorkspaceStepImplementation(file, sourceRoot),
+        operation,
       );
     }
     const workspace = this.vscode.workspace || {};
@@ -1165,22 +1542,45 @@ class ReferenceProvider {
 
     const documents = [];
     for (const pattern of STEP_IMPLEMENTATION_REFERENCE_PATTERNS) {
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       let uris;
       try {
-        uris = await workspace.findFiles(pattern);
+        uris = operation
+          ? await this.callForOperation(operation, () => workspace.findFiles(pattern))
+          : await workspace.findFiles(pattern);
       } catch (_error) {
+        if (operation && !this.isOperationActive(operation)) {
+          return CANCELLED_REFERENCE_OPERATION;
+        }
         continue;
+      }
+      if (uris === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
       }
 
       for (const uri of uris || []) {
+        if (operation && !this.isOperationActive(operation)) {
+          return CANCELLED_REFERENCE_OPERATION;
+        }
         const file = uriPath(uri);
         if (!this.shouldOpenWorkspaceStepImplementation(file, sourceRoot)) {
           continue;
         }
 
         try {
-          documents.push(await workspace.openTextDocument(uri));
+          const document = operation
+            ? await this.callForOperation(operation, () => workspace.openTextDocument(uri))
+            : await workspace.openTextDocument(uri);
+          if (document === CANCELLED_REFERENCE_OPERATION) {
+            return CANCELLED_REFERENCE_OPERATION;
+          }
+          documents.push(document);
         } catch (_error) {
+          if (operation && !this.isOperationActive(operation)) {
+            return CANCELLED_REFERENCE_OPERATION;
+          }
           // Ignore unreadable files so one stale workspace URI does not block references.
         }
       }
@@ -1188,11 +1588,12 @@ class ReferenceProvider {
     return documents;
   }
 
-  async findWorkspaceGaugeDocuments(sourceRoot) {
+  async findWorkspaceGaugeDocuments(sourceRoot, operation) {
     if (this.documentStore) {
       return this.storeDocumentsMatching(
         GAUGE_REFERENCE_FILE_PATTERNS,
         (file) => this.belongsPathToSourceGaugeProject(file, sourceRoot),
+        operation,
       );
     }
     const workspace = this.vscode.workspace || {};
@@ -1205,22 +1606,45 @@ class ReferenceProvider {
 
     const documents = [];
     for (const pattern of GAUGE_REFERENCE_PATTERNS) {
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       let uris;
       try {
-        uris = await workspace.findFiles(pattern);
+        uris = operation
+          ? await this.callForOperation(operation, () => workspace.findFiles(pattern))
+          : await workspace.findFiles(pattern);
       } catch (_error) {
+        if (operation && !this.isOperationActive(operation)) {
+          return CANCELLED_REFERENCE_OPERATION;
+        }
         continue;
+      }
+      if (uris === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
       }
 
       for (const uri of uris || []) {
+        if (operation && !this.isOperationActive(operation)) {
+          return CANCELLED_REFERENCE_OPERATION;
+        }
         const file = uriPath(uri);
         if (!this.belongsPathToSourceGaugeProject(file, sourceRoot)) {
           continue;
         }
 
         try {
-          documents.push(await workspace.openTextDocument(uri));
+          const document = operation
+            ? await this.callForOperation(operation, () => workspace.openTextDocument(uri))
+            : await workspace.openTextDocument(uri);
+          if (document === CANCELLED_REFERENCE_OPERATION) {
+            return CANCELLED_REFERENCE_OPERATION;
+          }
+          documents.push(document);
         } catch (_error) {
+          if (operation && !this.isOperationActive(operation)) {
+            return CANCELLED_REFERENCE_OPERATION;
+          }
           // Ignore unreadable files so one stale workspace URI does not block local references.
         }
       }
@@ -1228,7 +1652,7 @@ class ReferenceProvider {
     return documents;
   }
 
-  async stepImplementationDocuments(sourceDocument) {
+  async stepImplementationDocuments(sourceDocument, operation) {
     const workspace = this.vscode.workspace || {};
     const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
     const documents = [];
@@ -1258,7 +1682,17 @@ class ReferenceProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceStepImplementationDocuments(sourceRoot)) {
+    const workspaceDocuments = await this.findWorkspaceStepImplementationDocuments(
+      sourceRoot,
+      operation,
+    );
+    if (workspaceDocuments === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    for (const candidate of workspaceDocuments) {
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       addDocument(candidate);
     }
     return documents;
@@ -1269,7 +1703,10 @@ class ReferenceProvider {
     return stepValues[0];
   }
 
-  async stepImplementationValuesAt(document, position) {
+  async stepImplementationValuesAt(document, position, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     if (
       !document
       || !isStepImplementationDocument(document)
@@ -1285,23 +1722,38 @@ class ReferenceProvider {
       && typeof this.workspaceStepIndex.stepEntriesForDocument === "function";
     const implementationDocuments = indexed
       ? []
-      : await this.stepImplementationDocuments(document);
+      : await this.stepImplementationDocuments(document, operation);
+    if (implementationDocuments === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     const externalConstants = !indexed && isStepImplementationDocument(document)
       ? this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments)
       : undefined;
     const entries = indexed
-      ? await this.workspaceStepIndex.stepEntriesForDocument(document, document)
+      ? operation
+        ? await this.callForOperation(
+          operation,
+          () => this.workspaceStepIndex.stepEntriesForDocument(document, document),
+        )
+        : await this.workspaceStepIndex.stepEntriesForDocument(document, document)
       : findStepFunctionsForDocument(document, externalConstants);
+    if (entries === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     for (const entry of entries) {
       const start = entry.annotationStart !== undefined ? entry.annotationStart : entry.parameterStart;
       const end = entry.declarationEnd !== undefined ? entry.declarationEnd : entry.parameterEnd;
       if (offset >= start && offset <= end) {
         if (indexed && typeof this.workspaceStepIndex.stepAliasesForEntry === "function") {
-          const indexedAliases = await this.workspaceStepIndex.stepAliasesForEntry(
-            document,
-            document,
-            entry,
-          );
+          const indexedAliases = operation
+            ? await this.callForOperation(
+              operation,
+              () => this.workspaceStepIndex.stepAliasesForEntry(document, document, entry),
+            )
+            : await this.workspaceStepIndex.stepAliasesForEntry(document, document, entry);
+          if (indexedAliases === CANCELLED_REFERENCE_OPERATION) {
+            return CANCELLED_REFERENCE_OPERATION;
+          }
           const declaredAliases = new Set(entry.aliases || []);
           return uniqueValues([
             ...aliasValuesAtOffset(entry, text, offset),
@@ -1326,7 +1778,10 @@ class ReferenceProvider {
     );
   }
 
-  async gaugeDocuments(sourceRoot) {
+  async gaugeDocuments(sourceRoot, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     const workspace = this.vscode.workspace || {};
     const documents = [];
     const seenPaths = new Set();
@@ -1354,13 +1809,23 @@ class ReferenceProvider {
     for (const candidate of workspace.textDocuments || []) {
       addDocument(candidate);
     }
-    for (const candidate of await this.findWorkspaceGaugeDocuments(sourceRoot)) {
+    const workspaceDocuments = await this.findWorkspaceGaugeDocuments(sourceRoot, operation);
+    if (workspaceDocuments === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    for (const candidate of workspaceDocuments) {
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       addDocument(candidate);
     }
     return documents;
   }
 
-  async localStepReferences(stepValue, options = {}) {
+  async localStepReferences(stepValue, options = {}, operation) {
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     if (!stepValue) {
       return undefined;
     }
@@ -1373,10 +1838,15 @@ class ReferenceProvider {
       && this.workspaceStepIndex
       && typeof this.workspaceStepIndex.referenceLocations === "function"
     ) {
-      const indexedLocations = await this.workspaceStepIndex.referenceLocations(
-        options.sourceDocument,
-        targetTemplate,
-      );
+      const indexedLocations = operation
+        ? await this.callForOperation(
+          operation,
+          () => this.workspaceStepIndex.referenceLocations(options.sourceDocument, targetTemplate),
+        )
+        : await this.workspaceStepIndex.referenceLocations(options.sourceDocument, targetTemplate);
+      if (indexedLocations === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       return indexedLocations.length > 0 ? indexedLocations : undefined;
     }
     if (
@@ -1384,15 +1854,27 @@ class ReferenceProvider {
       && this.workspaceStepIndex
       && typeof this.workspaceStepIndex.referenceLocationsForPath === "function"
     ) {
-      const indexedLocations = await this.workspaceStepIndex.referenceLocationsForPath(
-        options.sourcePath,
-        targetTemplate,
-      );
+      const indexedLocations = operation
+        ? await this.callForOperation(
+          operation,
+          () => this.workspaceStepIndex.referenceLocationsForPath(options.sourcePath, targetTemplate),
+        )
+        : await this.workspaceStepIndex.referenceLocationsForPath(options.sourcePath, targetTemplate);
+      if (indexedLocations === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       return indexedLocations.length > 0 ? indexedLocations : undefined;
     }
     const sourceRoot = this.sourceGaugeProjectRoot(options);
     const locations = [];
-    for (const document of await this.gaugeDocuments(sourceRoot)) {
+    const documents = await this.gaugeDocuments(sourceRoot, operation);
+    if (documents === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    for (const document of documents) {
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
       locations.push(...localGaugeStepReferences(document, targetTemplate, {
         allowMultilineStep: this.allowsMultilineStep(document),
       }));
@@ -1401,22 +1883,78 @@ class ReferenceProvider {
   }
 
   showReferences(locations, uri, languageClient, position) {
+    return this.showReferencesForOperation(undefined, locations, uri, languageClient, position);
+  }
+
+  showReferencesForOperation(operation, locations, uri, languageClient, position) {
     if (locations) {
-      return this.vscode.commands.executeCommand(
-        SHOW_REFERENCES,
-        this.vscode.Uri.parse(uri),
-        (
+      if (operation && !this.isOperationActive(operation)) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      if (!operation) {
+        return this.vscode.commands.executeCommand(
+          SHOW_REFERENCES,
+          this.vscode.Uri.parse(uri),
+          (
+            languageClient
+            && languageClient.protocol2CodeConverter
+            && typeof languageClient.protocol2CodeConverter.asPosition === "function"
+              ? languageClient.protocol2CodeConverter.asPosition(position)
+              : position
+          ),
+          this.convertLocations(locations, languageClient),
+        );
+      }
+      const sourceUri = this.callSyncForOperation(operation, () => this.vscode.Uri.parse(uri));
+      if (sourceUri === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      const convertedPosition = this.callSyncForOperation(
+        operation,
+        () => (
           languageClient
           && languageClient.protocol2CodeConverter
           && typeof languageClient.protocol2CodeConverter.asPosition === "function"
             ? languageClient.protocol2CodeConverter.asPosition(position)
             : position
         ),
-        this.convertLocations(locations, languageClient),
+      );
+      if (convertedPosition === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      const convertedLocations = this.convertLocationsForOperation(
+        operation,
+        locations,
+        languageClient,
+      );
+      if (convertedLocations === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      return this.callForOperation(
+        operation,
+        () => this.vscode.commands.executeCommand(
+          SHOW_REFERENCES,
+          sourceUri,
+          convertedPosition,
+          convertedLocations,
+        ),
       );
     }
-    this.vscode.window.showInformationMessage("Action NA: Try this on an implementation.");
-    return Promise.resolve(false);
+    if (operation && !this.isOperationActive(operation)) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    if (!operation) {
+      this.vscode.window.showInformationMessage("Action NA: Try this on an implementation.");
+      return Promise.resolve(false);
+    }
+    const notification = this.callDetachedForOperation(
+      operation,
+      () => this.vscode.window.showInformationMessage("Action NA: Try this on an implementation."),
+    );
+    if (notification === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    return false;
   }
 }
 
