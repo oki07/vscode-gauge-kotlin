@@ -448,3 +448,136 @@ test("ProjectEnvironmentService watches every Gradle build script for environmen
   assert.deepEqual(first, { gauge_custom_classpath: "cp-1" });
   assert.deepEqual(second, { gauge_custom_classpath: "cp-2" });
 });
+
+test("ProjectEnvironmentService returns no cached environment after disposal", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const computationEntered = deferred();
+  const releaseComputation = deferred();
+  let computations = 0;
+  const project = {
+    root: () => "/workspace/gauge",
+    async envsAsync() {
+      computations += 1;
+      computationEntered.resolve();
+      return releaseComputation.promise;
+    },
+  };
+  const service = new ProjectEnvironmentService();
+
+  const pendingEnvironment = service.environmentFor(project);
+  await computationEntered.promise;
+  assert.equal(service.pending.size, 1);
+
+  service.dispose();
+  const laterEnvironment = service.environmentFor(project);
+  releaseComputation.resolve({ gauge_custom_classpath: "/workspace/classes" });
+
+  assert.deepEqual(
+    await Promise.all([pendingEnvironment, laterEnvironment]),
+    [{}, {}],
+  );
+  assert.deepEqual({
+    computations,
+    environments: service.environments.size,
+    pending: service.pending.size,
+    preparedRoots: service.preparedExecutionRoots.size,
+  }, {
+    computations: 1,
+    environments: 0,
+    pending: 0,
+    preparedRoots: 0,
+  });
+});
+
+test("ProjectEnvironmentService returns no execution environment after disposal", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const preparationEntered = deferred();
+  const releasePreparation = deferred();
+  let preparations = 0;
+  const project = {
+    root: () => "/workspace/gauge",
+    executionPreparationCacheable: () => true,
+    async executionEnvsAsync() {
+      preparations += 1;
+      preparationEntered.resolve();
+      return releasePreparation.promise;
+    },
+  };
+  const service = new ProjectEnvironmentService();
+
+  const pendingEnvironment = service.executionEnvironmentFor(project);
+  await preparationEntered.promise;
+  service.dispose();
+  const laterEnvironment = service.executionEnvironmentFor(project);
+  releasePreparation.resolve({ gauge_custom_classpath: "/workspace/classes" });
+
+  assert.deepEqual(
+    await Promise.all([pendingEnvironment, laterEnvironment]),
+    [undefined, undefined],
+  );
+  assert.deepEqual({
+    environments: service.environments.size,
+    pending: service.pending.size,
+    preparations,
+    preparedRoots: service.preparedExecutionRoots.size,
+  }, {
+    environments: 0,
+    pending: 0,
+    preparations: 1,
+    preparedRoots: 0,
+  });
+});
+
+test("ProjectEnvironmentService returns no fallback execution environment after disposal", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const computationEntered = deferred();
+  const releaseComputation = deferred();
+  let computations = 0;
+  const project = {
+    root: () => "/workspace/gauge",
+    async envsAsync() {
+      computations += 1;
+      computationEntered.resolve();
+      return releaseComputation.promise;
+    },
+  };
+  const service = new ProjectEnvironmentService();
+
+  const pendingEnvironment = service.executionEnvironmentFor(project);
+  await computationEntered.promise;
+  service.dispose();
+  releaseComputation.resolve({ gauge_custom_classpath: "/workspace/classes" });
+
+  assert.equal(await pendingEnvironment, undefined);
+  assert.equal(await service.executionEnvironmentFor(project), undefined);
+  assert.deepEqual({
+    computations,
+    environments: service.environments.size,
+    pending: service.pending.size,
+  }, {
+    computations: 1,
+    environments: 0,
+    pending: 0,
+  });
+});
+
+test("ProjectEnvironmentService does not start deferred work after disposal", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  let computations = 0;
+  const project = {
+    root: () => "/workspace/gauge",
+    async envsAsync() {
+      computations += 1;
+      return { gauge_custom_classpath: "/workspace/classes" };
+    },
+  };
+  const service = new ProjectEnvironmentService();
+
+  const pendingEnvironment = service.environmentFor(project);
+  service.dispose();
+
+  assert.deepEqual(await pendingEnvironment, {});
+  assert.equal(computations, 0);
+  assert.equal(service.environments.size, 0);
+  assert.equal(service.pending.size, 0);
+});

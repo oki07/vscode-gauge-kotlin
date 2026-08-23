@@ -154,6 +154,9 @@ class ProjectEnvironmentService {
   }
 
   onDidInvalidate(listener) {
+    if (this.disposed) {
+      return { dispose() {} };
+    }
     this.invalidationListeners.add(listener);
     return { dispose: () => this.invalidationListeners.delete(listener) };
   }
@@ -201,6 +204,9 @@ class ProjectEnvironmentService {
   }
 
   invalidateExecution(root) {
+    if (this.disposed) {
+      return;
+    }
     if (root) {
       this.preparedExecutionRoots.delete(root);
     } else {
@@ -209,6 +215,9 @@ class ProjectEnvironmentService {
   }
 
   invalidate(root) {
+    if (this.disposed) {
+      return;
+    }
     if (root) {
       this.rootGenerations.set(root, (this.rootGenerations.get(root) || 0) + 1);
       this.environments.delete(root);
@@ -246,6 +255,9 @@ class ProjectEnvironmentService {
 
   environmentFor(projectOrRoot, cli = this.cli) {
     this.start();
+    if (this.disposed) {
+      return Promise.resolve({});
+    }
     const project = typeof projectOrRoot === "string"
       ? this.projectForRoot(projectOrRoot)
       : projectOrRoot;
@@ -262,8 +274,11 @@ class ProjectEnvironmentService {
     const globalGeneration = this.globalGeneration;
     const rootGeneration = this.rootGenerations.get(root) || 0;
     const computation = Promise.resolve()
-      .then(() => this.computeEnvironment(project, cli))
+      .then(() => (this.disposed ? {} : this.computeEnvironment(project, cli)))
       .then((environment) => {
+        if (this.disposed) {
+          return {};
+        }
         if (environment && typeof environment === "object") {
           if (
             this.globalGeneration === globalGeneration
@@ -287,6 +302,9 @@ class ProjectEnvironmentService {
 
   async executionEnvironmentFor(project, cli = this.cli) {
     this.start();
+    if (this.disposed) {
+      return undefined;
+    }
     const root = projectRoot(project);
     if (!project || !root) {
       return {};
@@ -299,10 +317,14 @@ class ProjectEnvironmentService {
       // computation resolves to an empty object without ever being stored,
       // and must not be mistaken for a completed preparation.
       await this.pending.get(root);
+      if (this.disposed) {
+        return undefined;
+      }
       cached = this.environments.get(root);
     }
     if (typeof project.executionEnvsAsync !== "function") {
-      return this.environmentFor(project, cli);
+      const environment = await this.environmentFor(project, cli);
+      return this.disposed ? undefined : environment;
     }
     const preparationCacheable = Boolean(
       typeof project.executionPreparationCacheable === "function"
@@ -311,6 +333,9 @@ class ProjectEnvironmentService {
     const skipBuild = preparationCacheable && this.preparedExecutionRoots.has(root);
     try {
       const environment = await project.executionEnvsAsync(cli, cached, { skipBuild });
+      if (this.disposed) {
+        return undefined;
+      }
       if (isUsableEnvironment(environment)) {
         if (
           this.globalGeneration === globalGeneration
@@ -337,7 +362,11 @@ class ProjectEnvironmentService {
   }
 
   dispose() {
+    if (this.disposed) {
+      return;
+    }
     this.disposed = true;
+    this.globalGeneration += 1;
     this.invalidationListeners.clear();
     for (const disposable of this.disposables) {
       if (disposable && typeof disposable.dispose === "function") {
