@@ -357,50 +357,64 @@ class WorkspaceStepIndex {
   }
 
   async refreshState(state, sourceDocument) {
-    const documents = await this.workspaceDocumentsFor(state.root, sourceDocument);
-    const currentByPath = new Map(documents.map((document) => [documentPath(document), document]));
-    const dirtyFiles = state.fullDirty
-      ? new Set(currentByPath.keys())
-      : new Set(state.dirtyFiles);
-    const implementationDirty = state.fullDirty || [...dirtyFiles].some((file) => {
-      const document = currentByPath.get(file) || (state.records.get(file) && state.records.get(file).document);
-      return isStepImplementationDocument(document);
-    });
-
-    for (const file of [...state.records.keys()]) {
-      if (!currentByPath.has(file)) {
-        state.records.delete(file);
-      }
-    }
-
-    if (implementationDirty) {
-      state.stepAliasesByEntry = new Map();
-      for (const document of documents) {
-        const file = documentPath(document);
-        if (isStepImplementationDocument(document) || dirtyFiles.has(file) || !state.records.has(file)) {
-          state.records.set(file, await this.analyzeDocument(document, documents, state.root));
-        }
-      }
-    } else {
-      for (const file of dirtyFiles) {
-        const document = currentByPath.get(file);
-        if (document) {
-          state.records.set(file, await this.analyzeDocument(document, documents, state.root));
-        }
-      }
-      for (const document of documents) {
-        const file = documentPath(document);
-        if (!state.records.has(file)) {
-          state.records.set(file, await this.analyzeDocument(document, documents, state.root));
-        }
-      }
-    }
-
-    state.documents = documents;
+    const refreshAll = state.fullDirty;
     state.fullDirty = false;
+    const dirtyFiles = new Set(state.dirtyFiles);
     state.dirtyFiles.clear();
-    this.rebuildAggregates(state);
-    return state;
+    try {
+      const documents = await this.workspaceDocumentsFor(state.root, sourceDocument);
+      const currentByPath = new Map(documents.map((document) => [documentPath(document), document]));
+      if (refreshAll) {
+        for (const file of currentByPath.keys()) {
+          dirtyFiles.add(file);
+        }
+      }
+      const implementationDirty = refreshAll || [...dirtyFiles].some((file) => {
+        const document = currentByPath.get(file) || (state.records.get(file) && state.records.get(file).document);
+        return isStepImplementationDocument(document);
+      });
+
+      for (const file of [...state.records.keys()]) {
+        if (!currentByPath.has(file)) {
+          state.records.delete(file);
+        }
+      }
+
+      if (implementationDirty) {
+        state.stepAliasesByEntry = new Map();
+        for (const document of documents) {
+          const file = documentPath(document);
+          if (isStepImplementationDocument(document) || dirtyFiles.has(file) || !state.records.has(file)) {
+            state.records.set(file, await this.analyzeDocument(document, documents, state.root));
+          }
+        }
+      } else {
+        for (const file of dirtyFiles) {
+          const document = currentByPath.get(file);
+          if (document) {
+            state.records.set(file, await this.analyzeDocument(document, documents, state.root));
+          }
+        }
+        for (const document of documents) {
+          const file = documentPath(document);
+          if (!state.records.has(file)) {
+            state.records.set(file, await this.analyzeDocument(document, documents, state.root));
+          }
+        }
+      }
+
+      state.documents = documents;
+      this.rebuildAggregates(state);
+      return state;
+    } catch (error) {
+      if (refreshAll) {
+        state.fullDirty = true;
+      }
+      for (const file of dirtyFiles) {
+        state.dirtyFiles.add(file);
+      }
+      throw error;
+    }
   }
 
   async snapshotFor(sourceDocument) {
@@ -419,7 +433,7 @@ class WorkspaceStepIndex {
       return emptyState(undefined);
     }
     const state = this.stateFor(root);
-    if (!state.fullDirty && state.dirtyFiles.size === 0) {
+    if (!state.pending && !state.fullDirty && state.dirtyFiles.size === 0) {
       return state;
     }
     if (!state.pending) {
@@ -428,7 +442,7 @@ class WorkspaceStepIndex {
       });
     }
     await state.pending;
-    if (state.fullDirty || state.dirtyFiles.size > 0) {
+    if (state.pending || state.fullDirty || state.dirtyFiles.size > 0) {
       return this.snapshotForRoot(root, sourceDocument);
     }
     return state;

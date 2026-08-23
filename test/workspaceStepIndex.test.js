@@ -146,6 +146,75 @@ test("WorkspaceStepIndex refreshes unopened constant-backed aliases", async () =
   assert.equal(newDefinitions[0].document.uri.fsPath, implementation.uri.fsPath);
 });
 
+test("WorkspaceStepIndex preserves changes that arrive during refresh", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const file = "/workspace/gauge/specs/example.spec";
+  const original = createDocument("# Example\ntags: smoke", file, "gauge", 1);
+  const replacement = createDocument("# Example\ntags: regression", file, "gauge", 2);
+  const store = new FakeDocumentStore([original]);
+  let markAnalysisEntered;
+  const analysisEntered = new Promise((resolve) => {
+    markAnalysisEntered = resolve;
+  });
+  let releaseAnalysis;
+  const analysisGate = new Promise((resolve) => {
+    releaseAnalysis = resolve;
+  });
+  let analyses = 0;
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    async tagEntriesProvider(document) {
+      analyses += 1;
+      markAnalysisEntered();
+      await analysisGate;
+      return document.getText().match(/(?:smoke|regression)/g) || [];
+    },
+    vscode: { workspace: { textDocuments: [original] } },
+  });
+
+  const pendingTags = index.tagEntries(original);
+  await analysisEntered;
+  const concurrentTags = index.tagEntries(original);
+  store.replace(replacement);
+  releaseAnalysis();
+
+  assert.deepEqual(await pendingTags, ["regression"]);
+  assert.deepEqual(await concurrentTags, ["regression"]);
+  assert.deepEqual(await index.tagEntries(replacement), ["regression"]);
+  assert.equal(analyses, 2);
+});
+
+test("WorkspaceStepIndex restores consumed invalidations after refresh failure", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const file = "/workspace/gauge/specs/example.spec";
+  const original = createDocument("# Example\ntags: smoke", file, "gauge", 1);
+  const replacement = createDocument("# Example\ntags: regression", file, "gauge", 2);
+  const store = new FakeDocumentStore([original]);
+  const failingVersions = new Set([1, 2]);
+  let analyses = 0;
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    tagEntriesProvider(document) {
+      analyses += 1;
+      if (failingVersions.delete(document.version)) {
+        throw new Error(`refresh failed for version ${document.version}`);
+      }
+      return document.getText().match(/(?:smoke|regression)/g) || [];
+    },
+    vscode: { workspace: { textDocuments: [original] } },
+  });
+
+  await assert.rejects(() => index.tagEntries(original), /refresh failed for version 1/);
+  assert.deepEqual(await index.tagEntries(original), ["smoke"]);
+
+  store.replace(replacement);
+  await assert.rejects(() => index.tagEntries(replacement), /refresh failed for version 2/);
+  assert.deepEqual(await index.tagEntries(replacement), ["regression"]);
+  assert.equal(analyses, 4);
+});
+
 test("WorkspaceStepIndex does not reanalyze unchanged queries", async () => {
   const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
   const implementation = createDocument(
