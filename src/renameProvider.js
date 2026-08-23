@@ -37,6 +37,7 @@ const WORKSPACE_SCAN_FILE_PATTERNS = [
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 const PRE_REFACTOR_ERRORS_MESSAGE = "Please fix all errors before refactoring.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
+const CANCELLED_RENAME_OPERATION = Symbol("cancelled rename operation");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -64,13 +65,6 @@ function createRangeFromOffsets(vscode, text, startOffset, endOffset, document) 
     positionAt(text, startOffset, document),
     positionAt(text, endOffset, document),
   );
-}
-
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
-  }
-  return undefined;
 }
 
 function createWorkspaceEdit(vscode) {
@@ -1245,6 +1239,241 @@ class GaugeRenameProvider {
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       });
+    this.disposed = false;
+    this.activeOperations = new Set();
+    this.registrationDisposable = undefined;
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      this.cancelOperation(operation);
+    }
+    const registration = this.registrationDisposable;
+    this.registrationDisposable = undefined;
+    if (registration && typeof registration.dispose === "function") {
+      registration.dispose();
+    }
+  }
+
+  createOperation() {
+    if (this.disposed) {
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      hostCancellationDisposable: undefined,
+      resolveCancellation,
+      sources: new Set(),
+    };
+    this.activeOperations.add(operation);
+    return operation;
+  }
+
+  isOperationActive(operation) {
+    return !this.disposed && (!operation || operation.active);
+  }
+
+  disposeRequestSource(source, cancel) {
+    if (!source) {
+      return;
+    }
+    if (cancel && typeof source.cancel === "function") {
+      try {
+        source.cancel();
+      } catch (_error) {
+        // Cancellation is advisory; owned source disposal must still complete.
+      }
+    }
+    if (typeof source.dispose === "function") {
+      try {
+        source.dispose();
+      } catch (_error) {
+        // Host cleanup cannot reactivate a terminal rename operation.
+      }
+    }
+  }
+
+  disposeHostCancellation(operation) {
+    const disposable = operation && operation.hostCancellationDisposable;
+    if (!disposable) {
+      return;
+    }
+    operation.hostCancellationDisposable = undefined;
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Host listener cleanup cannot reactivate a completed operation.
+      }
+    }
+  }
+
+  cancelOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    const sources = [...operation.sources];
+    operation.sources.clear();
+    operation.resolveCancellation(CANCELLED_RENAME_OPERATION);
+    this.disposeHostCancellation(operation);
+    for (const source of sources) {
+      this.disposeRequestSource(source, true);
+    }
+  }
+
+  finishOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    const sources = [...operation.sources];
+    operation.sources.clear();
+    this.disposeHostCancellation(operation);
+    for (const source of sources) {
+      this.disposeRequestSource(source, false);
+    }
+  }
+
+  linkOperationCancellation(operation, token) {
+    if (!token) {
+      return true;
+    }
+    if (token.isCancellationRequested) {
+      this.cancelOperation(operation);
+      return false;
+    }
+    if (typeof token.onCancellationRequested !== "function") {
+      return true;
+    }
+    let disposable;
+    try {
+      disposable = token.onCancellationRequested(() => this.cancelOperation(operation));
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return false;
+      }
+      throw error;
+    }
+    if (this.isOperationActive(operation)) {
+      operation.hostCancellationDisposable = disposable;
+    } else if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // The operation settled while the host registered the listener.
+      }
+    }
+    if (token.isCancellationRequested && this.isOperationActive(operation)) {
+      this.cancelOperation(operation);
+    }
+    return this.isOperationActive(operation);
+  }
+
+  runOperation(token, callback) {
+    const operation = this.createOperation();
+    if (!operation) {
+      return Promise.resolve(undefined);
+    }
+    let workflow;
+    try {
+      workflow = this.linkOperationCancellation(operation, token)
+        ? Promise.resolve(callback(operation))
+        : Promise.resolve(CANCELLED_RENAME_OPERATION);
+    } catch (error) {
+      workflow = Promise.reject(error);
+    }
+    return Promise.race([workflow, operation.cancellation])
+      .then((value) => value === CANCELLED_RENAME_OPERATION ? undefined : value)
+      .finally(() => this.finishOperation(operation));
+  }
+
+  callSyncForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    try {
+      const value = callback();
+      return this.isOperationActive(operation) ? value : CANCELLED_RENAME_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  async callForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    let result;
+    try {
+      result = callback();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      throw error;
+    }
+    const observed = Promise.resolve(result);
+    if (!this.isOperationActive(operation)) {
+      observed.catch(() => {});
+      return CANCELLED_RENAME_OPERATION;
+    }
+    try {
+      const value = operation
+        ? await Promise.race([observed, operation.cancellation])
+        : await observed;
+      return this.isOperationActive(operation) ? value : CANCELLED_RENAME_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  createRequestSource(operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    if (typeof this.vscode.CancellationTokenSource !== "function") {
+      return undefined;
+    }
+    let source;
+    try {
+      source = new this.vscode.CancellationTokenSource();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      throw error;
+    }
+    if (!this.isOperationActive(operation)) {
+      this.disposeRequestSource(source, true);
+      return CANCELLED_RENAME_OPERATION;
+    }
+    operation.sources.add(source);
+    return source;
+  }
+
+  releaseRequestSource(operation, source) {
+    if (source && operation.sources.delete(source)) {
+      this.disposeRequestSource(source, false);
+    }
   }
 
   isGaugeProjectDocument(document) {
@@ -1270,12 +1499,18 @@ class GaugeRenameProvider {
     });
   }
 
-  async workspaceDocuments(sourceDocument) {
+  async workspaceDocuments(sourceDocument, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     if (
       this.workspaceStepIndex
       && typeof this.workspaceStepIndex.documentsFor === "function"
     ) {
-      return this.workspaceStepIndex.documentsFor(sourceDocument);
+      return this.callForOperation(
+        operation,
+        () => this.workspaceStepIndex.documentsFor(sourceDocument),
+      );
     }
     const workspace = this.vscode.workspace || {};
     const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
@@ -1283,6 +1518,8 @@ class GaugeRenameProvider {
     const seenPaths = new Set();
     const addDocument = (candidate) => {
       if (
+        !this.isOperationActive(operation)
+        ||
         !candidate
         || typeof candidate.getText !== "function"
         || (!isGaugeDocument(candidate) && !isStepImplementationDocument(candidate))
@@ -1307,8 +1544,24 @@ class GaugeRenameProvider {
     }
 
     if (this.documentStore) {
-      await this.documentStore.whenReady();
-      for (const candidate of this.documentStore.documents()) {
+      const ready = await this.callForOperation(
+        operation,
+        () => this.documentStore.whenReady(),
+      );
+      if (ready === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      const storedDocuments = this.callSyncForOperation(
+        operation,
+        () => this.documentStore.documents(),
+      );
+      if (storedDocuments === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      for (const candidate of storedDocuments) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_RENAME_OPERATION;
+        }
         const file = documentPath(candidate);
         if (
           !file
@@ -1327,11 +1580,20 @@ class GaugeRenameProvider {
       for (const pattern of [...GAUGE_FILE_PATTERNS, KOTLIN_FILE_PATTERN, JAVA_FILE_PATTERN]) {
         let uris;
         try {
-          uris = await workspace.findFiles(pattern);
+          uris = await this.callForOperation(operation, () => workspace.findFiles(pattern));
         } catch (_error) {
+          if (!this.isOperationActive(operation)) {
+            return CANCELLED_RENAME_OPERATION;
+          }
           continue;
         }
+        if (uris === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
+        }
         for (const uri of uris || []) {
+          if (!this.isOperationActive(operation)) {
+            return CANCELLED_RENAME_OPERATION;
+          }
           const file = uriPath(uri);
           if (file && seenPaths.has(file)) {
             continue;
@@ -1340,8 +1602,18 @@ class GaugeRenameProvider {
             continue;
           }
           try {
-            addDocument(await workspace.openTextDocument(uri));
+            const opened = await this.callForOperation(
+              operation,
+              () => workspace.openTextDocument(uri),
+            );
+            if (opened === CANCELLED_RENAME_OPERATION) {
+              return CANCELLED_RENAME_OPERATION;
+            }
+            addDocument(opened);
           } catch (_error) {
+            if (!this.isOperationActive(operation)) {
+              return CANCELLED_RENAME_OPERATION;
+            }
             // Ignore unreadable files so one stale URI does not block rename.
           }
         }
@@ -1349,7 +1621,7 @@ class GaugeRenameProvider {
     }
 
     addDocument(sourceDocument);
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_RENAME_OPERATION;
   }
 
   kotlinDocuments(documents) {
@@ -1360,12 +1632,18 @@ class GaugeRenameProvider {
     return documents.filter((document) => isStepImplementationDocument(document));
   }
 
-  async stepEntriesFor(sourceDocument, document, implementationDocuments) {
+  async stepEntriesFor(sourceDocument, document, implementationDocuments, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     if (
       this.workspaceStepIndex
       && typeof this.workspaceStepIndex.stepEntriesForDocument === "function"
     ) {
-      return this.workspaceStepIndex.stepEntriesForDocument(sourceDocument, document);
+      return this.callForOperation(
+        operation,
+        () => this.workspaceStepIndex.stepEntriesForDocument(sourceDocument, document),
+      );
     }
     let externalConstants;
     if (isStepImplementationDocument(document)) {
@@ -1378,7 +1656,10 @@ class GaugeRenameProvider {
         externalConstants = undefined;
       }
     }
-    return findStepFunctionsForDocument(document, externalConstants);
+    return this.callSyncForOperation(
+      operation,
+      () => findStepFunctionsForDocument(document, externalConstants),
+    );
   }
 
   stepAtGaugePosition(document, position) {
@@ -1456,46 +1737,82 @@ class GaugeRenameProvider {
     return undefined;
   }
 
-  async stepAt(document, position) {
-    const documents = await this.workspaceDocuments(document);
+  async stepAt(document, position, operation) {
+    const documents = await this.workspaceDocuments(document, operation);
+    if (documents === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     const implementationDocuments = this.stepImplementationDocuments(documents);
     const stepEntries = isStepImplementationDocument(document)
-      ? await this.stepEntriesFor(document, document, implementationDocuments)
+      ? await this.stepEntriesFor(document, document, implementationDocuments, operation)
       : [];
-    return {
+    if (stepEntries === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    return this.callSyncForOperation(operation, () => ({
       documents,
       step: this.stepAtGaugePosition(document, position)
-        || this.stepAtImplementationPosition(
-          document,
-          position,
-          implementationDocuments,
-          stepEntries,
-        ),
-    };
+          || this.stepAtImplementationPosition(
+            document,
+            position,
+            implementationDocuments,
+            stepEntries,
+          ),
+    }));
   }
 
-  async prepareRename(document, position) {
-    const { documents, step } = await this.stepAt(document, position);
-    await this.validateRenameTarget(document, documents, step);
-    return step ? { range: step.range, placeholder: step.text } : undefined;
+  prepareRename(document, position, token) {
+    return this.runOperation(
+      token,
+      (operation) => this.prepareRenameForOperation(operation, document, position),
+    );
   }
 
-  async validateRenameTarget(sourceDocument, documents, step) {
+  async prepareRenameForOperation(operation, document, position) {
+    const target = await this.stepAt(document, position, operation);
+    if (target === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    const validated = await this.validateRenameTarget(
+      document,
+      target.documents,
+      target.step,
+      operation,
+    );
+    if (validated === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    return this.callSyncForOperation(
+      operation,
+      () => target.step ? { range: target.step.range, placeholder: target.step.text } : undefined,
+    );
+  }
+
+  async validateRenameTarget(sourceDocument, documents, step, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     if (!step) {
       return;
     }
     const implementationDocuments = this.stepImplementationDocuments(documents);
     for (const document of this.stepImplementationDocuments(documents)) {
-      for (const entry of await this.stepEntriesFor(
+      const entries = await this.stepEntriesFor(
         sourceDocument,
         document,
         implementationDocuments,
-      )) {
+        operation,
+      );
+      if (entries === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      for (const entry of entries) {
         if (entry.aliases.length > 1 && stepEntryHasTemplate(entry, step.template)) {
           throw new Error(ALIASED_STEP_RENAME_ERROR);
         }
       }
     }
+    return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
   projectClientFor(document) {
@@ -1506,43 +1823,66 @@ class GaugeRenameProvider {
     return this.clientsMap.get(filename);
   }
 
-  lspWorkspaceEditToVscodeEdit(lspEdit) {
+  lspWorkspaceEditToVscodeEdit(lspEdit, operation) {
     if (!lspEdit || typeof lspEdit !== "object") {
       return undefined;
     }
 
-    const edit = createWorkspaceEdit(this.vscode);
+    const edit = this.callSyncForOperation(operation, () => createWorkspaceEdit(this.vscode));
+    if (edit === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     const addTextEdit = (uri, textEdit) => {
       if (!uri || !textEdit || !textEdit.range) {
-        return;
+        return true;
       }
-      edit.replace(
-        uriFromString(this.vscode, uri),
-        createRange(this.vscode, textEdit.range.start, textEdit.range.end),
-        textEdit.newText || "",
+      const replaced = this.callSyncForOperation(
+        operation,
+        () => edit.replace(
+          uriFromString(this.vscode, uri),
+          createRange(this.vscode, textEdit.range.start, textEdit.range.end),
+          textEdit.newText || "",
+        ),
       );
+      return replaced !== CANCELLED_RENAME_OPERATION;
     };
 
     for (const [uri, edits] of Object.entries(lspEdit.changes || {})) {
       for (const textEdit of edits || []) {
-        addTextEdit(uri, textEdit);
+        if (!addTextEdit(uri, textEdit)) {
+          return CANCELLED_RENAME_OPERATION;
+        }
       }
     }
 
     for (const change of lspEdit.documentChanges || []) {
       const uri = change && change.textDocument && change.textDocument.uri;
       for (const textEdit of (change && change.edits) || []) {
-        addTextEdit(uri, textEdit);
+        if (!addTextEdit(uri, textEdit)) {
+          return CANCELLED_RENAME_OPERATION;
+        }
       }
     }
 
-    return edit;
+    return this.isOperationActive(operation) ? edit : CANCELLED_RENAME_OPERATION;
   }
 
-  async provideLanguageServerRenameEdits(document, position, newName) {
-    const projectClient = this.projectClientFor(document);
+  async provideLanguageServerRenameEdits(document, position, newName, operation) {
+    const projectClient = this.callSyncForOperation(
+      operation,
+      () => this.projectClientFor(document),
+    );
+    if (projectClient === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     const client = projectClient && projectClient.client;
-    const uri = documentUriString(this.vscode, document);
+    const uri = this.callSyncForOperation(
+      operation,
+      () => documentUriString(this.vscode, document),
+    );
+    if (uri === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     if (!client || typeof client.sendRequest !== "function" || !uri) {
       return undefined;
     }
@@ -1555,13 +1895,40 @@ class GaugeRenameProvider {
       },
       newName,
     };
-    const lspEdit = await client.sendRequest(LSP_RENAME_REQUEST, params, createToken(this.vscode));
-    return this.lspWorkspaceEditToVscodeEdit(lspEdit);
+    const source = this.createRequestSource(operation);
+    if (source === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    let lspEdit;
+    try {
+      lspEdit = await this.callForOperation(
+        operation,
+        () => client.sendRequest(LSP_RENAME_REQUEST, params, source && source.token),
+      );
+    } finally {
+      this.releaseRequestSource(operation, source);
+    }
+    if (lspEdit === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    return this.callSyncForOperation(
+      operation,
+      () => this.lspWorkspaceEditToVscodeEdit(lspEdit, operation),
+    );
   }
 
-  async preflightRename(document) {
+  async preflightRename(document, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     if (this.vscode.workspace && typeof this.vscode.workspace.saveAll === "function") {
-      await this.vscode.workspace.saveAll();
+      const saved = await this.callForOperation(
+        operation,
+        () => this.vscode.workspace.saveAll(),
+      );
+      if (saved === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
     }
     if (
       !this.validateDiagnosticsProvider
@@ -1569,24 +1936,44 @@ class GaugeRenameProvider {
     ) {
       return;
     }
-    const result = await this.validateDiagnosticsProvider.validateErrorsForDocument(document, new Map());
+    const result = await this.callForOperation(
+      operation,
+      () => this.validateDiagnosticsProvider.validateErrorsForDocument(document, new Map()),
+    );
+    if (result === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     const errors = validateErrors(result).filter(isBlockingValidateError);
     if (errors.length > 0) {
       throw new Error(PRE_REFACTOR_ERRORS_MESSAGE);
     }
+    return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
-  addGaugeRenames(edit, document, template, newName) {
+  addGaugeRenames(edit, document, template, newName, operation) {
     const lines = documentLines(document);
     const allowMultiline = this.allowsMultilineStep(document);
     const docStringLines = closedDocStringLines(lines);
     for (let line = 0; line < lines.length; line += 1) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_RENAME_OPERATION;
+      }
       const step = gaugeStepOnLine(this.vscode, document, line, lines, {
         allowMultilineStep: allowMultiline,
         docStringLines,
       });
       if (step && step.template === template) {
-        edit.replace(document.uri, step.range, gaugeReplacementName(newName, step.hasInlineTable));
+        const replaced = this.callSyncForOperation(
+          operation,
+          () => edit.replace(
+            document.uri,
+            step.range,
+            gaugeReplacementName(newName, step.hasInlineTable),
+          ),
+        );
+        if (replaced === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
+        }
       }
       if (step) {
         line = Math.max(line, step.range.end.line);
@@ -1594,15 +1981,25 @@ class GaugeRenameProvider {
     }
     if (isConceptDocument(document)) {
       for (const heading of findConceptHeadings(document.getText())) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_RENAME_OPERATION;
+        }
         if (heading.normalized && heading.normalized === template) {
-          edit.replace(
-            document.uri,
-            createRange(this.vscode, heading.start, heading.end),
-            gaugeReplacementName(newName, false),
+          const replaced = this.callSyncForOperation(
+            operation,
+            () => edit.replace(
+              document.uri,
+              createRange(this.vscode, heading.start, heading.end),
+              gaugeReplacementName(newName, false),
+            ),
           );
+          if (replaced === CANCELLED_RENAME_OPERATION) {
+            return CANCELLED_RENAME_OPERATION;
+          }
         }
       }
     }
+    return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
   addConstantBackedStepRenames(
@@ -1614,31 +2011,51 @@ class GaugeRenameProvider {
     newName,
     hasInlineTable,
     oldName,
+    operation,
   ) {
     for (const reference of annotationConstantReferences(sourceText, entry)) {
       const targetReferences = constantReferenceTargets(sourceText, reference);
       for (const document of implementationDocuments) {
         for (const targetReference of targetReferences) {
+          if (!this.isOperationActive(operation)) {
+            return CANCELLED_RENAME_OPERATION;
+          }
           const constantRange = findConstLiteralRange(this.vscode, document, targetReference, alias);
           if (!constantRange || editHasReplacement(edit, document.uri, constantRange.range)) {
             continue;
           }
-          edit.replace(
-            document.uri,
-            constantRange.range,
-            replacementForLiteral(kotlinReplacementName(newName, hasInlineTable, {
-              implementationAlias: alias,
-              oldName,
-            }), constantRange.literal, {
-              kotlin: isKotlinDocument(document),
-            }),
+          const replaced = this.callSyncForOperation(
+            operation,
+            () => edit.replace(
+              document.uri,
+              constantRange.range,
+              replacementForLiteral(kotlinReplacementName(newName, hasInlineTable, {
+                implementationAlias: alias,
+                oldName,
+              }), constantRange.literal, {
+                kotlin: isKotlinDocument(document),
+              }),
+            ),
           );
+          if (replaced === CANCELLED_RENAME_OPERATION) {
+            return CANCELLED_RENAME_OPERATION;
+          }
         }
       }
     }
+    return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
-  addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName) {
+  addKotlinFunctionParameterRename(
+    edit,
+    document,
+    text,
+    entry,
+    newName,
+    hasInlineTable,
+    oldName,
+    operation,
+  ) {
     if (!isKotlinDocument(document) || entry.parameterStart === undefined || entry.parameterEnd === undefined) {
       return;
     }
@@ -1656,10 +2073,22 @@ class GaugeRenameProvider {
     if (editHasReplacement(edit, document.uri, range)) {
       return;
     }
-    edit.replace(document.uri, range, replacement);
+    return this.callSyncForOperation(
+      operation,
+      () => edit.replace(document.uri, range, replacement),
+    );
   }
 
-  addJavaFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName) {
+  addJavaFunctionParameterRename(
+    edit,
+    document,
+    text,
+    entry,
+    newName,
+    hasInlineTable,
+    oldName,
+    operation,
+  ) {
     if (!isJavaDocument(document) || entry.parameterStart === undefined || entry.parameterEnd === undefined) {
       return;
     }
@@ -1677,12 +2106,45 @@ class GaugeRenameProvider {
     if (editHasReplacement(edit, document.uri, range)) {
       return;
     }
-    edit.replace(document.uri, range, replacement);
+    return this.callSyncForOperation(
+      operation,
+      () => edit.replace(document.uri, range, replacement),
+    );
   }
 
-  addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName) {
-    this.addKotlinFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
-    this.addJavaFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+  addFunctionParameterRename(
+    edit,
+    document,
+    text,
+    entry,
+    newName,
+    hasInlineTable,
+    oldName,
+    operation,
+  ) {
+    const kotlinResult = this.addKotlinFunctionParameterRename(
+      edit,
+      document,
+      text,
+      entry,
+      newName,
+      hasInlineTable,
+      oldName,
+      operation,
+    );
+    if (kotlinResult === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    return this.addJavaFunctionParameterRename(
+      edit,
+      document,
+      text,
+      entry,
+      newName,
+      hasInlineTable,
+      oldName,
+      operation,
+    );
   }
 
   addStepImplementationRenames(
@@ -1694,7 +2156,11 @@ class GaugeRenameProvider {
     hasInlineTable,
     oldName,
     stepEntries,
+    operation,
   ) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     const text = document.getText();
     let externalConstants;
     const kotlinDocument = isKotlinDocument(document);
@@ -1706,6 +2172,9 @@ class GaugeRenameProvider {
       }
     }
     for (const entry of stepEntries || findStepFunctionsForDocument(document, externalConstants)) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_RENAME_OPERATION;
+      }
       const entryTemplate = entry.aliases.length === 1
         ? normalizeStepTemplate(entry.aliases[0])
         : undefined;
@@ -1715,7 +2184,7 @@ class GaugeRenameProvider {
       const literal = literalAliasRange(text, entry, entry.aliases[0]);
       if (!literal) {
         if (isStepImplementationDocument(document)) {
-          this.addConstantBackedStepRenames(
+          const constantResult = this.addConstantBackedStepRenames(
             edit,
             implementationDocuments,
             text,
@@ -1724,9 +2193,25 @@ class GaugeRenameProvider {
             newName,
             hasInlineTable,
             oldName,
+            operation,
           );
+          if (constantResult === CANCELLED_RENAME_OPERATION) {
+            return CANCELLED_RENAME_OPERATION;
+          }
         }
-        this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+        const parameterResult = this.addFunctionParameterRename(
+          edit,
+          document,
+          text,
+          entry,
+          newName,
+          hasInlineTable,
+          oldName,
+          operation,
+        );
+        if (parameterResult === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
+        }
         continue;
       }
       const range = createRangeFromOffsets(
@@ -1737,32 +2222,98 @@ class GaugeRenameProvider {
         document,
       );
       if (editHasReplacement(edit, document.uri, range)) {
-        this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+        const parameterResult = this.addFunctionParameterRename(
+          edit,
+          document,
+          text,
+          entry,
+          newName,
+          hasInlineTable,
+          oldName,
+          operation,
+        );
+        if (parameterResult === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
+        }
         continue;
       }
-      edit.replace(
-        document.uri,
-        range,
-        replacementForLiteral(kotlinReplacementName(newName, hasInlineTable, {
-          implementationAlias: entry.aliases[0],
-          oldName,
-        }), literal, {
-          kotlin: kotlinDocument,
-        }),
+      const replaced = this.callSyncForOperation(
+        operation,
+        () => edit.replace(
+          document.uri,
+          range,
+          replacementForLiteral(kotlinReplacementName(newName, hasInlineTable, {
+            implementationAlias: entry.aliases[0],
+            oldName,
+          }), literal, {
+            kotlin: kotlinDocument,
+          }),
+        ),
       );
-      this.addFunctionParameterRename(edit, document, text, entry, newName, hasInlineTable, oldName);
+      if (replaced === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
+      const parameterResult = this.addFunctionParameterRename(
+        edit,
+        document,
+        text,
+        entry,
+        newName,
+        hasInlineTable,
+        oldName,
+        operation,
+      );
+      if (parameterResult === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
     }
+    return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
-  async provideRenameEdits(document, position, newName) {
-    const { documents, step } = await this.stepAt(document, position);
+  provideRenameEdits(document, position, newName, token) {
+    return this.runOperation(
+      token,
+      (operation) => this.provideRenameEditsForOperation(
+        operation,
+        document,
+        position,
+        newName,
+      ),
+    );
+  }
+
+  async provideRenameEditsForOperation(operation, document, position, newName) {
+    const target = await this.stepAt(document, position, operation);
+    if (target === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    const { documents, step } = target;
     if (!step) {
       return undefined;
     }
-    await this.validateRenameTarget(document, documents, step);
-    await this.preflightRename(document);
+    const validated = await this.validateRenameTarget(
+      document,
+      documents,
+      step,
+      operation,
+    );
+    if (validated === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    const preflight = await this.preflightRename(document, operation);
+    if (preflight === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
     if (step.engineRename) {
-      const languageServerEdit = await this.provideLanguageServerRenameEdits(document, position, newName);
+      const languageServerEdit = await this.provideLanguageServerRenameEdits(
+        document,
+        position,
+        newName,
+        operation,
+      );
+      if (languageServerEdit === CANCELLED_RENAME_OPERATION) {
+        return CANCELLED_RENAME_OPERATION;
+      }
       if (languageServerEdit) {
         const implementationDocuments = this.stepImplementationDocuments(documents);
         for (const candidate of this.stepImplementationDocuments(documents)) {
@@ -1770,9 +2321,63 @@ class GaugeRenameProvider {
             document,
             candidate,
             implementationDocuments,
+            operation,
           );
-          this.addStepImplementationRenames(
-            languageServerEdit,
+          if (stepEntries === CANCELLED_RENAME_OPERATION) {
+            return CANCELLED_RENAME_OPERATION;
+          }
+          const augmented = this.callSyncForOperation(
+            operation,
+            () => this.addStepImplementationRenames(
+              languageServerEdit,
+              candidate,
+              implementationDocuments,
+              step.template,
+              newName,
+              step.hasInlineTable,
+              step.text,
+              stepEntries,
+              operation,
+            ),
+          );
+          if (augmented === CANCELLED_RENAME_OPERATION) {
+            return CANCELLED_RENAME_OPERATION;
+          }
+        }
+        return this.isOperationActive(operation)
+          ? languageServerEdit
+          : CANCELLED_RENAME_OPERATION;
+      }
+    }
+
+    const edit = this.callSyncForOperation(operation, () => createWorkspaceEdit(this.vscode));
+    if (edit === CANCELLED_RENAME_OPERATION) {
+      return CANCELLED_RENAME_OPERATION;
+    }
+    const implementationDocuments = this.stepImplementationDocuments(documents);
+    for (const candidate of documents) {
+      if (isGaugeDocument(candidate)) {
+        const renamed = this.callSyncForOperation(
+          operation,
+          () => this.addGaugeRenames(edit, candidate, step.template, newName, operation),
+        );
+        if (renamed === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
+        }
+      } else if (isStepImplementationDocument(candidate)) {
+        const stepEntries = await this.stepEntriesFor(
+          document,
+          candidate,
+          implementationDocuments,
+          operation,
+        );
+        if (stepEntries === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
+        }
+        const renamed = this.callSyncForOperation(
+          operation,
+          () => this.addStepImplementationRenames(
+            edit,
             candidate,
             implementationDocuments,
             step.template,
@@ -1780,43 +2385,25 @@ class GaugeRenameProvider {
             step.hasInlineTable,
             step.text,
             stepEntries,
-          );
+            operation,
+          ),
+        );
+        if (renamed === CANCELLED_RENAME_OPERATION) {
+          return CANCELLED_RENAME_OPERATION;
         }
-        return languageServerEdit;
       }
     }
-
-    const edit = createWorkspaceEdit(this.vscode);
-    const implementationDocuments = this.stepImplementationDocuments(documents);
-    for (const candidate of documents) {
-      if (isGaugeDocument(candidate)) {
-        this.addGaugeRenames(edit, candidate, step.template, newName);
-      } else if (isStepImplementationDocument(candidate)) {
-        const stepEntries = await this.stepEntriesFor(
-          document,
-          candidate,
-          implementationDocuments,
-        );
-        this.addStepImplementationRenames(
-          edit,
-          candidate,
-          implementationDocuments,
-          step.template,
-          newName,
-          step.hasInlineTable,
-          step.text,
-          stepEntries,
-        );
-      }
-    }
-    return edit;
+    return this.isOperationActive(operation) ? edit : CANCELLED_RENAME_OPERATION;
   }
 
   register() {
-    if (!this.vscode.languages || typeof this.vscode.languages.registerRenameProvider !== "function") {
-      return { dispose() {} };
+    if (this.disposed || this.registrationDisposable) {
+      return this;
     }
-    return this.vscode.languages.registerRenameProvider(
+    if (!this.vscode.languages || typeof this.vscode.languages.registerRenameProvider !== "function") {
+      return this;
+    }
+    const registration = this.vscode.languages.registerRenameProvider(
       [
         { language: GAUGE_LANGUAGE },
         { language: GAUGE_CONCEPT_LANGUAGE },
@@ -1830,6 +2417,14 @@ class GaugeRenameProvider {
       ],
       this,
     );
+    if (this.disposed) {
+      if (registration && typeof registration.dispose === "function") {
+        registration.dispose();
+      }
+    } else {
+      this.registrationDisposable = registration;
+    }
+    return this;
   }
 }
 

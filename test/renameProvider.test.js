@@ -1,6 +1,91 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((receivedResolve, receivedReject) => {
+    resolve = receivedResolve;
+    reject = receivedReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createCancellation() {
+  let cancellationRequested = false;
+  let listenerDisposals = 0;
+  let registrations = 0;
+  const listeners = new Set();
+  const token = {
+    get isCancellationRequested() {
+      return cancellationRequested;
+    },
+    onCancellationRequested(listener) {
+      registrations += 1;
+      listeners.add(listener);
+      let disposed = false;
+      return {
+        dispose() {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          listenerDisposals += 1;
+          listeners.delete(listener);
+        },
+      };
+    },
+  };
+  return {
+    cancel() {
+      if (cancellationRequested) {
+        return;
+      }
+      cancellationRequested = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    listenerDisposals() {
+      return listenerDisposals;
+    },
+    registrations() {
+      return registrations;
+    },
+    token,
+  };
+}
+
+function trackCancellationSources(vscode, sources, onConstruct) {
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+      if (onConstruct) {
+        onConstruct(this);
+      }
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+}
+
 function createFakeVscode(textDocuments) {
   return {
     Position: class Position {
@@ -2319,4 +2404,917 @@ test("GaugeRenameProvider uses the shared document store without workspace scans
     `expected at most one findFiles call (store scan), got: ${JSON.stringify(findFilesPatterns)}`,
   );
   assert.deepEqual(openedFiles, []);
+});
+
+test("GaugeRenameProvider returns neutral callbacks after cancellation or registration disposal", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+
+  for (const trigger of ["hostCancellation", "registrationDisposal"]) {
+    let clientLookups = 0;
+    let registrationDisposeCalls = 0;
+    const cancellation = createCancellation();
+    const vscode = createFakeVscode([specDocument]);
+    vscode.languages = {
+      registerRenameProvider() {
+        return {
+          dispose() {
+            registrationDisposeCalls += 1;
+          },
+        };
+      },
+    };
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          clientLookups += 1;
+          return undefined;
+        },
+      },
+      vscode,
+    });
+
+    if (trigger === "hostCancellation") {
+      cancellation.cancel();
+    } else {
+      const registration = provider.register();
+      registration.dispose();
+      registration.dispose();
+    }
+
+    const outcomes = await Promise.allSettled([
+      provider.prepareRename(
+        specDocument,
+        new vscode.Position(1, 4),
+        cancellation.token,
+      ),
+      provider.provideRenameEdits(
+        specDocument,
+        new vscode.Position(1, 4),
+        "Pay with <value>",
+        cancellation.token,
+      ),
+    ]);
+
+    assert.deepEqual(outcomes, [
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+    ]);
+    assert.equal(clientLookups, 0);
+    assert.equal(cancellation.registrations(), 0);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(registrationDisposeCalls, trigger === "registrationDisposal" ? 1 : 0);
+  }
+});
+
+test("GaugeRenameProvider cancels pending language-server renames on host cancellation", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const cancellation = createCancellation();
+  const requestEntered = deferred();
+  const requestGate = deferred();
+  const requests = [];
+  const sources = [];
+  const vscode = createFakeVscode([specDocument]);
+  trackCancellationSources(vscode, sources);
+  const provider = new GaugeRenameProvider({
+    clientsMap: {
+      get() {
+        return {
+          client: {
+            sendRequest(method, params, token) {
+              requests.push({ method, params, token });
+              requestEntered.resolve();
+              return requestGate.promise;
+            },
+          },
+        };
+      },
+    },
+    vscode,
+  });
+  let outcome = { status: "pending" };
+  const invocation = provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+    cancellation.token,
+  ).then(
+    (value) => {
+      outcome = { status: "fulfilled", value };
+      return value;
+    },
+    (reason) => {
+      outcome = { status: "rejected", reason };
+      throw reason;
+    },
+  );
+
+  await requestEntered.promise;
+  cancellation.cancel();
+  await nextTurn();
+  const observedBeforeRelease = outcome;
+  requestGate.resolve({ changes: {} });
+  await Promise.allSettled([invocation]);
+
+  assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
+  assert.equal(requests.length, 1);
+  assert.equal(sources.length, 1);
+  assert.equal(requests[0].token, sources[0].token);
+  assert.equal(sources[0].cancelCalls, 1);
+  assert.equal(sources[0].disposeCalls, 1);
+  assert.equal(cancellation.registrations(), 1);
+  assert.equal(cancellation.listenerDisposals(), 1);
+  assert.equal(cancellation.listenerCount(), 0);
+});
+
+test("GaugeRenameProvider detaches pending local rename discovery on host cancellation", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const cancellation = createCancellation();
+  const discoveryEntered = deferred();
+  const discoveryGate = deferred();
+  const vscode = createFakeVscode([specDocument]);
+  const provider = new GaugeRenameProvider({
+    vscode,
+    workspaceStepIndex: {
+      diagnosticsProvider: {
+        belongsToSourceGaugeProject() {
+          return true;
+        },
+        fileSystem: {},
+        gaugeProjectRoot() {
+          return "/workspace/gauge";
+        },
+        isGaugeProjectDocument() {
+          return true;
+        },
+        pathModule: require("node:path"),
+        rootForFile() {
+          return "/workspace/gauge";
+        },
+      },
+      documentsFor() {
+        discoveryEntered.resolve();
+        return discoveryGate.promise;
+      },
+    },
+  });
+  let outcome = { status: "pending" };
+  const invocation = provider.prepareRename(
+    specDocument,
+    new vscode.Position(1, 4),
+    cancellation.token,
+  ).then(
+    (value) => {
+      outcome = { status: "fulfilled", value };
+      return value;
+    },
+    (reason) => {
+      outcome = { status: "rejected", reason };
+      throw reason;
+    },
+  );
+
+  await discoveryEntered.promise;
+  cancellation.cancel();
+  await nextTurn();
+  const observedBeforeRelease = outcome;
+  discoveryGate.resolve([specDocument]);
+  await Promise.allSettled([invocation]);
+
+  assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
+  assert.equal(cancellation.registrations(), 1);
+  assert.equal(cancellation.listenerDisposals(), 1);
+  assert.equal(cancellation.listenerCount(), 0);
+});
+
+test("GaugeRenameProvider cancels pending language-server renames on provider disposal", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const cancellation = createCancellation();
+  const lateError = new Error("late rename failure");
+  const requestEntered = deferred();
+  const requestGate = deferred();
+  const sources = [];
+  const vscode = createFakeVscode([specDocument]);
+  trackCancellationSources(vscode, sources);
+  const provider = new GaugeRenameProvider({
+    clientsMap: {
+      get() {
+        return {
+          client: {
+            sendRequest() {
+              requestEntered.resolve();
+              return requestGate.promise;
+            },
+          },
+        };
+      },
+    },
+    vscode,
+  });
+  let outcome = { status: "pending" };
+  const invocation = provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+    cancellation.token,
+  ).then((value) => {
+    outcome = { status: "fulfilled", value };
+    return value;
+  });
+
+  await requestEntered.promise;
+  provider.dispose();
+  provider.dispose();
+  await nextTurn();
+  const observedBeforeRelease = outcome;
+  requestGate.reject(lateError);
+  await Promise.allSettled([invocation]);
+
+  assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
+  assert.equal(provider.activeOperations.size, 0);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].cancelCalls, 1);
+  assert.equal(sources[0].disposeCalls, 1);
+  assert.equal(cancellation.token.isCancellationRequested, false);
+  assert.equal(cancellation.listenerDisposals(), 1);
+  assert.equal(cancellation.listenerCount(), 0);
+});
+
+test("GaugeRenameProvider detaches pending preflight and augmentation stages", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+
+  {
+    const cancellation = createCancellation();
+    const saveEntered = deferred();
+    const saveGate = deferred();
+    let requestCalls = 0;
+    let validationCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    vscode.workspace.saveAll = () => {
+      saveEntered.resolve();
+      return saveGate.promise;
+    };
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                requestCalls += 1;
+                return { changes: {} };
+              },
+            },
+          };
+        },
+      },
+      validateDiagnosticsProvider: {
+        validateErrorsForDocument() {
+          validationCalls += 1;
+          return { errors: [] };
+        },
+      },
+      vscode,
+    });
+    let outcome = { status: "pending" };
+    const invocation = provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+      cancellation.token,
+    ).then((value) => {
+      outcome = { status: "fulfilled", value };
+      return value;
+    });
+
+    await saveEntered.promise;
+    provider.dispose();
+    await nextTurn();
+    const observedBeforeRelease = outcome;
+    saveGate.reject(new Error("late save failure"));
+    await Promise.allSettled([invocation]);
+
+    assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
+    assert.equal(validationCalls, 0);
+    assert.equal(requestCalls, 0);
+    assert.equal(cancellation.token.isCancellationRequested, false);
+    assert.equal(cancellation.listenerDisposals(), 1);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const sources = [];
+    let requestCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    trackCancellationSources(vscode, sources, () => cancellation.cancel());
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                requestCalls += 1;
+                return { changes: {} };
+              },
+            },
+          };
+        },
+      },
+      vscode,
+    });
+
+    assert.equal(
+      await provider.provideRenameEdits(
+        specDocument,
+        new vscode.Position(1, 4),
+        "Pay with <value>",
+        cancellation.token,
+      ),
+      undefined,
+    );
+    assert.equal(requestCalls, 0);
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].cancelCalls, 1);
+    assert.equal(sources[0].disposeCalls, 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const validationEntered = deferred();
+    const validationGate = deferred();
+    let requestCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                requestCalls += 1;
+                return { changes: {} };
+              },
+            },
+          };
+        },
+      },
+      validateDiagnosticsProvider: {
+        validateErrorsForDocument() {
+          validationEntered.resolve();
+          return validationGate.promise;
+        },
+      },
+      vscode,
+    });
+    let outcome = { status: "pending" };
+    const invocation = provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+      cancellation.token,
+    ).then((value) => {
+      outcome = { status: "fulfilled", value };
+      return value;
+    });
+
+    await validationEntered.promise;
+    cancellation.cancel();
+    await nextTurn();
+    const observedBeforeRelease = outcome;
+    validationGate.reject(new Error("late validation failure"));
+    await Promise.allSettled([invocation]);
+
+    assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
+    assert.equal(requestCalls, 0);
+    assert.equal(cancellation.listenerDisposals(), 1);
+  }
+
+  {
+    const kotlinDocument = createDocument([
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "@Step(\"Pay with <amount>\")",
+      "fun pay(amount: String) {}",
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+    const entry = {
+      aliases: ["Pay with <amount>"],
+      annotationEnd: 62,
+      annotationStart: 37,
+      declarationEnd: kotlinDocument.getText().length,
+      declarationStart: 37,
+      parameterEnd: kotlinDocument.getText().length - 3,
+      parameterStart: kotlinDocument.getText().lastIndexOf("amount"),
+    };
+    const augmentationEntered = deferred();
+    const augmentationGate = deferred();
+    const sources = [];
+    let stepEntryCalls = 0;
+    const vscode = createFakeVscode([specDocument, kotlinDocument]);
+    trackCancellationSources(vscode, sources);
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                return {
+                  changes: {
+                    "file:///workspace/gauge/specs/checkout.spec": [{
+                      range: {
+                        start: { line: 1, character: 0 },
+                        end: { line: 1, character: 19 },
+                      },
+                      newText: "* Pay with <value>",
+                    }],
+                  },
+                };
+              },
+            },
+          };
+        },
+      },
+      vscode,
+      workspaceStepIndex: {
+        diagnosticsProvider: {
+          belongsToSourceGaugeProject() {
+            return true;
+          },
+          fileSystem: {},
+          gaugeProjectRoot() {
+            return "/workspace/gauge";
+          },
+          isGaugeProjectDocument() {
+            return true;
+          },
+          pathModule: require("node:path"),
+          rootForFile() {
+            return "/workspace/gauge";
+          },
+        },
+        documentsFor() {
+          return [specDocument, kotlinDocument];
+        },
+        stepEntriesForDocument() {
+          stepEntryCalls += 1;
+          if (stepEntryCalls === 2) {
+            augmentationEntered.resolve();
+            return augmentationGate.promise;
+          }
+          return [entry];
+        },
+      },
+    });
+    let outcome = { status: "pending" };
+    const invocation = provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ).then((value) => {
+      outcome = { status: "fulfilled", value };
+      return value;
+    });
+
+    await augmentationEntered.promise;
+    provider.dispose();
+    await nextTurn();
+    const observedBeforeRelease = outcome;
+    augmentationGate.reject(new Error("late step entry failure"));
+    await Promise.allSettled([invocation]);
+
+    assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
+    assert.equal(stepEntryCalls, 2);
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].cancelCalls, 0);
+    assert.equal(sources[0].disposeCalls, 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+});
+
+test("GaugeRenameProvider normalizes synchronous cancellation boundaries", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+
+  {
+    let listenerDisposals = 0;
+    let clientLookups = 0;
+    const vscode = createFakeVscode([specDocument]);
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          clientLookups += 1;
+          return undefined;
+        },
+      },
+      vscode,
+    });
+    const token = {
+      isCancellationRequested: false,
+      onCancellationRequested(listener) {
+        listener();
+        return {
+          dispose() {
+            listenerDisposals += 1;
+          },
+        };
+      },
+    };
+
+    assert.equal(
+      await provider.prepareRename(specDocument, new vscode.Position(1, 4), token),
+      undefined,
+    );
+    assert.equal(clientLookups, 0);
+    assert.equal(listenerDisposals, 1);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const requestError = new Error("request failed after cancellation");
+    const sources = [];
+    const vscode = createFakeVscode([specDocument]);
+    trackCancellationSources(vscode, sources);
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                cancellation.cancel();
+                return Promise.reject(requestError);
+              },
+            },
+          };
+        },
+      },
+      vscode,
+    });
+
+    assert.equal(
+      await provider.provideRenameEdits(
+        specDocument,
+        new vscode.Position(1, 4),
+        "Pay with <value>",
+        cancellation.token,
+      ),
+      undefined,
+    );
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].cancelCalls, 1);
+    assert.equal(sources[0].disposeCalls, 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const sources = [];
+    let replaceCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    vscode.WorkspaceEdit = class WorkspaceEdit {
+      replace() {
+        replaceCalls += 1;
+        if (replaceCalls === 1) {
+          cancellation.cancel();
+        }
+      }
+    };
+    trackCancellationSources(vscode, sources);
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                return {
+                  changes: {
+                    "file:///workspace/gauge/specs/checkout.spec": [
+                      {
+                        range: {
+                          start: { line: 1, character: 0 },
+                          end: { line: 1, character: 19 },
+                        },
+                        newText: "* Pay with <value>",
+                      },
+                      {
+                        range: {
+                          start: { line: 2, character: 0 },
+                          end: { line: 2, character: 10 },
+                        },
+                        newText: "* Confirm",
+                      },
+                    ],
+                  },
+                };
+              },
+            },
+          };
+        },
+      },
+      vscode,
+    });
+
+    assert.equal(
+      await provider.provideRenameEdits(
+        specDocument,
+        new vscode.Position(1, 4),
+        "Pay with <value>",
+        cancellation.token,
+      ),
+      undefined,
+    );
+    assert.equal(replaceCalls, 1);
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].cancelCalls, 0);
+    assert.equal(sources[0].disposeCalls, 1);
+  }
+
+  {
+    const storedDocuments = [
+      createDocument(
+        "@Step(\"First\")\nfun first() {}",
+        "kotlin",
+        "/workspace/gauge/src/First.kt",
+      ),
+      createDocument(
+        "@Step(\"Second\")\nfun second() {}",
+        "kotlin",
+        "/workspace/gauge/src/Second.kt",
+      ),
+    ];
+    let provider;
+    let rootCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    provider = new GaugeRenameProvider({
+      diagnosticsProvider: {
+        belongsToSourceGaugeProject() {
+          return true;
+        },
+        fileSystem: {},
+        gaugeProjectRoot() {
+          return "/workspace/gauge";
+        },
+        isGaugeProjectDocument() {
+          return true;
+        },
+        pathModule: require("node:path"),
+        rootForFile() {
+          rootCalls += 1;
+          if (rootCalls === 1) {
+            provider.dispose();
+          }
+          return "/workspace/gauge";
+        },
+      },
+      documentStore: {
+        documents() {
+          return storedDocuments;
+        },
+        whenReady() {},
+      },
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      vscode,
+    });
+
+    assert.equal(
+      await provider.prepareRename(specDocument, new vscode.Position(1, 4)),
+      undefined,
+    );
+    assert.equal(rootCalls, 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  {
+    let clientLookups = 0;
+    let provider;
+    let registrationDisposeCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    vscode.languages = {
+      registerRenameProvider() {
+        provider.dispose();
+        return {
+          dispose() {
+            registrationDisposeCalls += 1;
+          },
+        };
+      },
+    };
+    provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          clientLookups += 1;
+          return undefined;
+        },
+      },
+      vscode,
+    });
+
+    assert.equal(provider.register(), provider);
+    assert.equal(registrationDisposeCalls, 1);
+    assert.equal(
+      await provider.prepareRename(specDocument, new vscode.Position(1, 4)),
+      undefined,
+    );
+    assert.equal(clientLookups, 0);
+  }
+});
+
+test("GaugeRenameProvider preserves live rename results and errors", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+
+  {
+    const cancellation = createCancellation();
+    const vscode = createFakeVscode([specDocument]);
+    const provider = new GaugeRenameProvider({ vscode });
+
+    const prepared = await provider.prepareRename(
+      specDocument,
+      new vscode.Position(1, 4),
+      cancellation.token,
+    );
+
+    assert.equal(prepared.placeholder, "Pay with <amount>");
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const localError = new Error("live local rename failure");
+    const vscode = createFakeVscode([specDocument]);
+    const provider = new GaugeRenameProvider({
+      vscode,
+      workspaceStepIndex: {
+        documentsFor() {
+          return Promise.reject(localError);
+        },
+      },
+    });
+
+    assert.deepEqual(
+      await Promise.allSettled([
+        provider.prepareRename(
+          specDocument,
+          new vscode.Position(1, 4),
+          cancellation.token,
+        ),
+      ]),
+      [{ status: "rejected", reason: localError }],
+    );
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  for (const settlement of ["success", "failure"]) {
+    const cancellation = createCancellation();
+    const liveError = new Error("live rename failure");
+    const sources = [];
+    const vscode = createFakeVscode([specDocument]);
+    trackCancellationSources(vscode, sources);
+    const provider = new GaugeRenameProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                if (settlement === "failure") {
+                  return Promise.reject(liveError);
+                }
+                return { changes: {} };
+              },
+            },
+          };
+        },
+      },
+      vscode,
+    });
+    const outcome = await Promise.allSettled([
+      provider.provideRenameEdits(
+        specDocument,
+        new vscode.Position(1, 4),
+        "Pay with <value>",
+        cancellation.token,
+      ),
+    ]);
+
+    if (settlement === "success") {
+      assert.equal(outcome[0].status, "fulfilled");
+      assert.ok(outcome[0].value instanceof vscode.WorkspaceEdit);
+    } else {
+      assert.deepEqual(outcome, [{ status: "rejected", reason: liveError }]);
+    }
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].cancelCalls, 0);
+    assert.equal(sources[0].disposeCalls, 1);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+});
+
+test("GaugeRenameProvider isolates concurrent request cancellation", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const cancellations = [createCancellation(), createCancellation()];
+  const gates = [deferred(), deferred()];
+  const sources = [];
+  let requestIndex = 0;
+  const vscode = createFakeVscode([specDocument]);
+  trackCancellationSources(vscode, sources);
+  const provider = new GaugeRenameProvider({
+    clientsMap: {
+      get() {
+        return {
+          client: {
+            sendRequest() {
+              const gate = gates[requestIndex];
+              requestIndex += 1;
+              return gate.promise;
+            },
+          },
+        };
+      },
+    },
+    vscode,
+  });
+  const outcomes = [{ status: "pending" }, { status: "pending" }];
+  const invocations = cancellations.map((cancellation, index) => provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    `Pay with <value${index}>`,
+    cancellation.token,
+  ).then((value) => {
+    outcomes[index] = { status: "fulfilled", value };
+    return value;
+  }));
+
+  while (requestIndex < 2) {
+    await nextTurn();
+  }
+  cancellations[0].cancel();
+  await nextTurn();
+  assert.deepEqual(outcomes, [
+    { status: "fulfilled", value: undefined },
+    { status: "pending" },
+  ]);
+  assert.equal(provider.activeOperations.size, 1);
+  assert.deepEqual(sources.map((source) => ({
+    cancelCalls: source.cancelCalls,
+    disposeCalls: source.disposeCalls,
+  })), [
+    { cancelCalls: 1, disposeCalls: 1 },
+    { cancelCalls: 0, disposeCalls: 0 },
+  ]);
+
+  provider.dispose();
+  await nextTurn();
+  assert.deepEqual(outcomes, [
+    { status: "fulfilled", value: undefined },
+    { status: "fulfilled", value: undefined },
+  ]);
+  assert.equal(provider.activeOperations.size, 0);
+  assert.deepEqual(sources.map((source) => ({
+    cancelCalls: source.cancelCalls,
+    disposeCalls: source.disposeCalls,
+  })), [
+    { cancelCalls: 1, disposeCalls: 1 },
+    { cancelCalls: 1, disposeCalls: 1 },
+  ]);
+
+  gates[0].reject(new Error("late first rename failure"));
+  gates[1].resolve({ changes: {} });
+  await Promise.allSettled(invocations);
 });
