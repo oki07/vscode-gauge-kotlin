@@ -529,37 +529,6 @@ function registerFoldingRangeProvider(context, vscode, options) {
   }
 }
 
-function registerFormatProvider(context, vscode, options) {
-  if (!vscode.languages || typeof vscode.languages.registerDocumentFormattingEditProvider !== "function") {
-    return;
-  }
-  const FormatProviderCtor = options.GaugeFormatProvider || GaugeFormatProvider;
-  const provider = new FormatProviderCtor({
-    cli: options.cli,
-    createCli: options.createCli,
-    fileSystem: options.fileSystem,
-    projectFactory: options.projectFactory,
-    projectEnvironmentService: options.projectEnvironmentService,
-    vscode,
-  });
-  const disposable = vscode.languages.registerDocumentFormattingEditProvider(
-    [
-      { language: GAUGE_LANGUAGE },
-      { language: GAUGE_CONCEPT_LANGUAGE },
-      SPEC_FILE_SELECTOR,
-      MARKDOWN_GAUGE_SPEC_SELECTOR,
-      CONCEPT_FILE_SELECTOR,
-    ],
-    provider,
-  );
-  if (disposable) {
-    context.subscriptions.push(disposable);
-  }
-  if (typeof provider.dispose === "function") {
-    context.subscriptions.push(provider);
-  }
-}
-
 function registerDocumentSymbolProvider(context, vscode, options) {
   if (!vscode.languages) {
     return;
@@ -1012,11 +981,6 @@ function startGaugeServices(context, vscode, options = {}) {
   });
   registerFoldingRangeProvider(context, vscode, {
     ...options,
-    projectFactory,
-  });
-  registerFormatProvider(context, vscode, {
-    ...options,
-    cli,
     projectFactory,
   });
   registerDocumentSymbolProvider(context, vscode, {

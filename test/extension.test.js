@@ -2474,7 +2474,7 @@ test("activation registers one local CodeLens provider for execution and referen
   assert.equal(context.subscriptions.includes(codeLensProviders[0].disposable), true);
 });
 
-test("activation registers Gauge document formatting for Gauge documents", () => {
+test("activation leaves Gauge document formatting to the Gauge language client", () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
@@ -2491,13 +2491,8 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
     },
   };
 
-  class FakeFormatProvider {
-    constructor(options) {
-      this.options = options;
-    }
-
-    dispose() {}
-  }
+  let constructedFormatProviders = 0;
+  let gaugeWorkspaces = 0;
 
   extension.activate(context, fakeVscode, {
     createCli() {
@@ -2507,6 +2502,10 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
       return { handleCommand() {} };
     },
     GaugeWorkspace: class FakeGaugeWorkspace {
+      constructor() {
+        gaugeWorkspaces += 1;
+      }
+
       dispose() {}
     },
     ConfigProvider: class FakeConfigProvider {
@@ -2528,7 +2527,11 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
     ReferenceProvider: class FakeReferenceProvider {
       dispose() {}
     },
-    GaugeFormatProvider: FakeFormatProvider,
+    GaugeFormatProvider: class FakeFormatProvider {
+      constructor() {
+        constructedFormatProviders += 1;
+      }
+    },
     GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
     GaugeStepDiagnosticsProvider: class FakeStepDiagnosticsProvider {
       register() {
@@ -2544,19 +2547,9 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
     showWelcomeNotification() {},
   });
 
-  assert.equal(formattingProviders.length, 1);
-  assert.deepEqual(formattingProviders[0].selector, [
-    { language: "gauge" },
-    { language: "gauge-concept" },
-    { scheme: "file", pattern: "**/*.spec" },
-    { language: "markdown", scheme: "file", pattern: "**/*.md" },
-    { scheme: "file", pattern: "**/*.cpt" },
-  ]);
-  assert.equal(formattingProviders[0].provider.options.vscode, fakeVscode);
-  assert.equal(formattingProviders[0].provider.options.cli, cli);
-  assert.equal(typeof formattingProviders[0].provider.options.projectFactory.isGaugeProject, "function");
-  assert.equal(context.subscriptions.includes(formattingProviders[0].disposable), true);
-  assert.equal(context.subscriptions.includes(formattingProviders[0].provider), true);
+  assert.equal(formattingProviders.length, 0);
+  assert.equal(constructedFormatProviders, 0);
+  assert.equal(gaugeWorkspaces, 1);
 });
 
 test("activation registers Gauge document symbols for Gauge documents", () => {
