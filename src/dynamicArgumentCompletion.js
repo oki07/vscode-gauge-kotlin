@@ -26,6 +26,7 @@ const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const CSV_DELIMITER_PROPERTY = "csv_delimiter";
 const GAUGE_DATA_DIR_PROPERTY = "gauge_data_dir";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
+const CANCELLED_COMPLETION = Symbol("cancelledCompletion");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -1334,6 +1335,203 @@ class GaugeDynamicArgumentCompletionProvider {
       });
   }
 
+  isCompletionOperationActive(operation) {
+    return !operation || operation.active;
+  }
+
+  disposeCompletionListener(operation) {
+    const disposable = operation && operation.cancellationDisposable;
+    if (!disposable) {
+      return;
+    }
+    operation.cancellationDisposable = undefined;
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Listener cleanup cannot reactivate a completed request.
+      }
+    }
+  }
+
+  cancelCompletionOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    operation.resolveCancellation(CANCELLED_COMPLETION);
+    this.disposeCompletionListener(operation);
+  }
+
+  finishCompletionOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.disposeCompletionListener(operation);
+  }
+
+  createCompletionOperation(token) {
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      cancellationDisposable: undefined,
+      resolveCancellation,
+      token,
+    };
+    if (!token || typeof token.onCancellationRequested !== "function") {
+      return operation;
+    }
+    let disposable;
+    try {
+      disposable = token.onCancellationRequested(() => this.cancelCompletionOperation(operation));
+    } catch (error) {
+      if (!operation.active) {
+        return operation;
+      }
+      this.finishCompletionOperation(operation);
+      throw error;
+    }
+    if (operation.active) {
+      operation.cancellationDisposable = disposable;
+    } else if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Synchronous cancellation already completed the request.
+      }
+    }
+    if (token.isCancellationRequested && operation.active) {
+      this.cancelCompletionOperation(operation);
+    }
+    return operation;
+  }
+
+  observeCompletionValue(value) {
+    if (isThenable(value)) {
+      Promise.resolve(value).catch(() => {});
+    }
+  }
+
+  completeForOperation(operation, callback, onFulfilled = (value) => value, onRejected) {
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
+    let value;
+    try {
+      value = callback();
+    } catch (error) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      throw error;
+    }
+    if (!this.isCompletionOperationActive(operation)) {
+      this.observeCompletionValue(value);
+      return CANCELLED_COMPLETION;
+    }
+    if (!isThenable(value)) {
+      if (value === CANCELLED_COMPLETION) {
+        return value;
+      }
+      let completed;
+      try {
+        completed = onFulfilled(value);
+      } catch (error) {
+        if (!this.isCompletionOperationActive(operation)) {
+          return CANCELLED_COMPLETION;
+        }
+        throw error;
+      }
+      if (!this.isCompletionOperationActive(operation)) {
+        this.observeCompletionValue(completed);
+        return CANCELLED_COMPLETION;
+      }
+      return completed;
+    }
+    const completion = Promise.resolve(value);
+    const guarded = operation
+      ? Promise.race([completion, operation.cancellation])
+      : completion;
+    return guarded.then(
+      (resolved) => {
+        if (
+          resolved === CANCELLED_COMPLETION
+          || !this.isCompletionOperationActive(operation)
+        ) {
+          return CANCELLED_COMPLETION;
+        }
+        let completed;
+        try {
+          completed = onFulfilled(resolved);
+        } catch (error) {
+          if (!this.isCompletionOperationActive(operation)) {
+            return CANCELLED_COMPLETION;
+          }
+          throw error;
+        }
+        if (!this.isCompletionOperationActive(operation)) {
+          this.observeCompletionValue(completed);
+          return CANCELLED_COMPLETION;
+        }
+        return completed;
+      },
+      (error) => {
+        if (!this.isCompletionOperationActive(operation)) {
+          return CANCELLED_COMPLETION;
+        }
+        if (onRejected) {
+          const completed = onRejected(error);
+          if (!this.isCompletionOperationActive(operation)) {
+            this.observeCompletionValue(completed);
+            return CANCELLED_COMPLETION;
+          }
+          return completed;
+        }
+        throw error;
+      },
+    );
+  }
+
+  runCompletionOperation(token, callback) {
+    if (token && token.isCancellationRequested) {
+      return [];
+    }
+    if (!token) {
+      return callback(undefined);
+    }
+    const operation = this.createCompletionOperation(token);
+    if (!operation.active) {
+      return [];
+    }
+    let result;
+    try {
+      result = this.completeForOperation(operation, () => callback(operation));
+    } catch (error) {
+      this.finishCompletionOperation(operation);
+      throw error;
+    }
+    if (!isThenable(result)) {
+      const completed = result === CANCELLED_COMPLETION ? [] : result;
+      this.finishCompletionOperation(operation);
+      return completed;
+    }
+    return Promise.resolve(result)
+      .then(
+        (value) => value === CANCELLED_COMPLETION ? [] : value,
+        (error) => {
+          if (!operation.active) {
+            return [];
+          }
+          throw error;
+        },
+      )
+      .finally(() => this.finishCompletionOperation(operation));
+  }
+
   isGaugeProjectDocument(document) {
     return this.diagnosticsProvider.isGaugeProjectDocument(document);
   }
@@ -1367,14 +1565,27 @@ class GaugeDynamicArgumentCompletionProvider {
     return this.isGaugeProjectDocument(document);
   }
 
-  workspaceDocuments() {
+  workspaceDocuments(operation) {
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const store = this.documentStore;
     if (store && typeof store.whenReady === "function" && !store.isScanComplete()) {
       // Wait for the store's one-time scan instead of falling back to a fresh
       // findFiles/openTextDocument sweep of the whole workspace.
-      return store.whenReady().then(() => this.diagnosticsProvider.workspaceDocuments());
+      return this.completeForOperation(
+        operation,
+        () => store.whenReady(),
+        () => this.completeForOperation(
+          operation,
+          () => this.diagnosticsProvider.workspaceDocuments(),
+        ),
+      );
     }
-    return this.diagnosticsProvider.workspaceDocuments();
+    return this.completeForOperation(
+      operation,
+      () => this.diagnosticsProvider.workspaceDocuments(),
+    );
   }
 
   stepCompletionEntries(document, workspaceDocuments, position) {
@@ -1517,33 +1728,68 @@ class GaugeDynamicArgumentCompletionProvider {
     return clientsMap.get(documentPath(document));
   }
 
-  serverCompletionItems(document, position, fallbackRange) {
+  serverCompletionItems(document, position, fallbackRange, operation) {
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const projectClient = this.projectClientFor(document);
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const client = projectClient && projectClient.client;
     const uri = documentUri(document);
     if (!client || typeof client.sendRequest !== "function" || !uri) {
       return [];
     }
-    return client.sendRequest(TEXT_DOCUMENT_COMPLETION_REQUEST, {
+    const params = {
       position: {
         line: position.line,
         character: position.character,
       },
       textDocument: { uri },
-    }).then(
-      (response) => lspCompletionItems(response)
-        .map((item) => lspCompletionItem(this.vscode, item, fallbackRange))
-        .filter(Boolean),
+    };
+    return this.completeForOperation(
+      operation,
+      () => operation
+        ? client.sendRequest(TEXT_DOCUMENT_COMPLETION_REQUEST, params, operation.token)
+        : client.sendRequest(TEXT_DOCUMENT_COMPLETION_REQUEST, params),
+      (response) => {
+        const items = [];
+        for (const item of lspCompletionItems(response)) {
+          if (!this.isCompletionOperationActive(operation)) {
+            return CANCELLED_COMPLETION;
+          }
+          const converted = lspCompletionItem(this.vscode, item, fallbackRange);
+          if (!this.isCompletionOperationActive(operation)) {
+            return CANCELLED_COMPLETION;
+          }
+          if (converted) {
+            items.push(converted);
+          }
+        }
+        return items;
+      },
       () => [],
     );
   }
 
-  serverStepCompletionItems(document, position, fallbackRange) {
-    return this.serverCompletionItems(document, position, fallbackRange);
+  serverStepCompletionItems(document, position, fallbackRange, operation) {
+    return this.serverCompletionItems(document, position, fallbackRange, operation);
   }
 
-  stepCompletionItems(document, position, targetRange, workspaceDocuments, indexedEntries) {
-    if (!this.isCompletionDocument(document)) {
+  stepCompletionItems(
+    document,
+    position,
+    targetRange,
+    workspaceDocuments,
+    indexedEntries,
+    operation,
+  ) {
+    if (
+      !this.isCompletionOperationActive(operation)
+      || !this.isCompletionDocument(document)
+      || !this.isCompletionOperationActive(operation)
+    ) {
       return [];
     }
     // Reached after an await, by which point the document may have shrunk
@@ -1567,15 +1813,26 @@ class GaugeDynamicArgumentCompletionProvider {
         kind,
       },
     ));
-    const serverItems = this.serverStepCompletionItems(document, position, range);
-    if (isThenable(serverItems)) {
-      return serverItems.then((items) => mergeCompletionItems(localItems, items));
-    }
-    return mergeCompletionItems(localItems, serverItems);
+    return this.completeForOperation(
+      operation,
+      () => this.serverStepCompletionItems(document, position, range, operation),
+      (items) => mergeCompletionItems(localItems, items),
+    );
   }
 
-  tagCompletionItems(document, position, targetRange, workspaceDocuments, indexedEntries) {
-    if (!this.isCompletionDocument(document)) {
+  tagCompletionItems(
+    document,
+    position,
+    targetRange,
+    workspaceDocuments,
+    indexedEntries,
+    operation,
+  ) {
+    if (
+      !this.isCompletionOperationActive(operation)
+      || !this.isCompletionDocument(document)
+      || !this.isCompletionOperationActive(operation)
+    ) {
       return [];
     }
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
@@ -1595,18 +1852,25 @@ class GaugeDynamicArgumentCompletionProvider {
         sortText: `a${label}`,
       },
     ));
-    const serverItems = this.serverCompletionItems(document, position, range);
-    if (isThenable(serverItems)) {
-      return serverItems.then((items) => mergeCompletionItemsByLabel(localItems, items));
-    }
-    return mergeCompletionItemsByLabel(localItems, serverItems);
+    return this.completeForOperation(
+      operation,
+      () => this.serverCompletionItems(document, position, range, operation),
+      (items) => mergeCompletionItemsByLabel(localItems, items),
+    );
   }
 
-  provideCompletionItems(document, position) {
-    if (!this.isCompletionDocument(document)) {
+  provideCompletionItemsForOperation(document, position, operation) {
+    if (
+      !this.isCompletionOperationActive(operation)
+      || !this.isCompletionDocument(document)
+      || !this.isCompletionOperationActive(operation)
+    ) {
       return [];
     }
     const line = document.lineAt(position.line).text;
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const tagRange = isDocumentTagsContext(document, position.line)
       ? tagCompletionRange(line, position)
       : undefined;
@@ -1624,21 +1888,31 @@ class GaugeDynamicArgumentCompletionProvider {
         this.workspaceStepIndex
         && typeof this.workspaceStepIndex.tagEntries === "function"
       ) {
-        const indexedEntries = this.workspaceStepIndex.tagEntries(document);
-        if (isThenable(indexedEntries)) {
-          return indexedEntries.then((entries) => (
-            this.tagCompletionItems(document, position, tagRange, [], entries)
-          ));
-        }
-        return this.tagCompletionItems(document, position, tagRange, [], indexedEntries);
+        return this.completeForOperation(
+          operation,
+          () => this.workspaceStepIndex.tagEntries(document),
+          (entries) => this.tagCompletionItems(
+            document,
+            position,
+            tagRange,
+            [],
+            entries,
+            operation,
+          ),
+        );
       }
-      const workspaceDocuments = this.workspaceDocuments();
-      if (isThenable(workspaceDocuments)) {
-        return workspaceDocuments.then((documents) => (
-          this.tagCompletionItems(document, position, tagRange, documents)
-        ));
-      }
-      return this.tagCompletionItems(document, position, tagRange, workspaceDocuments);
+      return this.completeForOperation(
+        operation,
+        () => this.workspaceDocuments(operation),
+        (documents) => this.tagCompletionItems(
+          document,
+          position,
+          tagRange,
+          documents,
+          undefined,
+          operation,
+        ),
+      );
     }
     if (argumentRange && isTableHeaderLine(document, position.line, { allowIndented: true })) {
       return [];
@@ -1654,31 +1928,34 @@ class GaugeDynamicArgumentCompletionProvider {
       const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
       const argumentType = argumentRange ? "dynamic" : "static";
       const completionItemsForLabels = (labels) => {
+        if (!this.isCompletionOperationActive(operation)) {
+          return CANCELLED_COMPLETION;
+        }
         const localItems = labels.map((label) => completionItem(
           this.vscode,
           label,
           range,
           argumentCompletionOptions(label, argumentType, line, targetRange),
         ));
-        const serverItems = this.serverCompletionItems(document, position, range);
-        if (isThenable(serverItems)) {
-          return serverItems.then((items) => mergeCompletionItemsByLabel(localItems, items));
-        }
-        return mergeCompletionItemsByLabel(localItems, serverItems);
+        return this.completeForOperation(
+          operation,
+          () => this.serverCompletionItems(document, position, range, operation),
+          (items) => mergeCompletionItemsByLabel(localItems, items),
+        );
       };
       if (
         this.workspaceStepIndex
         && typeof this.workspaceStepIndex.parameterEntries === "function"
       ) {
-        const indexedEntries = this.workspaceStepIndex.parameterEntries(
-          document,
-          position,
-          argumentType,
+        return this.completeForOperation(
+          operation,
+          () => this.workspaceStepIndex.parameterEntries(
+            document,
+            position,
+            argumentType,
+          ),
+          completionItemsForLabels,
         );
-        if (isThenable(indexedEntries)) {
-          return indexedEntries.then(completionItemsForLabels);
-        }
-        return completionItemsForLabels(indexedEntries);
       }
       const labels = argumentRange
         ? (
@@ -1716,22 +1993,39 @@ class GaugeDynamicArgumentCompletionProvider {
       this.workspaceStepIndex
       && typeof this.workspaceStepIndex.completionEntries === "function"
     ) {
-      const indexedEntries = this.workspaceStepIndex.completionEntries(document, position);
-      if (isThenable(indexedEntries)) {
-        return indexedEntries.then((entries) => (
-          this.stepCompletionItems(document, position, stepRange, [], entries)
-        ));
-      }
-      return this.stepCompletionItems(document, position, stepRange, [], indexedEntries);
+      return this.completeForOperation(
+        operation,
+        () => this.workspaceStepIndex.completionEntries(document, position),
+        (entries) => this.stepCompletionItems(
+          document,
+          position,
+          stepRange,
+          [],
+          entries,
+          operation,
+        ),
+      );
     }
 
-    const workspaceDocuments = this.workspaceDocuments();
-    if (isThenable(workspaceDocuments)) {
-      return workspaceDocuments.then((documents) => (
-        this.stepCompletionItems(document, position, stepRange, documents)
-      ));
-    }
-    return this.stepCompletionItems(document, position, stepRange, workspaceDocuments);
+    return this.completeForOperation(
+      operation,
+      () => this.workspaceDocuments(operation),
+      (documents) => this.stepCompletionItems(
+        document,
+        position,
+        stepRange,
+        documents,
+        undefined,
+        operation,
+      ),
+    );
+  }
+
+  provideCompletionItems(document, position, token) {
+    return this.runCompletionOperation(
+      token,
+      (operation) => this.provideCompletionItemsForOperation(document, position, operation),
+    );
   }
 }
 

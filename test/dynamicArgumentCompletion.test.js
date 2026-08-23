@@ -2,6 +2,68 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((receivedResolve, receivedReject) => {
+    reject = receivedReject;
+    resolve = receivedResolve;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createCancellation(cancelled = false) {
+  let cancellationRequested = cancelled;
+  let disposals = 0;
+  let registrations = 0;
+  const listeners = new Set();
+  const token = {
+    get isCancellationRequested() {
+      return cancellationRequested;
+    },
+    onCancellationRequested(listener) {
+      registrations += 1;
+      listeners.add(listener);
+      let disposed = false;
+      return {
+        dispose() {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          disposals += 1;
+          listeners.delete(listener);
+        },
+      };
+    },
+  };
+  return {
+    cancel() {
+      if (cancellationRequested) {
+        return;
+      }
+      cancellationRequested = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    disposals() {
+      return disposals;
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    registrations() {
+      return registrations;
+    },
+    token,
+  };
+}
+
 function createFakeVscode() {
   return {
     CompletionItem: class CompletionItem {
@@ -2474,4 +2536,527 @@ test("GaugeDynamicArgumentCompletionProvider uses the shared document store with
     `expected only the store scan, saw findFiles patterns: ${findFilesPatterns.join(", ")}`,
   );
   assert.deepEqual(openedFiles, []);
+});
+
+test("GaugeDynamicArgumentCompletionProvider skips pre-cancelled completion requests", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const cancellation = createCancellation(true);
+  const document = createDocument(
+    "# Checkout\n* Pay",
+    "/workspace/gauge/specs/example.spec",
+  );
+  let indexCalls = 0;
+  let clientLookups = 0;
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap: {
+      get() {
+        clientLookups += 1;
+        return undefined;
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      completionEntries() {
+        indexCalls += 1;
+        return [{ detail: "step", label: "Pay now" }];
+      },
+    },
+  });
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, 5),
+    cancellation.token,
+  );
+
+  assert.deepEqual(items, []);
+  assert.equal(indexCalls, 0);
+  assert.equal(clientLookups, 0);
+  assert.equal(cancellation.registrations(), 0);
+  assert.equal(cancellation.disposals(), 0);
+  assert.equal(cancellation.listenerCount(), 0);
+});
+
+test("GaugeDynamicArgumentCompletionProvider stops pending indexed completion on host cancellation", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+
+  for (const settlement of ["resolve", "reject"]) {
+    const cancellation = createCancellation();
+    const indexResponse = deferred();
+    const document = createDocument(
+      "# Checkout\n* Pay",
+      "/workspace/gauge/specs/example.spec",
+    );
+    let clientLookups = 0;
+    const provider = new GaugeDynamicArgumentCompletionProvider({
+      clientsMap: {
+        get() {
+          clientLookups += 1;
+          return undefined;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode,
+      workspaceStepIndex: {
+        completionEntries() {
+          return indexResponse.promise;
+        },
+      },
+    });
+    let outcome = { status: "pending" };
+    const completion = Promise.resolve(provider.provideCompletionItems(
+      document,
+      new vscode.Position(1, 5),
+      cancellation.token,
+    )).then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { error, status: "rejected" };
+      },
+    );
+
+    cancellation.cancel();
+    await nextTurn();
+    const cancellationOutcome = outcome;
+    if (settlement === "resolve") {
+      indexResponse.resolve([{ detail: "step", label: "Pay now" }]);
+    } else {
+      indexResponse.reject(new Error("late indexed completion failure"));
+    }
+    await completion;
+
+    assert.deepEqual(cancellationOutcome, { status: "fulfilled", value: [] });
+    assert.deepEqual(outcome, { status: "fulfilled", value: [] });
+    assert.equal(clientLookups, 0);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.disposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
+});
+
+test("GaugeDynamicArgumentCompletionProvider cancels pending Gauge LSP completion requests", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+
+  for (const settlement of ["resolve", "reject"]) {
+    const cancellation = createCancellation();
+    const serverResponse = deferred();
+    const document = createDocument(
+      "# Checkout\n* Pay",
+      "/workspace/gauge/specs/example.spec",
+    );
+    const requests = [];
+    const provider = new GaugeDynamicArgumentCompletionProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest(method, params, token) {
+                requests.push({ method, params, token });
+                return serverResponse.promise;
+              },
+            },
+          };
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode,
+      workspaceStepIndex: {
+        completionEntries() {
+          return [{ detail: "step", label: "Pay now" }];
+        },
+      },
+    });
+    let outcome = { status: "pending" };
+    const completion = Promise.resolve(provider.provideCompletionItems(
+      document,
+      new vscode.Position(1, 5),
+      cancellation.token,
+    )).then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { error, status: "rejected" };
+      },
+    );
+
+    assert.equal(requests.length, 1);
+    cancellation.cancel();
+    await nextTurn();
+    const cancellationOutcome = outcome;
+    if (settlement === "resolve") {
+      serverResponse.resolve([{ label: "Remote pay" }]);
+    } else {
+      serverResponse.reject(new Error("late Gauge completion failure"));
+    }
+    await completion;
+
+    assert.equal(requests[0].method, "textDocument/completion");
+    assert.equal(requests[0].token, cancellation.token);
+    assert.deepEqual(cancellationOutcome, { status: "fulfilled", value: [] });
+    assert.deepEqual(outcome, { status: "fulfilled", value: [] });
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.disposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
+});
+
+test("GaugeDynamicArgumentCompletionProvider normalizes synchronous host cancellation", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+
+  for (const stage of ["index", "request"]) {
+    const cancellation = createCancellation();
+    const lateError = new Error(`late ${stage} cancellation failure`);
+    const document = createDocument(
+      "# Checkout\n* Pay",
+      "/workspace/gauge/specs/example.spec",
+    );
+    let requests = 0;
+    const provider = new GaugeDynamicArgumentCompletionProvider({
+      clientsMap: {
+        get() {
+          return {
+            client: {
+              sendRequest() {
+                requests += 1;
+                cancellation.cancel();
+                return Promise.reject(lateError);
+              },
+            },
+          };
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode,
+      workspaceStepIndex: {
+        completionEntries() {
+          if (stage === "index") {
+            cancellation.cancel();
+            return Promise.reject(lateError);
+          }
+          return [{ detail: "step", label: "Pay now" }];
+        },
+      },
+    });
+
+    const items = await provider.provideCompletionItems(
+      document,
+      new vscode.Position(1, 5),
+      cancellation.token,
+    );
+
+    assert.deepEqual(items, []);
+    assert.equal(requests, stage === "request" ? 1 : 0);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.disposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
+});
+
+test("GaugeDynamicArgumentCompletionProvider stops every pending local completion source", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const cases = [
+    {
+      createIndex(gate) {
+        return { tagEntries: () => gate.promise };
+      },
+      document: createDocument(
+        "# Checkout\ntags: ",
+        "/workspace/gauge/specs/example.spec",
+      ),
+      position: new vscode.Position(1, 6),
+    },
+    {
+      createIndex(gate) {
+        return { parameterEntries: () => gate.promise };
+      },
+      document: createDocument(
+        "# Checkout\n* Pay with <cu>",
+        "/workspace/gauge/specs/example.spec",
+      ),
+      position: new vscode.Position(1, 14),
+    },
+    {
+      createStore(gate) {
+        return {
+          isScanComplete() {
+            return false;
+          },
+          whenReady() {
+            return gate.promise;
+          },
+        };
+      },
+      document: createDocument(
+        "# Checkout\n* Pay",
+        "/workspace/gauge/specs/example.spec",
+      ),
+      position: new vscode.Position(1, 5),
+    },
+  ];
+
+  for (const fixture of cases) {
+    for (const settlement of ["resolve", "reject"]) {
+      const cancellation = createCancellation();
+      const response = deferred();
+      let clientLookups = 0;
+      let workspaceDocumentCalls = 0;
+      const diagnosticsProvider = {
+        belongsToSourceGaugeProject() {
+          return true;
+        },
+        gaugeProjectRoot() {
+          return "/workspace/gauge";
+        },
+        isGaugeProjectDocument() {
+          return true;
+        },
+        workspaceDocuments() {
+          workspaceDocumentCalls += 1;
+          return [];
+        },
+      };
+      const provider = new GaugeDynamicArgumentCompletionProvider({
+        clientsMap: {
+          get() {
+            clientLookups += 1;
+            return undefined;
+          },
+        },
+        diagnosticsProvider,
+        documentStore: fixture.createStore && fixture.createStore(response),
+        projectFactory: createProjectFactory(),
+        vscode,
+        workspaceStepIndex: fixture.createIndex && fixture.createIndex(response),
+      });
+      let outcome = { status: "pending" };
+      const completion = Promise.resolve(provider.provideCompletionItems(
+        fixture.document,
+        fixture.position,
+        cancellation.token,
+      )).then(
+        (value) => {
+          outcome = { status: "fulfilled", value };
+        },
+        (error) => {
+          outcome = { error, status: "rejected" };
+        },
+      );
+
+      cancellation.cancel();
+      await nextTurn();
+      const cancellationOutcome = outcome;
+      if (settlement === "resolve") {
+        response.resolve([]);
+      } else {
+        response.reject(new Error("late local completion source failure"));
+      }
+      await completion;
+
+      assert.deepEqual(cancellationOutcome, { status: "fulfilled", value: [] });
+      assert.deepEqual(outcome, { status: "fulfilled", value: [] });
+      assert.equal(clientLookups, 0);
+      assert.equal(workspaceDocumentCalls, 0);
+      assert.equal(cancellation.registrations(), 1);
+      assert.equal(cancellation.disposals(), 1);
+      assert.equal(cancellation.listenerCount(), 0);
+    }
+  }
+});
+
+test("GaugeDynamicArgumentCompletionProvider isolates concurrent request cancellation", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const cancellations = [createCancellation(), createCancellation()];
+  const responses = [deferred(), deferred()];
+  const document = createDocument(
+    "# Checkout\n* Pay",
+    "/workspace/gauge/specs/example.spec",
+  );
+  let requestIndex = 0;
+  const provider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      completionEntries() {
+        const response = responses[requestIndex];
+        requestIndex += 1;
+        return response.promise;
+      },
+    },
+  });
+
+  const first = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, 5),
+    cancellations[0].token,
+  );
+  const second = provider.provideCompletionItems(
+    document,
+    new vscode.Position(1, 5),
+    cancellations[1].token,
+  );
+  cancellations[0].cancel();
+  responses[0].resolve([{ detail: "step", label: "Old pay" }]);
+  responses[1].resolve([{ detail: "step", label: "Current pay" }]);
+
+  assert.deepEqual(await first, []);
+  assert.deepEqual(labels(await second), ["Current pay"]);
+  assert.equal(requestIndex, 2);
+  for (const cancellation of cancellations) {
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.disposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
+});
+
+test("GaugeDynamicArgumentCompletionProvider preserves live completion outcomes", async () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const document = createDocument(
+    "# Checkout\n* Pay",
+    "/workspace/gauge/specs/example.spec",
+  );
+  const indexError = new Error("live indexed completion failure");
+  const indexCancellation = createCancellation();
+  const failingIndexProvider = new GaugeDynamicArgumentCompletionProvider({
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      completionEntries() {
+        return Promise.reject(indexError);
+      },
+    },
+  });
+
+  await assert.rejects(
+    failingIndexProvider.provideCompletionItems(
+      document,
+      new vscode.Position(1, 5),
+      indexCancellation.token,
+    ),
+    (error) => error === indexError,
+  );
+  assert.equal(indexCancellation.registrations(), 1);
+  assert.equal(indexCancellation.disposals(), 1);
+  assert.equal(indexCancellation.listenerCount(), 0);
+
+  const serverCancellation = createCancellation();
+  const serverError = new Error("live Gauge completion failure");
+  const failingServerProvider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap: {
+      get() {
+        return {
+          client: {
+            sendRequest() {
+              return Promise.reject(serverError);
+            },
+          },
+        };
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      completionEntries() {
+        return [{ detail: "step", label: "Pay now" }];
+      },
+    },
+  });
+
+  const items = await failingServerProvider.provideCompletionItems(
+    document,
+    new vscode.Position(1, 5),
+    serverCancellation.token,
+  );
+
+  assert.deepEqual(labels(items), ["Pay now"]);
+  assert.equal(serverCancellation.registrations(), 1);
+  assert.equal(serverCancellation.disposals(), 1);
+  assert.equal(serverCancellation.listenerCount(), 0);
+
+  const conversionCancellation = createCancellation();
+  const conversionError = new Error("live Gauge completion conversion failure");
+  const conversionProvider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap: {
+      get() {
+        return {
+          client: {
+            sendRequest() {
+              return Promise.resolve({ items: [{ label: "remote" }] });
+            },
+          },
+        };
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode: {
+      ...vscode,
+      CompletionItem: class CompletionItem {
+        constructor() {
+          throw conversionError;
+        }
+      },
+    },
+    workspaceStepIndex: {
+      tagEntries() {
+        return [];
+      },
+    },
+  });
+
+  await assert.rejects(
+    conversionProvider.provideCompletionItems(
+      createDocument("# Checkout\ntags: ", "/workspace/gauge/specs/example.spec"),
+      new vscode.Position(1, 6),
+      conversionCancellation.token,
+    ),
+    (error) => error === conversionError,
+  );
+  assert.equal(conversionCancellation.registrations(), 1);
+  assert.equal(conversionCancellation.disposals(), 1);
+  assert.equal(conversionCancellation.listenerCount(), 0);
+
+  const syncCancellation = createCancellation();
+  const syncError = new Error("synchronous Gauge completion failure");
+  const syncFailureProvider = new GaugeDynamicArgumentCompletionProvider({
+    clientsMap: {
+      get() {
+        return {
+          client: {
+            sendRequest() {
+              throw syncError;
+            },
+          },
+        };
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode,
+    workspaceStepIndex: {
+      completionEntries() {
+        return [{ detail: "step", label: "Pay now" }];
+      },
+    },
+  });
+
+  assert.throws(
+    () => syncFailureProvider.provideCompletionItems(
+      document,
+      new vscode.Position(1, 5),
+      syncCancellation.token,
+    ),
+    (error) => error === syncError,
+  );
+  assert.equal(syncCancellation.registrations(), 1);
+  assert.equal(syncCancellation.disposals(), 1);
+  assert.equal(syncCancellation.listenerCount(), 0);
 });
