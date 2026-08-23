@@ -25,6 +25,7 @@ const { GradleProject } = require("../project/gradleProject");
 const { MavenProject } = require("../project/mavenProject");
 const { createProjectFactory } = require("../project/projectFactory");
 const { ProjectEnvironmentService } = require("../projectEnvironmentService");
+const { createLspRequestOwner } = require("./lspRequestOwner");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
@@ -67,33 +68,39 @@ const EXECUTION_TEST_EVENT_TYPES = new Set([
   "testStarted",
 ]);
 
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
-  }
-  return undefined;
-}
-
 function resolveClientsMap(getClientsMap) {
   return typeof getClientsMap === "function" ? getClientsMap() : getClientsMap;
 }
 
 function createGaugeExecutionStatusProvider(getClientsMap, options = {}) {
   const vscode = options.vscode || {};
-  return function executionStatusProvider(projectRoot) {
+  const owner = createLspRequestOwner(undefined);
+  const executionStatusProvider = (projectRoot) => owner.run((operation) => {
     const clientsMap = resolveClientsMap(getClientsMap);
+    if (owner.operationStopped(operation)) {
+      return undefined;
+    }
     const projectClient = clientsMap && typeof clientsMap.get === "function"
       ? clientsMap.get(projectRoot)
       : undefined;
+    if (owner.operationStopped(operation)) {
+      return undefined;
+    }
     if (!projectClient || !projectClient.client || typeof projectClient.client.sendRequest !== "function") {
+      return undefined;
+    }
+    const source = owner.createSource(operation, vscode.CancellationTokenSource);
+    if (owner.operationStopped(operation)) {
       return undefined;
     }
     return projectClient.client.sendRequest(
       EXECUTION_STATUS_REQUEST,
       {},
-      createToken(vscode),
+      source && source.token,
     );
-  };
+  });
+  executionStatusProvider.dispose = owner.dispose;
+  return executionStatusProvider;
 }
 
 function getWorkspaceRoots(vscode) {
@@ -667,10 +674,22 @@ function createGaugeExecutionController(options = {}) {
     vscode,
   });
   const scenariosProvider = options.scenariosProvider || (async () => []);
+  const executionStatusProvider = options.executionStatusProvider;
+  const ownedRequestProviders = new Set();
+  if (options.ownsScenariosProvider && scenariosProvider && typeof scenariosProvider.dispose === "function") {
+    ownedRequestProviders.add(scenariosProvider);
+  }
+  if (
+    options.ownsExecutionStatusProvider
+    && executionStatusProvider
+    && typeof executionStatusProvider.dispose === "function"
+  ) {
+    ownedRequestProviders.add(executionStatusProvider);
+  }
   const debuggerFactory = options.debuggerFactory || createGaugeDebugger;
   const opener = options.opener || defaultOpener(vscode);
   const reportState = options.state || memoryReportState(options.reportPath);
-  const executionStatusBar = createExecutionStatusBar(vscode, options.executionStatusProvider);
+  const executionStatusBar = createExecutionStatusBar(vscode, executionStatusProvider);
   const executionEnv = envWithGaugeHome(options.env || process.env, {
     vscode,
     gaugeHome: options.gaugeHome,
@@ -1563,6 +1582,14 @@ function createGaugeExecutionController(options = {}) {
       }
       disposed = true;
       resolveDisposalSignal(disposedPreparation);
+      for (const provider of ownedRequestProviders) {
+        try {
+          provider.dispose();
+        } catch (_error) {
+          // Continue terminal cleanup for the remaining controller resources.
+        }
+      }
+      ownedRequestProviders.clear();
       latestScheduledExecutionSequence = ++nextExecutionSequence;
       if (pendingExecutionRequest) {
         notifyExecutionRequest(pendingExecutionRequest, "onCancelled");

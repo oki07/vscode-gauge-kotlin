@@ -11,6 +11,51 @@ function deferred() {
   return { promise, resolve };
 }
 
+function installCancellationSources(vscode) {
+  const sources = [];
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = {
+        get isCancellationRequested() {
+          return this.source.cancelCalls > 0;
+        },
+        source: this,
+      };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+  return sources;
+}
+
+function trackDisposableProvider(provider) {
+  const state = {
+    disposeCalls: 0,
+    operation: undefined,
+  };
+  function trackedProvider(...args) {
+    state.operation = provider(...args);
+    return state.operation;
+  }
+  trackedProvider.dispose = () => {
+    state.disposeCalls += 1;
+    if (provider && typeof provider.dispose === "function") {
+      provider.dispose();
+    }
+  };
+  trackedProvider.state = state;
+  return trackedProvider;
+}
+
 function createFakeVscode(overrides = {}) {
   const commandCalls = [];
   const errors = [];
@@ -2865,6 +2910,92 @@ test("executor suppresses scenario lookup errors after disposal", async () => {
   assert.deepEqual(errors, []);
 });
 
+test("executor disposes the real scenario provider and cancels its pending request exactly once", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { createGaugeScenariosProvider } = require("../../src/execution/scenarioProvider");
+  const requestEntered = deferred();
+  const releaseRequest = deferred();
+  const runnerCalls = [];
+  const { errors, quickPicks, vscode } = createFakeVscode();
+  const sources = installCancellationSources(vscode);
+  const provider = trackDisposableProvider(createGaugeScenariosProvider({
+    get() {
+      return {
+        client: {
+          start() {
+            return Promise.resolve(undefined);
+          },
+          sendRequest() {
+            requestEntered.resolve();
+            return releaseRequest.promise;
+          },
+        },
+      };
+    },
+  }, { vscode }));
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    ownsScenariosProvider: true,
+    scenariosProvider: provider,
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+  });
+
+  const execution = controller.handleCommand("gauge.execute.scenarios");
+  await requestEntered.promise;
+  controller.dispose();
+  controller.dispose();
+  assert.equal(await execution, undefined);
+
+  let providerOutcome = { status: "pending" };
+  provider.state.operation.then(
+    (value) => {
+      providerOutcome = { status: "fulfilled", value };
+    },
+    (error) => {
+      providerOutcome = { error, status: "rejected" };
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  const providerOutcomeBeforeRelease = providerOutcome;
+
+  releaseRequest.resolve([
+    {
+      heading: "Late scenario",
+      executionIdentifier: "/workspace/specs/example.spec:8",
+    },
+  ]);
+  assert.equal(await provider.state.operation, undefined);
+
+  assert.deepEqual({
+    disposeCalls: provider.state.disposeCalls,
+    errors,
+    providerOutcomeBeforeRelease,
+    quickPicks,
+    runnerCalls: runnerCalls.length,
+    sources: sources.map((source) => ({
+      cancelCalls: source.cancelCalls,
+      disposeCalls: source.disposeCalls,
+      isCancellationRequested: source.token.isCancellationRequested,
+    })),
+  }, {
+    disposeCalls: 1,
+    errors: [],
+    providerOutcomeBeforeRelease: { status: "fulfilled", value: undefined },
+    quickPicks: [],
+    runnerCalls: 0,
+    sources: [{
+      cancelCalls: 1,
+      disposeCalls: 1,
+      isCancellationRequested: true,
+    }],
+  });
+});
+
 test("executor suppresses pending status and output after disposal", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const statusRequestEntered = deferred();
@@ -2925,6 +3056,265 @@ test("executor suppresses pending status and output after disposal", async () =>
     statusShows: [1, 0],
     statusText: undefined,
   });
+});
+
+test("executor disposes the real execution status provider and cancels its pending request exactly once", async () => {
+  const {
+    createGaugeExecutionController,
+    createGaugeExecutionStatusProvider,
+  } = require("../../src/execution/executor");
+  const requestEntered = deferred();
+  const releaseRequest = deferred();
+  const { statusBarItems, vscode } = createFakeVscode();
+  const sources = installCancellationSources(vscode);
+  const provider = trackDisposableProvider(createGaugeExecutionStatusProvider({
+    get(projectRoot) {
+      assert.equal(projectRoot, "/workspace");
+      return {
+        client: {
+          sendRequest() {
+            requestEntered.resolve();
+            return releaseRequest.promise;
+          },
+        },
+      };
+    },
+  }, { vscode }));
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    executionStatusProvider: provider,
+    ownsExecutionStatusProvider: true,
+    async runner() {
+      return true;
+    },
+  });
+
+  const execution = controller.handleCommand("gauge.execute.specification.all");
+  await requestEntered.promise;
+  controller.dispose();
+  controller.dispose();
+  assert.equal(await execution, undefined);
+
+  let providerOutcome = { status: "pending" };
+  provider.state.operation.then(
+    (value) => {
+      providerOutcome = { status: "fulfilled", value };
+    },
+    (error) => {
+      providerOutcome = { error, status: "rejected" };
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  const providerOutcomeBeforeRelease = providerOutcome;
+
+  releaseRequest.resolve({
+    sceExecuted: 1,
+    sceFailed: 0,
+    scePassed: 1,
+    sceSkipped: 0,
+    specsExecuted: 1,
+    specsFailed: 0,
+    specsPassed: 1,
+    specsSkipped: 0,
+  });
+  assert.equal(await provider.state.operation, undefined);
+
+  assert.deepEqual({
+    disposeCalls: provider.state.disposeCalls,
+    providerOutcomeBeforeRelease,
+    sources: sources.map((source) => ({
+      cancelCalls: source.cancelCalls,
+      disposeCalls: source.disposeCalls,
+      isCancellationRequested: source.token.isCancellationRequested,
+    })),
+    statusShows: statusBarItems[1].showCalls,
+  }, {
+    disposeCalls: 1,
+    providerOutcomeBeforeRelease: { status: "fulfilled", value: undefined },
+    sources: [{
+      cancelCalls: 1,
+      disposeCalls: 1,
+      isCancellationRequested: true,
+    }],
+    statusShows: 0,
+  });
+});
+
+test("Gauge execution status provider releases request sources on live success and failure", async () => {
+  const { createGaugeExecutionStatusProvider } = require("../../src/execution/executor");
+  const response = { scePassed: 1 };
+  const requestError = new Error("status request failed");
+
+  for (const outcome of ["success", "failure"]) {
+    const { vscode } = createFakeVscode();
+    const sources = installCancellationSources(vscode);
+    const tokens = [];
+    const provider = createGaugeExecutionStatusProvider({
+      get() {
+        return {
+          client: {
+            sendRequest(_method, _params, token) {
+              tokens.push(token);
+              return outcome === "success"
+                ? Promise.resolve(response)
+                : Promise.reject(requestError);
+            },
+          },
+        };
+      },
+    }, { vscode });
+
+    const invocation = provider("/workspace");
+    if (outcome === "success") {
+      assert.equal(await invocation, response);
+    } else {
+      await assert.rejects(invocation, (error) => error === requestError);
+    }
+
+    assert.equal(tokens[0], sources[0].token);
+    assert.deepEqual(sources.map((source) => ({
+      cancelCalls: source.cancelCalls,
+      disposeCalls: source.disposeCalls,
+    })), [{ cancelCalls: 0, disposeCalls: 1 }]);
+  }
+});
+
+test("Gauge execution status provider handles synchronous disposal and concurrent requests", async () => {
+  const { createGaugeExecutionStatusProvider } = require("../../src/execution/executor");
+  const synchronousVscode = createFakeVscode().vscode;
+  const synchronousSources = installCancellationSources(synchronousVscode);
+  const synchronousError = new Error("synchronous status failure");
+  let synchronousProvider;
+  let synchronousMapCalls = 0;
+  let synchronousRequestCalls = 0;
+  synchronousProvider = createGaugeExecutionStatusProvider({
+    get() {
+      synchronousMapCalls += 1;
+      return {
+        client: {
+          sendRequest() {
+            synchronousRequestCalls += 1;
+            synchronousProvider.dispose();
+            synchronousSources[0].cancel = function cancelWithFailure() {
+              this.cancelCalls += 1;
+              throw new Error("status cancellation failed");
+            };
+            throw synchronousError;
+          },
+        },
+      };
+    },
+  }, { vscode: synchronousVscode });
+
+  assert.equal(await synchronousProvider("/workspace"), undefined);
+  assert.deepEqual(synchronousSources.map((source) => ({
+    cancelCalls: source.cancelCalls,
+    disposeCalls: source.disposeCalls,
+  })), [{ cancelCalls: 1, disposeCalls: 1 }]);
+  assert.equal(await synchronousProvider("/workspace"), undefined);
+  assert.equal(synchronousMapCalls, 1);
+  assert.equal(synchronousRequestCalls, 1);
+
+  const concurrentVscode = createFakeVscode().vscode;
+  const concurrentSources = installCancellationSources(concurrentVscode);
+  const requests = [deferred(), deferred()];
+  let requestIndex = 0;
+  const concurrentProvider = createGaugeExecutionStatusProvider({
+    get() {
+      return {
+        client: {
+          sendRequest() {
+            const request = requests[requestIndex];
+            requestIndex += 1;
+            return request.promise;
+          },
+        },
+      };
+    },
+  }, { vscode: concurrentVscode });
+
+  const first = concurrentProvider("/workspace/first");
+  const second = concurrentProvider("/workspace/second");
+  concurrentProvider.dispose();
+  concurrentProvider.dispose();
+
+  assert.deepEqual(await Promise.all([first, second]), [undefined, undefined]);
+  requests[0].resolve({ scePassed: 1 });
+  requests[1].resolve({ scePassed: 2 });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(concurrentSources.map((source) => ({
+    cancelCalls: source.cancelCalls,
+    disposeCalls: source.disposeCalls,
+  })), [
+    { cancelCalls: 1, disposeCalls: 1 },
+    { cancelCalls: 1, disposeCalls: 1 },
+  ]);
+});
+
+test("executor owns only request providers marked as controller-owned", () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { vscode } = createFakeVscode();
+  let borrowedDisposeCalls = 0;
+  const borrowedProvider = () => Promise.resolve(undefined);
+  borrowedProvider.dispose = () => {
+    borrowedDisposeCalls += 1;
+  };
+  const borrowedController = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    scenariosProvider: borrowedProvider,
+    executionStatusProvider: borrowedProvider,
+  });
+  borrowedController.dispose();
+  borrowedController.dispose();
+
+  let ownedDisposeCalls = 0;
+  const ownedProvider = () => Promise.resolve(undefined);
+  ownedProvider.dispose = () => {
+    ownedDisposeCalls += 1;
+  };
+  const ownedController = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    scenariosProvider: ownedProvider,
+    executionStatusProvider: ownedProvider,
+    ownsScenariosProvider: true,
+    ownsExecutionStatusProvider: true,
+  });
+  ownedController.dispose();
+  ownedController.dispose();
+
+  assert.equal(borrowedDisposeCalls, 0);
+  assert.equal(ownedDisposeCalls, 1);
+
+  let firstOwnedDisposeCalls = 0;
+  const firstOwnedProvider = () => Promise.resolve(undefined);
+  firstOwnedProvider.dispose = () => {
+    firstOwnedDisposeCalls += 1;
+    throw new Error("first provider disposal failed");
+  };
+  let secondOwnedDisposeCalls = 0;
+  const secondOwnedProvider = () => Promise.resolve(undefined);
+  secondOwnedProvider.dispose = () => {
+    secondOwnedDisposeCalls += 1;
+  };
+  const isolatedController = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    scenariosProvider: firstOwnedProvider,
+    executionStatusProvider: secondOwnedProvider,
+    ownsScenariosProvider: true,
+    ownsExecutionStatusProvider: true,
+  });
+  assert.doesNotThrow(() => isolatedController.dispose());
+  isolatedController.dispose();
+  assert.equal(firstOwnedDisposeCalls, 1);
+  assert.equal(secondOwnedDisposeCalls, 1);
 });
 
 test("executor settles a pending report open when disposed", async () => {

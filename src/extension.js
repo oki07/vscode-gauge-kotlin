@@ -1095,24 +1095,30 @@ function activate(context, vscodeApi, options = {}) {
   const executionEventSink = typeof testController.createExecutionEventSink === "function"
     ? testController.createExecutionEventSink()
     : undefined;
+  const ownsExecutionStatusProvider = !options.executionStatusProvider;
+  const executionStatusProvider = options.executionStatusProvider || createGaugeExecutionStatusProvider(
+    () => activeClientsMap,
+    { vscode },
+  );
+  const ownsScenariosProvider = !options.scenariosProvider;
+  const scenariosProvider = options.scenariosProvider || createGaugeScenariosProvider(
+    () => activeClientsMap,
+    { vscode },
+  );
   const executionController = (options.createExecutionController || createGaugeExecutionController)({
     vscode,
     cli: options.cli,
     createCli: options.createCli,
-    executionStatusProvider: options.executionStatusProvider || createGaugeExecutionStatusProvider(
-      () => activeClientsMap,
-      { vscode },
-    ),
+    executionStatusProvider,
     fileSystem: options.fileSystem,
+    ownsExecutionStatusProvider,
+    ownsScenariosProvider,
     pathModule: options.pathModule,
     projectFactory,
     projectEnvironmentService,
     executionEventSink,
     runner: options.runner,
-    scenariosProvider: options.scenariosProvider || createGaugeScenariosProvider(
-      () => activeClientsMap,
-      { vscode },
-    ),
+    scenariosProvider,
     state,
   });
   if (typeof testController.setExecutionController === "function") {

@@ -1762,6 +1762,8 @@ test("activation wires Gauge Test UI execution events into the execution control
   const sink = () => {};
   const clientsMap = new Map();
   const projectFactory = {};
+  const scenariosProvider = () => Promise.resolve([]);
+  const executionStatusProvider = () => Promise.resolve(undefined);
 
   class FakeGaugeTestController {
     constructor(options) {
@@ -1790,15 +1792,21 @@ test("activation wires Gauge Test UI execution events into the execution control
       created.executionOptions = options;
       return executionController;
     },
+    executionStatusProvider,
     GaugeTestController: FakeGaugeTestController,
     projectFactory,
+    scenariosProvider,
   });
 
   assert.equal(created.testController.options.vscode, fakeVscode);
   assert.equal(created.testController.options.clientsMap, clientsMap);
   assert.equal(created.testController.options.projectFactory, projectFactory);
   assert.equal(created.executionOptions.executionEventSink, sink);
+  assert.equal(created.executionOptions.executionStatusProvider, executionStatusProvider);
+  assert.equal(created.executionOptions.ownsExecutionStatusProvider, false);
+  assert.equal(created.executionOptions.ownsScenariosProvider, false);
   assert.equal(created.executionOptions.projectFactory, projectFactory);
+  assert.equal(created.executionOptions.scenariosProvider, scenariosProvider);
   assert.equal(created.testController.executionController, executionController);
   assert.equal(context.subscriptions.includes(created.testController.disposable), true);
   assert.equal(context.subscriptions.includes(executionController), true);
@@ -2126,6 +2134,8 @@ test("activation starts Gauge workspace services for Gauge projects", () => {
   assert.equal(created.executionOptions.state, created.state);
   assert.equal(typeof created.executionOptions.scenariosProvider, "function");
   assert.equal(typeof created.executionOptions.executionStatusProvider, "function");
+  assert.equal(created.executionOptions.ownsScenariosProvider, true);
+  assert.equal(created.executionOptions.ownsExecutionStatusProvider, true);
   assert.equal(created.workspace.options.cli, cli);
   assert.equal(created.workspace.options.clientsMap, created.clientsMap);
   assert.equal(created.workspace.options.state, created.state);
