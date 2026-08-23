@@ -13,13 +13,6 @@ function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");
 }
 
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
-  }
-  return undefined;
-}
-
 function createPosition(vscode, line, character) {
   if (typeof vscode.Position === "function") {
     return new vscode.Position(line, character);
@@ -63,6 +56,10 @@ function addDisposable(disposables, disposable) {
   }
 }
 
+function cancellationRequested(token) {
+  return Boolean(token && token.isCancellationRequested);
+}
+
 function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
   return executionIdentifier.split(`:${lineNo}`)[0];
 }
@@ -103,10 +100,14 @@ class SpecNodeProvider {
     this.pathModule = options.pathModule || nodePath;
     this.executionController = options.executionController;
     this.setTimeout = options.setTimeout || setTimeout;
+    this.clearTimeout = options.clearTimeout || clearTimeout;
     this.disposables = [];
+    this.activationTimers = new Set();
+    this.requestCancellationSources = new Set();
     this.activeFolder = undefined;
     this.languageClient = undefined;
     this.activation = Promise.resolve(undefined);
+    this.disposed = false;
     this.onDidChangeTreeDataEmitter = new this.vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -129,15 +130,43 @@ class SpecNodeProvider {
   }
 
   dispose() {
-    for (const disposable of this.disposables) {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.activeFolder = undefined;
+    this.languageClient = undefined;
+
+    for (const timeout of this.activationTimers) {
+      this.clearTimeout(timeout);
+    }
+    this.activationTimers.clear();
+
+    for (const source of [...this.requestCancellationSources]) {
+      this.requestCancellationSources.delete(source);
+      if (typeof source.cancel === "function") {
+        source.cancel();
+      }
+      if (typeof source.dispose === "function") {
+        source.dispose();
+      }
+    }
+
+    const disposables = this.disposables;
+    this.disposables = [];
+    for (const disposable of disposables) {
       disposable.dispose();
     }
     if (this.onDidChangeTreeDataEmitter && typeof this.onDidChangeTreeDataEmitter.dispose === "function") {
       this.onDidChangeTreeDataEmitter.dispose();
     }
+    Promise.resolve(setCommandContext(this.vscode, ACTIVATED_CONTEXT, false)).catch(() => undefined);
   }
 
   refresh(element) {
+    if (this.disposed) {
+      return;
+    }
     this.onDidChangeTreeDataEmitter.fire(element);
   }
 
@@ -146,6 +175,9 @@ class SpecNodeProvider {
   }
 
   async getChildren(element) {
+    if (this.disposed) {
+      return [];
+    }
     if (!this.activeFolder) {
       if (this.vscode.window && typeof this.vscode.window.showInformationMessage === "function") {
         await this.vscode.window.showInformationMessage("No dependency in empty workspace");
@@ -163,34 +195,93 @@ class SpecNodeProvider {
   }
 
   async getSpecifications() {
-    const values = await this.languageClient.sendRequest(
-      SPECS_REQUEST,
-      {},
-      createToken(this.vscode),
-    );
-    return (values || [])
-      .filter((entry) => entry && entry.heading)
-      .map((entry) => new Spec(entry.heading, entry.executionIdentifier, this.vscode));
+    if (this.disposed || !this.languageClient) {
+      return [];
+    }
+    const client = this.languageClient;
+    const cancellation = this.createRequestCancellationSource();
+    const token = cancellation && cancellation.token;
+    try {
+      let values;
+      try {
+        values = await client.sendRequest(SPECS_REQUEST, {}, token);
+      } catch (error) {
+        if (this.disposed || cancellationRequested(token)) {
+          return [];
+        }
+        throw error;
+      }
+      if (this.disposed || cancellationRequested(token)) {
+        return [];
+      }
+      return (values || [])
+        .filter((entry) => entry && entry.heading)
+        .map((entry) => new Spec(entry.heading, entry.executionIdentifier, this.vscode));
+    } finally {
+      this.releaseRequestCancellationSource(cancellation);
+    }
   }
 
   async getScenarios(spec) {
-    const values = await this.languageClient.sendRequest(
-      SCENARIOS_REQUEST,
-      {
-        textDocument: { uri: spec.file },
-        position: createPosition(this.vscode, 1, 1),
-      },
-      createToken(this.vscode),
-    );
-    return (values || []).map((entry) => new Scenario(
-      entry.heading,
-      specFileFromExecutionIdentifier(entry.executionIdentifier, entry.lineNo),
-      entry.lineNo,
-      this.vscode,
-    ));
+    if (this.disposed || !this.languageClient) {
+      return [];
+    }
+    const client = this.languageClient;
+    const cancellation = this.createRequestCancellationSource();
+    const token = cancellation && cancellation.token;
+    try {
+      let values;
+      try {
+        values = await client.sendRequest(
+          SCENARIOS_REQUEST,
+          {
+            textDocument: { uri: spec.file },
+            position: createPosition(this.vscode, 1, 1),
+          },
+          token,
+        );
+      } catch (error) {
+        if (this.disposed || cancellationRequested(token)) {
+          return [];
+        }
+        throw error;
+      }
+      if (this.disposed || cancellationRequested(token)) {
+        return [];
+      }
+      return (values || []).map((entry) => new Scenario(
+        entry.heading,
+        specFileFromExecutionIdentifier(entry.executionIdentifier, entry.lineNo),
+        entry.lineNo,
+        this.vscode,
+      ));
+    } finally {
+      this.releaseRequestCancellationSource(cancellation);
+    }
+  }
+
+  createRequestCancellationSource() {
+    if (this.disposed || typeof this.vscode.CancellationTokenSource !== "function") {
+      return undefined;
+    }
+    const source = new this.vscode.CancellationTokenSource();
+    this.requestCancellationSources.add(source);
+    return source;
+  }
+
+  releaseRequestCancellationSource(source) {
+    if (!source || !this.requestCancellationSources.delete(source)) {
+      return;
+    }
+    if (typeof source.dispose === "function") {
+      source.dispose();
+    }
   }
 
   changeClient(projectPath) {
+    if (this.disposed) {
+      return undefined;
+    }
     setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
     if (!isSpecExplorerEnabled(this.vscode)) {
       return undefined;
@@ -200,7 +291,7 @@ class SpecNodeProvider {
   }
 
   activateTreeDataProvider(projectPath) {
-    if (!projectPath) {
+    if (this.disposed || !projectPath) {
       return Promise.resolve(undefined);
     }
     const workspacePath = this.vscode.Uri && typeof this.vscode.Uri.file === "function"
@@ -212,31 +303,76 @@ class SpecNodeProvider {
     }
     return Promise.resolve(entry.client.start())
       .then(() => {
+        if (this.disposed) {
+          return undefined;
+        }
         this.languageClient = entry.client;
         this.activeFolder = projectPath;
         this.refresh();
-        const timeout = this.setTimeout(
-          () => setCommandContext(this.vscode, ACTIVATED_CONTEXT, true),
-          1000,
-        );
-        if (timeout && typeof timeout.unref === "function") {
-          timeout.unref();
+        if (this.disposed) {
+          return undefined;
         }
+        this.scheduleActivatedContext();
         return undefined;
       })
       // A second argument is read as options or an item, so the reason would
       // be dropped: fold it in. This fires exactly when the Gauge daemon
       // failed to start, which is when the user most needs to see why.
       .catch((reason) => {
-        const detail = (reason && reason.message) || String(reason || "");
-        return this.vscode.window.showErrorMessage(
-          `Failed to create test explorer.${detail ? ` ${detail}` : ""}`,
-        );
+        return this.showActivationError(reason);
       });
   }
 
+  async showActivationError(reason) {
+    if (this.disposed) {
+      return undefined;
+    }
+    const detail = (reason && reason.message) || String(reason || "");
+    try {
+      const result = await this.vscode.window.showErrorMessage(
+        `Failed to create test explorer.${detail ? ` ${detail}` : ""}`,
+      );
+      return this.disposed ? undefined : result;
+    } catch (error) {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  scheduleActivatedContext() {
+    if (this.disposed) {
+      return;
+    }
+    let timeout;
+    let fired = false;
+    const callback = () => {
+      fired = true;
+      if (timeout !== undefined) {
+        this.activationTimers.delete(timeout);
+      }
+      if (this.disposed) {
+        return undefined;
+      }
+      return setCommandContext(this.vscode, ACTIVATED_CONTEXT, true);
+    };
+    timeout = this.setTimeout(callback, 1000);
+    if (!fired && timeout !== undefined) {
+      this.activationTimers.add(timeout);
+    }
+    if (timeout && typeof timeout.unref === "function") {
+      timeout.unref();
+    }
+  }
+
   shouldRefresh(fileUri) {
-    if (!fileUri || !fileUri.fsPath || !SPEC_EXTENSIONS.has(this.pathModule.extname(fileUri.fsPath))) {
+    if (
+      this.disposed
+      || !fileUri
+      || !fileUri.fsPath
+      || !SPEC_EXTENSIONS.has(this.pathModule.extname(fileUri.fsPath))
+    ) {
       return false;
     }
     const entry = this.gaugeWorkspace.getClientsMap().get(fileUri.fsPath);
@@ -303,7 +439,7 @@ class SpecNodeProvider {
   }
 
   runAllActiveProjectSpecs() {
-    if (!this.executionController) {
+    if (this.disposed || !this.executionController) {
       return undefined;
     }
     return this.executionController.handleCommand(
@@ -313,7 +449,7 @@ class SpecNodeProvider {
   }
 
   runNode(node, debug) {
-    if (!this.executionController) {
+    if (this.disposed || !this.executionController) {
       return undefined;
     }
     return this.executionController.handleCommand(
@@ -323,7 +459,7 @@ class SpecNodeProvider {
   }
 
   openNode(node) {
-    if (!node) {
+    if (this.disposed || !node) {
       return Promise.resolve(undefined);
     }
     return this.vscode.workspace.openTextDocument(node.file)

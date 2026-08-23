@@ -2,6 +2,16 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
+
 function createFakeVscode(overrides = {}) {
   const commands = [];
   const contexts = [];
@@ -507,4 +517,509 @@ test("SpecNodeProvider reports why the test explorer could not be created", asyn
       actions: [],
     },
   ]);
+});
+
+test("SpecNodeProvider disposal ignores pending client activation", async () => {
+  const { Spec, SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const startEntered = deferred();
+  const startResponse = deferred();
+  const client = createFakeClient();
+  let startCalls = 0;
+  client.start = () => {
+    startCalls += 1;
+    startEntered.resolve();
+    return startResponse.promise;
+  };
+  const executionCalls = [];
+  const timers = [];
+  const {
+    contexts,
+    documents,
+    vscode,
+  } = createFakeVscode();
+  const workspace = createFakeWorkspace(client);
+  const provider = new SpecNodeProvider(workspace, {
+    executionController: {
+      handleCommand(...args) {
+        executionCalls.push(args);
+        return Promise.resolve(undefined);
+      },
+    },
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  const refreshes = [];
+  provider.onDidChangeTreeData((value) => refreshes.push(value));
+  const disposalCalls = provider.disposables.map(() => 0);
+  for (const [index, disposable] of provider.disposables.entries()) {
+    const originalDispose = disposable.dispose.bind(disposable);
+    disposable.dispose = () => {
+      disposalCalls[index] += 1;
+      originalDispose();
+    };
+  }
+  let emitterDisposals = 0;
+  const originalEmitterDispose = provider.onDidChangeTreeDataEmitter.dispose.bind(
+    provider.onDidChangeTreeDataEmitter,
+  );
+  provider.onDidChangeTreeDataEmitter.dispose = () => {
+    emitterDisposals += 1;
+    originalEmitterDispose();
+  };
+
+  await startEntered.promise;
+  provider.dispose();
+  provider.dispose();
+  const retainedProjectChange = workspace.projectChangeListeners[0]("/workspace/gauge");
+  startResponse.resolve(undefined);
+  await Promise.all([provider.ready(), Promise.resolve(retainedProjectChange)]);
+
+  provider.refresh();
+  const node = new Spec("Checkout", "/workspace/gauge/specs/checkout.spec", vscode);
+  const children = await provider.getChildren();
+  await Promise.resolve(provider.runAllActiveProjectSpecs());
+  await Promise.resolve(provider.runNode(node, false));
+  await Promise.resolve(provider.openNode(node));
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    children,
+    contextTrueCalls: contexts.filter((entry) => entry.value === true).length,
+    disposalCalls,
+    documents,
+    emitterDisposals,
+    executionCalls,
+    languageClient: provider.languageClient,
+    refreshes,
+    requests: client.requests.map((request) => request.method),
+    startCalls,
+    timers: timers.length,
+  }, {
+    activeFolder: undefined,
+    children: [],
+    contextTrueCalls: 0,
+    disposalCalls: disposalCalls.map(() => 1),
+    documents: [],
+    emitterDisposals: 1,
+    executionCalls: [],
+    languageClient: undefined,
+    refreshes: [],
+    requests: [],
+    startCalls: 1,
+    timers: 0,
+  });
+});
+
+test("SpecNodeProvider disposal suppresses pending activation failures", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const startResponse = deferred();
+  const client = createFakeClient();
+  client.start = () => startResponse.promise;
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
+    vscode,
+  });
+
+  provider.dispose();
+  startResponse.reject(new Error("gauge daemon exited after disposal"));
+
+  await assert.doesNotReject(() => provider.ready());
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    errors,
+    languageClient: provider.languageClient,
+    timers: timers.length,
+  }, {
+    activeFolder: undefined,
+    errors: [],
+    languageClient: undefined,
+    timers: 0,
+  });
+});
+
+test("SpecNodeProvider disposal neutralizes a pending activation error message", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const outcomes = [];
+
+  for (const settlement of ["resolve", "reject"]) {
+    const errorShown = deferred();
+    const messageResponse = deferred();
+    const client = createFakeClient();
+    client.start = () => Promise.reject(new Error(`live start ${settlement}`));
+    const { errors, vscode } = createFakeVscode();
+    vscode.window.showErrorMessage = (message) => {
+      errors.push({ actions: [], message });
+      errorShown.resolve();
+      return messageResponse.promise;
+    };
+    const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+      pathModule: path.posix,
+      vscode,
+    });
+
+    await errorShown.promise;
+    const ready = provider.ready();
+    provider.dispose();
+    if (settlement === "resolve") {
+      messageResponse.resolve("Dismissed");
+    } else {
+      messageResponse.reject(new Error("error UI closed during disposal"));
+    }
+    outcomes.push({
+      activeFolder: provider.activeFolder,
+      errors,
+      outcome: (await Promise.allSettled([ready]))[0],
+    });
+  }
+
+  assert.deepEqual(outcomes, [
+    {
+      activeFolder: undefined,
+      errors: [
+        {
+          actions: [],
+          message: "Failed to create test explorer. live start resolve",
+        },
+      ],
+      outcome: { status: "fulfilled", value: undefined },
+    },
+    {
+      activeFolder: undefined,
+      errors: [
+        {
+          actions: [],
+          message: "Failed to create test explorer. live start reject",
+        },
+      ],
+      outcome: { status: "fulfilled", value: undefined },
+    },
+  ]);
+});
+
+test("SpecNodeProvider disposal neutralizes tree requests and timers", async () => {
+  const { Spec, SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const specsEntered = deferred();
+  const specsResponse = deferred();
+  const scenariosEntered = deferred();
+  const scenariosResponse = deferred();
+  const requests = [];
+  const client = createFakeClient();
+  client.sendRequest = (method, params, token) => {
+    requests.push({ method, params, token });
+    if (method === "gauge/specs") {
+      specsEntered.resolve();
+      return specsResponse.promise;
+    }
+    scenariosEntered.resolve();
+    return scenariosResponse.promise;
+  };
+  const sources = [];
+  const timers = [];
+  const { contexts, errors, vscode } = createFakeVscode();
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    clearTimeout(handle) {
+      handle.clearCalls += 1;
+    },
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = {
+        callback,
+        clearCalls: 0,
+        delay,
+        unref() {},
+      };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  await provider.ready();
+  assert.equal(timers.length, 1);
+
+  const spec = new Spec("Checkout", "/workspace/gauge/specs/checkout.spec", vscode);
+  const pendingSpecs = provider.getChildren();
+  const pendingScenarios = provider.getChildren(spec);
+  await Promise.all([specsEntered.promise, scenariosEntered.promise]);
+  provider.dispose();
+  provider.dispose();
+
+  specsResponse.resolve([
+    {
+      heading: "Late checkout",
+      executionIdentifier: "/workspace/gauge/specs/late.spec",
+    },
+  ]);
+  scenariosResponse.reject(new Error("late scenario failure"));
+  const pendingOutcomes = await Promise.allSettled([pendingSpecs, pendingScenarios]);
+  const laterOutcomes = await Promise.allSettled([
+    provider.getChildren(),
+    provider.getChildren(spec),
+    provider.getSpecifications(),
+    provider.getScenarios(spec),
+  ]);
+  await Promise.resolve(timers[0].callback());
+
+  assert.deepEqual({
+    contextTrueCalls: contexts.filter((entry) => entry.value === true).length,
+    errors,
+    laterOutcomes,
+    pendingOutcomes,
+    requests: requests.map((request) => request.method),
+    sourceCalls: sources.map((source) => ({
+      cancel: source.cancelCalls,
+      dispose: source.disposeCalls,
+    })),
+    timerClearCalls: timers[0].clearCalls,
+  }, {
+    contextTrueCalls: 0,
+    errors: [],
+    laterOutcomes: [
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+    ],
+    pendingOutcomes: [
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+    ],
+    requests: ["gauge/specs", "gauge/scenarios"],
+    sourceCalls: [
+      { cancel: 1, dispose: 1 },
+      { cancel: 1, dispose: 1 },
+    ],
+    timerClearCalls: 1,
+  });
+});
+
+test("SpecNodeProvider disposal neutralizes complementary tree settlements", async () => {
+  const { Spec, SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const specsEntered = deferred();
+  const specsResponse = deferred();
+  const scenariosEntered = deferred();
+  const scenariosResponse = deferred();
+  const requests = [];
+  const sources = [];
+  const client = createFakeClient();
+  client.sendRequest = (method, params, token) => {
+    requests.push({ method, params, token });
+    if (method === "gauge/specs") {
+      specsEntered.resolve();
+      return specsResponse.promise;
+    }
+    scenariosEntered.resolve();
+    return scenariosResponse.promise;
+  };
+  const { vscode } = createFakeVscode();
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    clearTimeout() {},
+    pathModule: path.posix,
+    setTimeout() {
+      return { unref() {} };
+    },
+    vscode,
+  });
+  await provider.ready();
+
+  const spec = new Spec("Checkout", "/workspace/gauge/specs/checkout.spec", vscode);
+  const pendingSpecs = provider.getChildren();
+  const pendingScenarios = provider.getChildren(spec);
+  await Promise.all([specsEntered.promise, scenariosEntered.promise]);
+  provider.dispose();
+  specsResponse.reject(new Error("late specification failure"));
+  scenariosResponse.resolve([
+    {
+      heading: "Late scenario",
+      executionIdentifier: "/workspace/gauge/specs/checkout.spec:12",
+      lineNo: 12,
+    },
+  ]);
+
+  assert.deepEqual({
+    outcomes: await Promise.allSettled([pendingSpecs, pendingScenarios]),
+    requests: requests.map((request) => request.method),
+    sourceCalls: sources.map((source) => ({
+      cancel: source.cancelCalls,
+      dispose: source.disposeCalls,
+    })),
+  }, {
+    outcomes: [
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+    ],
+    requests: ["gauge/specs", "gauge/scenarios"],
+    sourceCalls: [
+      { cancel: 1, dispose: 1 },
+      { cancel: 1, dispose: 1 },
+    ],
+  });
+});
+
+test("SpecNodeProvider releases query sources after live settlements", async () => {
+  const { Spec, SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const sources = [];
+  const client = createFakeClient();
+  client.sendRequest = (method) => Promise.reject(new Error(`live ${method} failure`));
+  const { vscode } = createFakeVscode();
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    clearTimeout() {},
+    pathModule: path.posix,
+    setTimeout() {
+      return { unref() {} };
+    },
+    vscode,
+  });
+  await provider.ready();
+  const spec = new Spec("Checkout", "/workspace/gauge/specs/checkout.spec", vscode);
+
+  const outcomes = await Promise.allSettled([
+    provider.getSpecifications(),
+    provider.getScenarios(spec),
+  ]);
+  client.sendRequest = (method) => Promise.resolve(method === "gauge/specs"
+    ? [
+      {
+        heading: "Checkout",
+        executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+      },
+    ]
+    : [
+      {
+        heading: "Successful checkout",
+        executionIdentifier: "/workspace/gauge/specs/checkout.spec:12",
+        lineNo: 12,
+      },
+    ]);
+  const successful = await Promise.all([
+    provider.getSpecifications(),
+    provider.getScenarios(spec),
+  ]);
+  provider.dispose();
+
+  assert.deepEqual({
+    outcomes: outcomes.map((outcome) => ({
+      message: outcome.reason && outcome.reason.message,
+      status: outcome.status,
+    })),
+    sourceCalls: sources.map((source) => ({
+      cancel: source.cancelCalls,
+      dispose: source.disposeCalls,
+    })),
+    successful: successful.map((nodes) => nodes.map((node) => node.label)),
+  }, {
+    outcomes: [
+      { message: "live gauge/specs failure", status: "rejected" },
+      { message: "live gauge/scenarios failure", status: "rejected" },
+    ],
+    sourceCalls: [
+      { cancel: 0, dispose: 1 },
+      { cancel: 0, dispose: 1 },
+      { cancel: 0, dispose: 1 },
+      { cancel: 0, dispose: 1 },
+    ],
+    successful: [["Checkout"], ["Successful checkout"]],
+  });
+});
+
+test("SpecNodeProvider disposal during activation refresh does not queue context work", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const startResponse = deferred();
+  const client = createFakeClient();
+  client.start = () => startResponse.promise;
+  const timers = [];
+  const { contexts, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
+    vscode,
+  });
+  let refreshes = 0;
+  provider.onDidChangeTreeData(() => {
+    refreshes += 1;
+    provider.dispose();
+  });
+
+  startResponse.resolve(undefined);
+  await provider.ready();
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    contextTrueCalls: contexts.filter((entry) => entry.value === true).length,
+    disposed: provider.disposed,
+    languageClient: provider.languageClient,
+    refreshes,
+    timers: timers.length,
+  }, {
+    activeFolder: undefined,
+    contextTrueCalls: 0,
+    disposed: true,
+    languageClient: undefined,
+    refreshes: 1,
+    timers: 0,
+  });
 });
