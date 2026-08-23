@@ -562,3 +562,550 @@ test("createConcept reports existing file errors without overwriting", async () 
     "Unable to generate concept. File/project/specs/Shared.cpt already exists.",
   ]);
 });
+
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createLifecycleFixture(options = {}) {
+  const { SpecificationProvider } = require("../src/specification");
+  const calls = {
+    errors: [],
+    exists: [],
+    mkdir: [],
+    open: [],
+    prompts: [],
+    requests: [],
+    show: [],
+    write: [],
+  };
+  const handlers = new Map();
+  const registrationDisposals = new Map();
+  const sources = [];
+  let provider;
+
+  class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+      if (options.onSourceConstructed) {
+        options.onSourceConstructed(() => provider, this);
+      }
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+      if (options.cancelSource) {
+        options.cancelSource(this);
+      }
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+      if (options.disposeSource) {
+        options.disposeSource(this);
+      }
+    }
+  }
+
+  const client = {
+    sendRequest(method, token) {
+      calls.requests.push({ method, token });
+      if (options.sendRequest) {
+        return options.sendRequest({ calls, getProvider: () => provider, method, token });
+      }
+      return Promise.resolve(options.specDirs || ["specs"]);
+    },
+  };
+  const clientsMap = new Map([
+    ["/project", { client }],
+    ["/other", { client }],
+  ]);
+  if (options.getClient) {
+    clientsMap.get = (projectRoot) => options.getClient({
+      client,
+      getProvider: () => provider,
+      projectRoot,
+    });
+  }
+  const fileSystem = {
+    existsSync(filename) {
+      calls.exists.push(filename);
+      if (options.existsSync) {
+        return options.existsSync({ calls, filename, getProvider: () => provider });
+      }
+      return false;
+    },
+    promises: {
+      mkdir(directory, mkdirOptions) {
+        calls.mkdir.push({ directory, options: mkdirOptions });
+        if (options.mkdir) {
+          return options.mkdir({ calls, directory, getProvider: () => provider });
+        }
+        return Promise.resolve();
+      },
+      writeFile(filename, content, encoding) {
+        calls.write.push({ content, encoding, filename });
+        if (options.writeFile) {
+          return options.writeFile({ calls, filename, getProvider: () => provider });
+        }
+        return Promise.resolve();
+      },
+    },
+  };
+  const vscode = {
+    CancellationTokenSource,
+    commands: {
+      registerCommand(command, handler) {
+        handlers.set(command, handler);
+        registrationDisposals.set(command, 0);
+        return {
+          dispose() {
+            registrationDisposals.set(command, registrationDisposals.get(command) + 1);
+          },
+        };
+      },
+    },
+    workspace: {
+      getConfiguration() {
+        return { get() { return false; } };
+      },
+      openTextDocument(filename) {
+        calls.open.push(filename);
+        if (options.openTextDocument) {
+          return options.openTextDocument({ calls, filename, getProvider: () => provider });
+        }
+        return Promise.resolve({ filename });
+      },
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+    },
+    window: {
+      showErrorMessage(message) {
+        calls.errors.push(message);
+        if (options.showErrorMessage) {
+          return options.showErrorMessage({ calls, getProvider: () => provider, message });
+        }
+        return Promise.resolve(undefined);
+      },
+      showInputBox(inputOptions) {
+        calls.prompts.push({ kind: "input", options: inputOptions });
+        if (options.showInputBox) {
+          return options.showInputBox({ calls, getProvider: () => provider, options: inputOptions });
+        }
+        return Promise.resolve("Feature");
+      },
+      showQuickPick(items, pickOptions) {
+        calls.prompts.push({ items, kind: "quickPick", options: pickOptions });
+        if (options.showQuickPick) {
+          return options.showQuickPick({ calls, getProvider: () => provider, items, options: pickOptions });
+        }
+        return Promise.resolve(items[0]);
+      },
+      showTextDocument(document, showOptions) {
+        calls.show.push({ document, options: showOptions });
+        if (options.showTextDocument) {
+          return options.showTextDocument({ calls, document, getProvider: () => provider });
+        }
+        return Promise.resolve(options.shownResult || { shown: document });
+      },
+    },
+  };
+
+  provider = new SpecificationProvider(() => clientsMap, {
+    createConcept: options.createConcept,
+    createSpecification: options.createSpecification,
+    eol: "\n",
+    fileSystem,
+    getProjects: options.getProjects || (() => options.projects || ["/project"]),
+    pathModule: path.posix,
+    user: "Ada",
+    date: "2026-08-24",
+    vscode,
+  });
+
+  return {
+    calls,
+    clientsMap,
+    handlers,
+    provider,
+    registrationDisposals,
+    sources,
+    vscode,
+  };
+}
+
+test("SpecificationProvider owns specification and concept commands after disposal", async () => {
+  const fixture = createLifecycleFixture();
+  const specificationHandler = fixture.handlers.get("gauge.create.specification");
+  const conceptHandler = fixture.handlers.get("gauge.create.concept");
+
+  assert.equal(typeof specificationHandler, "function");
+  assert.equal(typeof conceptHandler, "function");
+
+  fixture.provider.dispose();
+  fixture.provider.dispose();
+
+  const outcomes = await Promise.allSettled([
+    specificationHandler(),
+    conceptHandler(),
+    fixture.provider.createSpecification(),
+    fixture.provider.createConcept(),
+  ]);
+
+  assert.deepEqual(outcomes, [
+    { status: "fulfilled", value: undefined },
+    { status: "fulfilled", value: undefined },
+    { status: "fulfilled", value: undefined },
+    { status: "fulfilled", value: undefined },
+  ]);
+  assert.equal(fixture.registrationDisposals.get("gauge.create.specification"), 1);
+  assert.equal(fixture.registrationDisposals.get("gauge.create.concept"), 1);
+  assert.equal(fixture.provider.activeOperations.size, 0);
+  assert.deepEqual(fixture.calls.requests, []);
+  assert.deepEqual(fixture.calls.prompts, []);
+  assert.deepEqual(fixture.calls.mkdir, []);
+  assert.deepEqual(fixture.calls.write, []);
+  assert.deepEqual(fixture.calls.errors, []);
+});
+
+test("SpecificationProvider cancels pending spec-directory requests on disposal", async () => {
+  for (const kind of ["specification", "concept"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const entered = deferred();
+      const request = deferred();
+      const fixture = createLifecycleFixture({
+        sendRequest() {
+          entered.resolve();
+          return request.promise;
+        },
+      });
+      const handler = fixture.handlers.get(`gauge.create.${kind}`);
+      let outcome = { status: "pending" };
+      const invocation = handler().then(
+        (value) => { outcome = { status: "fulfilled", value }; },
+        (error) => { outcome = { error, status: "rejected" }; },
+      );
+
+      await entered.promise;
+      fixture.provider.dispose();
+      await nextTurn();
+
+      assert.deepEqual(outcome, { status: "fulfilled", value: undefined });
+      assert.equal(fixture.provider.activeOperations.size, 0);
+      assert.equal(fixture.sources.length, 1);
+      assert.equal(fixture.sources[0].cancelCalls, 1);
+      assert.equal(fixture.sources[0].disposeCalls, 1);
+      assert.equal(fixture.sources[0].token.isCancellationRequested, true);
+      assert.equal(fixture.calls.requests[0].method, "gauge/specDirs");
+      assert.equal(fixture.calls.requests[0].token, fixture.sources[0].token);
+
+      if (settlement === "resolve") {
+        request.resolve(["specs"]);
+      } else {
+        request.reject(new Error(`late ${kind} directories failed`));
+      }
+      await invocation;
+      await nextTurn();
+
+      assert.deepEqual(fixture.calls.prompts, []);
+      assert.deepEqual(fixture.calls.mkdir, []);
+      assert.deepEqual(fixture.calls.write, []);
+      assert.deepEqual(fixture.calls.open, []);
+      assert.deepEqual(fixture.calls.show, []);
+      assert.deepEqual(fixture.calls.errors, []);
+    }
+  }
+});
+
+test("SpecificationProvider detaches pending creation stages on disposal", async () => {
+  const cases = [
+    { expected: [0, 0, 0, 0], kind: "specification", stage: "project" },
+    { expected: [0, 0, 0, 0], kind: "concept", stage: "directory" },
+    { expected: [0, 0, 0, 0], kind: "specification", stage: "input" },
+    { expected: [1, 0, 0, 0], kind: "concept", stage: "mkdir" },
+    { expected: [1, 1, 0, 0], kind: "specification", stage: "write" },
+    { expected: [1, 1, 1, 0], kind: "concept", stage: "open" },
+    { expected: [1, 1, 1, 1], kind: "specification", stage: "show" },
+  ];
+
+  for (const [index, entry] of cases.entries()) {
+    const entered = deferred();
+    const gate = deferred();
+    const fixture = createLifecycleFixture({
+      getProjects() {
+        return entry.stage === "project" ? ["/project", "/other"] : ["/project"];
+      },
+      specDirs: entry.stage === "directory" ? ["specs", "features"] : ["specs"],
+      showQuickPick({ items }) {
+        const projectPrompt = typeof items[0] === "object";
+        if ((entry.stage === "project" && projectPrompt)
+          || (entry.stage === "directory" && !projectPrompt)) {
+          entered.resolve();
+          return gate.promise;
+        }
+        return Promise.resolve(items[0]);
+      },
+      showInputBox() {
+        if (entry.stage === "input") {
+          entered.resolve();
+          return gate.promise;
+        }
+        return Promise.resolve("Feature");
+      },
+      mkdir() {
+        if (entry.stage === "mkdir") {
+          entered.resolve();
+          return gate.promise;
+        }
+        return Promise.resolve();
+      },
+      writeFile() {
+        if (entry.stage === "write") {
+          entered.resolve();
+          return gate.promise;
+        }
+        return Promise.resolve();
+      },
+      openTextDocument({ filename }) {
+        if (entry.stage === "open") {
+          entered.resolve();
+          return gate.promise;
+        }
+        return Promise.resolve({ filename });
+      },
+      showTextDocument() {
+        if (entry.stage === "show") {
+          entered.resolve();
+          return gate.promise;
+        }
+        return Promise.resolve({ shown: true });
+      },
+    });
+    const invocation = fixture.handlers.get(`gauge.create.${entry.kind}`)();
+    let outcome = { status: "pending" };
+    invocation.then(
+      (value) => { outcome = { status: "fulfilled", value }; },
+      (error) => { outcome = { error, status: "rejected" }; },
+    );
+
+    await entered.promise;
+    fixture.provider.dispose();
+    await nextTurn();
+
+    assert.deepEqual(outcome, { status: "fulfilled", value: undefined }, entry.stage);
+    assert.equal(fixture.provider.activeOperations.size, 0, entry.stage);
+
+    if (index % 2 === 0) {
+      gate.resolve(entry.stage === "project"
+        ? { description: "/project", label: "project" }
+        : entry.stage === "directory"
+          ? "specs"
+          : entry.stage === "input"
+            ? "Feature"
+            : entry.stage === "open"
+              ? { filename: "/project/specs/Feature.cpt" }
+              : { shown: true });
+    } else {
+      gate.reject(new Error(`late ${entry.stage} failed`));
+    }
+    await invocation;
+    await nextTurn();
+
+    assert.deepEqual([
+      fixture.calls.mkdir.length,
+      fixture.calls.write.length,
+      fixture.calls.open.length,
+      fixture.calls.show.length,
+    ], entry.expected, entry.stage);
+    assert.deepEqual(fixture.calls.errors, [], entry.stage);
+  }
+});
+
+test("SpecificationProvider preserves live creation outcomes and request cleanup", async () => {
+  const shownResult = { id: "shown" };
+  let requestCount = 0;
+  const fixture = createLifecycleFixture({
+    sendRequest() {
+      requestCount += 1;
+      if (requestCount === 2) {
+        return Promise.reject(new Error("live directories failed"));
+      }
+      return Promise.resolve(["specs"]);
+    },
+    shownResult,
+  });
+
+  const specificationResult = await fixture.handlers.get("gauge.create.specification")();
+  const conceptResult = await fixture.handlers.get("gauge.create.concept")();
+
+  assert.equal(specificationResult, shownResult);
+  assert.equal(conceptResult, undefined);
+  assert.equal(fixture.sources.length, 2);
+  for (const source of fixture.sources) {
+    assert.equal(source.cancelCalls, 0);
+    assert.equal(source.disposeCalls, 1);
+  }
+  assert.equal(fixture.provider.activeOperations.size, 0);
+  assert.deepEqual(fixture.calls.errors, [
+    "Unable to generate concept. Error: live directories failed",
+  ]);
+  fixture.provider.dispose();
+});
+
+test("SpecificationProvider handles synchronous disposal and concurrent creation", async () => {
+  {
+    const fixture = createLifecycleFixture({
+      onSourceConstructed(getProvider) {
+        getProvider().dispose();
+      },
+    });
+    const result = await fixture.handlers.get("gauge.create.specification")();
+
+    assert.equal(result, undefined);
+    assert.equal(fixture.sources.length, 1);
+    assert.equal(fixture.sources[0].cancelCalls, 1);
+    assert.equal(fixture.sources[0].disposeCalls, 1);
+    assert.equal(fixture.sources[0].token.isCancellationRequested, true);
+    assert.deepEqual(fixture.calls.requests, []);
+    assert.deepEqual(fixture.calls.prompts, []);
+    assert.deepEqual(fixture.calls.mkdir, []);
+    assert.deepEqual(fixture.calls.write, []);
+    assert.deepEqual(fixture.calls.open, []);
+    assert.deepEqual(fixture.calls.show, []);
+    assert.deepEqual(fixture.calls.errors, []);
+    assert.equal(fixture.registrationDisposals.get("gauge.create.specification"), 1);
+    assert.equal(fixture.registrationDisposals.get("gauge.create.concept"), 1);
+    assert.equal(fixture.provider.activeOperations.size, 0);
+  }
+
+  {
+    const fixture = createLifecycleFixture({
+      getClient({ client, getProvider }) {
+        getProvider().dispose();
+        return { client };
+      },
+    });
+    const result = await fixture.handlers.get("gauge.create.specification")();
+
+    assert.equal(result, undefined);
+    assert.equal(fixture.sources.length, 0);
+    assert.deepEqual(fixture.calls.requests, []);
+    assert.equal(fixture.provider.activeOperations.size, 0);
+  }
+
+  {
+    const fixture = createLifecycleFixture({
+      sendRequest() {
+        fixture.provider.dispose();
+        return Promise.reject(new Error("request failed after disposal"));
+      },
+    });
+    const result = await fixture.handlers.get("gauge.create.specification")();
+
+    assert.equal(result, undefined);
+    assert.equal(fixture.sources.length, 1);
+    assert.equal(fixture.sources[0].cancelCalls, 1);
+    assert.equal(fixture.sources[0].disposeCalls, 1);
+    assert.equal(fixture.provider.activeOperations.size, 0);
+    assert.deepEqual(fixture.calls.prompts, []);
+    assert.deepEqual(fixture.calls.errors, []);
+  }
+
+  {
+    const fixture = createLifecycleFixture({
+      existsSync() {
+        fixture.provider.dispose();
+        return false;
+      },
+    });
+    const result = await fixture.handlers.get("gauge.create.concept")();
+
+    assert.equal(result, undefined);
+    assert.equal(fixture.provider.activeOperations.size, 0);
+    assert.deepEqual(fixture.calls.mkdir, []);
+    assert.deepEqual(fixture.calls.write, []);
+    assert.deepEqual(fixture.calls.errors, []);
+  }
+
+  {
+    const requestEntries = [deferred(), deferred()];
+    const requestGates = [deferred(), deferred()];
+    let requestIndex = 0;
+    const fixture = createLifecycleFixture({
+      sendRequest() {
+        const index = requestIndex;
+        requestIndex += 1;
+        requestEntries[index].resolve();
+        return requestGates[index].promise;
+      },
+    });
+    const specification = fixture.handlers.get("gauge.create.specification")();
+    const concept = fixture.handlers.get("gauge.create.concept")();
+
+    await Promise.all(requestEntries.map((entry) => entry.promise));
+    fixture.provider.dispose();
+    fixture.provider.dispose();
+
+    assert.equal(fixture.provider.activeOperations.size, 0);
+    assert.deepEqual(await Promise.all([specification, concept]), [undefined, undefined]);
+    assert.equal(fixture.sources.length, 2);
+    for (const source of fixture.sources) {
+      assert.equal(source.cancelCalls, 1);
+      assert.equal(source.disposeCalls, 1);
+    }
+
+    requestGates[0].resolve(["specs"]);
+    requestGates[1].reject(new Error("late concept directories failed"));
+    await nextTurn();
+    assert.deepEqual(fixture.calls.prompts, []);
+    assert.deepEqual(fixture.calls.errors, []);
+  }
+});
+
+test("SpecificationProvider completes terminal cleanup when request cancellation throws", async () => {
+  const entered = deferred();
+  const request = deferred();
+  const cancellationError = new Error("cancellation cleanup failed");
+  const fixture = createLifecycleFixture({
+    cancelSource() {
+      throw cancellationError;
+    },
+    sendRequest() {
+      entered.resolve();
+      return request.promise;
+    },
+  });
+  const invocation = fixture.handlers.get("gauge.create.specification")();
+  await entered.promise;
+
+  let disposalError;
+  try {
+    fixture.provider.dispose();
+  } catch (error) {
+    disposalError = error;
+  }
+  request.resolve(["specs"]);
+  const result = await invocation;
+
+  assert.equal(disposalError, undefined);
+  assert.equal(result, undefined);
+  assert.equal(fixture.sources.length, 1);
+  assert.equal(fixture.sources[0].cancelCalls, 1);
+  assert.equal(fixture.sources[0].disposeCalls, 1);
+  assert.equal(fixture.registrationDisposals.get("gauge.create.specification"), 1);
+  assert.equal(fixture.registrationDisposals.get("gauge.create.concept"), 1);
+  assert.equal(fixture.provider.activeOperations.size, 0);
+});

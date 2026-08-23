@@ -5,25 +5,217 @@ const nodeOs = require("node:os");
 const nodePath = require("node:path");
 
 const SPEC_DIRS_REQUEST = "gauge/specDirs";
+const CREATE_SPECIFICATION_COMMAND = "gauge.create.specification";
+const CREATE_CONCEPT_COMMAND = "gauge.create.concept";
+const DISPOSED_CREATION = Symbol("disposed Gauge file creation");
 
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
+function cleanupOwnedSource(source, cancel) {
+  if (!source) {
+    return;
   }
-  return undefined;
+  if (cancel && typeof source.cancel === "function") {
+    try {
+      source.cancel();
+    } catch (error) {
+      // Best-effort cancellation must not interrupt terminal cleanup.
+    }
+  }
+  if (typeof source.dispose === "function") {
+    try {
+      source.dispose();
+    } catch (error) {
+      // Owned listener cleanup must not replace the operation result.
+    }
+  }
+}
+
+function cleanupDisposable(disposable) {
+  if (!disposable || typeof disposable.dispose !== "function") {
+    return;
+  }
+  try {
+    disposable.dispose();
+  } catch (error) {
+    // Continue releasing the remaining provider-owned registrations.
+  }
+}
+
+function createFileCreationOperation() {
+  let rejectPublic;
+  let resolveCancellation;
+  let resolvePublic;
+  const cancellation = new Promise((resolve) => {
+    resolveCancellation = resolve;
+  });
+  const promise = new Promise((resolve, reject) => {
+    resolvePublic = resolve;
+    rejectPublic = reject;
+  });
+  return {
+    cancellation,
+    cancellationSources: new Set(),
+    cancelled: false,
+    completed: false,
+    promise,
+    publicSettled: false,
+    cancel() {
+      if (this.cancelled || this.completed) {
+        return;
+      }
+      this.cancelled = true;
+      resolveCancellation(DISPOSED_CREATION);
+      if (!this.publicSettled) {
+        this.publicSettled = true;
+        resolvePublic(undefined);
+      }
+      const sources = [...this.cancellationSources];
+      this.cancellationSources.clear();
+      for (const source of sources) {
+        cleanupOwnedSource(source, true);
+      }
+    },
+    reject(error) {
+      if (this.publicSettled) {
+        return;
+      }
+      this.publicSettled = true;
+      rejectPublic(error);
+    },
+    resolve(value) {
+      if (this.publicSettled) {
+        return;
+      }
+      this.publicSettled = true;
+      resolvePublic(value);
+    },
+  };
+}
+
+function operationStopped(operation) {
+  return Boolean(operation && operation.cancelled);
+}
+
+function observePromise(value) {
+  if (value && typeof value.then === "function") {
+    Promise.resolve(value).catch(() => undefined);
+  }
+}
+
+async function callForOperation(operation, callback) {
+  if (operationStopped(operation)) {
+    return DISPOSED_CREATION;
+  }
+
+  let value;
+  try {
+    value = callback();
+  } catch (error) {
+    if (operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+    throw error;
+  }
+
+  const pending = Promise.resolve(value);
+  if (operationStopped(operation)) {
+    observePromise(pending);
+    return DISPOSED_CREATION;
+  }
+
+  try {
+    const result = operation
+      ? await Promise.race([pending, operation.cancellation])
+      : await pending;
+    return operationStopped(operation) || result === DISPOSED_CREATION
+      ? DISPOSED_CREATION
+      : result;
+  } catch (error) {
+    if (operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+    throw error;
+  }
+}
+
+function callSyncForOperation(operation, callback) {
+  if (operationStopped(operation)) {
+    return DISPOSED_CREATION;
+  }
+  try {
+    const value = callback();
+    if (operationStopped(operation)) {
+      observePromise(value);
+      return DISPOSED_CREATION;
+    }
+    return value;
+  } catch (error) {
+    if (operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+    throw error;
+  }
+}
+
+function createRequestSource(vscode, operation) {
+  if (operationStopped(operation)) {
+    return DISPOSED_CREATION;
+  }
+  if (typeof vscode.CancellationTokenSource !== "function") {
+    return undefined;
+  }
+  const source = new vscode.CancellationTokenSource();
+  if (operation) {
+    if (operationStopped(operation)) {
+      cleanupOwnedSource(source, true);
+      return DISPOSED_CREATION;
+    }
+    operation.cancellationSources.add(source);
+  }
+  return source;
+}
+
+function releaseRequestSource(operation, source) {
+  if (!source || source === DISPOSED_CREATION) {
+    return;
+  }
+  if (operation && !operation.cancellationSources.delete(source)) {
+    return;
+  }
+  cleanupOwnedSource(source, false);
 }
 
 function createGaugeSpecDirsProvider(getClientsMap, options = {}) {
   const vscode = options.vscode || {};
-  return function specDirsProvider(projectRoot) {
-    const clientsMap = typeof getClientsMap === "function" ? getClientsMap() : getClientsMap;
-    const projectClient = clientsMap && typeof clientsMap.get === "function"
-      ? clientsMap.get(projectRoot)
-      : undefined;
+  return async function specDirsProvider(projectRoot, operation) {
+    const clientsMap = callSyncForOperation(operation, () => (
+      typeof getClientsMap === "function" ? getClientsMap() : getClientsMap
+    ));
+    if (clientsMap === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
+    }
+    const projectClient = callSyncForOperation(operation, () => (
+      clientsMap && typeof clientsMap.get === "function"
+        ? clientsMap.get(projectRoot)
+        : undefined
+    ));
+    if (projectClient === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
+    }
     if (!projectClient || !projectClient.client || typeof projectClient.client.sendRequest !== "function") {
       return undefined;
     }
-    return projectClient.client.sendRequest(SPEC_DIRS_REQUEST, createToken(vscode));
+    const source = createRequestSource(vscode, operation);
+    if (source === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
+    }
+    try {
+      return await callForOperation(
+        operation,
+        () => projectClient.client.sendRequest(SPEC_DIRS_REQUEST, source && source.token),
+      );
+    } finally {
+      releaseRequestSource(operation, source);
+    }
   };
 }
 
@@ -104,12 +296,18 @@ function getWorkspaceRoots(vscode) {
     .filter(Boolean);
 }
 
-async function selectProjectRoot(vscode, pathModule, options = {}) {
+async function selectProjectRoot(vscode, pathModule, options = {}, operation) {
   if (options.projectRoot) {
     return options.projectRoot;
   }
 
-  const projectRoots = options.projects || getWorkspaceRoots(vscode);
+  const configuredProjects = typeof options.getProjects === "function"
+    ? callSyncForOperation(operation, options.getProjects)
+    : options.projects;
+  if (configuredProjects === DISPOSED_CREATION) {
+    return DISPOSED_CREATION;
+  }
+  const projectRoots = configuredProjects || getWorkspaceRoots(vscode);
   if (projectRoots.length === 0) {
     return undefined;
   }
@@ -121,12 +319,15 @@ async function selectProjectRoot(vscode, pathModule, options = {}) {
     label: pathModule.basename(projectRoot),
     description: projectRoot,
   }));
-  const selected = await vscode.window.showQuickPick(projectItems, {
-    canPickMany: false,
-    placeHolder: "Choose a project",
-  });
+  const selected = await callForOperation(
+    operation,
+    () => vscode.window.showQuickPick(projectItems, {
+      canPickMany: false,
+      placeHolder: "Choose a project",
+    }),
+  );
 
-  if (!selected) {
+  if (!selected || selected === DISPOSED_CREATION) {
     return undefined;
   }
   return selected.description || selected;
@@ -167,134 +368,359 @@ function showGenerationError(vscode, kind, message) {
   return undefined;
 }
 
-async function createSpecification(options = {}) {
+const SPECIFICATION_DESCRIPTOR = {
+  buildDocument(options) {
+    return buildSpecificationDocument({
+      date: options.date,
+      eol: options.eol,
+      user: options.user,
+      withHelp: getWithHelpSetting(options.vscode),
+    });
+  },
+  directoryPlaceholder: "Choose the folder in which the specification should be created",
+  extension: ".spec",
+  inputPlaceholder: "Enter the file name",
+  kind: "specification",
+};
+
+const CONCEPT_DESCRIPTOR = {
+  buildDocument(options) {
+    return buildConceptDocument({
+      date: options.date,
+      eol: options.eol,
+      user: options.user,
+    });
+  },
+  directoryPlaceholder: "Choose the folder in which the concept should be created",
+  extension: ".cpt",
+  inputPlaceholder: "Enter the concept file name",
+  kind: "concept",
+};
+
+async function createGaugeFile(options, descriptor) {
   const vscode = options.vscode || require("vscode");
+  const operation = options.operation;
   try {
     const fileSystem = options.fileSystem || nodeFs;
     const promises = fileSystem.promises || fileSystem;
     const pathModule = options.pathModule || nodePath;
     const eol = options.eol || nodeOs.EOL;
-    const projectRoot = await selectProjectRoot(vscode, pathModule, options);
+    const projectRoot = await selectProjectRoot(vscode, pathModule, options, operation);
 
-    if (!projectRoot) {
-      return showError(vscode, "No workspace folder is open.");
+    if (projectRoot === DISPOSED_CREATION || operationStopped(operation)) {
+      return DISPOSED_CREATION;
     }
 
-    const specDir = await selectSpecDirectory(vscode, pathModule, projectRoot, options);
-    if (!specDir) {
+    if (!projectRoot) {
+      return callForOperation(
+        operation,
+        () => showGenerationError(vscode, descriptor.kind, "No workspace folder is open."),
+      );
+    }
+
+    const targetDir = await selectSpecDirectory(vscode, pathModule, projectRoot, {
+      ...options,
+      specDirPlaceHolder: descriptor.directoryPlaceholder,
+    }, operation);
+    if (targetDir === DISPOSED_CREATION || operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+    if (!targetDir) {
       return undefined;
     }
 
-    const file = await vscode.window.showInputBox({ placeHolder: "Enter the file name" });
+    const file = await callForOperation(
+      operation,
+      () => vscode.window.showInputBox({ placeHolder: descriptor.inputPlaceholder }),
+    );
+    if (file === DISPOSED_CREATION || operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
     if (!file) {
       return undefined;
     }
 
-    const filename = pathModule.join(specDir, `${file}.spec`);
-
-    if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
-      return showError(vscode, `File${filename} already exists.`);
+    const filename = callSyncForOperation(
+      operation,
+      () => pathModule.join(targetDir, `${file}${descriptor.extension}`),
+    );
+    if (filename === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
     }
 
-    const document = buildSpecificationDocument({
-      withHelp: getWithHelpSetting(vscode),
+    const exists = typeof fileSystem.existsSync === "function"
+      ? callSyncForOperation(operation, () => fileSystem.existsSync(filename))
+      : false;
+    if (exists === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
+    }
+    if (exists) {
+      return callForOperation(
+        operation,
+        () => showGenerationError(
+          vscode,
+          descriptor.kind,
+          `File${filename} already exists.`,
+        ),
+      );
+    }
+
+    const document = callSyncForOperation(operation, () => descriptor.buildDocument({
       eol,
-      user: options.user,
-      date: options.date,
-    });
+      ...options,
+      vscode,
+    }));
+    if (document === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
+    }
 
-    await promises.mkdir(specDir, { recursive: true });
-    await promises.writeFile(filename, document.text, "utf8");
+    const createdDirectory = await callForOperation(
+      operation,
+      () => promises.mkdir(targetDir, { recursive: true }),
+    );
+    if (createdDirectory === DISPOSED_CREATION || operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
 
-    const textDocument = await vscode.workspace.openTextDocument(filename);
-    return vscode.window.showTextDocument(textDocument, {
-      selection: toRange(vscode, document.selection),
-    });
+    const wroteFile = await callForOperation(
+      operation,
+      () => promises.writeFile(filename, document.text, "utf8"),
+    );
+    if (wroteFile === DISPOSED_CREATION || operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+
+    const textDocument = await callForOperation(
+      operation,
+      () => vscode.workspace.openTextDocument(filename),
+    );
+    if (textDocument === DISPOSED_CREATION || operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+
+    const selection = callSyncForOperation(
+      operation,
+      () => toRange(vscode, document.selection),
+    );
+    if (selection === DISPOSED_CREATION) {
+      return DISPOSED_CREATION;
+    }
+    return callForOperation(
+      operation,
+      () => vscode.window.showTextDocument(textDocument, { selection }),
+    );
   } catch (error) {
-    return showError(vscode, error);
+    if (operationStopped(operation)) {
+      return DISPOSED_CREATION;
+    }
+    return callForOperation(
+      operation,
+      () => showGenerationError(vscode, descriptor.kind, error),
+    );
   }
+}
+
+async function createSpecification(options = {}) {
+  return createGaugeFile(options, SPECIFICATION_DESCRIPTOR);
 }
 
 async function createConcept(options = {}) {
-  const vscode = options.vscode || require("vscode");
-  try {
-    const fileSystem = options.fileSystem || nodeFs;
-    const promises = fileSystem.promises || fileSystem;
-    const pathModule = options.pathModule || nodePath;
-    const eol = options.eol || nodeOs.EOL;
-    const projectRoot = await selectProjectRoot(vscode, pathModule, options);
-
-    if (!projectRoot) {
-      return showGenerationError(vscode, "concept", "No workspace folder is open.");
-    }
-
-    const conceptDir = await selectSpecDirectory(vscode, pathModule, projectRoot, {
-      ...options,
-      specDirPlaceHolder: "Choose the folder in which the concept should be created",
-    });
-    if (!conceptDir) {
-      return undefined;
-    }
-
-    const file = await vscode.window.showInputBox({ placeHolder: "Enter the concept file name" });
-    if (!file) {
-      return undefined;
-    }
-
-    const filename = pathModule.join(conceptDir, `${file}.cpt`);
-
-    if (typeof fileSystem.existsSync === "function" && fileSystem.existsSync(filename)) {
-      return showGenerationError(vscode, "concept", `File${filename} already exists.`);
-    }
-
-    const document = buildConceptDocument({
-      date: options.date,
-      eol,
-      user: options.user,
-    });
-
-    await promises.mkdir(conceptDir, { recursive: true });
-    await promises.writeFile(filename, document.text, "utf8");
-
-    const textDocument = await vscode.workspace.openTextDocument(filename);
-    return vscode.window.showTextDocument(textDocument, {
-      selection: toRange(vscode, document.selection),
-    });
-  } catch (error) {
-    return showGenerationError(vscode, "concept", error);
-  }
+  return createGaugeFile(options, CONCEPT_DESCRIPTOR);
 }
 
-async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}) {
+async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}, operation) {
   if (options.specDir) {
-    return pathModule.isAbsolute(options.specDir)
-      ? options.specDir
-      : pathModule.join(projectRoot, options.specDir);
+    return callSyncForOperation(operation, () => (
+      pathModule.isAbsolute(options.specDir)
+        ? options.specDir
+        : pathModule.join(projectRoot, options.specDir)
+    ));
   }
 
   const relativeSpecDirs = options.specDirsProvider
-    ? await options.specDirsProvider(projectRoot)
+    ? await callForOperation(
+      operation,
+      () => options.specDirsProvider(projectRoot, operation),
+    )
     : ["specs"];
+  if (relativeSpecDirs === DISPOSED_CREATION || operationStopped(operation)) {
+    return DISPOSED_CREATION;
+  }
   const specDirs = relativeSpecDirs && relativeSpecDirs.length > 0
     ? relativeSpecDirs
     : ["specs"];
 
   let selected = specDirs[0];
   if (specDirs.length > 1 && vscode.window.showQuickPick) {
-    selected = await vscode.window.showQuickPick(specDirs, {
-      canPickMany: false,
-      placeHolder: options.specDirPlaceHolder
-        || "Choose the folder in which the specification should be created",
-    });
+    selected = await callForOperation(
+      operation,
+      () => vscode.window.showQuickPick(specDirs, {
+        canPickMany: false,
+        placeHolder: options.specDirPlaceHolder
+          || "Choose the folder in which the specification should be created",
+      }),
+    );
   }
 
-  if (!selected) {
+  if (!selected || selected === DISPOSED_CREATION) {
     return undefined;
   }
-  return pathModule.isAbsolute(selected) ? selected : pathModule.join(projectRoot, selected);
+  return callSyncForOperation(operation, () => (
+    pathModule.isAbsolute(selected) ? selected : pathModule.join(projectRoot, selected)
+  ));
+}
+
+function folderPathFromUri(value) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  return value.fsPath || value.path;
+}
+
+class SpecificationProvider {
+  constructor(getClientsMap, options = {}) {
+    this.getClientsMap = getClientsMap;
+    this.options = options;
+    this.vscode = options.vscode || require("vscode");
+    this.activeOperations = new Set();
+    this.disposed = false;
+    this.registrations = [];
+    this.specDirsProvider = options.specDirsProvider || createGaugeSpecDirsProvider(
+      getClientsMap,
+      { vscode: this.vscode },
+    );
+    this.registerCommands();
+  }
+
+  registerCommands() {
+    if (
+      this.disposed
+      || !this.vscode.commands
+      || typeof this.vscode.commands.registerCommand !== "function"
+    ) {
+      return;
+    }
+    const registrations = [
+      this.vscode.commands.registerCommand(
+        CREATE_SPECIFICATION_COMMAND,
+        (folder) => this.createSpecification(folderPathFromUri(folder)),
+      ),
+      this.vscode.commands.registerCommand(
+        CREATE_CONCEPT_COMMAND,
+        (folder) => this.createConcept(folderPathFromUri(folder)),
+      ),
+    ];
+    if (this.disposed) {
+      for (const registration of registrations) {
+        cleanupDisposable(registration);
+      }
+      return;
+    }
+    this.registrations.push(...registrations.filter(Boolean));
+  }
+
+  projectRoots() {
+    if (typeof this.options.getProjects === "function") {
+      return this.options.getProjects();
+    }
+    const clientsMap = typeof this.getClientsMap === "function"
+      ? this.getClientsMap()
+      : this.getClientsMap;
+    if (!clientsMap || typeof clientsMap.keys !== "function") {
+      return undefined;
+    }
+    const projects = Array.from(clientsMap.keys()).filter(Boolean);
+    return projects.length > 0 ? projects : undefined;
+  }
+
+  creationOptions(operation, specDir) {
+    const projects = this.projectRoots();
+    return {
+      date: this.options.date,
+      eol: this.options.eol,
+      fileSystem: this.options.fileSystem,
+      getProjects: () => projects,
+      operation,
+      pathModule: this.options.pathModule,
+      projects,
+      specDir,
+      specDirsProvider: (projectRoot) => this.specDirsProvider(projectRoot, operation),
+      user: this.options.user,
+      vscode: this.vscode,
+    };
+  }
+
+  runCreation(creator, specDir) {
+    if (this.disposed) {
+      return Promise.resolve(undefined);
+    }
+    const operation = createFileCreationOperation();
+    this.activeOperations.add(operation);
+
+    let workflow;
+    try {
+      const options = callSyncForOperation(
+        operation,
+        () => this.creationOptions(operation, specDir),
+      );
+      workflow = options === DISPOSED_CREATION
+        ? DISPOSED_CREATION
+        : callForOperation(operation, () => creator(options));
+    } catch (error) {
+      workflow = Promise.reject(error);
+    }
+    Promise.resolve(workflow).then(
+      (value) => this.finishOperation(operation, "resolve", value),
+      (error) => this.finishOperation(operation, "reject", error),
+    );
+    return operation.promise;
+  }
+
+  finishOperation(operation, outcome, value) {
+    this.activeOperations.delete(operation);
+    operation.completed = true;
+    const sources = [...operation.cancellationSources];
+    operation.cancellationSources.clear();
+    for (const source of sources) {
+      cleanupOwnedSource(source, false);
+    }
+    if (outcome === "reject") {
+      operation.reject(value);
+      return;
+    }
+    operation.resolve(value === DISPOSED_CREATION ? undefined : value);
+  }
+
+  createSpecification(specDir) {
+    const creator = this.options.createSpecification || createSpecification;
+    return this.runCreation(creator, specDir);
+  }
+
+  createConcept(specDir) {
+    const creator = this.options.createConcept || createConcept;
+    return this.runCreation(creator, specDir);
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      operation.cancel();
+    }
+    const registrations = this.registrations;
+    this.registrations = [];
+    for (const registration of registrations) {
+      cleanupDisposable(registration);
+    }
+  }
 }
 
 module.exports = {
+  SpecificationProvider,
   buildConceptDocument,
   buildSpecificationDocument,
   createConcept,

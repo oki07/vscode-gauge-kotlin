@@ -332,7 +332,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 6
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 5
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -904,7 +904,7 @@ test("activation uses asynchronous nested project discovery", async () => {
   assert.equal(cliCreations, 1);
 });
 
-test("create specification command delegates to the specification creator", () => {
+test("create specification command delegates to the specification creator", async () => {
   const extension = require("../src/extension");
 
   let receivedOptions;
@@ -923,11 +923,11 @@ test("create specification command delegates to the specification creator", () =
   );
 
   assert.ok(command);
-  assert.equal(command.handler(), "created");
+  assert.equal(await command.handler(), "created");
   assert.equal(receivedOptions.vscode, fakeVscode);
 });
 
-test("create concept command delegates to the concept creator", () => {
+test("create concept command delegates to the concept creator", async () => {
   const extension = require("../src/extension");
 
   let receivedOptions;
@@ -946,8 +946,47 @@ test("create concept command delegates to the concept creator", () => {
   );
 
   assert.ok(command);
-  assert.equal(command.handler(), "created");
+  assert.equal(await command.handler(), "created");
   assert.equal(receivedOptions.vscode, fakeVscode);
+});
+
+test("activation owns SpecificationProvider for file creation commands", () => {
+  const extension = require("../src/extension");
+
+  const clientsMap = new Map([
+    ["/workspace/gauge", { client: { id: "client" } }],
+  ]);
+  const created = {};
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+
+  class FakeSpecificationProvider {
+    constructor(getClientsMap, options) {
+      this.getClientsMap = getClientsMap;
+      this.options = options;
+      created.provider = this;
+    }
+
+    dispose() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    clientsMap,
+    SpecificationProvider: FakeSpecificationProvider,
+  });
+
+  assert.equal(context.subscriptions.includes(created.provider), true);
+  assert.equal(created.provider.getClientsMap(), clientsMap);
+  assert.equal(created.provider.options.vscode, fakeVscode);
+  assert.deepEqual(created.provider.options.getProjects(), ["/workspace/gauge"]);
+  assert.equal(
+    registeredCommands.some((entry) => entry.command === "gauge.create.specification"),
+    false,
+  );
+  assert.equal(
+    registeredCommands.some((entry) => entry.command === "gauge.create.concept"),
+    false,
+  );
 });
 
 test("preview command delegates to the Gauge preview creator", () => {
@@ -1544,13 +1583,13 @@ test("file creation commands use Gauge client project roots", async () => {
 
   assert.ok(createSpecificationCommand);
   assert.ok(createConceptCommand);
-  assert.equal(createSpecificationCommand.handler(), "specification");
-  assert.equal(createConceptCommand.handler(), "concept");
+  assert.equal(await createSpecificationCommand.handler(), "specification");
+  assert.equal(await createConceptCommand.handler(), "concept");
   assert.deepEqual(receivedOptions.specification.projects, ["/workspace/gauge"]);
   assert.deepEqual(receivedOptions.concept.projects, ["/workspace/gauge"]);
 });
 
-test("file creation commands use Explorer folder URI as the target directory", () => {
+test("file creation commands use Explorer folder URI as the target directory", async () => {
   const extension = require("../src/extension");
 
   const receivedOptions = {};
@@ -1624,8 +1663,8 @@ test("file creation commands use Explorer folder URI as the target directory", (
 
   assert.ok(createSpecificationCommand);
   assert.ok(createConceptCommand);
-  assert.equal(createSpecificationCommand.handler(folderUri), "specification");
-  assert.equal(createConceptCommand.handler(folderUri), "concept");
+  assert.equal(await createSpecificationCommand.handler(folderUri), "specification");
+  assert.equal(await createConceptCommand.handler(folderUri), "concept");
   assert.equal(receivedOptions.specification.specDir, "/workspace/gauge/specs/features");
   assert.equal(receivedOptions.concept.specDir, "/workspace/gauge/specs/features");
 });

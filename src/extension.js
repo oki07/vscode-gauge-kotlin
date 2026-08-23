@@ -44,11 +44,7 @@ const {
 } = require("./unusedReferenceDiagnosticsProvider");
 const { WorkspaceDocumentStore } = require("./workspaceDocumentStore");
 const { WorkspaceStepIndex } = require("./workspaceStepIndex");
-const {
-  createConcept,
-  createGaugeSpecDirsProvider,
-  createSpecification,
-} = require("./specification");
+const { SpecificationProvider } = require("./specification");
 const { GaugeRenameProvider } = require("./renameProvider");
 const {
   showInstallGaugeNotification,
@@ -79,6 +75,8 @@ const JAVA_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.java" };
 const KOTLIN_IMPLEMENTATION_SELECTOR = { scheme: "file", pattern: "**/*.kt" };
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
+  "gauge.create.specification",
+  "gauge.create.concept",
   "gauge.config.saveRecommended",
   "gauge.extract.concept",
   "gauge.showReferences.atCursor",
@@ -167,14 +165,6 @@ function showError(vscode, message) {
     return vscode.window.showErrorMessage(message);
   }
   return undefined;
-}
-
-function activeProjectRoots() {
-  if (!activeClientsMap || typeof activeClientsMap.keys !== "function") {
-    return undefined;
-  }
-  const roots = Array.from(activeClientsMap.keys()).filter(Boolean);
-  return roots.length > 0 ? roots : undefined;
 }
 
 async function applyDocumentEdits(vscode, document, edits) {
@@ -754,13 +744,6 @@ function registerSemanticTokenColorUpdates(context, vscode) {
   }
 }
 
-function folderPathFromUri(value) {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  return value.fsPath || value.path;
-}
-
 function isExecutionFlagObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -796,32 +779,6 @@ function createCommandHandler(command, vscode, executionController, options = {}
     }
 
     switch (command) {
-      case "gauge.create.specification":
-        return (options.createSpecification || createSpecification)({
-          vscode,
-          fileSystem: options.fileSystem,
-          pathModule: options.pathModule,
-          eol: options.eol,
-          projects: activeProjectRoots(),
-          specDirsProvider: options.specDirsProvider || createGaugeSpecDirsProvider(
-            () => activeClientsMap,
-            { vscode },
-          ),
-          specDir: folderPathFromUri(args[0]),
-        });
-      case "gauge.create.concept":
-        return (options.createConcept || createConcept)({
-          vscode,
-          fileSystem: options.fileSystem,
-          pathModule: options.pathModule,
-          eol: options.eol,
-          projects: activeProjectRoots(),
-          specDirsProvider: options.specDirsProvider || createGaugeSpecDirsProvider(
-            () => activeClientsMap,
-            { vscode },
-          ),
-          specDir: folderPathFromUri(args[0]),
-        });
       case "gauge.preview":
         if (options.createPreview) {
           return options.createPreview({
@@ -1186,7 +1143,36 @@ function activate(context, vscodeApi, options = {}) {
   }));
   registerArgumentCodeActionProvider(context, vscode, serviceOptions);
   registerStepCodeActionProvider(context, vscode, serviceOptions);
-  for (const command of GAUGE_COMMANDS.filter((entry) => !PROVIDER_COMMANDS.has(entry))) {
+  for (const command of GAUGE_COMMANDS) {
+    if (command === "gauge.create.specification") {
+      const SpecificationProviderCtor = options.SpecificationProvider || SpecificationProvider;
+      const specificationProvider = new SpecificationProviderCtor(
+        () => clientsMap,
+        {
+          createConcept: options.createConcept,
+          createSpecification: options.createSpecification,
+          date: options.date,
+          eol: options.eol,
+          fileSystem: options.fileSystem,
+          getProjects() {
+            if (!clientsMap || typeof clientsMap.keys !== "function") {
+              return undefined;
+            }
+            const projects = Array.from(clientsMap.keys()).filter(Boolean);
+            return projects.length > 0 ? projects : undefined;
+          },
+          pathModule: options.pathModule,
+          specDirsProvider: options.specDirsProvider,
+          user: options.user,
+          vscode,
+        },
+      );
+      context.subscriptions.push(specificationProvider);
+      continue;
+    }
+    if (PROVIDER_COMMANDS.has(command)) {
+      continue;
+    }
     const disposable = vscode.commands.registerCommand(
       command,
       createCommandHandler(command, vscode, executionController, commandOptions),
