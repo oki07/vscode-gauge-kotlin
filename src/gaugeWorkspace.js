@@ -347,6 +347,7 @@ class GaugeWorkspace {
     this.clientLanguageMap = new Map();
     this.projectEnvironmentCache = new Map();
     this.pendingServerStarts = new Map();
+    this.serverStartGenerations = new Map();
     this.disposed = false;
     this.env = envWithGaugeHome(options.env || process.env, {
       vscode: this.vscode,
@@ -391,6 +392,7 @@ class GaugeWorkspace {
 
   dispose() {
     this.disposed = true;
+    this.pendingServerStarts.clear();
     for (const disposable of this.disposables) {
       if (disposable && typeof disposable.dispose === "function") {
         disposable.dispose();
@@ -673,7 +675,11 @@ class GaugeWorkspace {
   }
 
   async stopServersForWorkspaceFolder(workspaceRoot) {
-    for (const projectRoot of [...this.clientsMap.keys()]) {
+    const projectRoots = new Set([
+      ...this.clientsMap.keys(),
+      ...this.pendingServerStarts.keys(),
+    ]);
+    for (const projectRoot of projectRoots) {
       if (isInside(workspaceRoot, projectRoot, this.pathModule)) {
         await this.stopServerFor(projectRoot);
       }
@@ -682,10 +688,13 @@ class GaugeWorkspace {
 
   async stopServerFor(folder) {
     const projectClient = this.clientsMap.get(folder);
+    const projectRoot = projectClient ? projectClient.project.root() : folder;
+    this.cancelServerStart(projectRoot);
     if (!projectClient) {
+      this.clientLanguageMap.delete(projectRoot);
+      this.projectEnvironmentCache.delete(projectRoot);
       return;
     }
-    const projectRoot = projectClient.project.root();
     this.clientsMap.delete(projectRoot);
     this.clientLanguageMap.delete(projectRoot);
     this.projectEnvironmentCache.delete(projectRoot);
@@ -792,7 +801,8 @@ class GaugeWorkspace {
     if (this.clientsMap.has(projectRoot)) {
       return this.clientsMap.get(projectRoot).client;
     }
-    const pendingStart = this.startLanguageServer(project, folder);
+    const startGeneration = this.serverStartGeneration(projectRoot);
+    const pendingStart = this.startLanguageServer(project, folder, startGeneration);
     this.pendingServerStarts.set(projectRoot, pendingStart);
     try {
       return await pendingStart;
@@ -803,11 +813,24 @@ class GaugeWorkspace {
     }
   }
 
-  async startLanguageServer(project, folder) {
+  serverStartGeneration(projectRoot) {
+    return this.serverStartGenerations.get(projectRoot) || 0;
+  }
+
+  cancelServerStart(projectRoot) {
+    this.serverStartGenerations.set(projectRoot, this.serverStartGeneration(projectRoot) + 1);
+    this.pendingServerStarts.delete(projectRoot);
+  }
+
+  isServerStartCurrent(projectRoot, startGeneration) {
+    return !this.disposed && this.serverStartGeneration(projectRoot) === startGeneration;
+  }
+
+  async startLanguageServer(project, folder, startGeneration) {
     const projectRoot = project.root();
     const javaConfigGenerated = this.generateJavaConfig(project);
     const serverOptions = await this.serverOptionsFor(project);
-    if (this.disposed) {
+    if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
       return this.cleanupLanguageClient(projectRoot);
     }
     const languageClient = new this.LanguageClient(
@@ -819,12 +842,12 @@ class GaugeWorkspace {
     this.clientsMap.set(project.root(), { project, client: languageClient });
     try {
       await this.installRunnerFor(project);
-      if (this.disposed) {
+      if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
         return this.cleanupLanguageClient(projectRoot, languageClient);
       }
       if (!javaConfigGenerated && this.generateJavaConfig(project)) {
         const refreshedServerOptions = await this.serverOptionsFor(project);
-        if (this.disposed) {
+        if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
           return this.cleanupLanguageClient(projectRoot, languageClient);
         }
         serverOptions.command = refreshedServerOptions.command;
@@ -833,20 +856,20 @@ class GaugeWorkspace {
       }
       this.registerDynamicFeatures(languageClient);
       await languageClient.start();
-      if (this.disposed) {
+      if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
         return this.cleanupLanguageClient(projectRoot, languageClient);
       }
       clearLspCodeLensFeature(languageClient);
     } catch (error) {
       await this.cleanupLanguageClient(projectRoot, languageClient);
-      if (!this.disposed) {
+      if (this.isServerStartCurrent(projectRoot, startGeneration)) {
         await this.showLanguageServerStartupError(project, error);
       }
       return undefined;
     }
     this.registerServerMessageFilter(languageClient);
-    await this.setLanguageId(languageClient, projectRoot);
-    if (this.disposed) {
+    await this.setLanguageId(languageClient, projectRoot, startGeneration);
+    if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
       return this.cleanupLanguageClient(projectRoot, languageClient);
     }
     return languageClient;
@@ -954,13 +977,17 @@ class GaugeWorkspace {
     return undefined;
   }
 
-  async setLanguageId(languageClient, projectRoot) {
+  async setLanguageId(languageClient, projectRoot, startGeneration) {
     try {
       const language = await languageClient.sendRequest("gauge/getRunnerLanguage", createToken(this.vscode));
       const currentEntry = this.clientsMap.has(projectRoot)
         ? Map.prototype.get.call(this.clientsMap, projectRoot)
         : undefined;
-      if (!this.disposed && currentEntry && currentEntry.client === languageClient) {
+      if (
+        this.isServerStartCurrent(projectRoot, startGeneration)
+        && currentEntry
+        && currentEntry.client === languageClient
+      ) {
         this.clientLanguageMap.set(projectRoot, language);
       }
     } catch (_error) {
