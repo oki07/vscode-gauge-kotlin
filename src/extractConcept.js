@@ -14,16 +14,66 @@ const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const NEW_FILE = "New File";
+const DISPOSED_OPERATION = Symbol("disposed extract concept operation");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
 
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
-  }
-  return undefined;
+function createExtractOperation() {
+  let rejectPublic;
+  let resolveCancellation;
+  let resolvePublic;
+  const cancellation = new Promise((resolve) => {
+    resolveCancellation = resolve;
+  });
+  const promise = new Promise((resolve, reject) => {
+    resolvePublic = resolve;
+    rejectPublic = reject;
+  });
+  return {
+    cancellation,
+    cancellationSources: new Set(),
+    cancelled: false,
+    completed: false,
+    promise,
+    publicSettled: false,
+    cancel() {
+      if (this.cancelled || this.completed) {
+        return;
+      }
+      this.cancelled = true;
+      resolveCancellation(DISPOSED_OPERATION);
+      const sources = [...this.cancellationSources];
+      this.cancellationSources.clear();
+      for (const source of sources) {
+        if (source && typeof source.cancel === "function") {
+          source.cancel();
+        }
+        if (source && typeof source.dispose === "function") {
+          source.dispose();
+        }
+      }
+      if (!this.publicSettled) {
+        this.publicSettled = true;
+        resolvePublic(undefined);
+      }
+    },
+    reject(error) {
+      if (this.publicSettled) {
+        return;
+      }
+      this.publicSettled = true;
+      rejectPublic(error);
+    },
+    resolve(value) {
+      if (this.publicSettled) {
+        return;
+      }
+      this.publicSettled = true;
+      resolvePublic(value);
+    },
+  };
 }
 
 function createPosition(vscode, line, character) {
@@ -834,66 +884,188 @@ class ExtractConceptCommandProvider {
     this.pathModule = options.pathModule || nodePath;
     this.workspaceEditorFactory = options.workspaceEditorFactory
       || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit));
+    this.activeOperations = new Set();
+    this.disposed = false;
     this.disposables = [];
     this.registerCommands();
   }
 
   registerCommands() {
+    if (this.disposed) {
+      return;
+    }
     if (!this.vscode.commands || typeof this.vscode.commands.registerCommand !== "function") {
       return;
     }
-    this.disposables.push(
-      this.vscode.commands.registerCommand(
-        EXTRACT_CONCEPT_COMMAND,
-        () => this.extractConcept(),
-      ),
+    const disposable = this.vscode.commands.registerCommand(
+      EXTRACT_CONCEPT_COMMAND,
+      () => this.extractConcept(),
     );
+    if (this.disposed) {
+      if (disposable && typeof disposable.dispose === "function") {
+        disposable.dispose();
+      }
+      return;
+    }
+    this.disposables.push(disposable);
   }
 
-  async extractConcept() {
+  extractConcept() {
+    if (this.disposed) {
+      return Promise.resolve(undefined);
+    }
+    const operation = createExtractOperation();
+    this.activeOperations.add(operation);
+    let work;
     try {
-      const editor = this.vscode.window && this.vscode.window.activeTextEditor;
-      const activePath = documentPath(editor && editor.document);
-      const projectClient = activePath && this.clients && typeof this.clients.get === "function"
-        ? this.clients.get(activePath)
-        : undefined;
-      if (!editor || !canExtractConceptFromDocument(editor.document, projectClient)) {
-        return this.showError("Cannot find Gauge document for extract to concept.");
-      }
+      work = this.extractConceptForOperation(operation);
+    } catch (error) {
+      this.finishOperation(operation, "reject", error);
+      return operation.promise;
+    }
+    Promise.resolve(work).then(
+      (value) => {
+        const result = this.operationStopped(operation) || value === DISPOSED_OPERATION
+          ? undefined
+          : value;
+        this.finishOperation(operation, "resolve", result);
+      },
+      (error) => {
+        if (this.operationStopped(operation)) {
+          this.finishOperation(operation, "resolve", undefined);
+          return;
+        }
+        this.finishOperation(operation, "reject", error);
+      },
+    );
+    return operation.promise;
+  }
 
-      const extraction = buildExtractSelection(editor.document, editor.selection, {
-        allowMultilineStep: this.allowsMultilineStep(projectClient),
-      });
-      if (!extraction) {
-        return this.showError(INVALID_SELECTION_ERROR);
-      }
-
-      const conceptNameInput = await this.vscode.window.showInputBox(
-        conceptNameInputOptions(extraction),
+  async extractConceptForOperation(operation) {
+    try {
+      const editor = this.callSyncForOperation(
+        operation,
+        () => this.vscode.window && this.vscode.window.activeTextEditor,
       );
-      const conceptName = normalizeConceptName(conceptNameInput);
+      if (editor === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const activePath = this.callSyncForOperation(
+        operation,
+        () => documentPath(editor && editor.document),
+      );
+      if (activePath === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const projectClient = this.callSyncForOperation(
+        operation,
+        () => (activePath && this.clients && typeof this.clients.get === "function"
+          ? this.clients.get(activePath)
+          : undefined),
+      );
+      if (projectClient === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      if (!editor || !canExtractConceptFromDocument(editor.document, projectClient)) {
+        return this.showErrorForOperation(
+          operation,
+          "Cannot find Gauge document for extract to concept.",
+        );
+      }
+
+      const extraction = this.callSyncForOperation(
+        operation,
+        () => buildExtractSelection(editor.document, editor.selection, {
+          allowMultilineStep: this.allowsMultilineStep(projectClient),
+        }),
+      );
+      if (extraction === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      if (!extraction) {
+        return this.showErrorForOperation(operation, INVALID_SELECTION_ERROR);
+      }
+
+      const conceptNameInput = await this.callForOperation(
+        operation,
+        () => this.vscode.window.showInputBox(conceptNameInputOptions(extraction)),
+      );
+      if (conceptNameInput === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const conceptName = this.callSyncForOperation(
+        operation,
+        () => normalizeConceptName(conceptNameInput),
+      );
+      if (conceptName === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
       if (!conceptName) {
         return undefined;
       }
 
       if (!projectClient || !projectClient.client || !projectClient.project) {
-        return this.showError("Cannot find Gauge project for extract to concept.");
+        return this.showErrorForOperation(
+          operation,
+          "Cannot find Gauge project for extract to concept.",
+        );
       }
 
-      const conceptFile = await this.selectConceptFile(projectClient, activePath);
+      const conceptFile = await this.selectConceptFile(operation, projectClient, activePath);
+      if (conceptFile === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
       if (!conceptFile) {
         return undefined;
       }
 
-      await this.ensureConceptNameAvailable(conceptName, conceptFile.knownFiles || []);
-      const edit = await this.createWorkspaceEdit(editor.document, extraction, conceptName, conceptFile);
-      const applied = await this.workspaceEditorFactory(edit).applyChanges();
-      if (applied === false) {
-        return this.showError("Unable to apply extract concept changes.");
+      const available = await this.ensureConceptNameAvailable(
+        operation,
+        conceptName,
+        conceptFile.knownFiles || [],
+      );
+      if (available === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
       }
-      return this.showInformation("Concept extracted.");
+      const edit = await this.createWorkspaceEdit(
+        operation,
+        editor.document,
+        extraction,
+        conceptName,
+        conceptFile,
+      );
+      if (edit === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const workspaceEditor = this.callSyncForOperation(
+        operation,
+        () => this.workspaceEditorFactory(edit),
+      );
+      if (workspaceEditor === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const applied = await this.callForOperation(
+        operation,
+        () => workspaceEditor.applyChanges(),
+      );
+      if (applied === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      if (applied === false) {
+        return this.showErrorForOperation(
+          operation,
+          "Unable to apply extract concept changes.",
+        );
+      }
+      return this.showInformationForOperation(operation, "Concept extracted.");
     } catch (error) {
-      return this.showError(error && error.message ? error.message : String(error));
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return this.showErrorForOperation(
+        operation,
+        error && error.message ? error.message : String(error),
+      );
     }
   }
 
@@ -910,20 +1082,38 @@ class ExtractConceptCommandProvider {
     });
   }
 
-  async selectConceptFile(projectClient, activePath) {
-    const projectRoot = projectClient.project.root();
-    const files = await projectClient.client.sendRequest(
-      GET_CONCEPT_FILES_REQUEST,
-      { concept: true },
-      createToken(this.vscode),
+  async selectConceptFile(operation, projectClient, activePath) {
+    const projectRoot = this.callSyncForOperation(
+      operation,
+      () => projectClient.project.root(),
     );
-    const selected = await this.vscode.window.showQuickPick(
-      conceptFileItems(files, projectRoot, this.pathModule),
-      {
-        canPickMany: false,
-        placeHolder: "Choose the concept file",
-      },
+    if (projectRoot === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const files = await this.requestForOperation(
+      operation,
+      (token) => projectClient.client.sendRequest(
+        GET_CONCEPT_FILES_REQUEST,
+        { concept: true },
+        token,
+      ),
     );
+    if (files === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const selected = await this.callForOperation(
+      operation,
+      () => this.vscode.window.showQuickPick(
+        conceptFileItems(files, projectRoot, this.pathModule),
+        {
+          canPickMany: false,
+          placeHolder: "Choose the concept file",
+        },
+      ),
+    );
+    if (selected === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
     if (!selected) {
       return undefined;
     }
@@ -935,17 +1125,35 @@ class ExtractConceptCommandProvider {
       };
     }
 
-    const input = await this.vscode.window.showInputBox({
-      placeHolder: "Enter the concept file path",
-      value: this.pathModule.join(
-        this.pathModule.relative(projectRoot, this.pathModule.dirname(activePath)),
-        "concept.cpt",
-      ),
-    });
-    const conceptPath = normalizeConceptFilePath(input, projectRoot, this.pathModule);
+    const input = await this.callForOperation(
+      operation,
+      () => this.vscode.window.showInputBox({
+        placeHolder: "Enter the concept file path",
+        value: this.pathModule.join(
+          this.pathModule.relative(projectRoot, this.pathModule.dirname(activePath)),
+          "concept.cpt",
+        ),
+      }),
+    );
+    if (input === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const conceptPath = this.callSyncForOperation(
+      operation,
+      () => normalizeConceptFilePath(input, projectRoot, this.pathModule),
+    );
+    if (conceptPath === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
     if (!conceptPath) {
       if (input && input.trim()) {
-        await this.showError("Concept file path must end with .cpt.");
+        const shown = await this.showErrorForOperation(
+          operation,
+          "Concept file path must end with .cpt.",
+        );
+        if (shown === DISPOSED_OPERATION) {
+          return DISPOSED_OPERATION;
+        }
       }
       return undefined;
     }
@@ -956,62 +1164,279 @@ class ExtractConceptCommandProvider {
     };
   }
 
-  async ensureConceptNameAvailable(conceptName, conceptFiles) {
-    const wanted = normalizeConceptHeading(parameterizedConceptName(conceptName));
+  async ensureConceptNameAvailable(operation, conceptName, conceptFiles) {
+    const wanted = this.callSyncForOperation(
+      operation,
+      () => normalizeConceptHeading(parameterizedConceptName(conceptName)),
+    );
+    if (wanted === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
     for (const file of conceptFiles) {
-      const document = await this.vscode.workspace.openTextDocument(createUri(this.vscode, file));
-      const text = typeof document.getText === "function" ? document.getText() : "";
+      const document = await this.callForOperation(
+        operation,
+        () => this.vscode.workspace.openTextDocument(createUri(this.vscode, file)),
+      );
+      if (document === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const text = this.callSyncForOperation(
+        operation,
+        () => (typeof document.getText === "function" ? document.getText() : ""),
+      );
+      if (text === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
       if (extractConceptHeadings(text).includes(wanted)) {
         throw new Error(`Concept \`${conceptName}\` already present`);
       }
     }
+    return undefined;
   }
 
-  async createWorkspaceEdit(document, extraction, conceptName, conceptFile) {
-    const sourceText = typeof document.getText === "function" ? document.getText() : "";
-    const eol = detectEol(sourceText);
-    const parameterizedExtraction = buildParameterizedExtraction(extraction, conceptName, eol);
-    const conceptDefinition = buildConceptDefinition(
-      parameterizedExtraction.conceptName,
-      parameterizedExtraction.conceptLines,
-      eol,
+  async createWorkspaceEdit(operation, document, extraction, conceptName, conceptFile) {
+    const prepared = this.callSyncForOperation(
+      operation,
+      () => {
+        const sourceText = typeof document.getText === "function" ? document.getText() : "";
+        const eol = detectEol(sourceText);
+        const parameterizedExtraction = buildParameterizedExtraction(extraction, conceptName, eol);
+        return {
+          conceptDefinition: buildConceptDefinition(
+            parameterizedExtraction.conceptName,
+            parameterizedExtraction.conceptLines,
+            eol,
+          ),
+          edit: createWorkspaceEdit(this.vscode),
+          eol,
+          parameterizedExtraction,
+          sourceText,
+        };
+      },
     );
+    if (prepared === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const {
+      conceptDefinition,
+      edit,
+      eol,
+      parameterizedExtraction,
+      sourceText,
+    } = prepared;
     const sourceUri = document.uri;
     const conceptUri = createUri(this.vscode, conceptFile.path);
-    const edit = createWorkspaceEdit(this.vscode);
 
-    const sourceEnd = replacementEnd(document, extraction.endLine);
-    edit.replace(
-      sourceUri,
-      createRange(this.vscode, extraction.startLine, 0, sourceEnd.line, sourceEnd.character),
-      `${parameterizedExtraction.sourceText}${sourceEnd.needsTrailingEol ? eol : ""}`,
+    const sourcePrepared = this.callSyncForOperation(
+      operation,
+      () => {
+        const sourceEnd = replacementEnd(document, extraction.endLine);
+        edit.replace(
+          sourceUri,
+          createRange(this.vscode, extraction.startLine, 0, sourceEnd.line, sourceEnd.character),
+          `${parameterizedExtraction.sourceText}${sourceEnd.needsTrailingEol ? eol : ""}`,
+        );
+      },
     );
+    if (sourcePrepared === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
 
     if (conceptFile.isNew) {
-      if (typeof edit.createFile === "function") {
-        edit.createFile(conceptUri, { ignoreIfExists: true });
-      }
-      edit.replace(
-        conceptUri,
-        createRange(this.vscode, 0, 0, 0, 0),
-        conceptDefinition,
+      const newFilePrepared = this.callSyncForOperation(
+        operation,
+        () => {
+          if (typeof edit.createFile === "function") {
+            edit.createFile(conceptUri, { ignoreIfExists: true });
+          }
+          edit.replace(
+            conceptUri,
+            createRange(this.vscode, 0, 0, 0, 0),
+            conceptDefinition,
+          );
+        },
       );
+      if (newFilePrepared === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
       return edit;
     }
 
-    const conceptDocument = await this.vscode.workspace.openTextDocument(conceptUri);
-    const existingText = typeof conceptDocument.getText === "function"
-      ? conceptDocument.getText()
-      : "";
-    edit.replace(
-      conceptUri,
-      documentEndRange(this.vscode, conceptDocument),
-      appendConcept(existingText, conceptDefinition, detectEol(existingText || sourceText)),
+    const conceptDocument = await this.callForOperation(
+      operation,
+      () => this.vscode.workspace.openTextDocument(conceptUri),
     );
+    if (conceptDocument === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const conceptPrepared = this.callSyncForOperation(
+      operation,
+      () => {
+        const existingText = typeof conceptDocument.getText === "function"
+          ? conceptDocument.getText()
+          : "";
+        edit.replace(
+          conceptUri,
+          documentEndRange(this.vscode, conceptDocument),
+          appendConcept(existingText, conceptDefinition, detectEol(existingText || sourceText)),
+        );
+      },
+    );
+    if (conceptPrepared === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
     return edit;
   }
 
+  createRequestSource(operation) {
+    if (this.operationStopped(operation)) {
+      return DISPOSED_OPERATION;
+    }
+    if (typeof this.vscode.CancellationTokenSource !== "function") {
+      return { release() {}, token: undefined };
+    }
+    let source;
+    try {
+      source = new this.vscode.CancellationTokenSource();
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      throw error;
+    }
+    if (this.operationStopped(operation)) {
+      if (source && typeof source.cancel === "function") {
+        source.cancel();
+      }
+      if (source && typeof source.dispose === "function") {
+        source.dispose();
+      }
+      return DISPOSED_OPERATION;
+    }
+    operation.cancellationSources.add(source);
+    let released = false;
+    return {
+      release: () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        if (!operation.cancellationSources.delete(source)) {
+          return;
+        }
+        if (source && typeof source.dispose === "function") {
+          source.dispose();
+        }
+      },
+      token: source && source.token,
+    };
+  }
+
+  async requestForOperation(operation, callback) {
+    const source = this.createRequestSource(operation);
+    if (source === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    try {
+      return await this.callForOperation(operation, () => callback(source.token));
+    } finally {
+      source.release();
+    }
+  }
+
+  callSyncForOperation(operation, callback) {
+    if (this.operationStopped(operation)) {
+      return DISPOSED_OPERATION;
+    }
+    let value;
+    try {
+      value = callback();
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      throw error;
+    }
+    return this.operationStopped(operation) ? DISPOSED_OPERATION : value;
+  }
+
+  callForOperation(operation, callback) {
+    if (this.operationStopped(operation)) {
+      return Promise.resolve(DISPOSED_OPERATION);
+    }
+    let value;
+    try {
+      value = callback();
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return Promise.resolve(DISPOSED_OPERATION);
+      }
+      return Promise.reject(error);
+    }
+    if (this.operationStopped(operation)) {
+      Promise.resolve(value).catch(() => undefined);
+      return Promise.resolve(DISPOSED_OPERATION);
+    }
+    return this.awaitOperation(operation, value);
+  }
+
+  async awaitOperation(operation, value) {
+    if (this.operationStopped(operation)) {
+      return DISPOSED_OPERATION;
+    }
+    try {
+      const result = await Promise.race([
+        Promise.resolve(value),
+        operation.cancellation,
+      ]);
+      if (result === DISPOSED_OPERATION || this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return result;
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  operationStopped(operation) {
+    return this.disposed || !operation || operation.cancelled;
+  }
+
+  finishOperation(operation, outcome, value) {
+    if (operation.completed) {
+      return;
+    }
+    operation.completed = true;
+    this.activeOperations.delete(operation);
+    const sources = [...operation.cancellationSources];
+    operation.cancellationSources.clear();
+    for (const source of sources) {
+      if (source && typeof source.dispose === "function") {
+        source.dispose();
+      }
+    }
+    if (outcome === "reject") {
+      operation.reject(value);
+      return;
+    }
+    operation.resolve(value);
+  }
+
+  showErrorForOperation(operation, message) {
+    return this.callForOperation(operation, () => this.showError(message));
+  }
+
+  showInformationForOperation(operation, message) {
+    return this.callForOperation(operation, () => this.showInformation(message));
+  }
+
   showError(message) {
+    if (this.disposed) {
+      return undefined;
+    }
     if (this.vscode.window && typeof this.vscode.window.showErrorMessage === "function") {
       return this.vscode.window.showErrorMessage(message);
     }
@@ -1019,6 +1444,9 @@ class ExtractConceptCommandProvider {
   }
 
   showInformation(message) {
+    if (this.disposed) {
+      return undefined;
+    }
     if (this.vscode.window && typeof this.vscode.window.showInformationMessage === "function") {
       return this.vscode.window.showInformationMessage(message);
     }
@@ -1026,7 +1454,18 @@ class ExtractConceptCommandProvider {
   }
 
   dispose() {
-    for (const disposable of this.disposables) {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      operation.cancel();
+    }
+    const disposables = this.disposables;
+    this.disposables = [];
+    for (const disposable of disposables) {
       if (disposable && typeof disposable.dispose === "function") {
         disposable.dispose();
       }

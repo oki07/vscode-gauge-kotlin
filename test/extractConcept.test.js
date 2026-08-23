@@ -2,6 +2,41 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function trackCancellationSources(vscode, sources, onConstruct = () => {}) {
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+      onConstruct(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+}
+
 function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec", languageId = "gauge") {
   const lines = text.split("\n");
   return {
@@ -2116,4 +2151,726 @@ test("ExtractConceptCommandProvider rejects duplicate parameterized static conce
     "Concept `Shared login \"Ada\" <role>` already present",
   ]);
   assert.deepEqual(appliedEdits, []);
+});
+
+test("ExtractConceptCommandProvider ignores retained calls after disposal", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const fake = createFakeVscode({
+    document,
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+  let clientLookups = 0;
+  let registrationDisposeCalls = 0;
+  fake.vscode.commands.registerCommand = (command, handler) => {
+    fake.commands.push({ command, handler });
+    return {
+      dispose() {
+        registrationDisposeCalls += 1;
+      },
+    };
+  };
+  const provider = new ExtractConceptCommandProvider({
+    get() {
+      clientLookups += 1;
+      return undefined;
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const handler = fake.commands.find(
+    (entry) => entry.command === "gauge.extract.concept",
+  ).handler;
+
+  provider.dispose();
+  provider.dispose();
+  const outcomes = await Promise.allSettled([
+    handler(),
+    provider.extractConcept(),
+  ]);
+
+  assert.deepEqual({
+    activeOperations: provider.activeOperations && provider.activeOperations.size,
+    appliedEdits: fake.appliedEdits.length,
+    clientLookups,
+    errors: fake.errors,
+    information: fake.information,
+    inputs: fake.inputs.length,
+    outcomes,
+    quickPicks: fake.quickPicks.length,
+    registrationDisposeCalls,
+  }, {
+    activeOperations: 0,
+    appliedEdits: 0,
+    clientLookups: 0,
+    errors: [],
+    information: [],
+    inputs: 0,
+    outcomes: [
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+    ],
+    quickPicks: 0,
+    registrationDisposeCalls: 1,
+  });
+});
+
+test("ExtractConceptCommandProvider settles a pending concept name prompt on disposal", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const fake = createFakeVscode({
+    document,
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+  const prompt = deferred();
+  const promptEntered = deferred();
+  let requestCalls = 0;
+  fake.vscode.window.showInputBox = (options) => {
+    fake.inputs.push(options);
+    promptEntered.resolve();
+    return prompt.promise;
+  };
+  const provider = new ExtractConceptCommandProvider(createClients({
+    push() {
+      requestCalls += 1;
+    },
+  }), {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const handler = fake.commands.find(
+    (entry) => entry.command === "gauge.extract.concept",
+  ).handler;
+  let settled = false;
+  const pending = handler().then((value) => {
+    settled = true;
+    return value;
+  });
+
+  await promptEntered.promise;
+  provider.dispose();
+  await nextTurn();
+  const snapshot = {
+    activeOperations: provider.activeOperations && provider.activeOperations.size,
+    requestCalls,
+    settled,
+  };
+  prompt.resolve("Shared login");
+  const outcome = await Promise.allSettled([pending]);
+  await nextTurn();
+
+  assert.deepEqual({
+    ...snapshot,
+    appliedEdits: fake.appliedEdits.length,
+    errors: fake.errors,
+    information: fake.information,
+    outcome,
+    quickPicks: fake.quickPicks.length,
+    requestCallsAfterSettlement: requestCalls,
+  }, {
+    activeOperations: 0,
+    appliedEdits: 0,
+    errors: [],
+    information: [],
+    outcome: [{ status: "fulfilled", value: undefined }],
+    quickPicks: 0,
+    requestCalls: 0,
+    requestCallsAfterSettlement: 0,
+    settled: true,
+  });
+});
+
+test("ExtractConceptCommandProvider cancels a pending implementation-file request on disposal", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const fake = createFakeVscode({
+    document,
+    inputResponses: ["Shared login"],
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+  const request = deferred();
+  const requestEntered = deferred();
+  const sources = [];
+  trackCancellationSources(fake.vscode, sources);
+  const requests = [];
+  const provider = new ExtractConceptCommandProvider({
+    get() {
+      return {
+        client: {
+          sendRequest(method, params, token) {
+            requests.push({ method, params, token });
+            requestEntered.resolve();
+            return request.promise;
+          },
+        },
+        project: {
+          root() {
+            return "/workspace/gauge";
+          },
+        },
+      };
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const handler = fake.commands.find(
+    (entry) => entry.command === "gauge.extract.concept",
+  ).handler;
+  let settled = false;
+  const pending = handler().then((value) => {
+    settled = true;
+    return value;
+  });
+
+  await requestEntered.promise;
+  provider.dispose();
+  await nextTurn();
+  const snapshot = {
+    activeOperations: provider.activeOperations && provider.activeOperations.size,
+    cancelCalls: sources[0].cancelCalls,
+    disposeCalls: sources[0].disposeCalls,
+    settled,
+  };
+  request.reject(new Error("disposed extract request failed"));
+  const outcome = await Promise.allSettled([pending]);
+  await nextTurn();
+
+  assert.deepEqual({
+    ...snapshot,
+    appliedEdits: fake.appliedEdits.length,
+    errors: fake.errors,
+    information: fake.information,
+    outcome,
+    quickPicks: fake.quickPicks.length,
+    requestCount: requests.length,
+    tokenCancelled: sources[0].token.isCancellationRequested,
+  }, {
+    activeOperations: 0,
+    appliedEdits: 0,
+    cancelCalls: 1,
+    disposeCalls: 1,
+    errors: [],
+    information: [],
+    outcome: [{ status: "fulfilled", value: undefined }],
+    quickPicks: 0,
+    requestCount: 1,
+    settled: true,
+    tokenCancelled: true,
+  });
+});
+
+test("ExtractConceptCommandProvider does not start apply after disposal during edit preparation", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const conceptPath = "/workspace/gauge/specs/concepts.cpt";
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const fake = createFakeVscode({
+    document,
+    inputResponses: ["Shared login"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: conceptPath,
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+  const secondOpen = deferred();
+  const secondOpenEntered = deferred();
+  let openCalls = 0;
+  fake.vscode.workspace.openTextDocument = () => {
+    openCalls += 1;
+    if (openCalls === 1) {
+      return Promise.resolve(createDocument("# Existing\n* Setup\n", conceptPath, "gauge-concept"));
+    }
+    secondOpenEntered.resolve();
+    return secondOpen.promise;
+  };
+  let applyCalls = 0;
+  let factoryCalls = 0;
+  const provider = new ExtractConceptCommandProvider(createClients([], [conceptPath]), {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+    workspaceEditorFactory() {
+      factoryCalls += 1;
+      return {
+        applyChanges() {
+          applyCalls += 1;
+          return Promise.resolve(true);
+        },
+      };
+    },
+  });
+  const handler = fake.commands.find(
+    (entry) => entry.command === "gauge.extract.concept",
+  ).handler;
+  let settled = false;
+  const pending = handler().then((value) => {
+    settled = true;
+    return value;
+  });
+
+  await secondOpenEntered.promise;
+  provider.dispose();
+  await nextTurn();
+  const snapshot = {
+    activeOperations: provider.activeOperations && provider.activeOperations.size,
+    applyCalls,
+    factoryCalls,
+    settled,
+  };
+  secondOpen.resolve(createDocument("# Existing\n* Setup\n", conceptPath, "gauge-concept"));
+  const outcome = await Promise.allSettled([pending]);
+  await nextTurn();
+
+  assert.deepEqual({
+    ...snapshot,
+    applyCallsAfterSettlement: applyCalls,
+    errors: fake.errors,
+    factoryCallsAfterSettlement: factoryCalls,
+    information: fake.information,
+    openCalls,
+    outcome,
+  }, {
+    activeOperations: 0,
+    applyCalls: 0,
+    applyCallsAfterSettlement: 0,
+    errors: [],
+    factoryCalls: 0,
+    factoryCallsAfterSettlement: 0,
+    information: [],
+    openCalls: 2,
+    outcome: [{ status: "fulfilled", value: undefined }],
+    settled: true,
+  });
+});
+
+test("ExtractConceptCommandProvider detaches an apply already started during disposal", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+
+  for (const settlement of ["true", "false", "reject"]) {
+    const conceptPath = "/workspace/gauge/specs/concepts.cpt";
+    const document = createDocument([
+      "# Checkout",
+      "",
+      "## Success",
+      "* Login",
+    ].join("\n"));
+    const fake = createFakeVscode({
+      conceptDocuments: {
+        [conceptPath]: "# Existing\n* Setup\n",
+      },
+      document,
+      inputResponses: ["Shared login"],
+      quickPickSelection: {
+        label: "concepts.cpt",
+        description: "specs",
+        value: conceptPath,
+      },
+      selection: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 7 },
+      },
+    });
+    const apply = deferred();
+    const applyEntered = deferred();
+    let applyCalls = 0;
+    const provider = new ExtractConceptCommandProvider(createClients([], [conceptPath]), {
+      pathModule: path.posix,
+      vscode: fake.vscode,
+      workspaceEditorFactory() {
+        return {
+          applyChanges() {
+            applyCalls += 1;
+            applyEntered.resolve();
+            return apply.promise;
+          },
+        };
+      },
+    });
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.extract.concept",
+    ).handler;
+    let settled = false;
+    const pending = handler().then((value) => {
+      settled = true;
+      return value;
+    });
+
+    await applyEntered.promise;
+    provider.dispose();
+    await nextTurn();
+    const snapshot = {
+      activeOperations: provider.activeOperations && provider.activeOperations.size,
+      applyCalls,
+      settled,
+    };
+    if (settlement === "true") {
+      apply.resolve(true);
+    } else if (settlement === "false") {
+      apply.resolve(false);
+    } else {
+      apply.reject(new Error("disposed apply failed"));
+    }
+    const outcome = await Promise.allSettled([pending]);
+    await nextTurn();
+
+    assert.deepEqual({
+      ...snapshot,
+      applyCallsAfterSettlement: applyCalls,
+      errors: fake.errors,
+      information: fake.information,
+      outcome,
+      settlement,
+    }, {
+      activeOperations: 0,
+      applyCalls: 1,
+      applyCallsAfterSettlement: 1,
+      errors: [],
+      information: [],
+      outcome: [{ status: "fulfilled", value: undefined }],
+      settled: true,
+      settlement,
+    });
+  }
+});
+
+test("ExtractConceptCommandProvider releases live request sources and preserves live failures", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+
+  for (const settlement of ["success", "reject"]) {
+    const conceptPath = "/workspace/gauge/specs/concepts.cpt";
+    const document = createDocument([
+      "# Checkout",
+      "",
+      "## Success",
+      "* Login",
+    ].join("\n"));
+    const fake = createFakeVscode({
+      conceptDocuments: {
+        [conceptPath]: "# Existing\n* Setup\n",
+      },
+      document,
+      inputResponses: ["Shared login"],
+      quickPickSelection: {
+        label: "concepts.cpt",
+        description: "specs",
+        value: conceptPath,
+      },
+      selection: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 7 },
+      },
+    });
+    const sources = [];
+    trackCancellationSources(fake.vscode, sources);
+    const requestError = new Error("live extract request failed");
+    const requests = [];
+    const provider = new ExtractConceptCommandProvider({
+      get() {
+        return {
+          client: {
+            sendRequest(method, params, token) {
+              requests.push({ method, params, token });
+              if (settlement === "reject") {
+                return Promise.reject(requestError);
+              }
+              return Promise.resolve([conceptPath]);
+            },
+          },
+          project: {
+            root() {
+              return "/workspace/gauge";
+            },
+          },
+        };
+      },
+    }, {
+      pathModule: path.posix,
+      vscode: fake.vscode,
+    });
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.extract.concept",
+    ).handler;
+
+    const outcome = await Promise.allSettled([handler()]);
+
+    assert.deepEqual({
+      activeOperations: provider.activeOperations.size,
+      appliedEdits: fake.appliedEdits.length,
+      cancelCalls: sources[0].cancelCalls,
+      disposeCalls: sources[0].disposeCalls,
+      errors: fake.errors,
+      information: fake.information,
+      outcome,
+      quickPicks: fake.quickPicks.length,
+      requestCount: requests.length,
+      settlement,
+      token: requests[0].token,
+    }, {
+      activeOperations: 0,
+      appliedEdits: settlement === "success" ? 1 : 0,
+      cancelCalls: 0,
+      disposeCalls: 1,
+      errors: settlement === "reject" ? [requestError.message] : [],
+      information: settlement === "success" ? ["Concept extracted."] : [],
+      outcome: [{ status: "fulfilled", value: undefined }],
+      quickPicks: settlement === "success" ? 1 : 0,
+      requestCount: 1,
+      settlement,
+      token: sources[0].token,
+    });
+  }
+});
+
+test("ExtractConceptCommandProvider normalizes synchronous disposal at operation boundaries", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+
+  for (const boundary of ["request", "factory", "apply"]) {
+    const conceptPath = "/workspace/gauge/specs/concepts.cpt";
+    const document = createDocument([
+      "# Checkout",
+      "",
+      "## Success",
+      "* Login",
+    ].join("\n"));
+    const fake = createFakeVscode({
+      conceptDocuments: {
+        [conceptPath]: "# Existing\n* Setup\n",
+      },
+      document,
+      inputResponses: ["Shared login"],
+      quickPickSelection: {
+        label: "concepts.cpt",
+        description: "specs",
+        value: conceptPath,
+      },
+      selection: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 7 },
+      },
+    });
+    const sources = [];
+    trackCancellationSources(fake.vscode, sources);
+    const boundaryError = new Error(`disposed during ${boundary}`);
+    let applyCalls = 0;
+    let factoryCalls = 0;
+    let provider;
+    const clients = {
+      get() {
+        return {
+          client: {
+            sendRequest() {
+              if (boundary === "request") {
+                provider.dispose();
+                return Promise.reject(boundaryError);
+              }
+              return Promise.resolve([conceptPath]);
+            },
+          },
+          project: {
+            root() {
+              return "/workspace/gauge";
+            },
+          },
+        };
+      },
+    };
+    const options = {
+      pathModule: path.posix,
+      vscode: fake.vscode,
+    };
+    if (boundary === "factory") {
+      options.workspaceEditorFactory = () => {
+        factoryCalls += 1;
+        provider.dispose();
+        return {
+          applyChanges() {
+            applyCalls += 1;
+            return Promise.resolve(true);
+          },
+        };
+      };
+    }
+    provider = new ExtractConceptCommandProvider(clients, options);
+    if (boundary === "apply") {
+      fake.vscode.workspace.applyEdit = () => {
+        applyCalls += 1;
+        provider.dispose();
+        return Promise.reject(boundaryError);
+      };
+    }
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.extract.concept",
+    ).handler;
+
+    const outcome = await Promise.allSettled([handler()]);
+    await nextTurn();
+
+    assert.deepEqual({
+      activeOperations: provider.activeOperations.size,
+      appliedEdits: fake.appliedEdits.length,
+      applyCalls,
+      boundary,
+      cancelCalls: sources[0].cancelCalls,
+      disposeCalls: sources[0].disposeCalls,
+      errors: fake.errors,
+      factoryCalls,
+      information: fake.information,
+      outcome,
+    }, {
+      activeOperations: 0,
+      appliedEdits: 0,
+      applyCalls: boundary === "apply" ? 1 : 0,
+      boundary,
+      cancelCalls: boundary === "request" ? 1 : 0,
+      disposeCalls: 1,
+      errors: [],
+      factoryCalls: boundary === "factory" ? 1 : 0,
+      information: [],
+      outcome: [{ status: "fulfilled", value: undefined }],
+    });
+  }
+});
+
+test("ExtractConceptCommandProvider cancels concurrent operations exactly once on disposal", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const fake = createFakeVscode({
+    document,
+    inputResponses: ["Shared login one", "Shared login two"],
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+  const sources = [];
+  trackCancellationSources(fake.vscode, sources);
+  const requestsEntered = deferred();
+  const requestGates = [deferred(), deferred()];
+  let requestCalls = 0;
+  let registrationDisposeCalls = 0;
+  fake.vscode.commands.registerCommand = (command, handler) => {
+    fake.commands.push({ command, handler });
+    return {
+      dispose() {
+        registrationDisposeCalls += 1;
+      },
+    };
+  };
+  const provider = new ExtractConceptCommandProvider({
+    get() {
+      return {
+        client: {
+          sendRequest() {
+            const gate = requestGates[requestCalls];
+            requestCalls += 1;
+            if (requestCalls === requestGates.length) {
+              requestsEntered.resolve();
+            }
+            return gate.promise;
+          },
+        },
+        project: {
+          root() {
+            return "/workspace/gauge";
+          },
+        },
+      };
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const handler = fake.commands.find(
+    (entry) => entry.command === "gauge.extract.concept",
+  ).handler;
+  let settled = 0;
+  const pending = [handler(), handler()].map((promise) => promise.then((value) => {
+    settled += 1;
+    return value;
+  }));
+
+  await requestsEntered.promise;
+  provider.dispose();
+  provider.dispose();
+  await nextTurn();
+  const snapshot = {
+    activeOperations: provider.activeOperations.size,
+    registrationDisposeCalls,
+    settled,
+    sources: sources.map((source) => ({
+      cancelCalls: source.cancelCalls,
+      disposeCalls: source.disposeCalls,
+      tokenCancelled: source.token.isCancellationRequested,
+    })),
+  };
+  requestGates[0].resolve([]);
+  requestGates[1].reject(new Error("disposed concurrent request failed"));
+  const outcomes = await Promise.allSettled(pending);
+  await nextTurn();
+
+  assert.deepEqual({
+    ...snapshot,
+    appliedEdits: fake.appliedEdits.length,
+    errors: fake.errors,
+    information: fake.information,
+    outcomes,
+    quickPicks: fake.quickPicks.length,
+    requestCalls,
+  }, {
+    activeOperations: 0,
+    appliedEdits: 0,
+    errors: [],
+    information: [],
+    outcomes: [
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+    ],
+    quickPicks: 0,
+    registrationDisposeCalls: 1,
+    requestCalls: 2,
+    settled: 2,
+    sources: [
+      { cancelCalls: 1, disposeCalls: 1, tokenCancelled: true },
+      { cancelCalls: 1, disposeCalls: 1, tokenCancelled: true },
+    ],
+  });
 });
