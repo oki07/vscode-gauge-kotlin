@@ -363,6 +363,122 @@ test("GaugeWorkspace disposes active clients when the workspace is disposed", as
   assert.deepEqual([...workspace.getClientLanguageMap().keys()], []);
 });
 
+test("GaugeWorkspace abandons an in-flight language server start after disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const constructedClients = [];
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+
+  class TrackedLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      constructedClients.push(this);
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: TrackedLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  let markServerOptionsEntered;
+  const serverOptionsEntered = new Promise((resolve) => {
+    markServerOptionsEntered = resolve;
+  });
+  let releaseServerOptions;
+  const serverOptionsGate = new Promise((resolve) => {
+    releaseServerOptions = resolve;
+  });
+  workspace.serverOptionsFor = async () => {
+    markServerOptionsEntered();
+    await serverOptionsGate;
+    return { command: "gauge", args: [], options: { env: {} } };
+  };
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await serverOptionsEntered;
+  const disposal = workspace.dispose();
+  releaseServerOptions();
+  const [startedClient] = await Promise.all([start, disposal]);
+
+  assert.equal(startedClient, undefined);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.getClientLanguageMap().size, 0);
+  assert.equal(constructedClients.filter((client) => !client.stopped).length, 0);
+});
+
+test("GaugeWorkspace abandons a registered language server start after disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  let markInstallEntered;
+  const installEntered = new Promise((resolve) => {
+    markInstallEntered = resolve;
+  });
+  let releaseInstall;
+  const installGate = new Promise((resolve) => {
+    releaseInstall = resolve;
+  });
+  workspace.installRunnerFor = async () => {
+    markInstallEntered();
+    await installGate;
+  };
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await installEntered;
+  const entry = clients.get("/workspace/gauge");
+  assert.equal(entry.client.started, false);
+
+  const disposal = workspace.dispose();
+  releaseInstall();
+  const [startedClient] = await Promise.all([start, disposal]);
+
+  assert.equal(startedClient, undefined);
+  assert.equal(entry.client.started, false);
+  assert.equal(entry.client.stopped, true);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.getClientLanguageMap().size, 0);
+});
+
 test("GaugeWorkspace exposes the project client before runner installation completes", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

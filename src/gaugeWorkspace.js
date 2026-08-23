@@ -347,6 +347,7 @@ class GaugeWorkspace {
     this.clientLanguageMap = new Map();
     this.projectEnvironmentCache = new Map();
     this.pendingServerStarts = new Map();
+    this.disposed = false;
     this.env = envWithGaugeHome(options.env || process.env, {
       vscode: this.vscode,
       gaugeHome: options.gaugeHome,
@@ -389,19 +390,15 @@ class GaugeWorkspace {
   }
 
   dispose() {
+    this.disposed = true;
     for (const disposable of this.disposables) {
       if (disposable && typeof disposable.dispose === "function") {
         disposable.dispose();
       }
     }
     const stopPromises = [];
-    for (const [projectRoot, projectClient] of this.clientsMap.entries()) {
-      this.clientsMap.delete(projectRoot);
-      this.clientLanguageMap.delete(projectRoot);
-      this.projectEnvironmentCache.delete(projectRoot);
-      if (projectClient.client && typeof projectClient.client.stop === "function") {
-        stopPromises.push(Promise.resolve(projectClient.client.stop()).catch(() => undefined));
-      }
+    for (const [projectRoot, projectClient] of [...this.clientsMap.entries()]) {
+      stopPromises.push(this.cleanupLanguageClient(projectRoot, projectClient.client));
     }
     if (this.outputChannel && typeof this.outputChannel.dispose === "function") {
       this.outputChannel.dispose();
@@ -784,7 +781,7 @@ class GaugeWorkspace {
   }
 
   async startServerFor(folder) {
-    if (!this.projectFactory.isGaugeProject(folder)) {
+    if (this.disposed || !this.projectFactory.isGaugeProject(folder)) {
       return undefined;
     }
     const project = this.projectFactory.get(folder);
@@ -810,6 +807,9 @@ class GaugeWorkspace {
     const projectRoot = project.root();
     const javaConfigGenerated = this.generateJavaConfig(project);
     const serverOptions = await this.serverOptionsFor(project);
+    if (this.disposed) {
+      return this.cleanupLanguageClient(projectRoot);
+    }
     const languageClient = new this.LanguageClient(
       "gauge",
       "Gauge",
@@ -819,36 +819,55 @@ class GaugeWorkspace {
     this.clientsMap.set(project.root(), { project, client: languageClient });
     try {
       await this.installRunnerFor(project);
+      if (this.disposed) {
+        return this.cleanupLanguageClient(projectRoot, languageClient);
+      }
       if (!javaConfigGenerated && this.generateJavaConfig(project)) {
         const refreshedServerOptions = await this.serverOptionsFor(project);
+        if (this.disposed) {
+          return this.cleanupLanguageClient(projectRoot, languageClient);
+        }
         serverOptions.command = refreshedServerOptions.command;
         serverOptions.args = refreshedServerOptions.args;
         serverOptions.options = refreshedServerOptions.options;
       }
       this.registerDynamicFeatures(languageClient);
       await languageClient.start();
+      if (this.disposed) {
+        return this.cleanupLanguageClient(projectRoot, languageClient);
+      }
       clearLspCodeLensFeature(languageClient);
     } catch (error) {
-      const ownsClientRegistration = !this.clientsMap.has(projectRoot)
-        || Map.prototype.get.call(this.clientsMap, projectRoot).client === languageClient;
-      if (ownsClientRegistration) {
-        this.clientsMap.delete(projectRoot);
-        this.clientLanguageMap.delete(projectRoot);
-        this.projectEnvironmentCache.delete(projectRoot);
+      await this.cleanupLanguageClient(projectRoot, languageClient);
+      if (!this.disposed) {
+        await this.showLanguageServerStartupError(project, error);
       }
-      if (typeof languageClient.stop === "function") {
-        try {
-          await languageClient.stop();
-        } catch (_stopError) {
-          // Preserve the original startup error shown below.
-        }
-      }
-      await this.showLanguageServerStartupError(project, error);
       return undefined;
     }
     this.registerServerMessageFilter(languageClient);
     await this.setLanguageId(languageClient, projectRoot);
+    if (this.disposed) {
+      return this.cleanupLanguageClient(projectRoot, languageClient);
+    }
     return languageClient;
+  }
+
+  async cleanupLanguageClient(projectRoot, languageClient) {
+    const ownsClientRegistration = !this.clientsMap.has(projectRoot)
+      || Map.prototype.get.call(this.clientsMap, projectRoot).client === languageClient;
+    if (ownsClientRegistration) {
+      this.clientsMap.delete(projectRoot);
+      this.clientLanguageMap.delete(projectRoot);
+      this.projectEnvironmentCache.delete(projectRoot);
+    }
+    if (languageClient && typeof languageClient.stop === "function") {
+      try {
+        await languageClient.stop();
+      } catch (_stopError) {
+        return undefined;
+      }
+    }
+    return undefined;
   }
 
   async showLanguageServerStartupError(project, error) {
@@ -938,7 +957,12 @@ class GaugeWorkspace {
   async setLanguageId(languageClient, projectRoot) {
     try {
       const language = await languageClient.sendRequest("gauge/getRunnerLanguage", createToken(this.vscode));
-      this.clientLanguageMap.set(projectRoot, language);
+      const currentEntry = this.clientsMap.has(projectRoot)
+        ? Map.prototype.get.call(this.clientsMap, projectRoot)
+        : undefined;
+      if (!this.disposed && currentEntry && currentEntry.client === languageClient) {
+        this.clientLanguageMap.set(projectRoot, language);
+      }
     } catch (_error) {
       return undefined;
     }
