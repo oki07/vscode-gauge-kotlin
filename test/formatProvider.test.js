@@ -70,6 +70,58 @@ function createFakeVscode(options = {}) {
   };
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+function createCancellation() {
+  const listeners = new Set();
+  let listenerDisposals = 0;
+  let registrations = 0;
+  let requested = false;
+  const token = {
+    get isCancellationRequested() {
+      return requested;
+    },
+    onCancellationRequested(listener) {
+      registrations += 1;
+      listeners.add(listener);
+      return {
+        dispose() {
+          if (listeners.delete(listener)) {
+            listenerDisposals += 1;
+          }
+        },
+      };
+    },
+  };
+  return {
+    cancel() {
+      if (requested) {
+        return;
+      }
+      requested = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    listenerDisposals() {
+      return listenerDisposals;
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    registrations() {
+      return registrations;
+    },
+    token,
+  };
+}
+
 test("GaugeFormatProvider returns full document edits from gauge format output", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
 
@@ -647,4 +699,392 @@ test("GaugeFormatProvider caches the project environment across format requests"
   await provider.provideDocumentFormattingEdits(document);
 
   assert.equal(envCalls, 1);
+});
+
+test("GaugeFormatProvider cancellation skips formatting before work starts", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  const errors = [];
+  let saveCalls = 0;
+  let spawnCalls = 0;
+  const document = createDocument("# Example\n");
+  document.save = () => {
+    saveCalls += 1;
+    return Promise.resolve(true);
+  };
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawn() {
+            spawnCalls += 1;
+            throw new Error("should not spawn");
+          },
+        };
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode({ errors }),
+  });
+  const token = {
+    isCancellationRequested: true,
+    onCancellationRequested() {
+      throw new Error("pre-cancelled formatting must not subscribe");
+    },
+  };
+
+  const edits = await provider.provideDocumentFormattingEdits(document, {}, token);
+
+  assert.deepEqual({ edits, errors, saveCalls, spawnCalls }, {
+    edits: [],
+    errors: [],
+    saveCalls: 0,
+    spawnCalls: 0,
+  });
+});
+
+test("GaugeFormatProvider cancellation stops after pending preparation", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  for (const boundaryName of ["save", "environment"]) {
+    for (const outcome of ["resolve", "reject"]) {
+      const boundary = deferred();
+      const cancellation = createCancellation();
+      const entered = deferred();
+      const errors = [];
+      let spawnCalls = 0;
+      const document = createDocument("# Example\n");
+      if (boundaryName === "save") {
+        document.save = () => {
+          entered.resolve();
+          return boundary.promise;
+        };
+      }
+      const provider = new GaugeFormatProvider({
+        cli: {
+          gaugeCommand() {
+            return {
+              spawn() {
+                spawnCalls += 1;
+                throw new Error("should not spawn");
+              },
+            };
+          },
+        },
+        projectEnvironmentService: {
+          environmentFor() {
+            if (boundaryName === "environment") {
+              entered.resolve();
+              return boundary.promise;
+            }
+            throw new Error("environment lookup should not start");
+          },
+        },
+        projectFactory: {
+          getProjectByFilepath() {
+            return {
+              root() {
+                return "/workspace/gauge";
+              },
+            };
+          },
+          isGaugeProject() {
+            return true;
+          },
+        },
+        vscode: createFakeVscode({ errors }),
+      });
+      const pending = provider.provideDocumentFormattingEdits(
+        document,
+        {},
+        cancellation.token,
+      );
+
+      await entered.promise;
+      cancellation.cancel();
+      if (outcome === "resolve") {
+        boundary.resolve(boundaryName === "save" ? true : {});
+      } else {
+        boundary.resolve(Promise.reject(new Error(`${boundaryName} failed`)));
+      }
+      const edits = await pending;
+
+      assert.deepEqual({
+        boundaryName,
+        edits,
+        errors,
+        outcome,
+        spawnCalls,
+      }, {
+        boundaryName,
+        edits: [],
+        errors: [],
+        outcome,
+        spawnCalls: 0,
+      });
+    }
+  }
+});
+
+test("GaugeFormatProvider cancellation kills active formats and ignores late settlements", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  for (const lateSettlement of ["close", "error"]) {
+    const cancellation = createCancellation();
+    const child = new EventEmitter();
+    const errors = [];
+    const spawned = deferred();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.killCalls = 0;
+    child.kill = () => {
+      child.killCalls += 1;
+      return true;
+    };
+    let readCalls = 0;
+    const provider = new GaugeFormatProvider({
+      cli: {
+        gaugeCommand() {
+          return {
+            spawn() {
+              spawned.resolve();
+              return child;
+            },
+          };
+        },
+      },
+      fileSystem: {
+        readFileSync() {
+          readCalls += 1;
+          return Buffer.from("# Formatted\n");
+        },
+      },
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      vscode: createFakeVscode({ errors }),
+    });
+    let settled = false;
+    const pending = provider
+      .provideDocumentFormattingEdits(
+        createDocument("# Original\n"),
+        {},
+        cancellation.token,
+      )
+      .then((edits) => {
+        settled = true;
+        return edits;
+      });
+
+    await spawned.promise;
+    cancellation.cancel();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const settledBeforeLate = settled;
+    const listenersAfterCancellation = {
+      childClose: child.listenerCount("close"),
+      childError: child.listenerCount("error"),
+      childExit: child.listenerCount("exit"),
+      stderrData: child.stderr.listenerCount("data"),
+      stdoutData: child.stdout.listenerCount("data"),
+    };
+    if (lateSettlement === "close") {
+      child.emit("close", 0);
+    } else {
+      assert.doesNotThrow(() => child.emit("error", new Error("late format error")));
+      child.emit("close", 1);
+    }
+    const edits = await pending;
+    const listenersAfterLate = {
+      childClose: child.listenerCount("close"),
+      childError: child.listenerCount("error"),
+      childExit: child.listenerCount("exit"),
+      stderrData: child.stderr.listenerCount("data"),
+      stdoutData: child.stdout.listenerCount("data"),
+    };
+
+    assert.deepEqual({
+      edits,
+      errors,
+      killCalls: child.killCalls,
+      lateSettlement,
+      listenerDisposals: cancellation.listenerDisposals(),
+      listenersAfterCancellation,
+      listenersAfterLate,
+      readCalls,
+      registrations: cancellation.registrations(),
+      remainingTokenListeners: cancellation.listenerCount(),
+      settledBeforeLate,
+    }, {
+      edits: [],
+      errors: [],
+      killCalls: 1,
+      lateSettlement,
+      listenerDisposals: 1,
+      listenersAfterCancellation: {
+        childClose: 1,
+        childError: 1,
+        childExit: 0,
+        stderrData: 0,
+        stdoutData: 0,
+      },
+      listenersAfterLate: {
+        childClose: 0,
+        childError: 0,
+        childExit: 0,
+        stderrData: 0,
+        stdoutData: 0,
+      },
+      readCalls: 0,
+      registrations: 1,
+      remainingTokenListeners: 0,
+      settledBeforeLate: true,
+    });
+  }
+});
+
+test("GaugeFormatProvider cancellation owns a child returned after synchronous cancellation", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  const cancellation = createCancellation();
+  const child = new EventEmitter();
+  const errors = [];
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.killCalls = 0;
+  child.kill = () => {
+    child.killCalls += 1;
+    return true;
+  };
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand() {
+        return {
+          spawn() {
+            cancellation.cancel();
+            return child;
+          },
+        };
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode({ errors }),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(
+    createDocument("# Original\n"),
+    {},
+    cancellation.token,
+  );
+  const lateError = new Error("late spawn cancellation error");
+
+  assert.doesNotThrow(() => child.emit("error", lateError));
+  child.emit("close", 1);
+  assert.deepEqual({
+    edits,
+    errors,
+    killCalls: child.killCalls,
+    registrations: cancellation.registrations(),
+  }, {
+    edits: [],
+    errors: [],
+    killCalls: 1,
+    registrations: 0,
+  });
+});
+
+test("GaugeFormatProvider cancellation handles synchronous token and kill callbacks", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  for (const killSettlement of ["error", "close"]) {
+    const child = new EventEmitter();
+    const errors = [];
+    let listenerDisposals = 0;
+    let requested = false;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.killCalls = 0;
+    child.kill = () => {
+      child.killCalls += 1;
+      if (killSettlement === "error") {
+        child.emit("error", new Error("synchronous kill error"));
+      } else {
+        child.emit("close", 1);
+      }
+      return true;
+    };
+    const token = {
+      get isCancellationRequested() {
+        return requested;
+      },
+      onCancellationRequested(listener) {
+        requested = true;
+        listener();
+        return {
+          dispose() {
+            listenerDisposals += 1;
+          },
+        };
+      },
+    };
+    const provider = new GaugeFormatProvider({
+      cli: {
+        gaugeCommand() {
+          return {
+            spawn() {
+              return child;
+            },
+          };
+        },
+      },
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      vscode: createFakeVscode({ errors }),
+    });
+
+    const edits = await provider.provideDocumentFormattingEdits(
+      createDocument("# Original\n"),
+      {},
+      token,
+    );
+    if (killSettlement === "error") {
+      child.emit("close", 1);
+    }
+
+    assert.deepEqual({
+      childListeners: {
+        close: child.listenerCount("close"),
+        error: child.listenerCount("error"),
+        exit: child.listenerCount("exit"),
+      },
+      edits,
+      errors,
+      killCalls: child.killCalls,
+      killSettlement,
+      listenerDisposals,
+      streamListeners: {
+        stderr: child.stderr.listenerCount("data"),
+        stdout: child.stdout.listenerCount("data"),
+      },
+    }, {
+      childListeners: { close: 0, error: 0, exit: 0 },
+      edits: [],
+      errors: [],
+      killCalls: 1,
+      killSettlement,
+      listenerDisposals: 1,
+      streamListeners: { stderr: 0, stdout: 0 },
+    });
+  }
 });

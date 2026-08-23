@@ -37,34 +37,105 @@ function isConceptDocument(document, filePath) {
     || filePath.toLowerCase().endsWith(CONCEPT_FILE_EXTENSION);
 }
 
-function collectOutput(stream, chunks) {
+function collectOutput(stream, chunks, cleanup) {
   if (stream && typeof stream.on === "function") {
-    stream.on("data", (chunk) => chunks.push(chunk.toString()));
+    const listener = (chunk) => chunks.push(chunk.toString());
+    stream.on("data", listener);
+    cleanup.push(() => removeEventListener(stream, "data", listener));
   }
 }
 
-function waitForProcess(command, args, options) {
+function removeEventListener(emitter, event, listener) {
+  if (emitter && typeof emitter.removeListener === "function") {
+    emitter.removeListener(event, listener);
+  } else if (emitter && typeof emitter.off === "function") {
+    emitter.off(event, listener);
+  }
+}
+
+function cancellationRequested(token) {
+  return Boolean(token && token.isCancellationRequested);
+}
+
+function protectCancelledChild(child) {
+  if (!child || typeof child.on !== "function") {
+    return;
+  }
+  const onError = () => {};
+  const onClose = () => {
+    removeEventListener(child, "error", onError);
+    removeEventListener(child, "close", onClose);
+  };
+  child.on("error", onError);
+  child.on("close", onClose);
+}
+
+function waitForProcess(command, args, options, token) {
   return new Promise((resolve) => {
     let settled = false;
+    let cancellationDisposable;
+    const cleanup = [];
     const stdout = [];
     const stderr = [];
 
-    function settle(result) {
-      if (!settled) {
-        settled = true;
-        resolve({
-          stdout: stdout.join(""),
-          stderr: stderr.join(""),
-          ...result,
-        });
+    function removeListeners() {
+      for (const remove of cleanup.splice(0)) {
+        remove();
+      }
+      if (cancellationDisposable && typeof cancellationDisposable.dispose === "function") {
+        cancellationDisposable.dispose();
+        cancellationDisposable = undefined;
       }
     }
 
     let child;
+    function settle(result, beforeCleanup) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (typeof beforeCleanup === "function") {
+        try {
+          beforeCleanup();
+        } catch (_error) {
+          // Cancellation remains neutral even when process termination fails.
+        }
+      }
+      removeListeners();
+      resolve({
+        stdout: stdout.join(""),
+        stderr: stderr.join(""),
+        ...result,
+      });
+    }
+
+    function cancel() {
+      settle({ cancelled: true }, () => {
+        if (child) {
+          protectCancelledChild(child);
+        }
+        if (child && typeof child.kill === "function") {
+          child.kill();
+        }
+      });
+    }
+
+    if (cancellationRequested(token)) {
+      cancel();
+      return;
+    }
     try {
       child = command.spawn(args, options);
     } catch (error) {
-      settle({ code: 1, error });
+      if (cancellationRequested(token)) {
+        cancel();
+      } else {
+        settle({ code: 1, error });
+      }
+      return;
+    }
+    if (cancellationRequested(token)) {
+      cancel();
       return;
     }
     if (!child) {
@@ -72,14 +143,36 @@ function waitForProcess(command, args, options) {
       return;
     }
 
-    collectOutput(child.stdout, stdout);
-    collectOutput(child.stderr, stderr);
+    collectOutput(child.stdout, stdout, cleanup);
+    collectOutput(child.stderr, stderr, cleanup);
     if (typeof child.on === "function") {
-      child.on("error", (error) => settle({ code: 1, error }));
-      child.on("exit", (code) => settle({ code }));
-      child.on("close", (code) => settle({ code }));
+      const onError = (error) => settle({ code: 1, error });
+      const onExit = (code) => settle({ code });
+      const onClose = (code) => settle({ code });
+      child.on("error", onError);
+      child.on("exit", onExit);
+      child.on("close", onClose);
+      cleanup.push(
+        () => removeEventListener(child, "error", onError),
+        () => removeEventListener(child, "exit", onExit),
+        () => removeEventListener(child, "close", onClose),
+      );
     } else {
       settle({ code: 0 });
+      return;
+    }
+    if (token && typeof token.onCancellationRequested === "function") {
+      const disposable = token.onCancellationRequested(cancel);
+      if (settled) {
+        if (disposable && typeof disposable.dispose === "function") {
+          disposable.dispose();
+        }
+      } else {
+        cancellationDisposable = disposable;
+      }
+    }
+    if (cancellationRequested(token)) {
+      cancel();
     }
   });
 }
@@ -198,7 +291,7 @@ class GaugeFormatProvider {
     this.projectEnvironments = new Map();
   }
 
-  async cachedProjectEnvironment(project, cli) {
+  async cachedProjectEnvironment(project, cli, token) {
     if (
       this.projectEnvironmentService
       && typeof this.projectEnvironmentService.environmentFor === "function"
@@ -210,6 +303,9 @@ class GaugeFormatProvider {
       return this.projectEnvironments.get(root);
     }
     const env = projectEnvironment(project, cli);
+    if (cancellationRequested(token)) {
+      return {};
+    }
     if (root && hasEnvironment(env)) {
       this.projectEnvironments.set(root, env);
     }
@@ -282,8 +378,8 @@ class GaugeFormatProvider {
     };
   }
 
-  async provideDocumentFormattingEdits(document) {
-    if (!this.shouldFormat(document)) {
+  async provideDocumentFormattingEdits(document, _formattingOptions, token) {
+    if (cancellationRequested(token) || !this.shouldFormat(document)) {
       return [];
     }
 
@@ -295,10 +391,16 @@ class GaugeFormatProvider {
       project = this.projectForFile(filePath);
       root = projectRoot(project);
     } catch (error) {
+      if (cancellationRequested(token)) {
+        return [];
+      }
       if (markdownSpecDocument) {
         return [];
       }
       showError(this.vscode, formatFailureMessage({ error }));
+      return [];
+    }
+    if (cancellationRequested(token)) {
       return [];
     }
     if (!root) {
@@ -312,11 +414,24 @@ class GaugeFormatProvider {
     }
 
     if (typeof document.save === "function") {
-      await document.save();
+      try {
+        await document.save();
+      } catch (error) {
+        if (cancellationRequested(token)) {
+          return [];
+        }
+        throw error;
+      }
+    }
+    if (cancellationRequested(token)) {
+      return [];
     }
 
     const cli = this.createCliIfNeeded();
     const command = cli && typeof cli.gaugeCommand === "function" && cli.gaugeCommand();
+    if (cancellationRequested(token)) {
+      return [];
+    }
     if (!command || typeof command.spawn !== "function") {
       showError(this.vscode, formatFailureMessage({
         error: new Error("Gauge is not installed."),
@@ -326,7 +441,21 @@ class GaugeFormatProvider {
 
     const processOptions = { cwd: root };
     const baseEnv = envWithGaugeHome(this.env || process.env, { vscode: this.vscode });
-    const projectEnv = await this.cachedProjectEnvironment(project, cli);
+    if (cancellationRequested(token)) {
+      return [];
+    }
+    let projectEnv;
+    try {
+      projectEnv = await this.cachedProjectEnvironment(project, cli, token);
+    } catch (error) {
+      if (cancellationRequested(token)) {
+        return [];
+      }
+      throw error;
+    }
+    if (cancellationRequested(token)) {
+      return [];
+    }
     if (this.env || baseEnv !== process.env || hasEnvironment(projectEnv)) {
       processOptions.env = {
         ...baseEnv,
@@ -340,23 +469,36 @@ class GaugeFormatProvider {
     }
     formatArgs.push(filePath);
 
-    const result = await waitForProcess(command, formatArgs, processOptions);
+    const result = await waitForProcess(command, formatArgs, processOptions, token);
+    if (result.cancelled || cancellationRequested(token)) {
+      return [];
+    }
     if (result.code !== 0) {
       showError(this.vscode, formatFailureMessage(result));
       return [];
     }
 
-    const formatted = this.fileSystem.readFileSync(filePath).toString();
+    let formatted;
+    try {
+      formatted = this.fileSystem.readFileSync(filePath).toString();
+    } catch (error) {
+      if (cancellationRequested(token)) {
+        return [];
+      }
+      throw error;
+    }
+    if (cancellationRequested(token)) {
+      return [];
+    }
     if (formatted === document.getText()) {
       return [];
     }
-    return [
-      createTextEdit(
-        this.vscode,
-        fullDocumentRange(this.vscode, document),
-        formatted,
-      ),
-    ];
+    const edit = createTextEdit(
+      this.vscode,
+      fullDocumentRange(this.vscode, document),
+      formatted,
+    );
+    return cancellationRequested(token) ? [] : [edit];
   }
 }
 
