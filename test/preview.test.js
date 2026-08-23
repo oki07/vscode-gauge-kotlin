@@ -30,13 +30,15 @@ function createChildProcess(options = {}) {
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   setImmediate(() => {
+    const code = options.code || 0;
     if (options.stdout) {
       child.stdout.emit("data", Buffer.from(options.stdout));
     }
     if (options.stderr) {
       child.stderr.emit("data", Buffer.from(options.stderr));
     }
-    child.emit("exit", options.code || 0);
+    child.emit("exit", code);
+    child.emit("close", code);
   });
   return child;
 }
@@ -1099,6 +1101,7 @@ test("GaugePreviewController lifecycle detaches active docs without killing them
   assert.equal(spawns.length, 1);
   assert.equal(controller.activeOperations.size, 1);
 
+  child.emit("exit", 0);
   controller.dispose();
   controller.dispose();
 
@@ -1561,6 +1564,116 @@ test("GaugePreviewController preserves live environment failures", async () => {
   assert.equal(controller.activeOperations.size, 0);
 });
 
+test("GaugePreviewController waits for close before publishing Spectacle success or failure", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+
+  for (const scenario of [
+    { closeCode: undefined, code: 0, result: true, terminal: "success" },
+    { closeCode: 1, code: 1, result: undefined, terminal: "failure" },
+    {
+      closeCode: 0,
+      code: 1,
+      error: new Error("live docs failure"),
+      result: undefined,
+      terminal: "error",
+    },
+  ]) {
+    const { errors, opened, vscode } = createFakeVscode();
+    const child = createDeferredChild();
+    const controller = new GaugePreviewController({
+      cli: {
+        isPluginInstalled() {
+          return true;
+        },
+        gaugeCommand() {
+          return { spawn() { return child; } };
+        },
+      },
+      fileSystem: { mkdirSync() {} },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      tempDirProvider() {
+        return "/tmp/gauge-preview";
+      },
+      vscode,
+    });
+
+    const pending = controller.preview();
+    let outcome = { status: "pending" };
+    pending.then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { error, status: "rejected" };
+      },
+    );
+    if (scenario.terminal === "failure") {
+      child.stderr.emit("data", "missing ");
+    }
+    if (scenario.terminal === "error") {
+      child.emit("error", scenario.error);
+    } else {
+      child.emit("exit", scenario.code);
+    }
+
+    let assertionError;
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(outcome, { status: "pending" });
+      assert.equal(controller.activeOperations.size, 1);
+      assert.deepEqual(errors, []);
+      assert.deepEqual(opened, []);
+      assert.equal(child.stdout.listenerCount("data"), 1);
+      assert.equal(child.stderr.listenerCount("data"), 1);
+    } catch (error) {
+      assertionError = error;
+    } finally {
+      if (scenario.terminal === "success") {
+        child.stdout.emit("data", "created\n");
+      } else if (scenario.terminal === "failure") {
+        child.stderr.emit("data", "spectacle plugin");
+      }
+      child.emit("close", scenario.closeCode);
+      await Promise.allSettled([pending]);
+    }
+
+    try {
+      assert.deepEqual(outcome, { status: "fulfilled", value: scenario.result });
+      assert.equal(controller.activeOperations.size, 0);
+      assert.equal(child.listenerCount("error"), 0);
+      assert.equal(child.listenerCount("exit"), 0);
+      assert.equal(child.listenerCount("close"), 0);
+      assert.equal(child.stdout.listenerCount("data"), 0);
+      assert.equal(child.stderr.listenerCount("data"), 0);
+      assert.equal(child.killCalls, 0);
+      if (scenario.terminal === "success") {
+        assert.deepEqual(errors, []);
+        assert.equal(opened.length, 1);
+      } else {
+        const reason = scenario.terminal === "failure"
+          ? "missing spectacle plugin"
+          : "live docs failure";
+        assert.deepEqual(errors, [
+          `Unable to create html file for example.spec. ${reason}`,
+        ]);
+        assert.deepEqual(opened, []);
+      }
+    } catch (error) {
+      if (!assertionError) {
+        assertionError = error;
+      }
+    }
+    if (assertionError) {
+      throw assertionError;
+    }
+  }
+});
+
 test("GaugePreviewController releases live process listeners after close", async () => {
   const { GaugePreviewController } = require("../src/preview");
 
@@ -1595,9 +1708,9 @@ test("GaugePreviewController releases live process listeners after close", async
     } else {
       child.emit("exit", 0);
     }
-    await pending;
     assert.equal(child.listenerCount("close"), 1);
     child.emit("close", terminal === "error" ? 1 : 0);
+    await pending;
 
     assert.equal(child.listenerCount("error"), 0);
     assert.equal(child.listenerCount("exit"), 0);

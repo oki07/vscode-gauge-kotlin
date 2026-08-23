@@ -217,6 +217,7 @@ function waitForProcess(command, args, options, operation) {
     let cancelled = operation.cancelled;
     let child;
     let exitCode;
+    let processError;
     let lateErrorListener;
     let listenersCleaned = false;
     let settled = false;
@@ -278,19 +279,21 @@ function waitForProcess(command, args, options, operation) {
     }
 
     function onError(error) {
-      settle({ code: 1, error });
+      if (!processError) {
+        processError = error;
+      }
     }
 
     function onExit(code) {
       exitCode = code;
-      settle({ code });
     }
 
     function onClose(code) {
-      if (!settled) {
-        settle({ code: code === null || code === undefined ? exitCode : code });
-      }
+      const finalCode = processError
+        ? 1
+        : (code === null || code === undefined ? exitCode : code);
       cleanupListeners();
+      settle({ code: finalCode, error: processError });
     }
 
     cancellationDisposable = operation.onCancellation(cancelConsumption);
