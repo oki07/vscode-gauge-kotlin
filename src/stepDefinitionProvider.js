@@ -25,6 +25,7 @@ const PROJECT_ROOT_NON_GAUGE = "nonGauge";
 const PROJECT_ROOT_UNKNOWN = "unknown";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
+const CANCELLED_DEFINITION_OPERATION = Symbol("cancelled definition operation");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -464,15 +465,223 @@ class GaugeStepDefinitionProvider {
     this.documentStore = options.documentStore;
     this.workspaceStepIndex = options.workspaceStepIndex;
     this.externalConstantsProvider = undefined;
+    this.ownedDiagnosticsProvider = undefined;
     this.diagnosticsProvider = options.diagnosticsProvider
-      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
-      || new GaugeStepDiagnosticsProvider({
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider);
+    if (!this.diagnosticsProvider) {
+      this.ownedDiagnosticsProvider = new GaugeStepDiagnosticsProvider({
         documentStore: this.documentStore,
         fileSystem: this.fileSystem,
         pathModule: this.pathModule,
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       });
+      this.diagnosticsProvider = this.ownedDiagnosticsProvider;
+    }
+    this.disposed = false;
+    this.activeOperations = new Set();
+    this.registrationDisposable = undefined;
+    this.registrationAttempted = false;
+  }
+
+  disposeOwnedProvider(provider) {
+    if (provider && typeof provider.dispose === "function") {
+      try {
+        provider.dispose();
+      } catch (_error) {
+        // Provider cleanup cannot reactivate a terminal definition request.
+      }
+    }
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      this.cancelOperation(operation);
+    }
+    const registration = this.registrationDisposable;
+    this.registrationDisposable = undefined;
+    if (registration && typeof registration.dispose === "function") {
+      try {
+        registration.dispose();
+      } catch (_error) {
+        // Continue releasing provider-owned caches after host cleanup fails.
+      }
+    }
+    const externalConstantsProvider = this.externalConstantsProvider;
+    this.externalConstantsProvider = undefined;
+    this.disposeOwnedProvider(externalConstantsProvider);
+    const ownedDiagnosticsProvider = this.ownedDiagnosticsProvider;
+    this.ownedDiagnosticsProvider = undefined;
+    this.disposeOwnedProvider(ownedDiagnosticsProvider);
+  }
+
+  createOperation() {
+    if (this.disposed) {
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      hostCancellationDisposable: undefined,
+      resolveCancellation,
+    };
+    this.activeOperations.add(operation);
+    return operation;
+  }
+
+  isOperationActive(operation) {
+    return !this.disposed && (!operation || operation.active);
+  }
+
+  disposeHostCancellation(operation) {
+    const disposable = operation && operation.hostCancellationDisposable;
+    if (!disposable) {
+      return;
+    }
+    operation.hostCancellationDisposable = undefined;
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Listener cleanup cannot reactivate a completed definition request.
+      }
+    }
+  }
+
+  cancelOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    operation.resolveCancellation(CANCELLED_DEFINITION_OPERATION);
+    this.disposeHostCancellation(operation);
+  }
+
+  finishOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    this.disposeHostCancellation(operation);
+  }
+
+  linkOperationCancellation(operation, token) {
+    if (!token) {
+      return true;
+    }
+    if (token.isCancellationRequested) {
+      this.cancelOperation(operation);
+      return false;
+    }
+    if (typeof token.onCancellationRequested !== "function") {
+      return true;
+    }
+    let disposable;
+    try {
+      disposable = token.onCancellationRequested(() => this.cancelOperation(operation));
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return false;
+      }
+      throw error;
+    }
+    if (this.isOperationActive(operation)) {
+      operation.hostCancellationDisposable = disposable;
+    } else if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // The operation completed while the host registered the listener.
+      }
+    }
+    if (token.isCancellationRequested && this.isOperationActive(operation)) {
+      this.cancelOperation(operation);
+    }
+    return this.isOperationActive(operation);
+  }
+
+  runOperation(token, callback) {
+    if (this.disposed || (token && token.isCancellationRequested)) {
+      return Promise.resolve([]);
+    }
+    const operation = this.createOperation();
+    if (!operation) {
+      return Promise.resolve([]);
+    }
+    let workflow;
+    try {
+      workflow = this.linkOperationCancellation(operation, token)
+        ? Promise.resolve(callback(operation))
+        : Promise.resolve(CANCELLED_DEFINITION_OPERATION);
+    } catch (error) {
+      workflow = Promise.reject(error);
+    }
+    return Promise.race([workflow, operation.cancellation])
+      .then(
+        (value) => value === CANCELLED_DEFINITION_OPERATION ? [] : value,
+        (error) => {
+          if (!this.isOperationActive(operation)) {
+            return [];
+          }
+          throw error;
+        },
+      )
+      .finally(() => this.finishOperation(operation));
+  }
+
+  callSyncForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    try {
+      const value = callback();
+      return this.isOperationActive(operation) ? value : CANCELLED_DEFINITION_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  async callForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    let result;
+    try {
+      result = callback();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      throw error;
+    }
+    const observed = Promise.resolve(result);
+    if (!this.isOperationActive(operation)) {
+      observed.catch(() => {});
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    try {
+      const value = await Promise.race([observed, operation.cancellation]);
+      return this.isOperationActive(operation) ? value : CANCELLED_DEFINITION_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      throw error;
+    }
   }
 
   isGaugeProjectDocument(document) {
@@ -542,25 +751,55 @@ class GaugeStepDefinitionProvider {
     return true;
   }
 
-  async storeWorkspaceDocuments(filePattern, sourceRoot) {
-    await this.documentStore.whenReady();
+  async storeWorkspaceDocuments(filePattern, sourceRoot, operation) {
+    const ready = await this.callForOperation(operation, () => this.documentStore.whenReady());
+    if (ready === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    const storedDocuments = this.callSyncForOperation(
+      operation,
+      () => this.documentStore.documents(),
+    );
+    if (storedDocuments === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     const documents = [];
-    for (const candidate of this.documentStore.documents()) {
-      const file = documentPath(candidate);
+    for (const candidate of storedDocuments) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      const file = this.callSyncForOperation(operation, () => documentPath(candidate));
+      if (file === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
       if (!file || !filePattern.test(file)) {
         continue;
       }
-      if (!this.shouldOpenWorkspaceDocument(file, sourceRoot)) {
+      const shouldOpen = this.callSyncForOperation(
+        operation,
+        () => this.shouldOpenWorkspaceDocument(file, sourceRoot),
+      );
+      if (shouldOpen === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      if (!shouldOpen) {
         continue;
       }
       documents.push(candidate);
     }
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_DEFINITION_OPERATION;
   }
 
-  async findWorkspaceStepImplementationDocuments(sourceRoot) {
+  async findWorkspaceStepImplementationDocuments(sourceRoot, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     if (this.documentStore) {
-      return this.storeWorkspaceDocuments(STEP_IMPLEMENTATION_FILE_PATTERN, sourceRoot);
+      return this.storeWorkspaceDocuments(
+        STEP_IMPLEMENTATION_FILE_PATTERN,
+        sourceRoot,
+        operation,
+      );
     }
     const workspace = this.vscode.workspace || {};
     if (
@@ -572,30 +811,55 @@ class GaugeStepDefinitionProvider {
 
     const documents = [];
     for (const pattern of STEP_IMPLEMENTATION_WORKSPACE_PATTERNS) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
       let uris;
       try {
-        uris = await workspace.findFiles(pattern);
-      } catch (error) {
+        uris = await this.callForOperation(operation, () => workspace.findFiles(pattern));
+      } catch (_error) {
         continue;
       }
+      if (uris === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
       for (const uri of uris || []) {
-        if (!this.shouldOpenWorkspaceDocument(uriPath(uri), sourceRoot)) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
+        const shouldOpen = this.callSyncForOperation(
+          operation,
+          () => this.shouldOpenWorkspaceDocument(uriPath(uri), sourceRoot),
+        );
+        if (shouldOpen === CANCELLED_DEFINITION_OPERATION) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
+        if (!shouldOpen) {
           continue;
         }
         try {
-          const document = await workspace.openTextDocument(uri);
+          const document = await this.callForOperation(
+            operation,
+            () => workspace.openTextDocument(uri),
+          );
+          if (document === CANCELLED_DEFINITION_OPERATION) {
+            return CANCELLED_DEFINITION_OPERATION;
+          }
           documents.push(document);
-        } catch (error) {
+        } catch (_error) {
           // Ignore unreadable files so one stale workspace URI does not block navigation.
         }
       }
     }
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_DEFINITION_OPERATION;
   }
 
-  async findWorkspaceConceptDocuments(sourceRoot) {
+  async findWorkspaceConceptDocuments(sourceRoot, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     if (this.documentStore) {
-      return this.storeWorkspaceDocuments(CONCEPT_FILE_PATTERN, sourceRoot);
+      return this.storeWorkspaceDocuments(CONCEPT_FILE_PATTERN, sourceRoot, operation);
     }
     const workspace = this.vscode.workspace || {};
     if (
@@ -608,27 +872,55 @@ class GaugeStepDefinitionProvider {
     const documents = [];
     let uris;
     try {
-      uris = await workspace.findFiles("**/*.cpt");
-    } catch (error) {
+      uris = await this.callForOperation(operation, () => workspace.findFiles("**/*.cpt"));
+    } catch (_error) {
       return documents;
     }
+    if (uris === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     for (const uri of uris || []) {
-      if (!this.shouldOpenWorkspaceDocument(uriPath(uri), sourceRoot)) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      const shouldOpen = this.callSyncForOperation(
+        operation,
+        () => this.shouldOpenWorkspaceDocument(uriPath(uri), sourceRoot),
+      );
+      if (shouldOpen === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      if (!shouldOpen) {
         continue;
       }
       try {
-        const document = await workspace.openTextDocument(uri);
+        const document = await this.callForOperation(
+          operation,
+          () => workspace.openTextDocument(uri),
+        );
+        if (document === CANCELLED_DEFINITION_OPERATION) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
         documents.push(document);
-      } catch (error) {
+      } catch (_error) {
         // Ignore unreadable files so one stale workspace URI does not block navigation.
       }
     }
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_DEFINITION_OPERATION;
   }
 
-  async stepImplementationDocumentGroups(sourceDocument) {
+  async stepImplementationDocumentGroups(sourceDocument, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     const workspace = this.vscode.workspace || {};
-    const sourceRoot = this.gaugeProjectRoot(sourceDocument);
+    const sourceRoot = this.callSyncForOperation(
+      operation,
+      () => this.gaugeProjectRoot(sourceDocument),
+    );
+    if (sourceRoot === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     const projectDocuments = [];
     const externalDocuments = [];
     const seenPaths = new Set();
@@ -663,19 +955,49 @@ class GaugeStepDefinitionProvider {
       }
     };
 
-    const openDocuments = workspace.textDocuments || [];
+    const openDocuments = this.callSyncForOperation(
+      operation,
+      () => workspace.textDocuments || [],
+    );
+    if (openDocuments === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     for (const candidate of openDocuments) {
-      addDocument(candidate);
+      const added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
     }
-    for (const candidate of await this.findWorkspaceStepImplementationDocuments(sourceRoot)) {
-      addDocument(candidate);
+    const workspaceDocuments = await this.findWorkspaceStepImplementationDocuments(
+      sourceRoot,
+      operation,
+    );
+    if (workspaceDocuments === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
     }
-    return { externalDocuments, projectDocuments };
+    for (const candidate of workspaceDocuments) {
+      const added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+    }
+    return this.isOperationActive(operation)
+      ? { externalDocuments, projectDocuments }
+      : CANCELLED_DEFINITION_OPERATION;
   }
 
-  async conceptDocuments(sourceDocument) {
+  async conceptDocuments(sourceDocument, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     const workspace = this.vscode.workspace || {};
-    const sourceRoot = this.gaugeProjectRoot(sourceDocument);
+    const sourceRoot = this.callSyncForOperation(
+      operation,
+      () => this.gaugeProjectRoot(sourceDocument),
+    );
+    if (sourceRoot === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -699,18 +1021,40 @@ class GaugeStepDefinitionProvider {
       documents.push(candidate);
     };
 
-    const openDocuments = workspace.textDocuments || [];
+    const openDocuments = this.callSyncForOperation(
+      operation,
+      () => workspace.textDocuments || [],
+    );
+    if (openDocuments === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     for (const candidate of openDocuments) {
-      addDocument(candidate);
+      const added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
     }
-    for (const candidate of await this.findWorkspaceConceptDocuments(sourceRoot)) {
-      addDocument(candidate);
+    const workspaceDocuments = await this.findWorkspaceConceptDocuments(sourceRoot, operation);
+    if (workspaceDocuments === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
     }
-    addDocument(sourceDocument);
-    return documents;
+    for (const candidate of workspaceDocuments) {
+      const added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+    }
+    const addedSource = this.callSyncForOperation(operation, () => addDocument(sourceDocument));
+    if (addedSource === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    return this.isOperationActive(operation) ? documents : CANCELLED_DEFINITION_OPERATION;
   }
 
-  externalWorkspaceConstantsProvider() {
+  externalWorkspaceConstantsProvider(operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     // The external fallback intentionally omits the project factory so that
     // constants from workspace documents outside the source Gauge project are
     // still resolved. Construct it once and reuse it so repeated definition
@@ -721,115 +1065,225 @@ class GaugeStepDefinitionProvider {
         vscode: this.vscode,
       });
     }
-    return this.externalConstantsProvider;
+    return this.isOperationActive(operation)
+      ? this.externalConstantsProvider
+      : CANCELLED_DEFINITION_OPERATION;
   }
 
-  collectWorkspaceConstants(document, kotlinDocuments, options = {}) {
+  collectWorkspaceConstants(document, kotlinDocuments, options = {}, operation) {
     // Pass the Kotlin documents directly as the workspace document list. Do NOT
     // spread `this.vscode` or `vscode.workspace`: object spread enumerates every
     // own getter, and VS Code / Cursor expose proposed-API getters (e.g.
     // workspace.tunnels) that throw for extensions that did not declare the
     // proposal, which would abort the entire definition lookup.
     const diagnosticsProvider = options.includeExternalWorkspace
-      ? this.externalWorkspaceConstantsProvider()
+      ? this.externalWorkspaceConstantsProvider(operation)
       : this.diagnosticsProvider;
+    if (diagnosticsProvider === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     return diagnosticsProvider.collectWorkspaceConstants(document, kotlinDocuments);
   }
 
-  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}) {
+  definitionsForDocuments(wantedStep, documents, constantDocuments, options = {}, operation) {
     const wantedSteps = Array.isArray(wantedStep) ? wantedStep : [wantedStep];
     const wantedStepSet = new Set(wantedSteps);
     const definitions = [];
     for (const candidate of documents) {
-      const text = candidate.getText();
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      const text = this.callSyncForOperation(operation, () => candidate.getText());
+      if (text === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
       let externalConstants;
       if (isStepImplementationDocument(candidate)) {
         try {
-          externalConstants = this.collectWorkspaceConstants(candidate, constantDocuments, options);
-        } catch (error) {
+          externalConstants = this.callSyncForOperation(
+            operation,
+            () => this.collectWorkspaceConstants(
+              candidate,
+              constantDocuments,
+              options,
+              operation,
+            ),
+          );
+          if (externalConstants === CANCELLED_DEFINITION_OPERATION) {
+            return CANCELLED_DEFINITION_OPERATION;
+          }
+        } catch (_error) {
           // Never let workspace-constant collection abort navigation: plain
           // @Step("literal") matching still works without resolved constants.
           externalConstants = undefined;
         }
       }
-      const stepFunctions = findStepFunctionsForDocument(candidate, externalConstants);
+      const stepFunctions = this.callSyncForOperation(
+        operation,
+        () => findStepFunctionsForDocument(candidate, externalConstants),
+      );
+      if (stepFunctions === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
       for (const entry of stepFunctions) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
         const normalizedAliases = entry.aliases
           .map((alias) => normalizeStepTemplate(alias))
           .filter(Boolean);
         if (!normalizedAliases.some((alias) => wantedStepSet.has(alias))) {
           continue;
         }
-        definitions.push(createLocation(
-          this.vscode,
-          candidate.uri,
-          targetRange(this.vscode, candidate, text, entry),
-        ));
+        const location = this.callSyncForOperation(
+          operation,
+          () => createLocation(
+            this.vscode,
+            candidate.uri,
+            targetRange(this.vscode, candidate, text, entry),
+          ),
+        );
+        if (location === CANCELLED_DEFINITION_OPERATION) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
+        definitions.push(location);
       }
     }
-    return definitions;
+    return this.isOperationActive(operation) ? definitions : CANCELLED_DEFINITION_OPERATION;
   }
 
-  conceptDefinitionsForDocuments(wantedStep, documents) {
+  conceptDefinitionsForDocuments(wantedStep, documents, operation) {
     const wantedSteps = Array.isArray(wantedStep) ? wantedStep : [wantedStep];
     const wantedStepSet = new Set(wantedSteps);
     const definitions = [];
     for (const candidate of documents) {
-      const text = candidate.getText();
-      for (const heading of findConceptHeadings(text)) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      const text = this.callSyncForOperation(operation, () => candidate.getText());
+      if (text === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      const headings = this.callSyncForOperation(
+        operation,
+        () => findConceptHeadings(text),
+      );
+      if (headings === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      for (const heading of headings) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
         if (!heading.normalized) {
           continue;
         }
         if (!wantedStepSet.has(heading.normalized)) {
           continue;
         }
-        definitions.push(createLocation(
-          this.vscode,
-          candidate.uri,
-          createRange(this.vscode, heading.start, heading.end),
-        ));
+        const location = this.callSyncForOperation(
+          operation,
+          () => createLocation(
+            this.vscode,
+            candidate.uri,
+            createRange(this.vscode, heading.start, heading.end),
+          ),
+        );
+        if (location === CANCELLED_DEFINITION_OPERATION) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
+        definitions.push(location);
       }
     }
-    return definitions;
+    return this.isOperationActive(operation) ? definitions : CANCELLED_DEFINITION_OPERATION;
   }
 
-  async provideDefinition(document, position) {
-    const wantedSteps = stepTextCandidatesAt(document, position, {
-      allowMultilineStep: this.allowsMultilineStep(document),
-    });
-    if (wantedSteps.length === 0 || !this.isGaugeProjectDocument(document)) {
+  async provideDefinitionForOperation(document, position, operation) {
+    const allowMultilineStep = this.callSyncForOperation(
+      operation,
+      () => this.allowsMultilineStep(document),
+    );
+    if (allowMultilineStep === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    const wantedSteps = this.callSyncForOperation(
+      operation,
+      () => stepTextCandidatesAt(document, position, { allowMultilineStep }),
+    );
+    if (wantedSteps === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    if (wantedSteps.length === 0) {
       return [];
     }
-    const sourceRoot = this.gaugeProjectRoot(document);
+    const isGaugeDocument = this.callSyncForOperation(
+      operation,
+      () => this.isGaugeProjectDocument(document),
+    );
+    if (isGaugeDocument === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    if (!isGaugeDocument) {
+      return [];
+    }
+    const sourceRoot = this.callSyncForOperation(
+      operation,
+      () => this.gaugeProjectRoot(document),
+    );
+    if (sourceRoot === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
 
     if (
       this.workspaceStepIndex
       && typeof this.workspaceStepIndex.definitionEntries === "function"
     ) {
-      const indexedEntries = await this.workspaceStepIndex.definitionEntries(document, wantedSteps);
-      const indexedDefinitions = indexedEntries.map((indexedEntry) => {
+      const indexedEntries = await this.callForOperation(
+        operation,
+        () => this.workspaceStepIndex.definitionEntries(document, wantedSteps),
+      );
+      if (indexedEntries === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
+      const indexedDefinitions = [];
+      for (const indexedEntry of indexedEntries) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
+        let location;
         if (indexedEntry.kind === "concept") {
-          return createLocation(
-            this.vscode,
-            indexedEntry.document.uri,
-            createRange(
+          location = this.callSyncForOperation(
+            operation,
+            () => createLocation(
               this.vscode,
-              indexedEntry.heading.start,
-              indexedEntry.heading.end,
+              indexedEntry.document.uri,
+              createRange(
+                this.vscode,
+                indexedEntry.heading.start,
+                indexedEntry.heading.end,
+              ),
+            ),
+          );
+        } else {
+          location = this.callSyncForOperation(
+            operation,
+            () => createLocation(
+              this.vscode,
+              indexedEntry.document.uri,
+              targetRange(
+                this.vscode,
+                indexedEntry.document,
+                indexedEntry.document.getText(),
+                indexedEntry.entry,
+              ),
             ),
           );
         }
-        return createLocation(
-          this.vscode,
-          indexedEntry.document.uri,
-          targetRange(
-            this.vscode,
-            indexedEntry.document,
-            indexedEntry.document.getText(),
-            indexedEntry.entry,
-          ),
-        );
-      });
+        if (location === CANCELLED_DEFINITION_OPERATION) {
+          return CANCELLED_DEFINITION_OPERATION;
+        }
+        indexedDefinitions.push(location);
+      }
       if (indexedDefinitions.length > 0) {
         return indexedDefinitions;
       }
@@ -838,27 +1292,47 @@ class GaugeStepDefinitionProvider {
         && typeof this.dependencyStepIndex.findDefinitions === "function"
         && sourceRoot !== undefined
       ) {
-        return (await this.dependencyStepIndex.findDefinitions(sourceRoot, wantedSteps)) || [];
+        const dependencyDefinitions = await this.callForOperation(
+          operation,
+          () => this.dependencyStepIndex.findDefinitions(sourceRoot, wantedSteps),
+        );
+        return dependencyDefinitions === CANCELLED_DEFINITION_OPERATION
+          ? CANCELLED_DEFINITION_OPERATION
+          : dependencyDefinitions || [];
       }
       return [];
     }
 
-    const {
-      externalDocuments,
-      projectDocuments,
-    } = await this.stepImplementationDocumentGroups(document);
+    const documentGroups = await this.stepImplementationDocumentGroups(document, operation);
+    if (documentGroups === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
+    const { externalDocuments, projectDocuments } = documentGroups;
     const projectDefinitions = this.definitionsForDocuments(
       wantedSteps,
       projectDocuments,
       projectDocuments,
+      {},
+      operation,
     );
+    if (projectDefinitions === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     if (projectDefinitions.length > 0) {
       return projectDefinitions;
     }
+    const concepts = await this.conceptDocuments(document, operation);
+    if (concepts === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     const conceptDefinitions = this.conceptDefinitionsForDocuments(
       wantedSteps,
-      await this.conceptDocuments(document),
+      concepts,
+      operation,
     );
+    if (conceptDefinitions === CANCELLED_DEFINITION_OPERATION) {
+      return CANCELLED_DEFINITION_OPERATION;
+    }
     if (conceptDefinitions.length > 0) {
       return conceptDefinitions;
     }
@@ -867,10 +1341,13 @@ class GaugeStepDefinitionProvider {
       && typeof this.dependencyStepIndex.findDefinitions === "function"
       && sourceRoot !== undefined
     ) {
-      const dependencyDefinitions = await this.dependencyStepIndex.findDefinitions(
-        sourceRoot,
-        wantedSteps,
+      const dependencyDefinitions = await this.callForOperation(
+        operation,
+        () => this.dependencyStepIndex.findDefinitions(sourceRoot, wantedSteps),
       );
+      if (dependencyDefinitions === CANCELLED_DEFINITION_OPERATION) {
+        return CANCELLED_DEFINITION_OPERATION;
+      }
       if (
         Array.isArray(dependencyDefinitions)
           ? dependencyDefinitions.length > 0
@@ -884,24 +1361,55 @@ class GaugeStepDefinitionProvider {
       externalDocuments,
       [...projectDocuments, ...externalDocuments],
       { includeExternalWorkspace: true },
+      operation,
+    );
+  }
+
+  provideDefinition(document, position, token) {
+    return this.runOperation(
+      token,
+      (operation) => this.provideDefinitionForOperation(document, position, operation),
     );
   }
 
   register() {
-    if (!this.vscode.languages || typeof this.vscode.languages.registerDefinitionProvider !== "function") {
-      return { dispose() {} };
+    if (this.disposed || this.registrationAttempted) {
+      return this;
     }
-    const disposable = this.vscode.languages.registerDefinitionProvider(
-      [
-        { language: GAUGE_LANGUAGE },
-        { language: GAUGE_CONCEPT_LANGUAGE },
-        { scheme: "file", pattern: "**/*.spec" },
-        { scheme: "file", pattern: "**/*.cpt" },
-        { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
-      ],
-      this,
-    );
-    return disposable;
+    this.registrationAttempted = true;
+    if (!this.vscode.languages || typeof this.vscode.languages.registerDefinitionProvider !== "function") {
+      return this;
+    }
+    let registration;
+    try {
+      registration = this.vscode.languages.registerDefinitionProvider(
+        [
+          { language: GAUGE_LANGUAGE },
+          { language: GAUGE_CONCEPT_LANGUAGE },
+          { scheme: "file", pattern: "**/*.spec" },
+          { scheme: "file", pattern: "**/*.cpt" },
+          { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
+        ],
+        this,
+      );
+    } catch (error) {
+      if (!this.disposed) {
+        this.registrationAttempted = false;
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      if (registration && typeof registration.dispose === "function") {
+        try {
+          registration.dispose();
+        } catch (_error) {
+          // Synchronous disposal already terminalized the provider.
+        }
+      }
+    } else {
+      this.registrationDisposable = registration;
+    }
+    return this;
   }
 }
 

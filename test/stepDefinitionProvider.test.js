@@ -1,6 +1,68 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((receivedResolve, receivedReject) => {
+    resolve = receivedResolve;
+    reject = receivedReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createCancellation() {
+  let cancellationRequested = false;
+  let listenerDisposals = 0;
+  let registrations = 0;
+  const listeners = new Set();
+  const token = {
+    get isCancellationRequested() {
+      return cancellationRequested;
+    },
+    onCancellationRequested(listener) {
+      registrations += 1;
+      listeners.add(listener);
+      let disposed = false;
+      return {
+        dispose() {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          listenerDisposals += 1;
+          listeners.delete(listener);
+        },
+      };
+    },
+  };
+  return {
+    cancel() {
+      if (cancellationRequested) {
+        return;
+      }
+      cancellationRequested = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    listenerDisposals() {
+      return listenerDisposals;
+    },
+    registrations() {
+      return registrations;
+    },
+    token,
+  };
+}
+
 function createFakeVscode(textDocuments, options = {}) {
   const workspace = {
     textDocuments,
@@ -87,13 +149,21 @@ function createMultiProjectFactory() {
 }
 
 function createRegistrationVscode() {
-  const registration = {};
+  const registration = {
+    disposeCalls: 0,
+    registerCalls: 0,
+  };
   return {
     languages: {
       registerDefinitionProvider(selector, provider) {
+        registration.registerCalls += 1;
         registration.selector = selector;
         registration.provider = provider;
-        return { dispose() {} };
+        return {
+          dispose() {
+            registration.disposeCalls += 1;
+          },
+        };
       },
     },
     registration,
@@ -1665,4 +1735,915 @@ test("GaugeStepDefinitionProvider registers concept definition selectors", () =>
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
   ]);
   assert.equal(vscode.registration.provider, provider);
+});
+
+test("GaugeStepDefinitionProvider returns no definitions when host cancellation stops a pending index request", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+  const targetDocument = createDocument(
+    "# Send the request\n* Continue",
+    "gauge-concept",
+    "/workspace/gauge/concepts/send.cpt",
+  );
+
+  for (const settlement of ["resolve", "reject"]) {
+    const cancellation = createCancellation();
+    const indexEntered = deferred();
+    const indexGate = deferred();
+    let dependencyCalls = 0;
+    const provider = new GaugeStepDefinitionProvider({
+      dependencyStepIndex: {
+        findDefinitions() {
+          dependencyCalls += 1;
+          return [];
+        },
+      },
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+      workspaceStepIndex: {
+        definitionEntries() {
+          indexEntered.resolve();
+          return indexGate.promise;
+        },
+      },
+    });
+    let outcome = { status: "pending" };
+    const invocation = provider.provideDefinition(
+      specDocument,
+      { line: 2, character: 5 },
+      cancellation.token,
+    ).then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+        return value;
+      },
+      (reason) => {
+        outcome = { reason, status: "rejected" };
+        throw reason;
+      },
+    );
+
+    await indexEntered.promise;
+    cancellation.cancel();
+    await nextTurn();
+    const observedBeforeRelease = outcome;
+    if (settlement === "resolve") {
+      indexGate.resolve([{
+        document: targetDocument,
+        heading: {
+          end: { line: 0, character: 18 },
+          start: { line: 0, character: 2 },
+        },
+        kind: "concept",
+      }]);
+    } else {
+      indexGate.reject(new Error("late definition index failure"));
+    }
+    await Promise.allSettled([invocation]);
+
+    assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+    assert.deepEqual(outcome, { status: "fulfilled", value: [] });
+    assert.equal(dependencyCalls, 0);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
+});
+
+test("GaugeStepDefinitionProvider disposal settles pending dependency requests and owns its registration", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+
+  for (const settlement of ["resolve", "reject"]) {
+    const dependencyEntered = deferred();
+    const dependencyGate = deferred();
+    const borrowedDisposals = {
+      dependency: 0,
+      diagnostics: 0,
+      index: 0,
+      store: 0,
+    };
+    let dependencyCalls = 0;
+    let indexCalls = 0;
+    const vscode = createRegistrationVscode();
+    const provider = new GaugeStepDefinitionProvider({
+      dependencyStepIndex: {
+        dispose() {
+          borrowedDisposals.dependency += 1;
+        },
+        findDefinitions() {
+          dependencyCalls += 1;
+          dependencyEntered.resolve();
+          return dependencyGate.promise;
+        },
+      },
+      diagnosticsProvider: {
+        dispose() {
+          borrowedDisposals.diagnostics += 1;
+        },
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      documentStore: {
+        dispose() {
+          borrowedDisposals.store += 1;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode,
+      workspaceStepIndex: {
+        definitionEntries() {
+          indexCalls += 1;
+          return [];
+        },
+        dispose() {
+          borrowedDisposals.index += 1;
+        },
+      },
+    });
+    const firstRegistration = provider.register();
+    const secondRegistration = provider.register();
+    let outcome = { status: "pending" };
+    const invocation = provider.provideDefinition(
+      specDocument,
+      { line: 2, character: 5 },
+    ).then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+        return value;
+      },
+      (reason) => {
+        outcome = { reason, status: "rejected" };
+        throw reason;
+      },
+    );
+
+    await dependencyEntered.promise;
+    firstRegistration.dispose();
+    firstRegistration.dispose();
+    await nextTurn();
+    const observedBeforeRelease = outcome;
+    const retained = vscode.registration.provider.provideDefinition(
+      specDocument,
+      { line: 2, character: 5 },
+    );
+    const direct = provider.provideDefinition(specDocument, { line: 2, character: 5 });
+    if (settlement === "resolve") {
+      dependencyGate.resolve([{ uri: { fsPath: "/dependency/Steps.class" } }]);
+    } else {
+      dependencyGate.reject(new Error("late dependency definition failure"));
+    }
+    const outcomes = await Promise.allSettled([invocation, retained, direct]);
+
+    assert.equal(firstRegistration, provider);
+    assert.equal(secondRegistration, provider);
+    assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+    assert.deepEqual(
+      outcomes,
+      [
+        { status: "fulfilled", value: [] },
+        { status: "fulfilled", value: [] },
+        { status: "fulfilled", value: [] },
+      ],
+    );
+    assert.equal(provider.activeOperations.size, 0);
+    assert.equal(vscode.registration.registerCalls, 1);
+    assert.equal(vscode.registration.disposeCalls, 1);
+    assert.equal(indexCalls, 1);
+    assert.equal(dependencyCalls, 1);
+    assert.deepEqual(borrowedDisposals, {
+      dependency: 0,
+      diagnostics: 0,
+      index: 0,
+      store: 0,
+    });
+  }
+});
+
+test("GaugeStepDefinitionProvider disposal detaches a borrowed document store scan", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+
+  for (const settlement of ["resolve", "reject"]) {
+    const readyEntered = deferred();
+    const readyGate = deferred();
+    let dependencyCalls = 0;
+    let disposeCalls = 0;
+    let documentReads = 0;
+    let disposeError;
+    const documentStore = {
+      dispose() {
+        disposeCalls += 1;
+      },
+      documents() {
+        documentReads += 1;
+        return [];
+      },
+      whenReady() {
+        readyEntered.resolve();
+        return readyGate.promise;
+      },
+    };
+    const provider = new GaugeStepDefinitionProvider({
+      dependencyStepIndex: {
+        findDefinitions() {
+          dependencyCalls += 1;
+          return [];
+        },
+      },
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      documentStore,
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+    });
+    let outcome = { status: "pending" };
+    const invocation = provider.provideDefinition(
+      specDocument,
+      { line: 2, character: 5 },
+    ).then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+        return value;
+      },
+      (reason) => {
+        outcome = { reason, status: "rejected" };
+        throw reason;
+      },
+    );
+
+    await readyEntered.promise;
+    try {
+      provider.dispose();
+    } catch (error) {
+      disposeError = error;
+    }
+    await nextTurn();
+    const observedBeforeRelease = outcome;
+    if (settlement === "resolve") {
+      readyGate.resolve();
+    } else {
+      readyGate.reject(new Error("late document store failure"));
+    }
+    await Promise.allSettled([invocation]);
+
+    assert.equal(disposeError, undefined);
+    assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+    assert.deepEqual(outcome, { status: "fulfilled", value: [] });
+    assert.equal(documentReads, 0);
+    assert.equal(dependencyCalls, 0);
+    assert.equal(disposeCalls, 0);
+  }
+});
+
+test("GaugeStepDefinitionProvider preserves live results and failures with host tokens", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+  const targetDocument = createDocument(
+    "# Send the request\n* Continue",
+    "gauge-concept",
+    "/workspace/gauge/concepts/send.cpt",
+  );
+  const entry = {
+    document: targetDocument,
+    heading: {
+      end: { line: 0, character: 18 },
+      start: { line: 0, character: 2 },
+    },
+    kind: "concept",
+  };
+
+  {
+    const cancellation = createCancellation();
+    let indexCalls = 0;
+    const provider = new GaugeStepDefinitionProvider({
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+      workspaceStepIndex: {
+        definitionEntries() {
+          indexCalls += 1;
+          return [entry];
+        },
+      },
+    });
+    cancellation.cancel();
+
+    const definitions = await provider.provideDefinition(
+      specDocument,
+      { line: 2, character: 5 },
+      cancellation.token,
+    );
+
+    assert.deepEqual(definitions, []);
+    assert.equal(indexCalls, 0);
+    assert.equal(cancellation.registrations(), 0);
+    assert.equal(cancellation.listenerDisposals(), 0);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const provider = new GaugeStepDefinitionProvider({
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+      workspaceStepIndex: {
+        definitionEntries() {
+          return [entry];
+        },
+      },
+    });
+
+    const definitions = await provider.provideDefinition(
+      specDocument,
+      { line: 2, character: 5 },
+      cancellation.token,
+    );
+
+    assert.equal(definitions.length, 1);
+    assert.equal(definitions[0].uri, targetDocument.uri);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  for (const source of ["index", "dependency", "store"]) {
+    const cancellation = createCancellation();
+    const liveError = new Error(`live ${source} definition failure`);
+    const provider = new GaugeStepDefinitionProvider({
+      dependencyStepIndex: {
+        findDefinitions() {
+          if (source === "dependency") {
+            return Promise.reject(liveError);
+          }
+          return [];
+        },
+      },
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      documentStore: source === "store"
+        ? {
+          whenReady() {
+            return Promise.reject(liveError);
+          },
+        }
+        : undefined,
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+      workspaceStepIndex: source === "store"
+        ? undefined
+        : {
+          definitionEntries() {
+            if (source === "index") {
+              return Promise.reject(liveError);
+            }
+            return [];
+          },
+        },
+    });
+
+    await assert.rejects(
+      provider.provideDefinition(
+        specDocument,
+        { line: 2, character: 5 },
+        cancellation.token,
+      ),
+      (error) => error === liveError,
+    );
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+});
+
+test("GaugeStepDefinitionProvider stops fallback file discovery on host cancellation", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+
+  for (const boundary of ["findFiles", "openTextDocument"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const cancellation = createCancellation();
+      const boundaryEntered = deferred();
+      const boundaryGate = deferred();
+      const findPatterns = [];
+      const openedFiles = [];
+      const firstUri = { fsPath: "/workspace/gauge/src/test/kotlin/FirstSteps.kt" };
+      const secondUri = { fsPath: "/workspace/gauge/src/test/kotlin/SecondSteps.kt" };
+      let dependencyCalls = 0;
+      const vscode = createFakeVscode([specDocument], {
+        findFiles(pattern) {
+          findPatterns.push(pattern);
+          if (boundary === "findFiles") {
+            boundaryEntered.resolve();
+            return boundaryGate.promise;
+          }
+          return Promise.resolve(pattern === "**/*.kt" ? [firstUri, secondUri] : []);
+        },
+        openTextDocument(uri) {
+          openedFiles.push(uri.fsPath);
+          boundaryEntered.resolve();
+          return boundaryGate.promise;
+        },
+      });
+      const provider = new GaugeStepDefinitionProvider({
+        dependencyStepIndex: {
+          findDefinitions() {
+            dependencyCalls += 1;
+            return [];
+          },
+        },
+        diagnosticsProvider: {
+          isGaugeProjectDocument() {
+            return true;
+          },
+          isGaugeProjectRoot() {
+            return true;
+          },
+        },
+        projectFactory: createProjectFactory(),
+        vscode,
+      });
+      let outcome = { status: "pending" };
+      const invocation = provider.provideDefinition(
+        specDocument,
+        { line: 2, character: 5 },
+        cancellation.token,
+      ).then(
+        (value) => {
+          outcome = { status: "fulfilled", value };
+          return value;
+        },
+        (reason) => {
+          outcome = { reason, status: "rejected" };
+          throw reason;
+        },
+      );
+
+      await boundaryEntered.promise;
+      cancellation.cancel();
+      await nextTurn();
+      const observedBeforeRelease = outcome;
+      if (settlement === "resolve") {
+        boundaryGate.resolve(boundary === "findFiles"
+          ? [firstUri, secondUri]
+          : createDocument(
+            "@Step(\"Send the request\")\nfun send() {}",
+            "kotlin",
+            firstUri.fsPath,
+          ));
+      } else {
+        boundaryGate.reject(new Error(`late ${boundary} failure`));
+      }
+      await Promise.allSettled([invocation]);
+
+      assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+      assert.deepEqual(outcome, { status: "fulfilled", value: [] });
+      assert.deepEqual(findPatterns, ["**/*.kt"]);
+      assert.deepEqual(openedFiles, boundary === "openTextDocument" ? [firstUri.fsPath] : []);
+      assert.equal(dependencyCalls, 0);
+      assert.equal(cancellation.listenerDisposals(), 1);
+      assert.equal(cancellation.listenerCount(), 0);
+    }
+  }
+});
+
+test("GaugeStepDefinitionProvider preserves live fallback file failures", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+  const unreadableUri = { fsPath: "/workspace/gauge/src/test/java/UnreadableSteps.java" };
+  const readableUri = { fsPath: "/workspace/gauge/src/test/java/OtherSteps.java" };
+  const dependencyLocation = { uri: { fsPath: "/dependency/Steps.class" } };
+  const cancellation = createCancellation();
+  const findPatterns = [];
+  const openedFiles = [];
+  const vscode = createFakeVscode([specDocument], {
+    findFiles(pattern) {
+      findPatterns.push(pattern);
+      if (pattern === "**/*.kt") {
+        return Promise.reject(new Error("live Kotlin search failure"));
+      }
+      if (pattern === "**/*.java") {
+        return Promise.resolve([unreadableUri, readableUri]);
+      }
+      return Promise.resolve([]);
+    },
+    openTextDocument(uri) {
+      openedFiles.push(uri.fsPath);
+      if (uri === unreadableUri) {
+        return Promise.reject(new Error("live Java read failure"));
+      }
+      return Promise.resolve(createDocument(
+        "@Step(\"Another request\")\nvoid another() {}",
+        "java",
+        uri.fsPath,
+      ));
+    },
+  });
+  const provider = new GaugeStepDefinitionProvider({
+    dependencyStepIndex: {
+      findDefinitions() {
+        return [dependencyLocation];
+      },
+    },
+    diagnosticsProvider: {
+      collectWorkspaceConstants() {
+        return new Map();
+      },
+      isGaugeProjectDocument() {
+        return true;
+      },
+      isGaugeProjectRoot() {
+        return true;
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode,
+  });
+
+  const definitions = await provider.provideDefinition(
+    specDocument,
+    { line: 2, character: 5 },
+    cancellation.token,
+  );
+
+  assert.deepEqual(definitions, [dependencyLocation]);
+  assert.deepEqual(findPatterns, ["**/*.kt", "**/*.java", "**/*.cpt"]);
+  assert.deepEqual(openedFiles, [unreadableUri.fsPath, readableUri.fsPath]);
+  assert.equal(cancellation.listenerDisposals(), 1);
+  assert.equal(cancellation.listenerCount(), 0);
+  assert.equal(provider.activeOperations.size, 0);
+});
+
+test("GaugeStepDefinitionProvider normalizes synchronous lifecycle reentrancy", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+  const targetDocument = createDocument(
+    "# Send the request\n* Continue",
+    "gauge-concept",
+    "/workspace/gauge/concepts/send.cpt",
+  );
+  const entry = {
+    document: targetDocument,
+    heading: {
+      end: { line: 0, character: 18 },
+      start: { line: 0, character: 2 },
+    },
+    kind: "concept",
+  };
+
+  {
+    let indexCalls = 0;
+    let listenerDisposals = 0;
+    const token = {
+      isCancellationRequested: false,
+      onCancellationRequested(listener) {
+        listener();
+        return {
+          dispose() {
+            listenerDisposals += 1;
+          },
+        };
+      },
+    };
+    const provider = new GaugeStepDefinitionProvider({
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+      workspaceStepIndex: {
+        definitionEntries() {
+          indexCalls += 1;
+          return [entry];
+        },
+      },
+    });
+
+    assert.deepEqual(
+      await provider.provideDefinition(specDocument, { line: 2, character: 5 }, token),
+      [],
+    );
+    assert.equal(indexCalls, 0);
+    assert.equal(listenerDisposals, 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const lateError = new Error("synchronous cancelled index failure");
+    let dependencyCalls = 0;
+    const provider = new GaugeStepDefinitionProvider({
+      dependencyStepIndex: {
+        findDefinitions() {
+          dependencyCalls += 1;
+          return [];
+        },
+      },
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode: createFakeVscode([specDocument]),
+      workspaceStepIndex: {
+        definitionEntries() {
+          cancellation.cancel();
+          return Promise.reject(lateError);
+        },
+      },
+    });
+
+    assert.deepEqual(
+      await provider.provideDefinition(
+        specDocument,
+        { line: 2, character: 5 },
+        cancellation.token,
+      ),
+      [],
+    );
+    assert.equal(dependencyCalls, 0);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  {
+    let locationCalls = 0;
+    let provider;
+    const vscode = createFakeVscode([specDocument]);
+    vscode.Location = class Location {
+      constructor(uri, range) {
+        locationCalls += 1;
+        this.uri = uri;
+        this.range = range;
+        if (locationCalls === 1) {
+          provider.dispose();
+        }
+      }
+    };
+    provider = new GaugeStepDefinitionProvider({
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode,
+      workspaceStepIndex: {
+        definitionEntries() {
+          return [entry, entry];
+        },
+      },
+    });
+
+    assert.deepEqual(
+      await provider.provideDefinition(specDocument, { line: 2, character: 5 }),
+      [],
+    );
+    assert.equal(locationCalls, 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  {
+    let registrationDisposeCalls = 0;
+    const vscode = createFakeVscode([specDocument]);
+    vscode.languages = {
+      registerDefinitionProvider(_selector, registeredProvider) {
+        registeredProvider.dispose();
+        return {
+          dispose() {
+            registrationDisposeCalls += 1;
+          },
+        };
+      },
+    };
+    const provider = new GaugeStepDefinitionProvider({
+      diagnosticsProvider: {
+        isGaugeProjectDocument() {
+          return true;
+        },
+        isGaugeProjectRoot() {
+          return true;
+        },
+      },
+      projectFactory: createProjectFactory(),
+      vscode,
+    });
+
+    assert.equal(provider.register(), provider);
+    assert.equal(provider.register(), provider);
+    assert.equal(registrationDisposeCalls, 1);
+    assert.deepEqual(
+      await provider.provideDefinition(specDocument, { line: 2, character: 5 }),
+      [],
+    );
+  }
+});
+
+test("GaugeStepDefinitionProvider isolates concurrent cancellation and provider disposal", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const specDocument = createDocument(
+    "# Send\n\n* Send the request",
+    "gauge",
+    "/workspace/gauge/specs/send.spec",
+  );
+  const targetDocument = createDocument(
+    "# Send the request\n* Continue",
+    "gauge-concept",
+    "/workspace/gauge/concepts/send.cpt",
+  );
+  const entry = {
+    document: targetDocument,
+    heading: {
+      end: { line: 0, character: 18 },
+      start: { line: 0, character: 2 },
+    },
+    kind: "concept",
+  };
+  const gates = [];
+  const provider = new GaugeStepDefinitionProvider({
+    diagnosticsProvider: {
+      disposeCalls: 0,
+      dispose() {
+        this.disposeCalls += 1;
+      },
+      isGaugeProjectDocument() {
+        return true;
+      },
+      isGaugeProjectRoot() {
+        return true;
+      },
+    },
+    projectFactory: createProjectFactory(),
+    vscode: createFakeVscode([specDocument]),
+    workspaceStepIndex: {
+      definitionEntries() {
+        const gate = deferred();
+        gates.push(gate);
+        return gate.promise;
+      },
+    },
+  });
+  const firstCancellation = createCancellation();
+  const secondCancellation = createCancellation();
+  const first = provider.provideDefinition(
+    specDocument,
+    { line: 2, character: 5 },
+    firstCancellation.token,
+  );
+  const second = provider.provideDefinition(
+    specDocument,
+    { line: 2, character: 5 },
+    secondCancellation.token,
+  );
+  await nextTurn();
+
+  firstCancellation.cancel();
+  gates[1].resolve([entry]);
+  const firstOutcome = await first;
+  const secondOutcome = await second;
+  gates[0].reject(new Error("late cancelled concurrent definition failure"));
+  await nextTurn();
+
+  assert.deepEqual(firstOutcome, []);
+  assert.equal(secondOutcome.length, 1);
+  assert.equal(secondOutcome[0].uri, targetDocument.uri);
+  assert.equal(firstCancellation.listenerDisposals(), 1);
+  assert.equal(secondCancellation.listenerDisposals(), 1);
+  assert.equal(provider.activeOperations.size, 0);
+
+  const thirdCancellation = createCancellation();
+  const fourthCancellation = createCancellation();
+  const third = provider.provideDefinition(
+    specDocument,
+    { line: 2, character: 5 },
+    thirdCancellation.token,
+  );
+  const fourth = provider.provideDefinition(
+    specDocument,
+    { line: 2, character: 5 },
+    fourthCancellation.token,
+  );
+  await nextTurn();
+  provider.dispose();
+  provider.dispose();
+  const disposedOutcomes = await Promise.all([third, fourth]);
+  gates[2].reject(new Error("late third definition failure"));
+  gates[3].resolve([entry]);
+  await nextTurn();
+
+  assert.deepEqual(disposedOutcomes, [[], []]);
+  assert.equal(thirdCancellation.listenerDisposals(), 1);
+  assert.equal(fourthCancellation.listenerDisposals(), 1);
+  assert.equal(provider.activeOperations.size, 0);
+  assert.equal(provider.diagnosticsProvider.disposeCalls, 0);
+});
+
+test("GaugeStepDefinitionProvider disposes only provider-owned diagnostic caches", () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const vscode = createFakeVscode([]);
+  const provider = new GaugeStepDefinitionProvider({ vscode });
+  const ownedDiagnosticsProvider = provider.ownedDiagnosticsProvider;
+  const externalConstantsProvider = provider.externalWorkspaceConstantsProvider();
+  let ownedDisposeCalls = 0;
+  let externalDisposeCalls = 0;
+  const ownedDispose = ownedDiagnosticsProvider.dispose.bind(ownedDiagnosticsProvider);
+  const externalDispose = externalConstantsProvider.dispose.bind(externalConstantsProvider);
+  ownedDiagnosticsProvider.dispose = () => {
+    ownedDisposeCalls += 1;
+    ownedDispose();
+  };
+  externalConstantsProvider.dispose = () => {
+    externalDisposeCalls += 1;
+    externalDispose();
+  };
+
+  provider.dispose();
+  provider.dispose();
+
+  assert.equal(ownedDisposeCalls, 1);
+  assert.equal(externalDisposeCalls, 1);
+  assert.equal(ownedDiagnosticsProvider.disposed, true);
+  assert.equal(externalConstantsProvider.disposed, true);
+  assert.equal(provider.ownedDiagnosticsProvider, undefined);
+  assert.equal(provider.externalConstantsProvider, undefined);
 });
