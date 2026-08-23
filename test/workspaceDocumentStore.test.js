@@ -246,6 +246,107 @@ test("WorkspaceDocumentStore updates disk content on watcher change events", asy
   assert.equal(documents[0].getText(), "# Login updated\n");
 });
 
+test("WorkspaceDocumentStore does not resurrect a deleted file from a pending read", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const file = "/ws/specs/login.spec";
+  const { vscode, state } = createFakeVscode({ files: [] });
+  let markReadEntered;
+  const readEntered = new Promise((resolve) => {
+    markReadEntered = resolve;
+  });
+  let releaseRead;
+  const readGate = new Promise((resolve) => {
+    releaseRead = resolve;
+  });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        async readFile() {
+          markReadEntered();
+          return readGate;
+        },
+      },
+    },
+    vscode,
+  });
+  await store.start();
+
+  const pendingRead = state.watchers[0].changeListeners[0]({ fsPath: file });
+  await readEntered;
+  await state.watchers[0].deleteListeners[0]({ fsPath: file });
+  releaseRead("# Deleted login\n");
+  await pendingRead;
+
+  assert.equal(store.documents().length, 0);
+});
+
+test("WorkspaceDocumentStore keeps the newest out-of-order watcher read", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const file = "/ws/specs/login.spec";
+  const { vscode, state } = createFakeVscode({ files: [] });
+  const releaseReads = [];
+  const store = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        readFile() {
+          return new Promise((resolve) => {
+            releaseReads.push(resolve);
+          });
+        },
+      },
+    },
+    vscode,
+  });
+  await store.start();
+
+  const olderRead = state.watchers[0].changeListeners[0]({ fsPath: file });
+  const newerRead = state.watchers[0].changeListeners[0]({ fsPath: file });
+  assert.equal(releaseReads.length, 2);
+
+  releaseReads[1]("# Newest login\n");
+  await newerRead;
+  assert.equal(store.documents()[0].getText(), "# Newest login\n");
+  releaseReads[0]("# Stale login\n");
+  await olderRead;
+
+  const documents = store.documents();
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].getText(), "# Newest login\n");
+});
+
+test("WorkspaceDocumentStore ignores a stale watcher read failure", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const file = "/ws/specs/login.spec";
+  const { vscode, state } = createFakeVscode({ files: [] });
+  const pendingReads = [];
+  const store = new WorkspaceDocumentStore({
+    fileSystem: {
+      promises: {
+        readFile() {
+          return new Promise((resolve, reject) => {
+            pendingReads.push({ reject, resolve });
+          });
+        },
+      },
+    },
+    vscode,
+  });
+  await store.start();
+
+  const olderRead = state.watchers[0].changeListeners[0]({ fsPath: file });
+  const newerRead = state.watchers[0].changeListeners[0]({ fsPath: file });
+  assert.equal(pendingReads.length, 2);
+
+  pendingReads[1].resolve("# Newest login\n");
+  await newerRead;
+  pendingReads[0].reject(new Error("stale read failed"));
+  await olderRead;
+
+  const documents = store.documents();
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].getText(), "# Newest login\n");
+});
+
 test("WorkspaceDocumentStore adds and removes documents on watcher create and delete", async () => {
   const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
   const files = { "/ws/specs/login.spec": "# Login\n" };

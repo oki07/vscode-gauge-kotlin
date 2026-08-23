@@ -90,6 +90,7 @@ class WorkspaceDocumentStore {
       DEFAULT_INITIAL_READ_CONCURRENCY,
     );
     this.diskDocuments = new Map();
+    this.fileGenerations = new Map();
     this.cachedDocuments = undefined;
     this.changeListeners = new Set();
     this.disposables = [];
@@ -164,14 +165,28 @@ class WorkspaceDocumentStore {
     return String(this.fileSystem.readFileSync(file));
   }
 
+  nextFileGeneration(file) {
+    const generation = (this.fileGenerations.get(file) || 0) + 1;
+    this.fileGenerations.set(file, generation);
+    return generation;
+  }
+
+  isCurrentFileGeneration(file, generation) {
+    return this.fileGenerations.get(file) === generation;
+  }
+
   async loadDiskDocument(file, options = {}) {
+    const fileGeneration = this.nextFileGeneration(file);
     try {
       const text = await this.readFileText(file);
-      if (this.disposed) {
+      if (this.disposed || !this.isCurrentFileGeneration(file, fileGeneration)) {
         return;
       }
       this.diskDocuments.set(file, createDiskDocument(file, text, this.vscode));
     } catch (_error) {
+      if (this.disposed || !this.isCurrentFileGeneration(file, fileGeneration)) {
+        return;
+      }
       this.diskDocuments.delete(file);
     }
     // A silent load skips waking the listeners, which is what the initial
@@ -193,9 +208,10 @@ class WorkspaceDocumentStore {
 
   handleFileDelete(uri) {
     const file = uriPath(uri);
-    if (!file || !this.diskDocuments.has(file)) {
+    if (!file || (!this.diskDocuments.has(file) && !this.fileGenerations.has(file))) {
       return Promise.resolve();
     }
+    this.nextFileGeneration(file);
     this.diskDocuments.delete(file);
     this.notifyChange(file);
     return Promise.resolve();
@@ -331,6 +347,7 @@ class WorkspaceDocumentStore {
     }
     this.disposables = [];
     this.diskDocuments.clear();
+    this.fileGenerations.clear();
     this.cachedDocuments = undefined;
   }
 }
