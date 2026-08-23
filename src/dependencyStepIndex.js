@@ -441,9 +441,13 @@ class DependencyStepIndex {
     this.indices = new Map();
     this.pending = new Map();
     this.generation = 0;
+    this.disposed = false;
   }
 
   async projectClasspath(root) {
+    if (this.disposed) {
+      return [];
+    }
     const project = projectForRoot(this.projectFactory, root);
     if (
       !project
@@ -463,12 +467,21 @@ class DependencyStepIndex {
           ? project.envsAsync(this.cli)
           : Promise.resolve(project.envs(this.cli) || {})
       );
+    if (this.disposed || !environment) {
+      return [];
+    }
     const classpath = environment[GAUGE_CUSTOM_CLASSPATH];
     return typeof classpath === "string" ? classpath.split(this.pathModule.delimiter) : [];
   }
 
   async buildIndex(root) {
+    if (this.disposed) {
+      return undefined;
+    }
     const classpath = await this.classpathProvider(root);
+    if (this.disposed) {
+      return undefined;
+    }
     const archives = [...new Set((Array.isArray(classpath) ? classpath : [])
       .filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".jar"))
       .filter((entry) => this.fileSystem.existsSync(entry)))];
@@ -480,7 +493,13 @@ class DependencyStepIndex {
 
     const entriesByTemplate = new Map();
     for (const archive of archives) {
+      if (this.disposed) {
+        return undefined;
+      }
       await this.scanArchive(archive, async (_fileName, data) => {
+        if (this.disposed) {
+          return;
+        }
         let parsed;
         try {
           parsed = parseDependencyClass(data, archive);
@@ -504,6 +523,12 @@ class DependencyStepIndex {
           }
         }
       });
+      if (this.disposed) {
+        return undefined;
+      }
+    }
+    if (this.disposed) {
+      return undefined;
     }
     const index = { classpathKey, entriesByTemplate };
     this.indices.set(root, index);
@@ -512,30 +537,45 @@ class DependencyStepIndex {
   }
 
   refresh(root, force = false) {
-    if (!root) {
+    if (this.disposed || !root) {
       return Promise.resolve(undefined);
     }
     if (!force && this.indices.has(root)) {
-      return Promise.resolve(this.indices.get(root));
+      return Promise.resolve(this.indices.get(root)).then((index) => (
+        this.disposed ? undefined : index
+      ));
     }
     if (this.pending.has(root)) {
       return this.pending.get(root);
     }
-    const refresh = this.buildIndex(root).finally(() => {
-      if (this.pending.get(root) === refresh) {
-        this.pending.delete(root);
-      }
-    });
+    const refresh = this.buildIndex(root)
+      .catch((error) => {
+        if (this.disposed) {
+          return undefined;
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (this.pending.get(root) === refresh) {
+          this.pending.delete(root);
+        }
+      });
     this.pending.set(root, refresh);
     return refresh;
   }
 
   invalidate(root) {
+    if (this.disposed) {
+      return;
+    }
     this.indices.delete(root);
     this.generation += 1;
   }
 
   stepTemplates(root) {
+    if (this.disposed) {
+      return new Set();
+    }
     const index = this.indices.get(root);
     return new Set(index ? index.entriesByTemplate.keys() : []);
   }
@@ -555,8 +595,19 @@ class DependencyStepIndex {
   }
 
   async findDefinitions(root, normalizedSteps) {
-    const index = await this.refresh(root);
-    if (!index) {
+    if (this.disposed) {
+      return [];
+    }
+    let index;
+    try {
+      index = await this.refresh(root);
+    } catch (error) {
+      if (this.disposed) {
+        return [];
+      }
+      throw error;
+    }
+    if (this.disposed || !index) {
       return [];
     }
     const definitions = [];
@@ -587,14 +638,21 @@ class DependencyStepIndex {
   }
 
   content(uri) {
+    if (this.disposed) {
+      return "Dependency step declaration is unavailable.";
+    }
     return this.contents.get(uri && uri.toString())
       || this.contents.get(uri && uri.query)
       || "Dependency step declaration is unavailable.";
   }
 
   register() {
+    if (this.disposed) {
+      return { dispose() {} };
+    }
     const workspace = this.vscode.workspace || {};
     const disposables = [];
+    let registrationDisposed = false;
     if (
       this.projectEnvironmentService
       && typeof this.projectEnvironmentService.onDidInvalidate === "function"
@@ -615,7 +673,12 @@ class DependencyStepIndex {
       }));
     }
     return {
-      dispose() {
+      dispose: () => {
+        if (registrationDisposed) {
+          return;
+        }
+        registrationDisposed = true;
+        this.dispose();
         for (const disposable of disposables) {
           if (disposable && typeof disposable.dispose === "function") {
             disposable.dispose();
@@ -623,6 +686,17 @@ class DependencyStepIndex {
         }
       },
     };
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.generation += 1;
+    this.contents.clear();
+    this.indices.clear();
+    this.pending.clear();
   }
 }
 
