@@ -332,7 +332,7 @@ test("activation registers core contributed Gauge commands", () => {
   );
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 5
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 6
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -979,6 +979,49 @@ test("preview command delegates to the Gauge preview creator", () => {
   assert.equal(receivedOptions.fileSystem.id, "fs");
   assert.equal(receivedOptions.pathModule.id, "path");
   assert.equal(receivedOptions.projectFactory, projectFactory);
+});
+
+test("activation owns one Gauge preview controller", async () => {
+  const extension = require("../src/extension");
+
+  const created = [];
+  class FakePreviewController {
+    constructor(options) {
+      this.options = options;
+      this.disposeCalls = 0;
+      this.previewCalls = 0;
+      created.push(this);
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+
+    preview() {
+      this.previewCalls += 1;
+      return Promise.resolve("previewed");
+    }
+  }
+
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+  const projectEnvironmentService = { id: "environment-service" };
+
+  extension.activate(context, fakeVscode, {
+    GaugePreviewController: FakePreviewController,
+    projectEnvironmentService,
+  });
+
+  const command = registeredCommands.find((entry) => entry.command === "gauge.preview");
+  assert.ok(command);
+  assert.equal(await command.handler(), "previewed");
+  assert.equal(created.length, 1);
+  assert.equal(created[0].previewCalls, 1);
+  assert.equal(created[0].options.projectEnvironmentService, projectEnvironmentService);
+  assert.equal(
+    context.subscriptions.filter((entry) => entry === created[0]).length,
+    1,
+  );
 });
 
 test("format command saves and runs gauge format for the active Gauge file", async () => {

@@ -28,7 +28,7 @@ const { ReferenceProvider } = require("./gaugeReference");
 const { GaugeState } = require("./gaugeState");
 const { GaugeWorkspace } = require("./gaugeWorkspace");
 const { ProjectInitializer } = require("./init/projectInit");
-const { previewGaugeDocument } = require("./preview");
+const { GaugePreviewController, previewGaugeDocument } = require("./preview");
 const { ProjectEnvironmentService } = require("./projectEnvironmentService");
 const { createProjectFactory } = require("./project/projectFactory");
 const {
@@ -854,13 +854,31 @@ function createCommandHandler(command, vscode, executionController, options = {}
           specDir: folderPathFromUri(args[0]),
         });
       case "gauge.preview":
-        return (options.createPreview || previewGaugeDocument)({
+        if (options.createPreview) {
+          return options.createPreview({
+            vscode,
+            cli: options.cli,
+            createCli: options.createCli,
+            env: options.env,
+            fileSystem: options.fileSystem,
+            pathModule: options.pathModule,
+            projectEnvironmentService: options.projectEnvironmentService,
+            projectFactory: options.projectFactory,
+            tempDirProvider: options.tempDirProvider,
+          });
+        }
+        if (options.previewController
+          && typeof options.previewController.preview === "function") {
+          return options.previewController.preview();
+        }
+        return previewGaugeDocument({
           vscode,
           cli: options.cli,
           createCli: options.createCli,
           env: options.env,
           fileSystem: options.fileSystem,
           pathModule: options.pathModule,
+          projectEnvironmentService: options.projectEnvironmentService,
           projectFactory: options.projectFactory,
           tempDirProvider: options.tempDirProvider,
         });
@@ -1127,9 +1145,26 @@ function activate(context, vscodeApi, options = {}) {
   }
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
+  const GaugePreviewControllerCtor = options.GaugePreviewController || GaugePreviewController;
+  const previewController = options.previewController || new GaugePreviewControllerCtor({
+    cli: options.cli,
+    createCli: options.createCli,
+    env: options.env,
+    fileSystem: options.fileSystem,
+    osModule: options.osModule,
+    pathModule: options.pathModule,
+    projectEnvironmentService,
+    projectFactory,
+    tempDirProvider: options.tempDirProvider,
+    vscode,
+  });
+  if (previewController && typeof previewController.dispose === "function") {
+    context.subscriptions.push(previewController);
+  }
   const serviceOptions = {
     ...options,
     clientsMap,
+    previewController,
     projectFactory,
     projectEnvironmentService,
   };

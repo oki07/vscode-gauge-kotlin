@@ -3,6 +3,28 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function createDeferredChild() {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.killCalls = 0;
+  child.kill = () => {
+    child.killCalls += 1;
+    return true;
+  };
+  return child;
+}
+
 function createChildProcess(options = {}) {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
@@ -765,6 +787,14 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
     },
     errorSelection: "Install Spectacle",
   });
+  const informationEntered = deferred();
+  const originalShowInformationMessage = vscode.window.showInformationMessage;
+  vscode.window.showInformationMessage = (...args) => {
+    const result = originalShowInformationMessage(...args);
+    informationEntered.resolve();
+    return result;
+  };
+  const installEntered = deferred();
   let finishInstall;
   let assertionError;
   const installPromise = new Promise((resolve) => {
@@ -778,6 +808,7 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
     },
     installGaugeRunner(pluginName) {
       installs.push(pluginName);
+      installEntered.resolve();
       return installPromise;
     },
   };
@@ -800,9 +831,9 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
   };
 
   const firstPreview = previewGaugeDocument(options);
-  await Promise.resolve();
+  await installEntered.promise;
   const secondPreview = previewGaugeDocument(options);
-  await Promise.resolve();
+  await informationEntered.promise;
 
   try {
     assert.deepEqual(installs, ["spectacle"]);
@@ -831,4 +862,598 @@ test("previewGaugeDocument requires an active Gauge document", async () => {
 
   assert.deepEqual(opened, []);
   assert.deepEqual(errors, ["Open a Gauge specification or concept to preview."]);
+});
+
+test("GaugePreviewController lifecycle detaches active docs without killing them", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode();
+  const child = createDeferredChild();
+  const spawns = [];
+  const controller = new GaugePreviewController({
+    cli: {
+      isPluginInstalled() {
+        return true;
+      },
+      gaugeCommand() {
+        return {
+          spawn(args, options) {
+            spawns.push({ args, options });
+            return child;
+          },
+        };
+      },
+    },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  const active = controller.preview();
+  assert.equal(spawns.length, 1);
+  assert.equal(controller.activeOperations.size, 1);
+
+  controller.dispose();
+  controller.dispose();
+
+  assert.equal(await active, undefined);
+  assert.equal(controller.activeOperations.size, 0);
+  assert.equal(child.killCalls, 0);
+  assert.equal(child.listenerCount("error") > 0, true);
+  assert.doesNotThrow(() => child.emit("error", new Error("late docs failure")));
+  child.emit("close", 1);
+  assert.equal(child.listenerCount("error"), 0);
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(child.listenerCount("close"), 0);
+  assert.equal(child.stdout.listenerCount("data"), 0);
+  assert.equal(child.stderr.listenerCount("data"), 0);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(opened, []);
+
+  assert.equal(await controller.preview(), undefined);
+  assert.equal(spawns.length, 1);
+});
+
+test("GaugePreviewController lifecycle neutralizes pending environment settlements", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+
+  for (const settlement of ["resolve", "reject"]) {
+    const environmentEntered = deferred();
+    const environmentResponse = deferred();
+    const { errors, opened, vscode } = createFakeVscode();
+    const spawns = [];
+    const controller = new GaugePreviewController({
+      cli: {
+        isPluginInstalled() {
+          return true;
+        },
+        gaugeCommand() {
+          return {
+            spawn() {
+              spawns.push(settlement);
+              return createDeferredChild();
+            },
+          };
+        },
+      },
+      fileSystem: { mkdirSync() {} },
+      pathModule: path.posix,
+      projectEnvironmentService: {
+        environmentFor() {
+          environmentEntered.resolve();
+          return environmentResponse.promise;
+        },
+      },
+      projectFactory: {
+        getProjectByFilepath() {
+          return { root: "/workspace/gauge" };
+        },
+      },
+      tempDirProvider() {
+        return "/tmp/gauge-preview";
+      },
+      vscode,
+    });
+
+    const pending = controller.preview();
+    await environmentEntered.promise;
+    controller.dispose();
+    assert.equal(await pending, undefined);
+
+    if (settlement === "resolve") {
+      environmentResponse.resolve({ gauge_custom_classpath: "/workspace/classes" });
+    } else {
+      environmentResponse.reject(new Error("late environment failure"));
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(spawns, []);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(opened, []);
+  }
+});
+
+test("GaugePreviewController lifecycle separates prompt and install ownership", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+
+  for (const boundary of ["prompt", "install"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const promptResponse = deferred();
+      const installEntered = deferred();
+      const installResponse = deferred();
+      const { errors, opened, vscode } = createFakeVscode();
+      const installs = [];
+      const writes = [];
+      vscode.window.showErrorMessage = (message) => {
+        errors.push(message);
+        return boundary === "prompt"
+          ? promptResponse.promise
+          : Promise.resolve("Install Spectacle");
+      };
+      const controller = new GaugePreviewController({
+        cli: {
+          isPluginInstalled() {
+            return false;
+          },
+          installGaugeRunner(pluginName) {
+            installs.push(pluginName);
+            installEntered.resolve();
+            return installResponse.promise;
+          },
+        },
+        fileSystem: {
+          mkdirSync() {},
+          writeFileSync(filename) {
+            writes.push(filename);
+          },
+        },
+        pathModule: path.posix,
+        projectFactory: {
+          getGaugeRootFromFilePath() {
+            return "/workspace/gauge";
+          },
+        },
+        tempDirProvider() {
+          return "/tmp/gauge-preview";
+        },
+        vscode,
+      });
+
+      const pending = controller.preview();
+      if (boundary === "install") {
+        await installEntered.promise;
+      }
+      controller.dispose();
+      assert.equal(await pending, undefined);
+
+      const response = boundary === "prompt" ? promptResponse : installResponse;
+      if (settlement === "resolve") {
+        response.resolve("Install Spectacle");
+      } else {
+        response.reject(new Error(`late ${boundary} failure`));
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+
+      assert.deepEqual(installs, boundary === "install" ? ["spectacle"] : []);
+      assert.deepEqual(writes, []);
+      assert.deepEqual(opened, []);
+      assert.equal(errors.length, 1);
+    }
+  }
+});
+
+test("GaugePreviewController lifecycle guards fallback and spawn reentrancy", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const fallbackBoundaries = [
+    "/tmp/gauge-preview",
+    "/tmp/gauge-preview/docs",
+    "/tmp/gauge-preview/docs/html/specs",
+    "read",
+    "write",
+  ];
+
+  for (const boundary of fallbackBoundaries) {
+    const { opened, vscode } = createFakeVscode({ errorSelection: undefined });
+    const calls = [];
+    let controller;
+    const stopAt = (value) => {
+      calls.push(value);
+      if (value === boundary) {
+        controller.dispose();
+      }
+    };
+    controller = new GaugePreviewController({
+      cli: {
+        isPluginInstalled() {
+          return false;
+        },
+      },
+      fileSystem: {
+        mkdirSync(directory) {
+          stopAt(directory);
+        },
+        readFileSync() {
+          stopAt("read");
+          return "# Checkout\n";
+        },
+        writeFileSync() {
+          stopAt("write");
+        },
+      },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      tempDirProvider() {
+        return "/tmp/gauge-preview";
+      },
+      vscode,
+    });
+
+    assert.equal(await controller.preview(), undefined);
+    assert.deepEqual(opened, []);
+    assert.equal(calls.includes(boundary), true);
+  }
+
+  const { errors, opened, vscode } = createFakeVscode();
+  const child = createDeferredChild();
+  let controller;
+  controller = new GaugePreviewController({
+    cli: {
+      isPluginInstalled() {
+        return true;
+      },
+      gaugeCommand() {
+        return {
+          spawn() {
+            controller.dispose();
+            return child;
+          },
+        };
+      },
+    },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.equal(await controller.preview(), undefined);
+  assert.equal(child.killCalls, 0);
+  assert.doesNotThrow(() => child.emit("error", new Error("late spawn failure")));
+  child.emit("close", 1);
+  assert.equal(child.listenerCount("error"), 0);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(opened, []);
+});
+
+test("GaugePreviewController lifecycle guards synchronous preparation reentrancy", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const boundaries = [
+    "activeDocument",
+    "project",
+    "cli",
+    "tempDirectory",
+    "pluginCheck",
+    "command",
+  ];
+
+  for (const boundary of boundaries) {
+    const { errors, opened, vscode } = createFakeVscode();
+    const calls = [];
+    let controller;
+    const stopAt = (value) => {
+      calls.push(value);
+      if (value === boundary) {
+        controller.dispose();
+      }
+    };
+    if (boundary === "activeDocument") {
+      const document = vscode.window.activeTextEditor.document;
+      Object.defineProperty(vscode.window, "activeTextEditor", {
+        get() {
+          stopAt("activeDocument");
+          return { document };
+        },
+      });
+    }
+    controller = new GaugePreviewController({
+      createCli() {
+        stopAt("cli");
+        return {
+          isPluginInstalled() {
+            stopAt("pluginCheck");
+            return true;
+          },
+          gaugeCommand() {
+            stopAt("command");
+            return {
+              spawn() {
+                calls.push("spawn");
+                return createDeferredChild();
+              },
+            };
+          },
+        };
+      },
+      fileSystem: { mkdirSync() {} },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          stopAt("project");
+          return "/workspace/gauge";
+        },
+      },
+      tempDirProvider() {
+        stopAt("tempDirectory");
+        return "/tmp/gauge-preview";
+      },
+      vscode,
+    });
+
+    assert.equal(await controller.preview(), undefined);
+    assert.equal(calls.includes(boundary), true);
+    assert.equal(calls.includes("spawn"), false);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(opened, []);
+  }
+});
+
+test("GaugePreviewController lifecycle neutralizes pending browser settlements", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+
+  for (const settlement of ["resolve", "reject"]) {
+    const { errors, opened, vscode } = createFakeVscode();
+    const child = createDeferredChild();
+    const openEntered = deferred();
+    const openResponse = deferred();
+    vscode.env.openExternal = (uri) => {
+      opened.push(uri);
+      openEntered.resolve();
+      return openResponse.promise;
+    };
+    const controller = new GaugePreviewController({
+      cli: {
+        isPluginInstalled() {
+          return true;
+        },
+        gaugeCommand() {
+          return { spawn() { return child; } };
+        },
+      },
+      fileSystem: { mkdirSync() {} },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      tempDirProvider() {
+        return "/tmp/gauge-preview";
+      },
+      vscode,
+    });
+
+    const pending = controller.preview();
+    child.emit("close", 0);
+    await openEntered.promise;
+    controller.dispose();
+    assert.equal(await pending, undefined);
+
+    if (settlement === "resolve") {
+      openResponse.resolve(true);
+    } else {
+      openResponse.reject(new Error("late browser failure"));
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(opened.length, 1);
+    assert.deepEqual(errors, []);
+    assert.equal(controller.activeOperations.size, 0);
+  }
+});
+
+test("GaugePreviewController lifecycle observes promises returned during synchronous disposal", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode();
+  let observedRejections = 0;
+  let controller;
+  const rejectedThenable = {
+    then(_resolve, reject) {
+      observedRejections += 1;
+      reject(new Error("synchronous disposal environment failure"));
+    },
+  };
+  controller = new GaugePreviewController({
+    cli: {
+      isPluginInstalled() {
+        return true;
+      },
+      gaugeCommand() {
+        return { spawn() { return createDeferredChild(); } };
+      },
+    },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectEnvironmentService: {
+      environmentFor() {
+        controller.dispose();
+        return rejectedThenable;
+      },
+    },
+    projectFactory: {
+      getProjectByFilepath() {
+        return { root: "/workspace/gauge" };
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.equal(await controller.preview(), undefined);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(observedRejections, 1);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(opened, []);
+});
+
+test("GaugePreviewController preserves live environment failures", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode();
+  const environmentError = new Error("live preview environment failure");
+  const spawns = [];
+  const controller = new GaugePreviewController({
+    cli: {
+      isPluginInstalled() {
+        return true;
+      },
+      gaugeCommand() {
+        return {
+          spawn() {
+            spawns.push("spawn");
+            return createDeferredChild();
+          },
+        };
+      },
+    },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectEnvironmentService: {
+      environmentFor() {
+        return Promise.reject(environmentError);
+      },
+    },
+    projectFactory: {
+      getProjectByFilepath() {
+        return { root: "/workspace/gauge" };
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  await assert.rejects(
+    controller.preview(),
+    (error) => error === environmentError,
+  );
+  assert.deepEqual(spawns, []);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(opened, []);
+  assert.equal(controller.activeOperations.size, 0);
+});
+
+test("GaugePreviewController releases live process listeners after close", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+
+  for (const terminal of ["error", "exit"]) {
+    const { errors, opened, vscode } = createFakeVscode();
+    const child = createDeferredChild();
+    const controller = new GaugePreviewController({
+      cli: {
+        isPluginInstalled() {
+          return true;
+        },
+        gaugeCommand() {
+          return { spawn() { return child; } };
+        },
+      },
+      fileSystem: { mkdirSync() {} },
+      pathModule: path.posix,
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      tempDirProvider() {
+        return "/tmp/gauge-preview";
+      },
+      vscode,
+    });
+
+    const pending = controller.preview();
+    if (terminal === "error") {
+      child.emit("error", new Error("live docs failure"));
+    } else {
+      child.emit("exit", 0);
+    }
+    await pending;
+    assert.equal(child.listenerCount("close"), 1);
+    child.emit("close", terminal === "error" ? 1 : 0);
+
+    assert.equal(child.listenerCount("error"), 0);
+    assert.equal(child.listenerCount("exit"), 0);
+    assert.equal(child.listenerCount("close"), 0);
+    assert.equal(child.stdout.listenerCount("data"), 0);
+    assert.equal(child.stderr.listenerCount("data"), 0);
+    assert.equal(errors.length, terminal === "error" ? 1 : 0);
+    assert.equal(opened.length, terminal === "exit" ? 1 : 0);
+  }
+});
+
+test("GaugePreviewController preserves independent live preview requests", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const { opened, vscode } = createFakeVscode();
+  const children = [];
+  const controller = new GaugePreviewController({
+    cli: {
+      isPluginInstalled() {
+        return true;
+      },
+      gaugeCommand() {
+        return {
+          spawn() {
+            const child = createDeferredChild();
+            children.push(child);
+            return child;
+          },
+        };
+      },
+    },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  const first = controller.preview();
+  const second = controller.preview();
+  assert.notStrictEqual(first, second);
+  assert.equal(children.length, 2);
+  assert.equal(controller.activeOperations.size, 2);
+
+  children[1].emit("close", 0);
+  children[0].emit("close", 0);
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.equal(opened.length, 2);
+  assert.equal(controller.activeOperations.size, 0);
+  assert.deepEqual(children.map((child) => child.killCalls), [0, 0]);
+  assert.deepEqual(children.map((child) => child.listenerCount("error")), [0, 0]);
+  assert.deepEqual(children.map((child) => child.listenerCount("close")), [0, 0]);
 });
