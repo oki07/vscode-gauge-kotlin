@@ -346,6 +346,7 @@ class GaugeWorkspace {
     this.clientsMap = options.clientsMap || new GaugeClients();
     this.clientLanguageMap = new Map();
     this.projectEnvironmentCache = new Map();
+    this.pendingServerStarts = new Map();
     this.env = envWithGaugeHome(options.env || process.env, {
       vscode: this.vscode,
       gaugeHome: options.gaugeHome,
@@ -787,10 +788,26 @@ class GaugeWorkspace {
       return undefined;
     }
     const project = this.projectFactory.get(folder);
-    if (this.clientsMap.has(project.root())) {
-      return this.clientsMap.get(project.root()).client;
+    const projectRoot = project.root();
+    if (this.pendingServerStarts.has(projectRoot)) {
+      return this.pendingServerStarts.get(projectRoot);
     }
+    if (this.clientsMap.has(projectRoot)) {
+      return this.clientsMap.get(projectRoot).client;
+    }
+    const pendingStart = this.startLanguageServer(project, folder);
+    this.pendingServerStarts.set(projectRoot, pendingStart);
+    try {
+      return await pendingStart;
+    } finally {
+      if (this.pendingServerStarts.get(projectRoot) === pendingStart) {
+        this.pendingServerStarts.delete(projectRoot);
+      }
+    }
+  }
 
+  async startLanguageServer(project, folder) {
+    const projectRoot = project.root();
     const javaConfigGenerated = this.generateJavaConfig(project);
     const serverOptions = await this.serverOptionsFor(project);
     const languageClient = new this.LanguageClient(
@@ -812,14 +829,25 @@ class GaugeWorkspace {
       await languageClient.start();
       clearLspCodeLensFeature(languageClient);
     } catch (error) {
-      this.clientsMap.delete(project.root());
-      this.clientLanguageMap.delete(project.root());
-      this.projectEnvironmentCache.delete(project.root());
+      const ownsClientRegistration = !this.clientsMap.has(projectRoot)
+        || Map.prototype.get.call(this.clientsMap, projectRoot).client === languageClient;
+      if (ownsClientRegistration) {
+        this.clientsMap.delete(projectRoot);
+        this.clientLanguageMap.delete(projectRoot);
+        this.projectEnvironmentCache.delete(projectRoot);
+      }
+      if (typeof languageClient.stop === "function") {
+        try {
+          await languageClient.stop();
+        } catch (_stopError) {
+          // Preserve the original startup error shown below.
+        }
+      }
       await this.showLanguageServerStartupError(project, error);
       return undefined;
     }
     this.registerServerMessageFilter(languageClient);
-    await this.setLanguageId(languageClient, project.root());
+    await this.setLanguageId(languageClient, projectRoot);
     return languageClient;
   }
 

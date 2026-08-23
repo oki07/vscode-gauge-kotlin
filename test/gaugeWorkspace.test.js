@@ -688,6 +688,71 @@ test("GaugeWorkspace starts clients concurrently within an explicit bound", asyn
   assert.equal(maximumStarts, DEFAULT_CLIENT_START_CONCURRENCY);
 });
 
+test("GaugeWorkspace shares an in-flight same-root language server start", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  let constructedClients = 0;
+  let clientStartCalls = 0;
+
+  class CountingLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      constructedClients += 1;
+    }
+
+    start() {
+      clientStartCalls += 1;
+      return super.start();
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: CountingLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  let releaseServerOptions;
+  const serverOptionsGate = new Promise((resolve) => {
+    releaseServerOptions = resolve;
+  });
+  let serverOptionsCalls = 0;
+  workspace.serverOptionsFor = async () => {
+    serverOptionsCalls += 1;
+    await serverOptionsGate;
+    return { command: "gauge", args: [], options: { env: {} } };
+  };
+
+  const firstStart = workspace.startServerFor("/workspace/gauge");
+  const secondStart = workspace.startServerFor("/workspace/gauge");
+  await Promise.resolve();
+  releaseServerOptions();
+  const [firstClient, secondClient] = await Promise.all([firstStart, secondStart]);
+
+  assert.equal(serverOptionsCalls, 1);
+  assert.equal(constructedClients, 1);
+  assert.equal(clientStartCalls, 1);
+  assert.equal(firstClient, secondClient);
+  assert.equal(clients.get("/workspace/gauge").client, firstClient);
+});
+
 test("GaugeWorkspace suppresses the external implementation source popup from Gauge LSP", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
@@ -1089,6 +1154,78 @@ test("GaugeWorkspace removes clients and reports language server startup failure
       detail: undefined,
     },
   ]);
+});
+
+test("GaugeWorkspace preserves a replacement client when an older same-root start fails", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  let rejectStart;
+  let failedClient;
+  let markStartEntered;
+  const startEntered = new Promise((resolve) => {
+    markStartEntered = resolve;
+  });
+
+  class DelayedFailureLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      failedClient = this;
+    }
+
+    start() {
+      this.started = true;
+      return new Promise((_resolve, reject) => {
+        rejectStart = reject;
+        markStartEntered();
+      });
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: DelayedFailureLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await startEntered;
+  assert.equal(typeof rejectStart, "function");
+
+  const failedEntry = clients.get("/workspace/gauge");
+  const replacementClient = new FakeLanguageClient("replacement", "Gauge", {}, {});
+  await replacementClient.start();
+  const replacementEntry = {
+    project: failedEntry.project,
+    client: replacementClient,
+  };
+  clients.set("/workspace/gauge", replacementEntry);
+  workspace.getClientLanguageMap().set("/workspace/gauge", "replacement");
+  workspace.projectEnvironmentCache.set("/workspace/gauge", { replacement: true });
+
+  rejectStart(new Error("older start failed"));
+  assert.equal(await start, undefined);
+
+  assert.equal(Map.prototype.get.call(clients, "/workspace/gauge"), replacementEntry);
+  assert.equal(workspace.getClientLanguageMap().get("/workspace/gauge"), "replacement");
+  assert.deepEqual(workspace.projectEnvironmentCache.get("/workspace/gauge"), { replacement: true });
+  assert.equal(failedClient.stopped, true);
 });
 
 test("GaugeWorkspace leaves language server recovery to the default error handler", async () => {
