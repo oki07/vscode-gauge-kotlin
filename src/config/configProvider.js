@@ -20,6 +20,7 @@ class ConfigProvider {
       "files.autoSave": "afterDelay",
       "files.autoSaveDelay": 500,
     };
+    this.disposed = false;
     this.disposables = [];
 
     this.applyDefaultSettings();
@@ -47,40 +48,74 @@ class ConfigProvider {
   }
 
   registerCommand() {
+    if (this.disposed) {
+      return;
+    }
     if (!this.vscode.commands || typeof this.vscode.commands.registerCommand !== "function") {
       return;
     }
-    this.disposables.push(
-      this.vscode.commands.registerCommand(
-        SAVE_RECOMMENDED_SETTINGS,
-        () => this.applyAndReload(this.recommendedSettings, this.configurationTarget().Workspace),
-      ),
+    const disposable = this.vscode.commands.registerCommand(
+      SAVE_RECOMMENDED_SETTINGS,
+      () => this.applyAndReload(this.recommendedSettings, this.configurationTarget().Workspace),
     );
+    if (this.disposed) {
+      if (disposable && typeof disposable.dispose === "function") {
+        disposable.dispose();
+      }
+      return;
+    }
+    this.disposables.push(disposable);
   }
 
-  applyDefaultSettings() {
+  async applyDefaultSettings() {
+    if (this.disposed) {
+      return undefined;
+    }
     const configuration = this.configuration();
+    if (this.disposed) {
+      return undefined;
+    }
     const inspected = this.inspectConfiguration(FILE_ASSOCIATIONS_KEY);
+    if (this.disposed) {
+      return undefined;
+    }
     const associations = {
       ...(inspected.workspaceValue || {}),
       "*.spec": "gauge",
       "*.cpt": "gauge-concept",
     };
-    return configuration.update(
-      FILE_ASSOCIATIONS_KEY,
-      associations,
-      this.configurationTarget().Workspace,
-    );
+    const target = this.configurationTarget().Workspace;
+    if (this.disposed) {
+      return undefined;
+    }
+    try {
+      await configuration.update(FILE_ASSOCIATIONS_KEY, associations, target);
+    } catch (error) {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
+    }
+    return undefined;
   }
 
   verifyRecommendedConfig() {
+    if (this.disposed) {
+      return true;
+    }
     const recommendedOption = this.inspectConfiguration(RECOMMENDED_SETTINGS_OPTION);
+    if (this.disposed) {
+      return true;
+    }
     if (recommendedOption.globalValue === IGNORE) {
       return true;
     }
 
     for (const key of Object.keys(this.recommendedSettings)) {
       const inspected = this.inspectConfiguration(key);
+      if (this.disposed) {
+        return true;
+      }
       if (!inspected.workspaceFolderValue
         && !inspected.workspaceValue
         && inspected.globalValue !== this.recommendedSettings[key]) {
@@ -90,12 +125,21 @@ class ConfigProvider {
     return true;
   }
 
-  showRecommendedSettingsNotification() {
+  async showRecommendedSettingsNotification() {
+    if (this.disposed) {
+      return undefined;
+    }
     if (this.verifyRecommendedConfig()) {
+      return undefined;
+    }
+    if (this.disposed) {
       return undefined;
     }
 
     const recommendedOption = this.inspectConfiguration(RECOMMENDED_SETTINGS_OPTION);
+    if (this.disposed) {
+      return undefined;
+    }
     if (recommendedOption.globalValue === APPLY_AND_RELOAD) {
       return this.applyAndReload(
         { ...this.recommendedSettings },
@@ -107,39 +151,72 @@ class ConfigProvider {
       return undefined;
     }
 
-    const selection = this.vscode.window.showInformationMessage(
-      "Gauge recommends some settings for best experience with Visual Studio Code.",
-      APPLY_AND_RELOAD,
-      REMIND_ME_LATER,
-      IGNORE,
-    );
-    if (selection && typeof selection.then === "function") {
-      return selection.then((option) => this.applySelectedOption(option));
+    let selection;
+    try {
+      selection = this.vscode.window.showInformationMessage(
+        "Gauge recommends some settings for best experience with Visual Studio Code.",
+        APPLY_AND_RELOAD,
+        REMIND_ME_LATER,
+        IGNORE,
+      );
+      if (!selection || typeof selection.then !== "function") {
+        return undefined;
+      }
+      const option = await selection;
+      if (this.disposed) {
+        return undefined;
+      }
+      return await this.applySelectedOption(option);
+    } catch (error) {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
     }
-    return undefined;
   }
 
-  applySelectedOption(option) {
+  async applySelectedOption(option) {
+    if (this.disposed) {
+      return undefined;
+    }
     if (option === APPLY_AND_RELOAD) {
-      this.applyAndReload(this.recommendedSettings, this.configurationTarget().Workspace, false);
+      const target = this.configurationTarget();
+      if (this.disposed) {
+        return undefined;
+      }
+      this.applyAndReload(this.recommendedSettings, target.Workspace, false);
+      if (this.disposed) {
+        return undefined;
+      }
       return this.applyAndReload(
         { [RECOMMENDED_SETTINGS_OPTION]: APPLY_AND_RELOAD },
-        this.configurationTarget().Global,
+        target.Global,
       );
     }
     if (option === IGNORE) {
+      const target = this.configurationTarget().Global;
+      if (this.disposed) {
+        return undefined;
+      }
       return this.applyAndReload(
         { [RECOMMENDED_SETTINGS_OPTION]: IGNORE },
-        this.configurationTarget().Global,
+        target,
         false,
       );
     }
     if (option === REMIND_ME_LATER) {
       const recommendedOption = this.inspectConfiguration(RECOMMENDED_SETTINGS_OPTION);
+      if (this.disposed) {
+        return undefined;
+      }
       if (recommendedOption.globalValue !== REMIND_ME_LATER) {
+        const target = this.configurationTarget().Global;
+        if (this.disposed) {
+          return undefined;
+        }
         return this.applyAndReload(
           { [RECOMMENDED_SETTINGS_OPTION]: REMIND_ME_LATER },
-          this.configurationTarget().Global,
+          target,
           false,
         );
       }
@@ -147,20 +224,61 @@ class ConfigProvider {
     return undefined;
   }
 
-  applyAndReload(settings, configurationTarget, shouldReload = true) {
-    const configuration = this.configuration();
-    const updatePromises = Object.keys(settings).map((key) => (
-      configuration.update(key, settings[key], configurationTarget)
-    ));
-    if (!shouldReload) {
-      return Promise.all(updatePromises);
+  async applyAndReload(settings, configurationTarget, shouldReload = true) {
+    if (this.disposed) {
+      return undefined;
     }
-    return Promise.all(updatePromises)
-      .then(() => this.vscode.commands.executeCommand(RELOAD_WINDOW));
+    const configuration = this.configuration();
+    if (this.disposed) {
+      return undefined;
+    }
+    const updatePromises = [];
+    for (const key of Object.keys(settings)) {
+      if (this.disposed) {
+        break;
+      }
+      try {
+        updatePromises.push(configuration.update(key, settings[key], configurationTarget));
+      } catch (error) {
+        if (this.disposed) {
+          break;
+        }
+        throw error;
+      }
+    }
+    try {
+      await Promise.all(updatePromises);
+    } catch (error) {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      return undefined;
+    }
+    if (!shouldReload) {
+      return undefined;
+    }
+    try {
+      const result = await this.vscode.commands.executeCommand(RELOAD_WINDOW);
+      return this.disposed ? undefined : result;
+    } catch (error) {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   dispose() {
-    for (const disposable of this.disposables) {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const disposables = this.disposables;
+    this.disposables = [];
+    for (const disposable of disposables) {
       if (disposable && typeof disposable.dispose === "function") {
         disposable.dispose();
       }
