@@ -1047,7 +1047,10 @@ test("format command saves and runs gauge format for the active Gauge file", asy
               const child = new EventEmitter();
               child.stdout = new EventEmitter();
               child.stderr = new EventEmitter();
-              process.nextTick(() => child.emit("exit", 0));
+              process.nextTick(() => {
+                child.emit("exit", 0);
+                child.emit("close", 0);
+              });
               return child;
             },
           };
@@ -1133,7 +1136,10 @@ test("format command saves and runs gauge format for active spec files by extens
               const child = new EventEmitter();
               child.stdout = new EventEmitter();
               child.stderr = new EventEmitter();
-              process.nextTick(() => child.emit("exit", 0));
+              process.nextTick(() => {
+                child.emit("exit", 0);
+                child.emit("close", 0);
+              });
               return child;
             },
           };
@@ -1208,7 +1214,10 @@ test("format command saves and runs gauge format for active Markdown Gauge specs
               const child = new EventEmitter();
               child.stdout = new EventEmitter();
               child.stderr = new EventEmitter();
-              process.nextTick(() => child.emit("exit", 0));
+              process.nextTick(() => {
+                child.emit("exit", 0);
+                child.emit("close", 0);
+              });
               return child;
             },
           };
@@ -1288,6 +1297,7 @@ test("format command removes deprecated Gauge lines from failures", async () => 
               process.nextTick(() => {
                 child.stderr.emit("data", "[DEPRECATED] old behavior\nformat failed\n");
                 child.emit("exit", 1);
+                child.emit("close", 1);
               });
               return child;
             },

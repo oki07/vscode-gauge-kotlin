@@ -134,7 +134,10 @@ test("GaugeFormatProvider returns full document edits from gauge format output",
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -199,7 +202,10 @@ test("GaugeFormatProvider formats Markdown language Gauge specs inside Gauge pro
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -255,7 +261,10 @@ test("GaugeFormatProvider formats concept files by extension", async () => {
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -311,7 +320,10 @@ test("GaugeFormatProvider formats gauge-concept documents by language id", async
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -367,7 +379,10 @@ test("GaugeFormatProvider formats spec files by extension", async () => {
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -423,7 +438,10 @@ test("GaugeFormatProvider passes skip empty line insertion option to gauge forma
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -544,7 +562,10 @@ test("GaugeFormatProvider passes configured Gauge home and project environment",
           const child = new EventEmitter();
           child.stdout = new EventEmitter();
           child.stderr = new EventEmitter();
-          process.nextTick(() => child.emit("exit", 0));
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
           return child;
         },
       };
@@ -609,6 +630,7 @@ test("GaugeFormatProvider removes deprecated Gauge lines from format failures", 
           process.nextTick(() => {
             child.stderr.emit("data", "[DEPRECATED] old behavior\nreal error\n");
             child.emit("exit", 1);
+            child.emit("close", 1);
           });
           return child;
         },
@@ -630,6 +652,131 @@ test("GaugeFormatProvider removes deprecated Gauge lines from format failures", 
 
   assert.deepEqual(edits, []);
   assert.deepEqual(errors, ["Error on formatting spec. real error"]);
+});
+
+test("GaugeFormatProvider waits for close before publishing live format results", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  for (const scenario of [
+    {
+      closeCode: undefined,
+      exitCode: 0,
+      formatted: "# Example\n\n* formatted\n",
+      resultCount: 1,
+      terminal: "success",
+    },
+    {
+      closeCode: 1,
+      exitCode: 1,
+      expectedError: "Error on formatting spec. missing implementation",
+      resultCount: 0,
+      terminal: "failure",
+    },
+    {
+      closeCode: 0,
+      expectedError: "Error on formatting spec. live format failure",
+      processError: new Error("live format failure"),
+      resultCount: 0,
+      terminal: "error",
+    },
+  ]) {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.killCalls = 0;
+    child.kill = () => {
+      child.killCalls += 1;
+    };
+    const errors = [];
+    const spawned = deferred();
+    let readCalls = 0;
+    const provider = new GaugeFormatProvider({
+      cli: {
+        gaugeCommand() {
+          return {
+            spawn() {
+              spawned.resolve();
+              return child;
+            },
+          };
+        },
+      },
+      fileSystem: {
+        readFileSync() {
+          readCalls += 1;
+          return Buffer.from(scenario.formatted || "# Example\n");
+        },
+      },
+      projectFactory: {
+        getGaugeRootFromFilePath() {
+          return "/workspace/gauge";
+        },
+      },
+      vscode: createFakeVscode({ errors }),
+    });
+
+    const pending = provider.provideDocumentFormattingEdits(
+      createDocument("# Example\n* unformatted\n"),
+    );
+    let outcome = { status: "pending" };
+    pending.then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { error, status: "rejected" };
+      },
+    );
+    await spawned.promise;
+    if (scenario.terminal === "failure") {
+      child.stderr.emit("data", "missing ");
+    }
+    if (scenario.terminal === "error") {
+      child.emit("error", scenario.processError);
+    } else {
+      child.emit("exit", scenario.exitCode);
+    }
+
+    let assertionError;
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(outcome, { status: "pending" });
+      assert.equal(provider.activeRequests.size, 1);
+      assert.equal(readCalls, 0);
+      assert.deepEqual(errors, []);
+      assert.equal(child.stdout.listenerCount("data"), 1);
+      assert.equal(child.stderr.listenerCount("data"), 1);
+    } catch (error) {
+      assertionError = error;
+    } finally {
+      if (scenario.terminal === "failure") {
+        child.stderr.emit("data", "implementation");
+      }
+      child.emit("close", scenario.closeCode);
+      await Promise.allSettled([pending]);
+    }
+
+    try {
+      assert.equal(outcome.status, "fulfilled");
+      assert.equal(outcome.value.length, scenario.resultCount);
+      assert.equal(provider.activeRequests.size, 0);
+      assert.equal(readCalls, scenario.terminal === "success" ? 1 : 0);
+      assert.deepEqual(errors, scenario.expectedError ? [scenario.expectedError] : []);
+      assert.equal(child.listenerCount("error"), 0);
+      assert.equal(child.listenerCount("exit"), 0);
+      assert.equal(child.listenerCount("close"), 0);
+      assert.equal(child.stdout.listenerCount("data"), 0);
+      assert.equal(child.stderr.listenerCount("data"), 0);
+      assert.equal(child.killCalls, 0);
+    } catch (error) {
+      if (!assertionError) {
+        assertionError = error;
+      }
+    }
+    if (assertionError) {
+      throw assertionError;
+    }
+  }
 });
 
 test("GaugeFormatProvider ignores non-Gauge documents", async () => {

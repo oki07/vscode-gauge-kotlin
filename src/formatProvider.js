@@ -143,6 +143,8 @@ function waitForProcess(command, args, options, token) {
   return new Promise((resolve) => {
     let settled = false;
     let cancellationDisposable;
+    let exitCode;
+    let processError;
     const cleanup = [];
     const stdout = [];
     const stderr = [];
@@ -215,9 +217,20 @@ function waitForProcess(command, args, options, token) {
     collectOutput(child.stdout, stdout, cleanup);
     collectOutput(child.stderr, stderr, cleanup);
     if (typeof child.on === "function") {
-      const onError = (error) => settle({ code: 1, error });
-      const onExit = (code) => settle({ code });
-      const onClose = (code) => settle({ code });
+      const onError = (error) => {
+        if (!processError) {
+          processError = error;
+        }
+      };
+      const onExit = (code) => {
+        exitCode = code;
+      };
+      const onClose = (code) => settle({
+        code: processError
+          ? 1
+          : (code === null || code === undefined ? exitCode : code),
+        error: processError,
+      });
       child.on("error", onError);
       child.on("exit", onExit);
       child.on("close", onClose);
