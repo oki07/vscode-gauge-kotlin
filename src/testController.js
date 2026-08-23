@@ -464,6 +464,7 @@ class GaugeTestController {
     this.attemptCounts = new Map();
     this.activeAttemptIds = new Map();
     this.workspaceDiscoveredIdsByClient = new Map();
+    this.workspaceDiscoveryGeneration = 0;
     this.discoveryCancellationSources = new Set();
     this.registrationDisposables = undefined;
     this.disposed = false;
@@ -779,23 +780,50 @@ class GaugeTestController {
     this.clientsMap = clientsMap;
   }
 
+  beginWorkspaceDiscovery() {
+    this.workspaceDiscoveryGeneration += 1;
+    return this.workspaceDiscoveryGeneration;
+  }
+
+  hasWorkspaceClient(client) {
+    if (!this.clientsMap || typeof this.clientsMap.values !== "function") {
+      return false;
+    }
+    for (const entry of this.clientsMap.values()) {
+      if (entry && entry.client === client) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  isCurrentWorkspaceDiscovery(generation, client) {
+    return !this.disposed
+      && generation === this.workspaceDiscoveryGeneration
+      && (client === undefined || this.hasWorkspaceClient(client));
+  }
+
   async discoverWorkspaceTests() {
+    if (this.disposed) {
+      return [];
+    }
+    const generation = this.beginWorkspaceDiscovery();
     if (
-      this.disposed
-      || !this.controller
+      !this.controller
       || !this.clientsMap
       || typeof this.clientsMap.values !== "function"
     ) {
       return [];
     }
     const discovered = [];
-    for (const entry of this.clientsMap.values()) {
+    const entries = [...this.clientsMap.values()];
+    for (const entry of entries) {
       const client = entry && entry.client;
       if (!client || typeof client.sendRequest !== "function") {
         continue;
       }
-      const clientTests = await this.discoverClientTests(client);
-      if (this.disposed) {
+      const clientTests = await this.discoverClientTests(client, generation);
+      if (!this.isCurrentWorkspaceDiscovery(generation)) {
         return [];
       }
       discovered.push(...clientTests);
@@ -821,8 +849,14 @@ class GaugeTestController {
     }
   }
 
-  async discoverClientTests(client) {
+  async discoverClientTests(client, discoveryGeneration) {
     if (this.disposed || !client || typeof client.sendRequest !== "function") {
+      return [];
+    }
+    const generation = discoveryGeneration === undefined
+      ? this.beginWorkspaceDiscovery()
+      : discoveryGeneration;
+    if (!this.isCurrentWorkspaceDiscovery(generation, client)) {
       return [];
     }
     const cancellation = this.createDiscoveryCancellationSource();
@@ -834,7 +868,10 @@ class GaugeTestController {
       } catch (_error) {
         return [];
       }
-      if (this.disposed || cancellationRequested(token)) {
+      if (
+        !this.isCurrentWorkspaceDiscovery(generation, client)
+        || cancellationRequested(token)
+      ) {
         return [];
       }
       const discovered = [];
@@ -846,7 +883,10 @@ class GaugeTestController {
         specEntries,
         this.scenarioRequestConcurrency,
         (spec) => {
-          if (this.disposed || cancellationRequested(token)) {
+          if (
+            !this.isCurrentWorkspaceDiscovery(generation, client)
+            || cancellationRequested(token)
+          ) {
             return [];
           }
           let request;
@@ -864,15 +904,24 @@ class GaugeTestController {
           }
           return Promise.resolve(request)
             .then((response) => (
-              this.disposed || cancellationRequested(token) ? [] : response
+              !this.isCurrentWorkspaceDiscovery(generation, client)
+                || cancellationRequested(token)
+                ? []
+                : response
             ))
             .catch(() => []);
         },
       );
-      if (this.disposed || cancellationRequested(token)) {
+      if (
+        !this.isCurrentWorkspaceDiscovery(generation, client)
+        || cancellationRequested(token)
+      ) {
         return [];
       }
       for (const [specIndex, spec] of specEntries.entries()) {
+        if (!this.isCurrentWorkspaceDiscovery(generation, client)) {
+          return [];
+        }
         const specId = spec.executionIdentifier;
         discoveredIds.add(specId);
         const specItem = this.upsertItem(
@@ -913,7 +962,10 @@ class GaugeTestController {
           }
         }
       }
-      if (this.disposed || cancellationRequested(token)) {
+      if (
+        !this.isCurrentWorkspaceDiscovery(generation, client)
+        || cancellationRequested(token)
+      ) {
         return [];
       }
       this.pruneWorkspaceDiscoveredItems(client, discoveredIds);
@@ -948,6 +1000,7 @@ class GaugeTestController {
       return;
     }
     this.disposed = true;
+    this.workspaceDiscoveryGeneration += 1;
 
     for (const source of [...this.discoveryCancellationSources]) {
       this.discoveryCancellationSources.delete(source);

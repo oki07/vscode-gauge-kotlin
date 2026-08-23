@@ -1027,6 +1027,261 @@ test("GaugeTestController settles in-flight scenario discovery when disposed", a
   });
 });
 
+test("GaugeTestController keeps the latest overlapping workspace discovery", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const firstEntered = deferred();
+  const firstResponse = deferred();
+  const { controller, vscode } = createFakeVscode();
+  const scenarioRequests = [];
+  let specsCalls = 0;
+  let secondClientSpecsCalls = 0;
+  const firstClient = {
+    async sendRequest(method, params) {
+      if (method === "gauge/specs") {
+        specsCalls += 1;
+        if (specsCalls === 1) {
+          firstEntered.resolve();
+          return firstResponse.promise;
+        }
+        return [
+          {
+            heading: "Current checkout",
+            executionIdentifier: "/workspace/first/specs/current.spec",
+          },
+        ];
+      }
+      if (method === "gauge/scenarios") {
+        scenarioRequests.push(params.textDocument.uri);
+        return [
+          {
+            heading: "Current scenario",
+            executionIdentifier: `${params.textDocument.uri}:8`,
+            lineNo: 8,
+          },
+        ];
+      }
+      return [];
+    },
+  };
+  const secondClient = {
+    async sendRequest(method) {
+      if (method === "gauge/specs") {
+        secondClientSpecsCalls += 1;
+        return [
+          {
+            heading: "Current accounts",
+            executionIdentifier: "/workspace/second/specs/current.spec",
+          },
+        ];
+      }
+      return [];
+    },
+  };
+  const gaugeTests = new GaugeTestController({
+    clientsMap: new Map([
+      ["/workspace/first", { client: firstClient }],
+      ["/workspace/second", { client: secondClient }],
+    ]),
+    vscode,
+  });
+  gaugeTests.register();
+
+  const first = gaugeTests.discoverWorkspaceTests();
+  await firstEntered.promise;
+  const second = gaugeTests.discoverWorkspaceTests();
+  const secondResult = await second;
+  firstResponse.resolve([
+    {
+      heading: "Stale checkout",
+      executionIdentifier: "/workspace/first/specs/stale.spec",
+    },
+  ]);
+  const firstResult = await first;
+
+  assert.deepEqual({
+    firstResult: firstResult.map((item) => item.id),
+    firstWorkspaceIds: [...gaugeTests.workspaceDiscoveredIdsByClient.get(firstClient)],
+    scenarioRequests,
+    secondClientSpecsCalls,
+    secondResult: secondResult.map((item) => item.id),
+    testItems: collectionItems(controller.items).map((item) => item.id),
+  }, {
+    firstResult: [],
+    firstWorkspaceIds: [
+      "/workspace/first/specs/current.spec",
+      "/workspace/first/specs/current.spec:8",
+    ],
+    scenarioRequests: ["/workspace/first/specs/current.spec"],
+    secondClientSpecsCalls: 1,
+    secondResult: [
+      "/workspace/first/specs/current.spec",
+      "/workspace/first/specs/current.spec:8",
+      "/workspace/second/specs/current.spec",
+    ],
+    testItems: [
+      "/workspace/first/specs/current.spec",
+      "/workspace/second/specs/current.spec",
+    ],
+  });
+});
+
+test("GaugeTestController ignores a scenario response superseded by workspace discovery", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const firstScenarioEntered = deferred();
+  const firstScenarioResponse = deferred();
+  const { controller, vscode } = createFakeVscode();
+  let specsCalls = 0;
+  const client = {
+    async sendRequest(method, params) {
+      if (method === "gauge/specs") {
+        specsCalls += 1;
+        return [
+          specsCalls === 1
+            ? {
+              heading: "Stale checkout",
+              executionIdentifier: "/workspace/gauge/specs/stale.spec",
+            }
+            : {
+              heading: "Current checkout",
+              executionIdentifier: "/workspace/gauge/specs/current.spec",
+            },
+        ];
+      }
+      if (method === "gauge/scenarios") {
+        if (params.textDocument.uri.endsWith("/stale.spec")) {
+          firstScenarioEntered.resolve();
+          return firstScenarioResponse.promise;
+        }
+        return [
+          {
+            heading: "Current scenario",
+            executionIdentifier: "/workspace/gauge/specs/current.spec:8",
+            lineNo: 8,
+          },
+        ];
+      }
+      return [];
+    },
+  };
+  const gaugeTests = new GaugeTestController({
+    clientsMap: new Map([["/workspace/gauge", { client }]]),
+    vscode,
+  });
+  gaugeTests.register();
+
+  const first = gaugeTests.discoverWorkspaceTests();
+  await firstScenarioEntered.promise;
+  const secondResult = await gaugeTests.discoverWorkspaceTests();
+  firstScenarioResponse.resolve([
+    {
+      heading: "Stale scenario",
+      executionIdentifier: "/workspace/gauge/specs/stale.spec:12",
+      lineNo: 12,
+    },
+  ]);
+  const firstResult = await first;
+  const currentSpec = controller.items.get("/workspace/gauge/specs/current.spec");
+
+  assert.deepEqual({
+    firstResult: firstResult.map((item) => item.id),
+    scenarioItems: currentSpec
+      ? collectionItems(currentSpec.children).map((item) => item.id)
+      : [],
+    secondResult: secondResult.map((item) => item.id),
+    testItems: collectionItems(controller.items).map((item) => item.id),
+    workspaceIds: [...gaugeTests.workspaceDiscoveredIdsByClient.get(client)],
+  }, {
+    firstResult: [],
+    scenarioItems: ["/workspace/gauge/specs/current.spec:8"],
+    secondResult: [
+      "/workspace/gauge/specs/current.spec",
+      "/workspace/gauge/specs/current.spec:8",
+    ],
+    testItems: ["/workspace/gauge/specs/current.spec"],
+    workspaceIds: [
+      "/workspace/gauge/specs/current.spec",
+      "/workspace/gauge/specs/current.spec:8",
+    ],
+  });
+});
+
+test("GaugeTestController does not restore discovery for a removed client", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const removedRequestEntered = deferred();
+  const removedResponse = deferred();
+  const { controller, vscode } = createFakeVscode();
+  const scenarioRequests = [];
+  let oldSpecsCalls = 0;
+  const oldClient = {
+    async sendRequest(method, params) {
+      if (method === "gauge/specs") {
+        oldSpecsCalls += 1;
+        if (oldSpecsCalls === 1) {
+          return [
+            {
+              heading: "Existing checkout",
+              executionIdentifier: "/workspace/old/specs/existing.spec",
+            },
+          ];
+        }
+        removedRequestEntered.resolve();
+        return removedResponse.promise;
+      }
+      if (method === "gauge/scenarios") {
+        scenarioRequests.push(params.textDocument.uri);
+        return [
+          {
+            heading: "Existing scenario",
+            executionIdentifier: `${params.textDocument.uri}:4`,
+            lineNo: 4,
+          },
+        ];
+      }
+      return [];
+    },
+  };
+  const clientsMap = new Map([["/workspace/old", { client: oldClient }]]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+  gaugeTests.register();
+
+  await gaugeTests.discoverWorkspaceTests();
+  const removedPending = gaugeTests.discoverClientTests(oldClient);
+  await removedRequestEntered.promise;
+  clientsMap.delete("/workspace/old");
+  gaugeTests.pruneRemovedClientWorkspaceTests();
+  assert.deepEqual({
+    controllerItems: controller.items.size,
+    internalItems: gaugeTests.items.size,
+    workspaceClients: gaugeTests.workspaceDiscoveredIdsByClient.size,
+  }, {
+    controllerItems: 0,
+    internalItems: 0,
+    workspaceClients: 0,
+  });
+
+  removedResponse.resolve([
+    {
+      heading: "Removed checkout",
+      executionIdentifier: "/workspace/old/specs/removed.spec",
+    },
+  ]);
+  const removedResult = await removedPending;
+
+  assert.deepEqual({
+    removedClientTracked: gaugeTests.workspaceDiscoveredIdsByClient.has(oldClient),
+    removedResult: removedResult.map((item) => item.id),
+    scenarioRequests,
+    testItems: collectionItems(controller.items).map((item) => item.id),
+    workspaceClients: gaugeTests.workspaceDiscoveredIdsByClient.size,
+  }, {
+    removedClientTracked: false,
+    removedResult: [],
+    scenarioRequests: ["/workspace/old/specs/existing.spec"],
+    testItems: [],
+    workspaceClients: 0,
+  });
+});
+
 test("GaugeTestController accepts a single scenario response from Gauge LSP", async () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();
