@@ -3,6 +3,14 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 function createFakeVscode(overrides = {}) {
   const commandCalls = [];
   const errors = [];
@@ -55,6 +63,9 @@ function createFakeVscode(overrides = {}) {
         },
         async showQuickPick(items, options) {
           quickPicks.push({ items, options });
+          if (typeof overrides.showQuickPick === "function") {
+            return overrides.showQuickPick(items, options);
+          }
           return overrides.quickPickSelection || items[0];
         },
         async showErrorMessage(message) {
@@ -2048,6 +2059,7 @@ test("executor does not let an older resolving command replace a newer run", asy
     finishOlderScenarioRequest = resolve;
   });
   const runs = [];
+  const runnerStarted = deferred();
   const { vscode } = createFakeVscode();
 
   const controller = createGaugeExecutionController({
@@ -2077,6 +2089,7 @@ test("executor does not let an older resolving command replace a newer run", asy
         record.cancelCalls += 1;
       };
       runs.push(record);
+      runnerStarted.resolve();
       return run;
     },
   });
@@ -2084,8 +2097,7 @@ test("executor does not let an older resolving command replace a newer run", asy
   const olderRun = controller.handleCommand("gauge.execute.scenario");
   await Promise.resolve();
   const latestRun = controller.handleCommand("gauge.execute.scenario");
-  await Promise.resolve();
-  await Promise.resolve();
+  await runnerStarted.promise;
 
   assert.equal(runs.length, 1);
   assert.equal(runs[0].command.status, "/workspace/specs/example.spec:9");
@@ -2157,6 +2169,850 @@ test("executor disposes execution status bar items", () => {
   controller.dispose();
 
   assert.deepEqual(statusBarItems.map((item) => item.disposeCalls), [1, 1]);
+});
+
+test("executor cancels active execution and rejects later work when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const lifecycle = [];
+  const runnerCalls = [];
+  const runnerStarted = deferred();
+  let cancelCalls = 0;
+  const { statusBarItems, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    runner(command) {
+      runnerCalls.push(command);
+      runnerStarted.resolve();
+      const run = new Promise(() => {});
+      run.cancel = (aborted) => {
+        assert.equal(aborted, true);
+        cancelCalls += 1;
+      };
+      return run;
+    },
+  });
+
+  let activeOutcome;
+  controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onCancelled: () => lifecycle.push("active:cancelled"),
+      onStart: () => lifecycle.push("active:start"),
+      onSuperseded: () => lifecycle.push("active:superseded"),
+    },
+    undefined,
+  ).then((value) => {
+    activeOutcome = { status: "fulfilled", value };
+  });
+  await runnerStarted.promise;
+  assert.equal(runnerCalls.length, 1);
+
+  controller.dispose();
+  controller.dispose();
+  await Promise.resolve();
+
+  let laterOutcome;
+  controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onCancelled: () => lifecycle.push("later:cancelled"),
+      onStart: () => lifecycle.push("later:start"),
+    },
+    undefined,
+  ).then((value) => {
+    laterOutcome = { status: "fulfilled", value };
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual({
+    activeOutcome,
+    cancelCalls,
+    lifecycle,
+    laterOutcome,
+    runnerCalls: runnerCalls.length,
+    statusDisposals: statusBarItems.map((item) => item.disposeCalls),
+  }, {
+    activeOutcome: { status: "fulfilled", value: undefined },
+    cancelCalls: 1,
+    lifecycle: ["active:start", "active:cancelled", "later:cancelled"],
+    laterOutcome: { status: "fulfilled", value: undefined },
+    runnerCalls: 1,
+    statusDisposals: [1, 1],
+  });
+});
+
+test("executor observes asynchronous debugger shutdown when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const runnerEntered = deferred();
+  let debugSubscriptionDisposals = 0;
+  let debuggerShutdownObservations = 0;
+  let runCancellationObservations = 0;
+  const { vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    debuggerFactory() {
+      return {
+        async addDebugEnv(env) {
+          return env;
+        },
+        registerStopDebugger() {
+          return {
+            dispose() {
+              debugSubscriptionDisposals += 1;
+            },
+          };
+        },
+        stopDebugger() {
+          return {
+            then(resolve) {
+              debuggerShutdownObservations += 1;
+              resolve(undefined);
+            },
+          };
+        },
+      };
+    },
+    runner() {
+      runnerEntered.resolve();
+      const run = new Promise(() => {});
+      run.cancel = () => ({
+        then(resolve) {
+          runCancellationObservations += 1;
+          resolve(undefined);
+        },
+      });
+      return run;
+    },
+  });
+
+  const execution = controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:8",
+  }, { debug: true });
+  await runnerEntered.promise;
+  controller.dispose();
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({
+    debugSubscriptionDisposals,
+    debuggerShutdownObservations,
+    execution: await execution,
+    runCancellationObservations,
+  }, {
+    debugSubscriptionDisposals: 1,
+    debuggerShutdownObservations: 1,
+    execution: undefined,
+    runCancellationObservations: 1,
+  });
+});
+
+test("executor does not start work when disposal occurs in onStart", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const lifecycle = [];
+  let runnerCalls = 0;
+  let saveCalls = 0;
+  const { commandCalls, vscode } = createFakeVscode({
+    async saveAll() {
+      saveCalls += 1;
+      return true;
+    },
+  });
+  let controller;
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async runner() {
+      runnerCalls += 1;
+      return true;
+    },
+  });
+
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onCancelled() {
+        lifecycle.push("cancelled");
+      },
+      onStart() {
+        lifecycle.push("start");
+        controller.dispose();
+      },
+    },
+  );
+
+  assert.equal(await execution, undefined);
+  assert.deepEqual({
+    executingTrueCalls: commandCalls.filter((call) => (
+      call.command === "setContext" && call.args[1] === true
+    )).length,
+    lifecycle,
+    runnerCalls,
+    saveCalls,
+  }, {
+    executingTrueCalls: 0,
+    lifecycle: ["start", "cancelled"],
+    runnerCalls: 0,
+    saveCalls: 0,
+  });
+});
+
+test("executor settles work stopped in onStart", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const lifecycle = [];
+  let runnerCalls = 0;
+  let saveCalls = 0;
+  const { commandCalls, vscode } = createFakeVscode({
+    async saveAll() {
+      saveCalls += 1;
+      return true;
+    },
+  });
+  let controller;
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async runner() {
+      runnerCalls += 1;
+      return true;
+    },
+  });
+
+  let executionOutcome;
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onCancelled() {
+        lifecycle.push("cancelled");
+      },
+      onStart() {
+        lifecycle.push("start");
+        controller.stopExecution();
+      },
+    },
+  );
+  execution.then((value) => {
+    executionOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const snapshot = {
+    executingTrueCalls: commandCalls.filter((call) => (
+      call.command === "setContext" && call.args[1] === true
+    )).length,
+    executionOutcome,
+    lifecycle: [...lifecycle],
+    runnerCalls,
+    saveCalls,
+  };
+  if (!executionOutcome) {
+    controller.dispose();
+  }
+
+  assert.deepEqual(snapshot, {
+    executingTrueCalls: 0,
+    executionOutcome: { status: "fulfilled", value: undefined },
+    lifecycle: ["start", "cancelled"],
+    runnerCalls: 0,
+    saveCalls: 0,
+  });
+  assert.equal(await execution, undefined);
+});
+
+test("executor settles preparing and pending executions when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const saveEntered = deferred();
+  const releaseSave = deferred();
+  const lifecycle = [];
+  const runnerCalls = [];
+  const { vscode } = createFakeVscode({
+    async saveAll() {
+      saveEntered.resolve();
+      return releaseSave.promise;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+  });
+
+  let preparingOutcome;
+  const preparing = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onStart: () => lifecycle.push("preparing:start"),
+      onSuperseded: () => lifecycle.push("preparing:superseded"),
+    },
+    undefined,
+  );
+  preparing.then((value) => {
+    preparingOutcome = { status: "fulfilled", value };
+  });
+  await saveEntered.promise;
+
+  let pendingOutcome;
+  const pending = controller.handleCommandWithMetadata(
+    "gauge.execute",
+    {
+      onCancelled: () => lifecycle.push("pending:cancelled"),
+      onStart: () => lifecycle.push("pending:start"),
+    },
+    "/workspace/specs/pending.spec",
+  );
+  pending.then((value) => {
+    pendingOutcome = { status: "fulfilled", value };
+  });
+
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({
+    lifecycle,
+    pendingOutcome,
+    preparingOutcome,
+    runnerCalls: runnerCalls.length,
+  }, {
+    lifecycle: ["preparing:start", "preparing:superseded", "pending:cancelled"],
+    pendingOutcome: { status: "fulfilled", value: undefined },
+    preparingOutcome: { status: "fulfilled", value: undefined },
+    runnerCalls: 0,
+  });
+
+  releaseSave.resolve(true);
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(runnerCalls.length, 0);
+  assert.equal(await preparing, undefined);
+  assert.equal(await pending, undefined);
+});
+
+test("executor cancels a multi-project execution once when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const runnerEntered = deferred();
+  const lifecycle = [];
+  const runnerCalls = [];
+  let cancelCalls = 0;
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/checkout" } },
+      { uri: { fsPath: "/workspace/accounts" } },
+    ],
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename.endsWith(".spec") || filename.endsWith("manifest.json");
+      },
+    },
+    projectFactory: {
+      get(root) {
+        return { root: () => root };
+      },
+      getGaugeRootFromFilePath(filename) {
+        return filename.startsWith("/workspace/checkout/")
+          ? "/workspace/checkout"
+          : "/workspace/accounts";
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    runner(command) {
+      runnerCalls.push(command);
+      runnerEntered.resolve();
+      const run = new Promise(() => {});
+      run.cancel = () => {
+        cancelCalls += 1;
+      };
+      return run;
+    },
+  });
+
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.specification",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+    { fsPath: "/workspace/checkout/specs/checkout.spec" },
+    [
+      { fsPath: "/workspace/checkout/specs/checkout.spec" },
+      { fsPath: "/workspace/accounts/specs/accounts.spec" },
+    ],
+  );
+  await runnerEntered.promise;
+  controller.dispose();
+
+  assert.equal(await execution, undefined);
+  assert.deepEqual({ cancelCalls, lifecycle, runnerCalls: runnerCalls.length }, {
+    cancelCalls: 1,
+    lifecycle: ["start", "cancelled"],
+    runnerCalls: 1,
+  });
+});
+
+test("executor cancels a scenario request that resolves after disposal", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const scenarioRequestEntered = deferred();
+  const releaseScenarioRequest = deferred();
+  const events = [];
+  const lifecycle = [];
+  const runnerCalls = [];
+  const { commandCalls, quickPicks, statusBarItems, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    executionEventSink: (event) => events.push(event),
+    readNewLastRunResultEvents: () => [],
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+    async scenariosProvider() {
+      scenarioRequestEntered.resolve();
+      return releaseScenarioRequest.promise;
+    },
+  });
+
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.scenario",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+      onSuperseded: () => lifecycle.push("superseded"),
+    },
+    undefined,
+    { testUi: true, "simple-console": false },
+  );
+  await scenarioRequestEntered.promise;
+  let executionOutcome;
+  execution.then((value) => {
+    executionOutcome = { status: "fulfilled", value };
+  });
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({ executionOutcome, lifecycle }, {
+    executionOutcome: { status: "fulfilled", value: undefined },
+    lifecycle: ["cancelled"],
+  });
+
+  releaseScenarioRequest.resolve([{
+    executionIdentifier: "/workspace/specs/example.spec:8",
+    heading: "Checkout",
+  }]);
+
+  assert.equal(await execution, undefined);
+  assert.deepEqual({
+    events,
+    executingTrueCalls: commandCalls.filter((call) => (
+      call.command === "setContext" && call.args[1] === true
+    )).length,
+    lifecycle,
+    quickPicks: quickPicks.length,
+    runnerCalls: runnerCalls.length,
+    statusDisposals: statusBarItems.map((item) => item.disposeCalls),
+    statusShows: statusBarItems.map((item) => item.showCalls),
+  }, {
+    events: [],
+    executingTrueCalls: 0,
+    lifecycle: ["cancelled"],
+    quickPicks: 0,
+    runnerCalls: 0,
+    statusDisposals: [1, 1],
+    statusShows: [0, 0],
+  });
+});
+
+test("executor settles a pending scenario selection when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const quickPickEntered = deferred();
+  const releaseQuickPick = deferred();
+  const lifecycle = [];
+  const runnerCalls = [];
+  const { vscode } = createFakeVscode({
+    showQuickPick() {
+      quickPickEntered.resolve();
+      return releaseQuickPick.promise;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+    async scenariosProvider() {
+      return [{
+        executionIdentifier: "/workspace/specs/example.spec:8",
+        heading: "Checkout",
+      }];
+    },
+  });
+
+  let executionOutcome;
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.scenarios",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+  );
+  execution.then((value) => {
+    executionOutcome = { status: "fulfilled", value };
+  });
+  await quickPickEntered.promise;
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({ executionOutcome, lifecycle, runnerCalls: runnerCalls.length }, {
+    executionOutcome: { status: "fulfilled", value: undefined },
+    lifecycle: ["cancelled"],
+    runnerCalls: 0,
+  });
+
+  releaseQuickPick.resolve(undefined);
+  assert.equal(await execution, undefined);
+  assert.equal(runnerCalls.length, 0);
+});
+
+test("executor settles a pending project selection when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const quickPickEntered = deferred();
+  const releaseQuickPick = deferred();
+  const lifecycle = [];
+  const runnerCalls = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/checkout" } },
+      { uri: { fsPath: "/workspace/accounts" } },
+    ],
+    showQuickPick() {
+      quickPickEntered.resolve();
+      return releaseQuickPick.promise;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+  });
+
+  let executionOutcome;
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.failed",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+  );
+  execution.then((value) => {
+    executionOutcome = { status: "fulfilled", value };
+  });
+  await quickPickEntered.promise;
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({ executionOutcome, lifecycle, runnerCalls: runnerCalls.length }, {
+    executionOutcome: { status: "fulfilled", value: undefined },
+    lifecycle: ["cancelled"],
+    runnerCalls: 0,
+  });
+
+  releaseQuickPick.resolve(undefined);
+  assert.equal(await execution, undefined);
+  assert.equal(runnerCalls.length, 0);
+});
+
+test("executor cancels a project selection resolved in the disposal turn", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const quickPickEntered = deferred();
+  const releaseQuickPick = deferred();
+  const lifecycle = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/checkout" } },
+      { uri: { fsPath: "/workspace/accounts" } },
+    ],
+    showQuickPick() {
+      quickPickEntered.resolve();
+      return releaseQuickPick.promise;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+  });
+
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.failed",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+  );
+  await quickPickEntered.promise;
+  releaseQuickPick.resolve(undefined);
+  controller.dispose();
+
+  assert.equal(await execution, undefined);
+  assert.deepEqual(lifecycle, ["cancelled"]);
+});
+
+test("executor suppresses a project selection rejected in the disposal turn", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const lifecycle = [];
+  let controller;
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/checkout" } },
+      { uri: { fsPath: "/workspace/accounts" } },
+    ],
+    showQuickPick() {
+      return {
+        then(_resolve, reject) {
+          reject(new Error("disposed project selection failed"));
+          controller.dispose();
+        },
+      };
+    },
+  });
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+  });
+
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.failed",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+  );
+
+  assert.equal(await execution, undefined);
+  assert.deepEqual(lifecycle, ["cancelled"]);
+
+  const { vscode: liveVscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/checkout" } },
+      { uri: { fsPath: "/workspace/accounts" } },
+    ],
+    showQuickPick() {
+      return Promise.reject(new Error("live project selection failed"));
+    },
+  });
+  const liveController = createGaugeExecutionController({
+    vscode: liveVscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+  });
+  await assert.rejects(
+    liveController.handleCommand("gauge.execute.failed"),
+    /live project selection failed/,
+  );
+  liveController.dispose();
+});
+
+test("executor suppresses scenario lookup errors after disposal", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const scenarioRequestEntered = deferred();
+  let rejectScenarioRequest;
+  const scenarioRequest = new Promise((_resolve, reject) => {
+    rejectScenarioRequest = reject;
+  });
+  const { errors, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async scenariosProvider() {
+      scenarioRequestEntered.resolve();
+      return scenarioRequest;
+    },
+  });
+
+  const execution = controller.handleCommand("gauge.execute.scenario");
+  await scenarioRequestEntered.promise;
+  controller.dispose();
+  rejectScenarioRequest(new Error("disposed scenario lookup failed"));
+
+  assert.equal(await execution, undefined);
+  assert.deepEqual(errors, []);
+});
+
+test("executor suppresses pending status and output after disposal", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const statusRequestEntered = deferred();
+  const releaseStatusRequest = deferred();
+  const events = [];
+  const { statusBarItems, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    executionEventSink: (event) => events.push(event),
+    async executionStatusProvider() {
+      statusRequestEntered.resolve();
+      return releaseStatusRequest.promise;
+    },
+    async runner() {
+      return true;
+    },
+  });
+
+  const execution = controller.handleCommand("gauge.execute.specification.all");
+  await statusRequestEntered.promise;
+  controller.dispose();
+  controller.processOutputLine(`${JSON.stringify({
+    type: "specStart",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    filename: "/workspace/specs/example.spec",
+    line: 1,
+  })}\n`);
+  controller.setReportPath("/workspace/reports/html-report/index.html");
+  releaseStatusRequest.resolve({
+    sceExecuted: 1,
+    sceFailed: 0,
+    scePassed: 1,
+    sceSkipped: 0,
+    specsExecuted: 1,
+    specsFailed: 0,
+    specsPassed: 1,
+    specsSkipped: 0,
+  });
+
+  assert.equal(await execution, undefined);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({
+    events,
+    reportPath: controller.getReportPath(),
+    statusColor: statusBarItems[1].color,
+    statusDisposals: statusBarItems.map((item) => item.disposeCalls),
+    statusShows: statusBarItems.map((item) => item.showCalls),
+    statusText: statusBarItems[1].text,
+  }, {
+    events: [],
+    reportPath: undefined,
+    statusColor: undefined,
+    statusDisposals: [1, 1],
+    statusShows: [1, 0],
+    statusText: undefined,
+  });
+});
+
+test("executor settles a pending report open when disposed", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const openEntered = deferred();
+  let rejectOpen;
+  const openResult = new Promise((_resolve, reject) => {
+    rejectOpen = reject;
+  });
+  const { errors, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    opener() {
+      openEntered.resolve();
+      return openResult;
+    },
+  });
+
+  let reportOutcome;
+  const report = controller.openReport();
+  report.then((value) => {
+    reportOutcome = { status: "fulfilled", value };
+  });
+  await openEntered.promise;
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual({ errors, reportOutcome }, {
+    errors: [],
+    reportOutcome: { status: "fulfilled", value: undefined },
+  });
+
+  rejectOpen(new Error("disposed report open failed"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(errors, []);
+  assert.equal(await report, undefined);
+});
+
+test("executor normalizes a report opened in the disposal turn", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const openEntered = deferred();
+  const releaseOpen = deferred();
+  const { vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    opener() {
+      openEntered.resolve();
+      return releaseOpen.promise;
+    },
+  });
+
+  const report = controller.openReport();
+  await openEntered.promise;
+  releaseOpen.resolve(true);
+  controller.dispose();
+
+  assert.equal(await report, undefined);
+});
+
+test("executor suppresses a report failure in the disposal turn", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const openEntered = deferred();
+  let rejectOpen;
+  const openResult = new Promise((_resolve, reject) => {
+    rejectOpen = reject;
+  });
+  const { errors, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    opener() {
+      openEntered.resolve();
+      return openResult;
+    },
+  });
+
+  const report = controller.openReport();
+  await openEntered.promise;
+  rejectOpen(new Error("disposed report open failed"));
+  controller.dispose();
+
+  assert.equal(await report, undefined);
+  assert.deepEqual(errors, []);
 });
 
 test("executor sets the executing context while a run is active", async () => {

@@ -201,7 +201,7 @@ function activeProjectRoot(vscode, projectFactory) {
   }
 }
 
-async function selectProjectRoot(vscode, pathModule, projectFactory) {
+async function selectProjectRoot(vscode, pathModule, projectFactory, waitForSelection) {
   let roots = selectableProjectRoots(vscode, projectFactory);
   if (roots.length === 0) {
     const activeRoot = activeProjectRoot(vscode, projectFactory);
@@ -218,10 +218,13 @@ async function selectProjectRoot(vscode, pathModule, projectFactory) {
     label: pathModule.basename(root),
     description: root,
   }));
-  const selected = await vscode.window.showQuickPick(items, {
+  const selection = vscode.window.showQuickPick(items, {
     canPickMany: false,
     placeHolder: "Choose a project",
   });
+  const selected = typeof waitForSelection === "function"
+    ? await waitForSelection(selection)
+    : await selection;
   if (!selected) {
     return undefined;
   }
@@ -485,9 +488,13 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
   stopExecution.command = STOP_EXECUTION_COMMAND;
   stopExecution.tooltip = "Click to Stop Run";
   executionStatus.command = SHOW_REPORT_COMMAND;
+  let disposed = false;
 
   return {
     beforeExecute(command, runningStatus) {
+      if (disposed) {
+        return;
+      }
       executionStatus.hide();
       if (command.env && command.env.DEBUGGING) {
         return;
@@ -496,6 +503,9 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
       stopExecution.show();
     },
     async afterExecute(projectRoot, aborted) {
+      if (disposed) {
+        return undefined;
+      }
       stopExecution.hide();
       if (aborted) {
         executionStatus.hide();
@@ -510,7 +520,7 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
       } catch (_error) {
         return undefined;
       }
-      if (!status) {
+      if (disposed || !status) {
         return undefined;
       }
       executionStatus.color = executionStatusColor(status);
@@ -521,6 +531,10 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
       return undefined;
     },
     dispose() {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       stopExecution.dispose();
       executionStatus.dispose();
     },
@@ -673,6 +687,12 @@ function createGaugeExecutionController(options = {}) {
   let pendingExecutionRequest;
   let sawExecutionTestEvent = false;
   let cachedCli;
+  let disposed = false;
+  const disposedPreparation = Symbol("disposed preparation");
+  let resolveDisposalSignal;
+  const disposalSignal = new Promise((resolve) => {
+    resolveDisposalSignal = resolve;
+  });
   const ownsProjectEnvironmentService = !options.projectEnvironmentService;
   const projectEnvironmentService = options.projectEnvironmentService
     || new ProjectEnvironmentService({ projectFactory, vscode });
@@ -682,7 +702,33 @@ function createGaugeExecutionController(options = {}) {
   }
 
   function setReportPath(nextReportPath) {
+    if (disposed) {
+      return undefined;
+    }
     return reportState.setReportPath(nextReportPath && nextReportPath.trim());
+  }
+
+  function ignoreRejection(value) {
+    if (value && typeof value.then === "function") {
+      Promise.resolve(value).catch(() => undefined);
+    }
+  }
+
+  async function waitForPreparation(value) {
+    try {
+      const result = await Promise.race([Promise.resolve(value), disposalSignal]);
+      return disposed ? disposedPreparation : result;
+    } catch (error) {
+      if (disposed) {
+        return disposedPreparation;
+      }
+      throw error;
+    }
+  }
+
+  function cancelUnstartedExecution(flags) {
+    notifyExecutionRequest({ metadata: flags[EXECUTION_METADATA] }, "onCancelled");
+    return undefined;
   }
 
   function getReportPath() {
@@ -704,6 +750,9 @@ function createGaugeExecutionController(options = {}) {
   let lineProcessors;
 
   function emitExecutionEvent(event) {
+    if (disposed) {
+      return;
+    }
     if (isExecutionTestEvent(event)) {
       sawExecutionTestEvent = true;
     }
@@ -719,12 +768,18 @@ function createGaugeExecutionController(options = {}) {
   }
 
   function processOutputLine(lineText) {
+    if (disposed) {
+      return;
+    }
     for (const processor of lineProcessors) {
       processor.process(lineText, activeDebugger);
     }
   }
 
   function processOutputChunk(chunk) {
+    if (disposed) {
+      return;
+    }
     emitExecutionEvent({ type: "output", message: String(chunk || "") });
   }
 
@@ -883,8 +938,10 @@ function createGaugeExecutionController(options = {}) {
         activeDebuggerSessionSubscription.dispose();
       }
       activeDebuggerSessionSubscription = undefined;
-      await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
-      await setExecutingContext(vscode, false);
+      if (!disposed) {
+        await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
+        await setExecutingContext(vscode, false);
+      }
       activeExecutionProjectRoot = undefined;
       activeRun = undefined;
       activeDebugger = undefined;
@@ -922,8 +979,12 @@ function createGaugeExecutionController(options = {}) {
       activeExecutionRequest = request;
       try {
         notifyExecutionRequest(request, "onStart");
-        const result = await runExecution(request);
-        settleExecutionRequest(request, "resolve", result);
+        if (!disposed && !request.cancelRequested) {
+          const result = await runExecution(request);
+          settleExecutionRequest(request, "resolve", result);
+        } else {
+          settleExecutionRequest(request, "resolve", undefined);
+        }
       } catch (error) {
         settleExecutionRequest(request, "reject", error);
       } finally {
@@ -937,6 +998,10 @@ function createGaugeExecutionController(options = {}) {
   }
 
   function executeInProject(projectRoot, spec, flags = {}) {
+    if (disposed) {
+      notifyExecutionRequest({ metadata: flags[EXECUTION_METADATA] }, "onCancelled");
+      return Promise.resolve(undefined);
+    }
     const sequence = Number.isSafeInteger(flags[EXECUTION_SEQUENCE])
       ? flags[EXECUTION_SEQUENCE]
       : ++nextExecutionSequence;
@@ -1004,6 +1069,9 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function executeActiveSpecification(flags = {}) {
+    if (disposed) {
+      return cancelUnstartedExecution(flags);
+    }
     const context = getActiveSpecificationContext("specification");
     if (context.error) {
       return vscode.window.showErrorMessage(context.error);
@@ -1083,6 +1151,9 @@ function createGaugeExecutionController(options = {}) {
         ...flags,
         status: pathModule.join(group.projectRoot, "Specifications"),
       });
+      if (disposed) {
+        return undefined;
+      }
       if (groupResult === false) {
         result = false;
       } else if (groupResult === undefined && result !== false) {
@@ -1124,11 +1195,18 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function executeAllSpecifications(projectRoot, flags = {}) {
+    if (disposed) {
+      return cancelUnstartedExecution(flags);
+    }
     const selectedProjectRoot = projectRoot || (await selectProjectRoot(
       vscode,
       pathModule,
       projectFactory,
+      waitForPreparation,
     ));
+    if (selectedProjectRoot === disposedPreparation) {
+      return cancelUnstartedExecution(flags);
+    }
     if (!selectedProjectRoot) {
       return undefined;
     }
@@ -1139,11 +1217,18 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function executeFailed(projectRoot, flags = {}) {
+    if (disposed) {
+      return cancelUnstartedExecution(flags);
+    }
     const selectedProjectRoot = projectRoot || (await selectProjectRoot(
       vscode,
       pathModule,
       projectFactory,
+      waitForPreparation,
     ));
+    if (selectedProjectRoot === disposedPreparation) {
+      return cancelUnstartedExecution(flags);
+    }
     if (!selectedProjectRoot) {
       return undefined;
     }
@@ -1155,11 +1240,18 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function repeatExecution(projectRoot, flags = {}) {
+    if (disposed) {
+      return cancelUnstartedExecution(flags);
+    }
     const selectedProjectRoot = projectRoot || (await selectProjectRoot(
       vscode,
       pathModule,
       projectFactory,
+      waitForPreparation,
     ));
+    if (selectedProjectRoot === disposedPreparation) {
+      return cancelUnstartedExecution(flags);
+    }
     if (!selectedProjectRoot) {
       return undefined;
     }
@@ -1199,7 +1291,12 @@ function createGaugeExecutionController(options = {}) {
     if (!Array.isArray(scenarios) || scenarios.length === 0) {
       return undefined;
     }
-    const selected = await vscode.window.showQuickPick(getScenarioQuickPickItems(scenarios));
+    const selected = await waitForPreparation(
+      vscode.window.showQuickPick(getScenarioQuickPickItems(scenarios)),
+    );
+    if (selected === disposedPreparation) {
+      return cancelUnstartedExecution(flags);
+    }
     if (!selected) {
       return undefined;
     }
@@ -1211,6 +1308,9 @@ function createGaugeExecutionController(options = {}) {
   }
 
   async function executeScenario(atCursor, flags = {}) {
+    if (disposed) {
+      return cancelUnstartedExecution(flags);
+    }
     const context = getActiveSpecificationContext("scenario(s)");
     if (context.error) {
       return vscode.window.showErrorMessage(context.error);
@@ -1221,16 +1321,25 @@ function createGaugeExecutionController(options = {}) {
       : { line: 1, character: 1 };
     let scenarios;
     try {
-      scenarios = await scenariosProvider({
-        projectRoot: context.projectRoot,
-        spec: context.spec,
-        position,
-        atCursor,
-      });
+      scenarios = await waitForPreparation(
+        scenariosProvider({
+          projectRoot: context.projectRoot,
+          spec: context.spec,
+          position,
+          atCursor,
+        }),
+      );
     } catch (_error) {
+      if (disposed) {
+        return cancelUnstartedExecution(flags);
+      }
       return vscode.window.showErrorMessage(
         `found some problems in ${context.spec}. Fix all problems before running scenarios.`,
       );
+    }
+
+    if (scenarios === disposedPreparation || disposed) {
+      return cancelUnstartedExecution(flags);
     }
 
     if (atCursor && !Array.isArray(scenarios)) {
@@ -1252,13 +1361,13 @@ function createGaugeExecutionController(options = {}) {
     activeRunUserAborted = Boolean(aborted);
     try {
       if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
-        activeDebugger.stopDebugger();
+        ignoreRejection(activeDebugger.stopDebugger());
       }
       if (activeRun && typeof activeRun.cancel === "function") {
         return activeRun.cancel(aborted);
       }
     } catch (error) {
-      if (vscode.window && typeof vscode.window.showErrorMessage === "function") {
+      if (!disposed && vscode.window && typeof vscode.window.showErrorMessage === "function") {
         return vscode.window.showErrorMessage(`Failed to Stop Run: ${error.message}`);
       }
     }
@@ -1287,9 +1396,16 @@ function createGaugeExecutionController(options = {}) {
   ];
 
   async function openReport() {
+    if (disposed) {
+      return undefined;
+    }
     try {
-      return await opener(getReportPath());
+      const result = await waitForPreparation(opener(getReportPath()));
+      return result === disposedPreparation ? undefined : result;
     } catch (error) {
+      if (disposed) {
+        return undefined;
+      }
       return vscode.window.showErrorMessage(`Can't open html report. ${error}`);
     }
   }
@@ -1362,6 +1478,10 @@ function createGaugeExecutionController(options = {}) {
     const hasSelectedResources = Array.isArray(flagsOrSelectedResources);
     const selectedResources = hasSelectedResources ? flagsOrSelectedResources : undefined;
     const suppliedFlags = hasSelectedResources ? maybeFlags : flagsOrSelectedResources;
+    if (disposed) {
+      notifyExecutionRequest({ metadata: suppliedFlags[EXECUTION_METADATA] }, "onCancelled");
+      return Promise.resolve(undefined);
+    }
     const startsExecution = EXECUTION_COMMANDS.has(command)
       && command !== SHOW_REPORT_COMMAND
       && command !== STOP_EXECUTION_COMMAND;
@@ -1438,7 +1558,17 @@ function createGaugeExecutionController(options = {}) {
     executeFailed,
     executeScenario,
     dispose() {
-      executionStatusBar.dispose();
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      resolveDisposalSignal(disposedPreparation);
+      latestScheduledExecutionSequence = ++nextExecutionSequence;
+      if (pendingExecutionRequest) {
+        notifyExecutionRequest(pendingExecutionRequest, "onCancelled");
+        settleExecutionRequest(pendingExecutionRequest, "resolve", undefined);
+        pendingExecutionRequest = undefined;
+      }
       if (
         activeDebuggerSessionSubscription
         && typeof activeDebuggerSessionSubscription.dispose === "function"
@@ -1446,6 +1576,16 @@ function createGaugeExecutionController(options = {}) {
         activeDebuggerSessionSubscription.dispose();
       }
       activeDebuggerSessionSubscription = undefined;
+      if (activeExecutionRequest) {
+        const cancellation = activeExecutionRequest.cancelRequested
+          ? undefined
+          : cancelActiveExecution(true, "onCancelled");
+        activeRunUserAborted = true;
+        settleExecutionRequest(activeExecutionRequest, "resolve", undefined);
+        ignoreRejection(cancellation);
+      }
+      ignoreRejection(setExecutingContext(vscode, false));
+      executionStatusBar.dispose();
       if (
         ownsProjectEnvironmentService
         && projectEnvironmentService
