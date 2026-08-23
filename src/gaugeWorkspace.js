@@ -348,6 +348,7 @@ class GaugeWorkspace {
     this.projectEnvironmentCache = new Map();
     this.pendingServerStarts = new Map();
     this.serverStartGenerations = new Map();
+    this.workspaceFolderDiscoveryGenerations = new Map();
     this.stoppedLanguageClients = new WeakSet();
     this.disposed = false;
     this.env = envWithGaugeHome(options.env || process.env, {
@@ -411,16 +412,28 @@ class GaugeWorkspace {
 
   async startWorkspaceProjects() {
     const folders = this.vscode.workspace.workspaceFolders || [];
-    const discoveredRoots = await mapWithConcurrency(
+    const discoveredProjects = await mapWithConcurrency(
       folders,
       this.clientStartConcurrency,
-      (folder) => this.discoverGaugeProjectRoots(folder.uri.fsPath),
+      (folder) => this.discoverWorkspaceFolderProjects(folder.uri.fsPath),
     );
-    const projectRoots = [...new Set(discoveredRoots.flat())];
+    const projectsByRoot = new Map();
+    for (const project of discoveredProjects.flat()) {
+      if (!projectsByRoot.has(project.projectRoot)) {
+        projectsByRoot.set(project.projectRoot, []);
+      }
+      projectsByRoot.get(project.projectRoot).push(project);
+    }
     await mapWithConcurrency(
-      projectRoots,
+      projectsByRoot.values(),
       this.clientStartConcurrency,
-      (projectRoot) => this.startServerFor(projectRoot),
+      (projects) => {
+        const current = projects.find((project) => this.isWorkspaceFolderDiscoveryCurrent(
+          project.workspaceRoot,
+          project.generation,
+        ));
+        return current ? this.startServerFor(current.projectRoot) : undefined;
+      },
     );
     await this.startServerForActiveGaugeDocument();
     await this.setMultiProjectContext();
@@ -591,11 +604,14 @@ class GaugeWorkspace {
     const added = event && event.added ? event.added : [];
     const removed = event && event.removed ? event.removed : [];
     const beforeProjectRoots = this.projectRootsKey();
+    for (const folder of removed) {
+      this.invalidateWorkspaceFolderDiscovery(folder.uri.fsPath);
+    }
     for (const folder of added) {
       await this.startServersForWorkspaceFolder(folder.uri.fsPath);
     }
     for (const folder of removed) {
-      await this.stopServersForWorkspaceFolder(folder.uri.fsPath);
+      await this.stopServersForWorkspaceFolder(folder.uri.fsPath, false);
     }
     await this.setMultiProjectContext();
     if (this.projectRootsKey() !== beforeProjectRoots) {
@@ -666,16 +682,52 @@ class GaugeWorkspace {
     return roots.sort();
   }
 
-  async startServersForWorkspaceFolder(workspaceRoot) {
-    const projectRoots = await this.discoverGaugeProjectRoots(workspaceRoot);
-    await mapWithConcurrency(
-      projectRoots,
-      this.clientStartConcurrency,
-      (projectRoot) => this.startServerFor(projectRoot),
+  workspaceFolderDiscoveryGeneration(workspaceRoot) {
+    return this.workspaceFolderDiscoveryGenerations.get(workspaceRoot) || 0;
+  }
+
+  invalidateWorkspaceFolderDiscovery(workspaceRoot) {
+    this.workspaceFolderDiscoveryGenerations.set(
+      workspaceRoot,
+      this.workspaceFolderDiscoveryGeneration(workspaceRoot) + 1,
     );
   }
 
-  async stopServersForWorkspaceFolder(workspaceRoot) {
+  isWorkspaceFolderDiscoveryCurrent(workspaceRoot, generation) {
+    return !this.disposed
+      && this.workspaceFolderDiscoveryGeneration(workspaceRoot) === generation;
+  }
+
+  async discoverWorkspaceFolderProjects(workspaceRoot) {
+    const generation = this.workspaceFolderDiscoveryGeneration(workspaceRoot);
+    const projectRoots = await this.discoverGaugeProjectRoots(workspaceRoot);
+    if (!this.isWorkspaceFolderDiscoveryCurrent(workspaceRoot, generation)) {
+      return [];
+    }
+    return projectRoots.map((projectRoot) => ({
+      generation,
+      projectRoot,
+      workspaceRoot,
+    }));
+  }
+
+  async startServersForWorkspaceFolder(workspaceRoot) {
+    const projects = await this.discoverWorkspaceFolderProjects(workspaceRoot);
+    await mapWithConcurrency(
+      projects,
+      this.clientStartConcurrency,
+      (project) => (
+        this.isWorkspaceFolderDiscoveryCurrent(project.workspaceRoot, project.generation)
+          ? this.startServerFor(project.projectRoot)
+          : undefined
+      ),
+    );
+  }
+
+  async stopServersForWorkspaceFolder(workspaceRoot, invalidateDiscovery = true) {
+    if (invalidateDiscovery) {
+      this.invalidateWorkspaceFolderDiscovery(workspaceRoot);
+    }
     const projectRoots = new Set([
       ...this.clientsMap.keys(),
       ...this.pendingServerStarts.keys(),

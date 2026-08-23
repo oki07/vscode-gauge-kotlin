@@ -1003,6 +1003,8 @@ test("GaugeWorkspace starts clients concurrently within an explicit bound", asyn
   });
   const workspace = Object.create(GaugeWorkspace.prototype);
   workspace.clientStartConcurrency = DEFAULT_CLIENT_START_CONCURRENCY;
+  workspace.disposed = false;
+  workspace.workspaceFolderDiscoveryGenerations = new Map();
   workspace.discoverGaugeProjectRoots = () => roots;
   workspace.startServerFor = async () => {
     activeStarts += 1;
@@ -1816,6 +1818,138 @@ test("GaugeWorkspace reports project selection failures", async () => {
       detail: undefined,
     },
   ]);
+});
+
+test("GaugeWorkspace does not resurrect clients when a workspace folder is removed during discovery", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const retainedWorkspaceFolder = { uri: { fsPath: "/workspace/retained" } };
+  const removedWorkspaceFolder = { uri: { fsPath: "/workspace/removed" } };
+  const addedWorkspaceFolder = { uri: { fsPath: "/workspace/added" } };
+  const workspaceFolders = [retainedWorkspaceFolder, removedWorkspaceFolder];
+  const { vscode, workspaceFolderListeners } = createFakeVscode({ workspaceFolders });
+  const clients = new GaugeClients();
+  let discoveryEnteredResolve;
+  const discoveryEntered = new Promise((resolve) => {
+    discoveryEnteredResolve = resolve;
+  });
+  let discoveryResponseResolve;
+  const discoveryResponse = new Promise((resolve) => {
+    discoveryResponseResolve = resolve;
+  });
+  let addedDiscoveryEnteredResolve;
+  const addedDiscoveryEntered = new Promise((resolve) => {
+    addedDiscoveryEnteredResolve = resolve;
+  });
+  let addedDiscoveryResponseResolve;
+  const addedDiscoveryResponse = new Promise((resolve) => {
+    addedDiscoveryResponseResolve = resolve;
+  });
+  let constructedClients = 0;
+  let startedClients = 0;
+
+  class CountingLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      constructedClients += 1;
+    }
+
+    start() {
+      startedClients += 1;
+      return super.start();
+    }
+  }
+
+  const projectRoot = "/workspace/removed/gauge";
+  const project = {
+    envs() {
+      return {};
+    },
+    hasFile(filename) {
+      return filename === projectRoot || filename.startsWith(`${projectRoot}/`);
+    },
+    isProjectLanguage() {
+      return false;
+    },
+    language() {
+      return "kotlin";
+    },
+    root() {
+      return projectRoot;
+    },
+  };
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }),
+    clientsMap: clients,
+    LanguageClient: CountingLanguageClient,
+    pathModule: path.posix,
+    projectFactory: {
+      findGaugeProjectRootsAsync(root) {
+        if (root === retainedWorkspaceFolder.uri.fsPath) {
+          return [];
+        }
+        if (root === addedWorkspaceFolder.uri.fsPath) {
+          addedDiscoveryEnteredResolve();
+          return addedDiscoveryResponse;
+        }
+        assert.equal(root, removedWorkspaceFolder.uri.fsPath);
+        discoveryEnteredResolve();
+        return discoveryResponse;
+      },
+      get(root) {
+        assert.equal(root, projectRoot);
+        return project;
+      },
+      isGaugeProject(root) {
+        return root === projectRoot;
+      },
+    },
+    vscode,
+  });
+
+  await discoveryEntered;
+  workspaceFolders.splice(1, 1, addedWorkspaceFolder);
+  const folderChange = workspaceFolderListeners[0]({
+    added: [addedWorkspaceFolder],
+    removed: [removedWorkspaceFolder],
+  });
+  await addedDiscoveryEntered;
+  assert.deepEqual({ constructedClients, startedClients }, {
+    constructedClients: 0,
+    startedClients: 0,
+  });
+
+  discoveryResponseResolve([projectRoot]);
+  await workspace.ready();
+  let assertionError;
+  try {
+    assert.deepEqual({
+      clientLanguages: workspace.getClientLanguageMap().size,
+      clients: clients.size,
+      constructedClients,
+      pendingStarts: workspace.pendingServerStarts.size,
+      startedClients,
+    }, {
+      clientLanguages: 0,
+      clients: 0,
+      constructedClients: 0,
+      pendingStarts: 0,
+      startedClients: 0,
+    });
+  } catch (error) {
+    assertionError = error;
+  } finally {
+    addedDiscoveryResponseResolve([]);
+    await folderChange;
+    await workspace.dispose();
+  }
+  if (assertionError) {
+    throw assertionError;
+  }
 });
 
 test("GaugeWorkspace starts and stops clients as workspace folders change", async () => {
