@@ -45,10 +45,14 @@ class WorkspaceEditor {
     this.edit = edit;
     this.vscode = getVscode(options.vscode);
     this.fileSystem = options.fileSystem || nodeFs;
+    this.isActive = typeof options.isActive === "function" ? options.isActive : () => true;
     this.pathModule = options.pathModule || nodePath;
   }
 
   applyChanges() {
+    if (!this.isActive()) {
+      return Promise.resolve(undefined);
+    }
     if (!this.edit || typeof this.edit.entries !== "function") {
       if (this.vscode.workspace && typeof this.vscode.workspace.applyEdit === "function") {
         return this.vscode.workspace.applyEdit(this.edit);
@@ -58,32 +62,60 @@ class WorkspaceEditor {
 
     return Promise.all(this.edit.entries().map(([uri, edits]) => (
       this.applyTextEdit(uri, edits)
-    ))).then((results) => results.every((result) => result !== false));
+    ))).then((results) => (
+      this.isActive() ? results.every((result) => result !== false) : undefined
+    ));
   }
 
   ensureDirectoryExists(filename) {
+    if (!this.isActive()) {
+      return false;
+    }
     const directory = this.pathModule.dirname(filename);
-    if (!this.fileSystem.existsSync(directory)) {
+    const exists = this.fileSystem.existsSync(directory);
+    if (!this.isActive()) {
+      return false;
+    }
+    if (!exists) {
       this.fileSystem.mkdirSync(directory, { recursive: true });
     }
+    return this.isActive();
   }
 
   ensureFileExists(filename) {
-    if (this.fileSystem.existsSync(filename)) {
-      return;
+    if (!this.isActive()) {
+      return false;
     }
-    this.ensureDirectoryExists(filename);
+    const exists = this.fileSystem.existsSync(filename);
+    if (!this.isActive()) {
+      return false;
+    }
+    if (exists) {
+      return true;
+    }
+    if (!this.ensureDirectoryExists(filename)) {
+      return false;
+    }
     this.fileSystem.writeFileSync(filename, "", { encoding: "utf8" });
+    return this.isActive();
   }
 
   async applyTextEdit(uri, edits) {
+    if (!this.isActive()) {
+      return undefined;
+    }
     const filename = uriFsPath(uri);
     if (!filename) {
       return false;
     }
 
-    this.ensureFileExists(filename);
+    if (!this.ensureFileExists(filename)) {
+      return undefined;
+    }
     const document = await this.vscode.workspace.openTextDocument(filename);
+    if (!this.isActive()) {
+      return undefined;
+    }
     const firstEdit = edits && edits[0];
     const lineNumber = firstEdit && firstEdit.range && firstEdit.range.start
       ? firstEdit.range.start.line
@@ -91,8 +123,14 @@ class WorkspaceEditor {
     await this.vscode.window.showTextDocument(document, {
       selection: createRange(this.vscode, lineNumber),
     });
+    if (!this.isActive()) {
+      return undefined;
+    }
     const documentUri = document.uri || uri;
     const documentEdit = createWorkspaceEdit(this.vscode, documentUri, edits || []);
+    if (!this.isActive()) {
+      return undefined;
+    }
     return this.vscode.workspace.applyEdit(documentEdit);
   }
 }

@@ -19,21 +19,72 @@ const DEFAULT_KOTLIN_IMPLEMENTATION_FILE = "src/test/kotlin/Steps.kt";
 const DEFAULT_JAVA_IMPLEMENTATION_FILE = "src/test/java/Steps.java";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
+const DISPOSED_OPERATION = Symbol("disposed generate stub operation");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
 }
 
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
-  }
-  return undefined;
+function createGenerateStubOperation() {
+  let rejectPublic;
+  let resolveCancellation;
+  let resolvePublic;
+  const cancellation = new Promise((resolve) => {
+    resolveCancellation = resolve;
+  });
+  const promise = new Promise((resolve, reject) => {
+    rejectPublic = reject;
+    resolvePublic = resolve;
+  });
+  return {
+    cancellation,
+    cancellationSources: new Set(),
+    cancelled: false,
+    completed: false,
+    promise,
+    publicSettled: false,
+    cancel() {
+      if (this.cancelled || this.completed) {
+        return;
+      }
+      this.cancelled = true;
+      resolveCancellation(DISPOSED_OPERATION);
+      const sources = [...this.cancellationSources];
+      this.cancellationSources.clear();
+      for (const source of sources) {
+        if (source && typeof source.cancel === "function") {
+          source.cancel();
+        }
+        if (source && typeof source.dispose === "function") {
+          source.dispose();
+        }
+      }
+      if (!this.publicSettled) {
+        this.publicSettled = true;
+        resolvePublic(undefined);
+      }
+    },
+    reject(error) {
+      if (this.publicSettled) {
+        return;
+      }
+      this.publicSettled = true;
+      rejectPublic(error);
+    },
+    resolve(value) {
+      if (this.publicSettled) {
+        return;
+      }
+      this.publicSettled = true;
+      resolvePublic(value);
+    },
+  };
 }
 
 function defaultWorkspaceEditorFactory(vscode, edit, options = {}) {
   return new WorkspaceEditor(edit, {
     fileSystem: options.fileSystem,
+    isActive: options.isActive,
     pathModule: options.pathModule,
     vscode,
   });
@@ -120,119 +171,358 @@ class GenerateStubCommandProvider {
     this.pathModule = options.pathModule || nodePath;
     this.fileSystem = options.fileSystem || nodeFs;
     this.workspaceEditorFactory = options.workspaceEditorFactory
-      || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit, {
+      || ((edit, operation) => defaultWorkspaceEditorFactory(this.vscode, edit, {
         fileSystem: this.fileSystem,
+        isActive: () => !this.operationStopped(operation),
         pathModule: this.pathModule,
       }));
+    this.activeOperations = new Set();
+    this.disposed = false;
     this.disposables = [];
     this.registerCommands();
   }
 
   registerCommands() {
+    if (this.disposed) {
+      return;
+    }
     if (!this.vscode.commands || typeof this.vscode.commands.registerCommand !== "function") {
       return;
     }
-    this.disposables.push(
-      this.vscode.commands.registerCommand(GENERATE_STEP_STUB, (code) => this.generateStepStub(code)),
-    );
-    this.disposables.push(
-      this.vscode.commands.registerCommand(
-        GENERATE_CONCEPT_STUB,
-        (conceptInfo) => this.generateConceptStub(conceptInfo),
-      ),
-    );
+    const registrations = [
+      [GENERATE_STEP_STUB, (code) => this.generateStepStub(code)],
+      [GENERATE_CONCEPT_STUB, (conceptInfo) => this.generateConceptStub(conceptInfo)],
+    ];
+    for (const [command, handler] of registrations) {
+      if (this.disposed) {
+        break;
+      }
+      const disposable = this.vscode.commands.registerCommand(command, handler);
+      if (this.disposed) {
+        if (disposable && typeof disposable.dispose === "function") {
+          disposable.dispose();
+        }
+        break;
+      }
+      this.disposables.push(disposable);
+    }
   }
 
   generateStepStub(code) {
-    const activePath = this.vscode.window.activeTextEditor.document.uri.fsPath;
-    const projectClient = this.clients.get(activePath);
-    return projectClient.client
-      .sendRequest(FILES_REQUEST, createToken(this.vscode))
-      .then((files) => this.vscode.window.showQuickPick(
-        this.getFileLists(files, projectClient.project.root()),
-      ))
-      .then(async (selected) => {
-        if (!selected) {
-          return undefined;
-        }
-        if (selected.value === COPY_TO_CLIPBOARD) {
-          return this.vscode.env.clipboard.writeText(code).then(
-            () => this.vscode.window.showInformationMessage("Step Implementation copied to clipboard"),
-            (reason) => this.handleError(reason),
-          );
-        }
-        const implementationFilePath = await this.resolveImplementationFilePath(
-          selected,
-          projectClient.project.root(),
-          implementationDefaults(projectClient.project, code),
-        );
-        if (!implementationFilePath) {
-          return undefined;
-        }
-        if (selected.value === NEW_FILE) {
-          this.ensureNewImplementationFile(implementationFilePath);
-        }
-        const selectedCode = this.stepCodeForImplementationFile(code, implementationFilePath);
-        return this.generateInFile(
-          ADD_STUB_REQUEST,
-          { implementationFilePath, codes: [selectedCode] },
-          projectClient.client,
-        );
-      }, (reason) => this.handleError(reason));
+    return this.startOperation((operation) => this.generateStepStubForOperation(operation, code));
   }
 
   generateConceptStub(conceptInfo) {
-    const activePath = this.vscode.window.activeTextEditor.document.uri.fsPath;
-    const projectClient = this.clients.get(activePath);
-    return projectClient.client
-      .sendRequest(FILES_REQUEST, { concept: true }, createToken(this.vscode))
-      .then((files) => this.vscode.window.showQuickPick(
-        this.getFileLists(files, projectClient.project.root(), false),
-      ))
-      .then((selected) => {
-        if (!selected) {
-          return undefined;
+    return this.startOperation(
+      (operation) => this.generateConceptStubForOperation(operation, conceptInfo),
+    );
+  }
+
+  startOperation(callback) {
+    if (this.disposed) {
+      return Promise.resolve(undefined);
+    }
+    const operation = createGenerateStubOperation();
+    this.activeOperations.add(operation);
+    let work;
+    try {
+      work = callback(operation);
+    } catch (error) {
+      this.finishOperation(operation, "reject", error);
+      return operation.promise;
+    }
+    Promise.resolve(work).then(
+      (value) => {
+        const result = this.operationStopped(operation) || value === DISPOSED_OPERATION
+          ? undefined
+          : value;
+        this.finishOperation(operation, "resolve", result);
+      },
+      (error) => {
+        if (this.operationStopped(operation)) {
+          this.finishOperation(operation, "resolve", undefined);
+          return;
         }
-        const params = {
-          ...conceptInfo,
-          conceptFile: selected.value,
-          dir: this.pathModule.dirname(activePath),
-        };
-        return this.generateInFile(GENERATE_CONCEPT_REQUEST, params, projectClient.client);
-      }, (reason) => this.handleError(reason));
+        this.finishOperation(operation, "reject", error);
+      },
+    );
+    return operation.promise;
   }
 
-  generateInFile(request, params, languageClient) {
-    return languageClient
-      .sendRequest(request, params, createToken(this.vscode))
-      .then((edit) => languageClient.protocol2CodeConverter.asWorkspaceEdit(edit))
-      .then((workspaceEdit) => this.workspaceEditorFactory(workspaceEdit).applyChanges())
-      .catch((reason) => this.handleError(reason));
+  async generateStepStubForOperation(operation, code) {
+    const context = this.stepContext(operation);
+    if (context === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const { projectClient } = context;
+    let files;
+    let selected;
+    try {
+      files = await this.requestForOperation(
+        operation,
+        (token) => projectClient.client.sendRequest(FILES_REQUEST, token),
+      );
+      if (files === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const projectRoot = this.callSyncForOperation(
+        operation,
+        () => projectClient.project.root(),
+      );
+      if (projectRoot === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const items = this.callSyncForOperation(
+        operation,
+        () => this.getFileLists(files, projectRoot),
+      );
+      if (items === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      selected = await this.callForOperation(
+        operation,
+        () => this.vscode.window.showQuickPick(items),
+      );
+    } catch (reason) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return this.handleErrorForOperation(operation, reason);
+    }
+    if (selected === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    if (!selected) {
+      return undefined;
+    }
+    if (selected.value === COPY_TO_CLIPBOARD) {
+      try {
+        const copied = await this.callForOperation(
+          operation,
+          () => this.vscode.env.clipboard.writeText(code),
+        );
+        if (copied === DISPOSED_OPERATION) {
+          return DISPOSED_OPERATION;
+        }
+        return this.showInformationForOperation(
+          operation,
+          "Step Implementation copied to clipboard",
+        );
+      } catch (reason) {
+        if (this.operationStopped(operation)) {
+          return DISPOSED_OPERATION;
+        }
+        return this.handleErrorForOperation(operation, reason);
+      }
+    }
+
+    const projectRoot = this.callSyncForOperation(
+      operation,
+      () => projectClient.project.root(),
+    );
+    if (projectRoot === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const defaults = this.callSyncForOperation(
+      operation,
+      () => implementationDefaults(projectClient.project, code),
+    );
+    if (defaults === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const implementationFilePath = await this.resolveImplementationFilePath(
+      operation,
+      selected,
+      projectRoot,
+      defaults,
+    );
+    if (implementationFilePath === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    if (!implementationFilePath) {
+      return undefined;
+    }
+    if (selected.value === NEW_FILE) {
+      const created = this.ensureNewImplementationFile(operation, implementationFilePath);
+      if (created === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+    }
+    const selectedCode = this.callSyncForOperation(
+      operation,
+      () => this.stepCodeForImplementationFile(code, implementationFilePath),
+    );
+    if (selectedCode === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    return this.generateInFile(
+      operation,
+      ADD_STUB_REQUEST,
+      { implementationFilePath, codes: [selectedCode] },
+      projectClient.client,
+    );
   }
 
-  async resolveImplementationFilePath(selected, projectRoot, defaults = implementationDefaults()) {
+  async generateConceptStubForOperation(operation, conceptInfo) {
+    const context = this.stepContext(operation);
+    if (context === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const { activePath, projectClient } = context;
+    let files;
+    let selected;
+    try {
+      files = await this.requestForOperation(
+        operation,
+        (token) => projectClient.client.sendRequest(FILES_REQUEST, { concept: true }, token),
+      );
+      if (files === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const projectRoot = this.callSyncForOperation(
+        operation,
+        () => projectClient.project.root(),
+      );
+      if (projectRoot === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const items = this.callSyncForOperation(
+        operation,
+        () => this.getFileLists(files, projectRoot, false),
+      );
+      if (items === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      selected = await this.callForOperation(
+        operation,
+        () => this.vscode.window.showQuickPick(items),
+      );
+    } catch (reason) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return this.handleErrorForOperation(operation, reason);
+    }
+    if (selected === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    if (!selected) {
+      return undefined;
+    }
+    const params = this.callSyncForOperation(
+      operation,
+      () => ({
+        ...conceptInfo,
+        conceptFile: selected.value,
+        dir: this.pathModule.dirname(activePath),
+      }),
+    );
+    if (params === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    return this.generateInFile(
+      operation,
+      GENERATE_CONCEPT_REQUEST,
+      params,
+      projectClient.client,
+    );
+  }
+
+  stepContext(operation) {
+    const activePath = this.callSyncForOperation(
+      operation,
+      () => this.vscode.window.activeTextEditor.document.uri.fsPath,
+    );
+    if (activePath === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const projectClient = this.callSyncForOperation(
+      operation,
+      () => this.clients.get(activePath),
+    );
+    if (projectClient === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    return { activePath, projectClient };
+  }
+
+  async generateInFile(operation, request, params, languageClient) {
+    try {
+      const edit = await this.requestForOperation(
+        operation,
+        (token) => languageClient.sendRequest(request, params, token),
+      );
+      if (edit === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const workspaceEdit = await this.callForOperation(
+        operation,
+        () => languageClient.protocol2CodeConverter.asWorkspaceEdit(edit),
+      );
+      if (workspaceEdit === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const workspaceEditor = this.callSyncForOperation(
+        operation,
+        () => this.workspaceEditorFactory(workspaceEdit, operation),
+      );
+      if (workspaceEditor === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      return await this.callForOperation(
+        operation,
+        () => workspaceEditor.applyChanges(),
+      );
+    } catch (reason) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return this.handleErrorForOperation(operation, reason);
+    }
+  }
+
+  async resolveImplementationFilePath(
+    operation,
+    selected,
+    projectRoot,
+    defaults = implementationDefaults(),
+  ) {
     if (selected.value !== NEW_FILE) {
       return selected.value;
     }
     if (!this.vscode.window || typeof this.vscode.window.showInputBox !== "function") {
       return undefined;
     }
-    const input = await this.vscode.window.showInputBox({
-      prompt: `Enter the new ${defaults.label} implementation file path.`,
-      placeHolder: defaults.defaultFile,
-      value: defaults.defaultFile,
-    });
-    const trimmed = typeof input === "string" ? input.trim() : "";
+    const input = await this.callForOperation(
+      operation,
+      () => this.vscode.window.showInputBox({
+        prompt: `Enter the new ${defaults.label} implementation file path.`,
+        placeHolder: defaults.defaultFile,
+        value: defaults.defaultFile,
+      }),
+    );
+    if (input === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const trimmed = this.callSyncForOperation(
+      operation,
+      () => (typeof input === "string" ? input.trim() : ""),
+    );
+    if (trimmed === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
     if (!trimmed) {
       return undefined;
     }
-    if (!projectRoot || this.pathModule.isAbsolute(trimmed)) {
-      return this.pathModule.normalize(trimmed);
-    }
-    return this.pathModule.join(projectRoot, trimmed);
+    return this.callSyncForOperation(operation, () => {
+      if (!projectRoot || this.pathModule.isAbsolute(trimmed)) {
+        return this.pathModule.normalize(trimmed);
+      }
+      return this.pathModule.join(projectRoot, trimmed);
+    });
   }
 
-  ensureNewImplementationFile(implementationFilePath) {
+  ensureNewImplementationFile(operation, implementationFilePath) {
     const lowerPath = String(implementationFilePath || "").toLowerCase();
     if (
       !implementationFilePath
@@ -243,18 +533,48 @@ class GenerateStubCommandProvider {
     ) {
       return;
     }
-    if (this.fileSystem.existsSync(implementationFilePath)) {
+    const fileExists = this.callSyncForOperation(
+      operation,
+      () => this.fileSystem.existsSync(implementationFilePath),
+    );
+    if (fileExists === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    if (fileExists) {
       return;
     }
-    const directory = this.pathModule.dirname(implementationFilePath);
+    const directory = this.callSyncForOperation(
+      operation,
+      () => this.pathModule.dirname(implementationFilePath),
+    );
+    if (directory === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
     if (
       directory
       && typeof this.fileSystem.mkdirSync === "function"
-      && !this.fileSystem.existsSync(directory)
     ) {
-      this.fileSystem.mkdirSync(directory, { recursive: true });
+      const directoryExists = this.callSyncForOperation(
+        operation,
+        () => this.fileSystem.existsSync(directory),
+      );
+      if (directoryExists === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      if (!directoryExists) {
+        const created = this.callSyncForOperation(
+          operation,
+          () => this.fileSystem.mkdirSync(directory, { recursive: true }),
+        );
+        if (created === DISPOSED_OPERATION) {
+          return DISPOSED_OPERATION;
+        }
+      }
     }
-    this.fileSystem.writeFileSync(implementationFilePath, "", { encoding: "utf8" });
+    return this.callSyncForOperation(
+      operation,
+      () => this.fileSystem.writeFileSync(implementationFilePath, "", { encoding: "utf8" }),
+    );
   }
 
   implementationFileText(implementationFilePath) {
@@ -322,7 +642,160 @@ class GenerateStubCommandProvider {
     );
   }
 
+  createRequestSource(operation) {
+    if (this.operationStopped(operation)) {
+      return DISPOSED_OPERATION;
+    }
+    if (typeof this.vscode.CancellationTokenSource !== "function") {
+      return { release() {}, token: undefined };
+    }
+    let source;
+    try {
+      source = new this.vscode.CancellationTokenSource();
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      throw error;
+    }
+    if (this.operationStopped(operation)) {
+      if (source && typeof source.cancel === "function") {
+        source.cancel();
+      }
+      if (source && typeof source.dispose === "function") {
+        source.dispose();
+      }
+      return DISPOSED_OPERATION;
+    }
+    operation.cancellationSources.add(source);
+    let released = false;
+    return {
+      release: () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        if (!operation.cancellationSources.delete(source)) {
+          return;
+        }
+        if (source && typeof source.dispose === "function") {
+          source.dispose();
+        }
+      },
+      token: source && source.token,
+    };
+  }
+
+  async requestForOperation(operation, callback) {
+    const source = this.createRequestSource(operation);
+    if (source === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    try {
+      return await this.callForOperation(operation, () => callback(source.token));
+    } finally {
+      source.release();
+    }
+  }
+
+  callSyncForOperation(operation, callback) {
+    if (this.operationStopped(operation)) {
+      return DISPOSED_OPERATION;
+    }
+    let value;
+    try {
+      value = callback();
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      throw error;
+    }
+    return this.operationStopped(operation) ? DISPOSED_OPERATION : value;
+  }
+
+  callForOperation(operation, callback) {
+    if (this.operationStopped(operation)) {
+      return Promise.resolve(DISPOSED_OPERATION);
+    }
+    let value;
+    try {
+      value = callback();
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return Promise.resolve(DISPOSED_OPERATION);
+      }
+      return Promise.reject(error);
+    }
+    if (this.operationStopped(operation)) {
+      Promise.resolve(value).catch(() => undefined);
+      return Promise.resolve(DISPOSED_OPERATION);
+    }
+    return this.awaitOperation(operation, value);
+  }
+
+  async awaitOperation(operation, value) {
+    if (this.operationStopped(operation)) {
+      return DISPOSED_OPERATION;
+    }
+    try {
+      const result = await Promise.race([
+        Promise.resolve(value),
+        operation.cancellation,
+      ]);
+      if (result === DISPOSED_OPERATION || this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return result;
+    } catch (error) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  operationStopped(operation) {
+    return this.disposed || !operation || operation.cancelled;
+  }
+
+  finishOperation(operation, outcome, value) {
+    if (operation.completed) {
+      return;
+    }
+    operation.completed = true;
+    this.activeOperations.delete(operation);
+    const sources = [...operation.cancellationSources];
+    operation.cancellationSources.clear();
+    for (const source of sources) {
+      if (source && typeof source.dispose === "function") {
+        source.dispose();
+      }
+    }
+    if (outcome === "reject") {
+      operation.reject(value);
+      return;
+    }
+    operation.resolve(value);
+  }
+
+  handleErrorForOperation(operation, reason) {
+    return this.callForOperation(operation, () => this.handleError(reason));
+  }
+
+  showInformationForOperation(operation, message) {
+    return this.callForOperation(operation, () => {
+      if (this.disposed) {
+        return undefined;
+      }
+      return this.vscode.window.showInformationMessage(message);
+    });
+  }
+
   handleError(reason) {
+    if (this.disposed) {
+      return undefined;
+    }
     return this.vscode.window.showErrorMessage(`Unable to generate implementation. ${reason}`);
   }
 
@@ -342,7 +815,18 @@ class GenerateStubCommandProvider {
   }
 
   dispose() {
-    for (const disposable of this.disposables) {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      operation.cancel();
+    }
+    const disposables = this.disposables;
+    this.disposables = [];
+    for (const disposable of disposables) {
       if (disposable && typeof disposable.dispose === "function") {
         disposable.dispose();
       }

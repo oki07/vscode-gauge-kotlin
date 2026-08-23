@@ -2,6 +2,40 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    reject = rejectPromise;
+    resolve = resolvePromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function trackCancellationSources(vscode, sources) {
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+}
+
 function createFakeVscode(overrides = {}) {
   const commands = [];
   const appliedEdits = [];
@@ -813,4 +847,1038 @@ test("GenerateStubCommandProvider defaults new step files to Java paths for Java
   ]);
   assert.deepEqual(events, ["mkdir", "write", "request"]);
   assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+});
+
+test("GenerateStubCommandProvider ignores retained commands after disposal", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const fake = createFakeVscode();
+  const registrationDisposeCalls = new Map();
+  fake.vscode.commands.registerCommand = (command, handler) => {
+    fake.commands.push({ command, handler });
+    registrationDisposeCalls.set(command, 0);
+    return {
+      dispose() {
+        registrationDisposeCalls.set(command, registrationDisposeCalls.get(command) + 1);
+      },
+    };
+  };
+  let clientLookups = 0;
+  const provider = new GenerateStubCommandProvider({
+    get() {
+      clientLookups += 1;
+      return undefined;
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const stepHandler = fake.commands.find(
+    (entry) => entry.command === "gauge.generate.step",
+  ).handler;
+  const conceptHandler = fake.commands.find(
+    (entry) => entry.command === "gauge.generate.concept",
+  ).handler;
+
+  provider.dispose();
+  provider.dispose();
+  const outcomes = await Promise.allSettled([
+    Promise.resolve().then(() => stepHandler("fun step() {}")),
+    Promise.resolve().then(() => conceptHandler({ conceptName: "# Shared" })),
+    Promise.resolve().then(() => provider.generateStepStub("fun direct() {}")),
+    Promise.resolve().then(() => provider.generateConceptStub({ conceptName: "# Direct" })),
+  ]);
+
+  assert.deepEqual({
+    activeOperations: provider.activeOperations && provider.activeOperations.size,
+    clientLookups,
+    errors: fake.errors,
+    information: fake.information,
+    inputBoxes: fake.inputBoxes.length,
+    outcomes,
+    quickPicks: fake.quickPicks.length,
+    registrationDisposeCalls: Object.fromEntries(registrationDisposeCalls),
+  }, {
+    activeOperations: 0,
+    clientLookups: 0,
+    errors: [],
+    information: [],
+    inputBoxes: 0,
+    outcomes: [
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+    ],
+    quickPicks: 0,
+    registrationDisposeCalls: {
+      "gauge.generate.concept": 1,
+      "gauge.generate.step": 1,
+    },
+  });
+});
+
+test("GenerateStubCommandProvider cancels pending file-list requests on disposal", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+
+  for (const route of ["step", "concept"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const fake = createFakeVscode();
+      const sources = [];
+      trackCancellationSources(fake.vscode, sources);
+      const request = deferred();
+      const requestEntered = deferred();
+      const requestCalls = [];
+      fake.vscode.window.showQuickPick = (items) => {
+        fake.quickPicks.push(items);
+        return Promise.resolve(undefined);
+      };
+      const requestError = new Error(`disposed ${route} files failed`);
+      const provider = new GenerateStubCommandProvider({
+        get() {
+          return {
+            client: {
+              sendRequest(...args) {
+                requestCalls.push(args);
+                requestEntered.resolve();
+                return request.promise;
+              },
+            },
+            project: {
+              root() {
+                return "/workspace";
+              },
+            },
+          };
+        },
+      }, {
+        pathModule: path.posix,
+        vscode: fake.vscode,
+      });
+      const handler = fake.commands.find(
+        (entry) => entry.command === `gauge.generate.${route}`,
+      ).handler;
+      let settled = false;
+      const pending = handler(route === "step" ? "fun step() {}" : { conceptName: "# Shared" })
+        .then((value) => {
+          settled = true;
+          return value;
+        });
+
+      await requestEntered.promise;
+      provider.dispose();
+      await nextTurn();
+      const snapshot = {
+        activeOperations: provider.activeOperations && provider.activeOperations.size,
+        cancelCalls: sources[0].cancelCalls,
+        disposeCalls: sources[0].disposeCalls,
+        settled,
+      };
+      if (settlement === "resolve") {
+        request.resolve([]);
+      } else {
+        request.reject(requestError);
+      }
+      const outcome = await Promise.allSettled([pending]);
+      await nextTurn();
+
+      const expectedArgs = route === "step"
+        ? ["gauge/getImplFiles", sources[0].token]
+        : ["gauge/getImplFiles", { concept: true }, sources[0].token];
+      assert.deepEqual({
+        ...snapshot,
+        errors: fake.errors,
+        information: fake.information,
+        outcome,
+        quickPicks: fake.quickPicks.length,
+        requestArgs: requestCalls[0],
+        route,
+        settlement,
+        tokenCancelled: sources[0].token.isCancellationRequested,
+      }, {
+        activeOperations: 0,
+        cancelCalls: 1,
+        disposeCalls: 1,
+        errors: [],
+        information: [],
+        outcome: [{ status: "fulfilled", value: undefined }],
+        quickPicks: 0,
+        requestArgs: expectedArgs,
+        route,
+        settled: true,
+        settlement,
+        tokenCancelled: true,
+      });
+    }
+  }
+
+  const liveFake = createFakeVscode();
+  const liveSources = [];
+  trackCancellationSources(liveFake.vscode, liveSources);
+  const liveError = new Error("live files failed");
+  const liveProvider = new GenerateStubCommandProvider({
+    get() {
+      return {
+        client: {
+          sendRequest() {
+            return Promise.reject(liveError);
+          },
+        },
+        project: {
+          root() {
+            return "/workspace";
+          },
+        },
+      };
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: liveFake.vscode,
+  });
+  const liveHandler = liveFake.commands.find(
+    (entry) => entry.command === "gauge.generate.step",
+  ).handler;
+
+  await liveHandler("fun step() {}");
+
+  assert.deepEqual({
+    activeOperations: liveProvider.activeOperations && liveProvider.activeOperations.size,
+    cancelCalls: liveSources[0].cancelCalls,
+    disposeCalls: liveSources[0].disposeCalls,
+    errors: liveFake.errors,
+  }, {
+    activeOperations: 0,
+    cancelCalls: 0,
+    disposeCalls: 1,
+    errors: [`Unable to generate implementation. ${liveError}`],
+  });
+});
+
+test("GenerateStubCommandProvider stops pending selection side effects on disposal", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+
+  for (const scenario of ["quickPick", "newFileInput", "clipboardResolve", "clipboardReject"]) {
+    const fake = createFakeVscode();
+    const sources = [];
+    trackCancellationSources(fake.vscode, sources);
+    const gate = deferred();
+    const entered = deferred();
+    const madeDirectories = [];
+    const writes = [];
+    const requestMethods = [];
+    let applyCalls = 0;
+    let clipboardCalls = 0;
+    let converterCalls = 0;
+    let factoryCalls = 0;
+    const fileSystem = {
+      existsSync() {
+        return false;
+      },
+      mkdirSync(directory) {
+        madeDirectories.push(directory);
+      },
+      writeFileSync(filename) {
+        writes.push(filename);
+      },
+    };
+    if (scenario === "quickPick") {
+      fake.vscode.window.showQuickPick = (items) => {
+        fake.quickPicks.push(items);
+        entered.resolve();
+        return gate.promise;
+      };
+    } else if (scenario === "newFileInput") {
+      fake.vscode.window.showQuickPick = (items) => {
+        fake.quickPicks.push(items);
+        return Promise.resolve(items[0]);
+      };
+      fake.vscode.window.showInputBox = (options) => {
+        fake.inputBoxes.push(options);
+        entered.resolve();
+        return gate.promise;
+      };
+    } else {
+      fake.vscode.window.showQuickPick = (items) => {
+        fake.quickPicks.push(items);
+        return Promise.resolve(items[1]);
+      };
+      fake.vscode.env.clipboard.writeText = () => {
+        clipboardCalls += 1;
+        entered.resolve();
+        return gate.promise;
+      };
+    }
+    const client = {
+      protocol2CodeConverter: {
+        asWorkspaceEdit(edit) {
+          converterCalls += 1;
+          return Promise.resolve(edit);
+        },
+      },
+      sendRequest(method) {
+        requestMethods.push(method);
+        if (method === "gauge/getImplFiles") {
+          return Promise.resolve([]);
+        }
+        return Promise.resolve({ changes: [] });
+      },
+    };
+    const provider = new GenerateStubCommandProvider({
+      get() {
+        return {
+          client,
+          project: {
+            root() {
+              return "/workspace";
+            },
+          },
+        };
+      },
+    }, {
+      fileSystem,
+      pathModule: path.posix,
+      vscode: fake.vscode,
+      workspaceEditorFactory() {
+        factoryCalls += 1;
+        return {
+          applyChanges() {
+            applyCalls += 1;
+            return Promise.resolve(true);
+          },
+        };
+      },
+    });
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.generate.step",
+    ).handler;
+    let settled = false;
+    const pending = handler("fun step() {}").then((value) => {
+      settled = true;
+      return value;
+    });
+
+    await entered.promise;
+    provider.dispose();
+    await nextTurn();
+    const snapshot = {
+      activeOperations: provider.activeOperations && provider.activeOperations.size,
+      settled,
+    };
+    if (scenario === "quickPick") {
+      gate.resolve(undefined);
+    } else if (scenario === "newFileInput") {
+      gate.resolve("src/test/kotlin/NewSteps.kt");
+    } else if (scenario === "clipboardResolve") {
+      gate.resolve(undefined);
+    } else {
+      gate.reject(new Error("disposed clipboard failed"));
+    }
+    const outcome = await Promise.allSettled([pending]);
+    await nextTurn();
+
+    assert.deepEqual({
+      ...snapshot,
+      applyCalls,
+      cancelCalls: sources[0].cancelCalls,
+      clipboardCalls,
+      converterCalls,
+      disposeCalls: sources[0].disposeCalls,
+      errors: fake.errors,
+      factoryCalls,
+      information: fake.information,
+      inputBoxes: fake.inputBoxes.length,
+      madeDirectories,
+      outcome,
+      quickPicks: fake.quickPicks.length,
+      requestMethods,
+      scenario,
+      writes,
+    }, {
+      activeOperations: 0,
+      applyCalls: 0,
+      cancelCalls: 0,
+      clipboardCalls: scenario.startsWith("clipboard") ? 1 : 0,
+      converterCalls: 0,
+      disposeCalls: 1,
+      errors: [],
+      factoryCalls: 0,
+      information: [],
+      inputBoxes: scenario === "newFileInput" ? 1 : 0,
+      madeDirectories: [],
+      outcome: [{ status: "fulfilled", value: undefined }],
+      quickPicks: 1,
+      requestMethods: ["gauge/getImplFiles"],
+      scenario,
+      settled: true,
+      writes: [],
+    });
+  }
+});
+
+test("GenerateStubCommandProvider detaches generated edit stages on disposal", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+
+  for (const stage of ["request", "converter", "apply"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const fake = createFakeVscode();
+      const sources = [];
+      trackCancellationSources(fake.vscode, sources);
+      const gate = deferred();
+      const entered = deferred();
+      const requestMethods = [];
+      let applyCalls = 0;
+      let converterCalls = 0;
+      let factoryCalls = 0;
+      const stageError = new Error(`disposed ${stage} failed`);
+      const client = {
+        protocol2CodeConverter: {
+          asWorkspaceEdit(edit) {
+            converterCalls += 1;
+            if (stage === "converter") {
+              entered.resolve();
+              return gate.promise;
+            }
+            return Promise.resolve({ converted: edit });
+          },
+        },
+        sendRequest(method) {
+          requestMethods.push(method);
+          if (method === "gauge/getImplFiles") {
+            return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+          }
+          if (stage === "request") {
+            entered.resolve();
+            return gate.promise;
+          }
+          return Promise.resolve({ changes: [] });
+        },
+      };
+      const provider = new GenerateStubCommandProvider({
+        get() {
+          return {
+            client,
+            project: {
+              root() {
+                return "/workspace";
+              },
+            },
+          };
+        },
+      }, {
+        pathModule: path.posix,
+        vscode: fake.vscode,
+        workspaceEditorFactory() {
+          factoryCalls += 1;
+          return {
+            applyChanges() {
+              applyCalls += 1;
+              if (stage === "apply") {
+                entered.resolve();
+                return gate.promise;
+              }
+              return Promise.resolve(true);
+            },
+          };
+        },
+      });
+      const handler = fake.commands.find(
+        (entry) => entry.command === "gauge.generate.step",
+      ).handler;
+      let settled = false;
+      const pending = handler("fun step() {}").then((value) => {
+        settled = true;
+        return value;
+      });
+
+      await entered.promise;
+      provider.dispose();
+      await nextTurn();
+      const snapshot = {
+        activeOperations: provider.activeOperations && provider.activeOperations.size,
+        settled,
+      };
+      if (settlement === "resolve") {
+        gate.resolve(stage === "request" ? { changes: [] } : { converted: true });
+      } else {
+        gate.reject(stageError);
+      }
+      const outcome = await Promise.allSettled([pending]);
+      await nextTurn();
+
+      const expectedCounts = {
+        apply: { applyCalls: 1, converterCalls: 1, factoryCalls: 1 },
+        converter: { applyCalls: 0, converterCalls: 1, factoryCalls: 0 },
+        request: { applyCalls: 0, converterCalls: 0, factoryCalls: 0 },
+      }[stage];
+      assert.deepEqual({
+        ...snapshot,
+        ...expectedCounts,
+        cancelCalls: sources.map((source) => source.cancelCalls),
+        disposeCalls: sources.map((source) => source.disposeCalls),
+        errors: fake.errors,
+        information: fake.information,
+        outcome,
+        requestMethods,
+        settlement,
+        stage,
+      }, {
+        activeOperations: 0,
+        ...expectedCounts,
+        cancelCalls: stage === "request" ? [0, 1] : [0, 0],
+        disposeCalls: [1, 1],
+        errors: [],
+        information: [],
+        outcome: [{ status: "fulfilled", value: undefined }],
+        requestMethods: ["gauge/getImplFiles", "gauge/putStubImpl"],
+        settled: true,
+        settlement,
+        stage,
+      });
+    }
+  }
+});
+
+test("GenerateStubCommandProvider stops the default workspace editor after disposal", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+
+  for (const stage of ["open", "show", "apply"]) {
+    const filename = "/workspace/src/test/kotlin/Steps.kt";
+    const fake = createFakeVscode({
+      quickPickSelection: {
+        label: "Steps.kt",
+        description: "src/test/kotlin",
+        value: filename,
+      },
+    });
+    const gate = deferred();
+    const entered = deferred();
+    let applyCalls = 0;
+    let openCalls = 0;
+    let showCalls = 0;
+    fake.vscode.workspace.openTextDocument = () => {
+      openCalls += 1;
+      if (stage === "open") {
+        entered.resolve();
+        return gate.promise;
+      }
+      return Promise.resolve({ fileName: filename, uri: { fsPath: filename } });
+    };
+    fake.vscode.window.showTextDocument = () => {
+      showCalls += 1;
+      if (stage === "show") {
+        entered.resolve();
+        return gate.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    fake.vscode.workspace.applyEdit = () => {
+      applyCalls += 1;
+      if (stage === "apply") {
+        entered.resolve();
+        return gate.promise;
+      }
+      return Promise.resolve(true);
+    };
+    const client = {
+      protocol2CodeConverter: {
+        asWorkspaceEdit() {
+          return Promise.resolve({
+            entries() {
+              return [[{ fsPath: filename }, [{
+                newText: "fun step() {}\n",
+                range: {
+                  end: { character: 0, line: 0 },
+                  start: { character: 0, line: 0 },
+                },
+              }]]];
+            },
+          });
+        },
+      },
+      sendRequest(method) {
+        if (method === "gauge/getImplFiles") {
+          return Promise.resolve([filename]);
+        }
+        return Promise.resolve({ changes: [] });
+      },
+    };
+    const provider = new GenerateStubCommandProvider({
+      get() {
+        return {
+          client,
+          project: {
+            root() {
+              return "/workspace";
+            },
+          },
+        };
+      },
+    }, {
+      fileSystem: {
+        existsSync() {
+          return true;
+        },
+      },
+      pathModule: path.posix,
+      vscode: fake.vscode,
+    });
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.generate.step",
+    ).handler;
+    let settled = false;
+    const pending = handler("fun step() {}").then((value) => {
+      settled = true;
+      return value;
+    });
+
+    await entered.promise;
+    provider.dispose();
+    await nextTurn();
+    const snapshot = {
+      activeOperations: provider.activeOperations && provider.activeOperations.size,
+      applyCalls,
+      openCalls,
+      settled,
+      showCalls,
+    };
+    if (stage === "apply") {
+      gate.reject(new Error("disposed workspace apply failed"));
+    } else {
+      gate.resolve({ fileName: filename, uri: { fsPath: filename } });
+    }
+    const outcome = await Promise.allSettled([pending]);
+    await nextTurn();
+
+    assert.deepEqual({
+      ...snapshot,
+      applyCallsAfterSettlement: applyCalls,
+      errors: fake.errors,
+      information: fake.information,
+      openCallsAfterSettlement: openCalls,
+      outcome,
+      showCallsAfterSettlement: showCalls,
+      stage,
+    }, {
+      activeOperations: 0,
+      applyCalls: stage === "apply" ? 1 : 0,
+      applyCallsAfterSettlement: stage === "apply" ? 1 : 0,
+      errors: [],
+      information: [],
+      openCalls: 1,
+      openCallsAfterSettlement: 1,
+      outcome: [{ status: "fulfilled", value: undefined }],
+      settled: true,
+      showCalls: stage === "open" ? 0 : 1,
+      showCallsAfterSettlement: stage === "open" ? 0 : 1,
+      stage,
+    });
+  }
+});
+
+test("GenerateStubCommandProvider preserves live generated-edit failures and releases request sources", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+
+  for (const stage of ["request", "converter", "factory", "apply"]) {
+    const filename = "/workspace/src/test/kotlin/Steps.kt";
+    const fake = createFakeVscode({
+      quickPickSelection: {
+        label: "Steps.kt",
+        description: "src/test/kotlin",
+        value: filename,
+      },
+    });
+    const sources = [];
+    trackCancellationSources(fake.vscode, sources);
+    const stageError = new Error(`live ${stage} failed`);
+    let applyCalls = 0;
+    let converterCalls = 0;
+    let factoryCalls = 0;
+    const client = {
+      protocol2CodeConverter: {
+        asWorkspaceEdit(edit) {
+          converterCalls += 1;
+          if (stage === "converter") {
+            return Promise.reject(stageError);
+          }
+          return Promise.resolve({ converted: edit });
+        },
+      },
+      sendRequest(method) {
+        if (method === "gauge/getImplFiles") {
+          return Promise.resolve([filename]);
+        }
+        if (stage === "request") {
+          return Promise.reject(stageError);
+        }
+        return Promise.resolve({ changes: [] });
+      },
+    };
+    const provider = new GenerateStubCommandProvider({
+      get() {
+        return {
+          client,
+          project: {
+            root() {
+              return "/workspace";
+            },
+          },
+        };
+      },
+    }, {
+      pathModule: path.posix,
+      vscode: fake.vscode,
+      workspaceEditorFactory() {
+        factoryCalls += 1;
+        if (stage === "factory") {
+          throw stageError;
+        }
+        return {
+          applyChanges() {
+            applyCalls += 1;
+            if (stage === "apply") {
+              return Promise.reject(stageError);
+            }
+            return Promise.resolve(true);
+          },
+        };
+      },
+    });
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.generate.step",
+    ).handler;
+
+    const outcome = await Promise.allSettled([handler("fun step() {}")]);
+
+    const expectedCounts = {
+      apply: { applyCalls: 1, converterCalls: 1, factoryCalls: 1 },
+      converter: { applyCalls: 0, converterCalls: 1, factoryCalls: 0 },
+      factory: { applyCalls: 0, converterCalls: 1, factoryCalls: 1 },
+      request: { applyCalls: 0, converterCalls: 0, factoryCalls: 0 },
+    }[stage];
+    assert.deepEqual({
+      activeOperations: provider.activeOperations.size,
+      ...expectedCounts,
+      cancelCalls: sources.map((source) => source.cancelCalls),
+      disposeCalls: sources.map((source) => source.disposeCalls),
+      errors: fake.errors,
+      information: fake.information,
+      outcome,
+      stage,
+    }, {
+      activeOperations: 0,
+      ...expectedCounts,
+      cancelCalls: [0, 0],
+      disposeCalls: [1, 1],
+      errors: [`Unable to generate implementation. ${stageError}`],
+      information: [],
+      outcome: [{ status: "fulfilled", value: undefined }],
+      stage,
+    });
+  }
+});
+
+test("GenerateStubCommandProvider preserves live clipboard notification failures", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const fake = createFakeVscode({
+    quickPickSelection: {
+      label: "Copy To Clipboard",
+      description: "",
+      value: "Copy To Clipboard",
+    },
+  });
+  const sources = [];
+  trackCancellationSources(fake.vscode, sources);
+  const notificationError = new Error("live clipboard notification failed");
+  fake.vscode.window.showInformationMessage = (message) => {
+    fake.information.push(message);
+    return Promise.reject(notificationError);
+  };
+  const provider = new GenerateStubCommandProvider({
+    get() {
+      return {
+        client: {
+          sendRequest() {
+            return Promise.resolve([]);
+          },
+        },
+        project: {
+          root() {
+            return "/workspace";
+          },
+        },
+      };
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const handler = fake.commands.find(
+    (entry) => entry.command === "gauge.generate.step",
+  ).handler;
+
+  const outcome = await Promise.allSettled([handler("fun step() {}")]);
+
+  assert.deepEqual({
+    activeOperations: provider.activeOperations.size,
+    cancelCalls: sources[0].cancelCalls,
+    disposeCalls: sources[0].disposeCalls,
+    errors: fake.errors,
+    information: fake.information,
+    outcome,
+  }, {
+    activeOperations: 0,
+    cancelCalls: 0,
+    disposeCalls: 1,
+    errors: [],
+    information: ["Step Implementation copied to clipboard"],
+    outcome: [{ status: "rejected", reason: notificationError }],
+  });
+});
+
+test("GenerateStubCommandProvider stops synchronous disposal reentrancy at operation boundaries", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+
+  for (const boundary of ["source", "request", "factory", "newFileFs", "workspaceFs"]) {
+    const filename = boundary === "newFileFs"
+      ? "/workspace/src/test/kotlin/NewSteps.kt"
+      : "/workspace/src/test/kotlin/Steps.kt";
+    const fake = createFakeVscode({
+      inputBoxValue: "src/test/kotlin/NewSteps.kt",
+      quickPickSelection: boundary === "newFileFs"
+        ? { label: "New File", description: "Create a new file", value: "New File" }
+        : { label: "Steps.kt", description: "src/test/kotlin", value: filename },
+    });
+    const sources = [];
+    const boundaryError = new Error(`disposed during ${boundary}`);
+    let applyCalls = 0;
+    let converterCalls = 0;
+    let mkdirCalls = 0;
+    let openCalls = 0;
+    let provider;
+    let requestCalls = 0;
+    let writeCalls = 0;
+    if (boundary === "source") {
+      fake.vscode.CancellationTokenSource = class CancellationTokenSource {
+        constructor() {
+          this.cancelCalls = 0;
+          this.disposeCalls = 0;
+          this.token = { isCancellationRequested: false };
+          sources.push(this);
+          provider.dispose();
+        }
+
+        cancel() {
+          this.cancelCalls += 1;
+          this.token.isCancellationRequested = true;
+        }
+
+        dispose() {
+          this.disposeCalls += 1;
+        }
+      };
+    } else {
+      trackCancellationSources(fake.vscode, sources);
+    }
+    fake.vscode.workspace.openTextDocument = () => {
+      openCalls += 1;
+      return Promise.resolve({ fileName: filename, uri: { fsPath: filename } });
+    };
+    const fileSystem = {
+      existsSync() {
+        if (boundary === "newFileFs" || boundary === "workspaceFs") {
+          provider.dispose();
+        }
+        return boundary === "workspaceFs";
+      },
+      mkdirSync() {
+        mkdirCalls += 1;
+      },
+      writeFileSync() {
+        writeCalls += 1;
+      },
+    };
+    const client = {
+      protocol2CodeConverter: {
+        asWorkspaceEdit() {
+          converterCalls += 1;
+          return Promise.resolve({
+            entries() {
+              return [[{ fsPath: filename }, []]];
+            },
+          });
+        },
+      },
+      sendRequest(method) {
+        requestCalls += 1;
+        if (method === "gauge/getImplFiles") {
+          return Promise.resolve(boundary === "newFileFs" ? [] : [filename]);
+        }
+        if (boundary === "request") {
+          provider.dispose();
+          return Promise.reject(boundaryError);
+        }
+        return Promise.resolve({ changes: [] });
+      },
+    };
+    const options = {
+      fileSystem,
+      pathModule: path.posix,
+      vscode: fake.vscode,
+    };
+    if (boundary === "factory") {
+      options.workspaceEditorFactory = () => {
+        provider.dispose();
+        return {
+          applyChanges() {
+            applyCalls += 1;
+            return Promise.resolve(true);
+          },
+        };
+      };
+    }
+    provider = new GenerateStubCommandProvider({
+      get() {
+        return {
+          client,
+          project: {
+            root() {
+              return "/workspace";
+            },
+          },
+        };
+      },
+    }, options);
+    const handler = fake.commands.find(
+      (entry) => entry.command === "gauge.generate.step",
+    ).handler;
+
+    const outcome = await Promise.allSettled([handler("fun step() {}")]);
+    await nextTurn();
+
+    const expectedSources = boundary === "source"
+      ? [{ cancelCalls: 1, disposeCalls: 1 }]
+      : boundary === "request"
+        ? [{ cancelCalls: 0, disposeCalls: 1 }, { cancelCalls: 1, disposeCalls: 1 }]
+        : boundary === "newFileFs"
+          ? [{ cancelCalls: 0, disposeCalls: 1 }]
+          : [{ cancelCalls: 0, disposeCalls: 1 }, { cancelCalls: 0, disposeCalls: 1 }];
+    assert.deepEqual({
+      activeOperations: provider.activeOperations.size,
+      applyCalls,
+      boundary,
+      converterCalls,
+      errors: fake.errors,
+      information: fake.information,
+      mkdirCalls,
+      openCalls,
+      outcome,
+      requestCalls,
+      sources: sources.map((source) => ({
+        cancelCalls: source.cancelCalls,
+        disposeCalls: source.disposeCalls,
+      })),
+      writeCalls,
+    }, {
+      activeOperations: 0,
+      applyCalls: 0,
+      boundary,
+      converterCalls: ["factory", "workspaceFs"].includes(boundary) ? 1 : 0,
+      errors: [],
+      information: [],
+      mkdirCalls: 0,
+      openCalls: 0,
+      outcome: [{ status: "fulfilled", value: undefined }],
+      requestCalls: boundary === "source" ? 0 : boundary === "newFileFs" ? 1 : 2,
+      sources: expectedSources,
+      writeCalls: 0,
+    });
+  }
+});
+
+test("GenerateStubCommandProvider cancels concurrent step and concept operations exactly once", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const fake = createFakeVscode();
+  const sources = [];
+  trackCancellationSources(fake.vscode, sources);
+  const entered = deferred();
+  const gates = [deferred(), deferred()];
+  let requestCalls = 0;
+  const provider = new GenerateStubCommandProvider({
+    get() {
+      return {
+        client: {
+          sendRequest() {
+            const gate = gates[requestCalls];
+            requestCalls += 1;
+            if (requestCalls === gates.length) {
+              entered.resolve();
+            }
+            return gate.promise;
+          },
+        },
+        project: {
+          root() {
+            return "/workspace";
+          },
+        },
+      };
+    },
+  }, {
+    pathModule: path.posix,
+    vscode: fake.vscode,
+  });
+  const stepHandler = fake.commands.find(
+    (entry) => entry.command === "gauge.generate.step",
+  ).handler;
+  const conceptHandler = fake.commands.find(
+    (entry) => entry.command === "gauge.generate.concept",
+  ).handler;
+  let settled = 0;
+  const pending = [
+    stepHandler("fun step() {}"),
+    conceptHandler({ conceptName: "# Shared" }),
+  ].map((promise) => promise.then((value) => {
+    settled += 1;
+    return value;
+  }));
+
+  await entered.promise;
+  provider.dispose();
+  provider.dispose();
+  await nextTurn();
+  const snapshot = {
+    activeOperations: provider.activeOperations.size,
+    settled,
+    sources: sources.map((source) => ({
+      cancelCalls: source.cancelCalls,
+      disposeCalls: source.disposeCalls,
+    })),
+  };
+  gates[0].resolve([]);
+  gates[1].reject(new Error("disposed concurrent concept failed"));
+  const outcomes = await Promise.allSettled(pending);
+  await nextTurn();
+
+  assert.deepEqual({
+    ...snapshot,
+    errors: fake.errors,
+    information: fake.information,
+    outcomes,
+    quickPicks: fake.quickPicks.length,
+    requestCalls,
+  }, {
+    activeOperations: 0,
+    errors: [],
+    information: [],
+    outcomes: [
+      { status: "fulfilled", value: undefined },
+      { status: "fulfilled", value: undefined },
+    ],
+    quickPicks: 0,
+    requestCalls: 2,
+    settled: 2,
+    sources: [
+      { cancelCalls: 1, disposeCalls: 1 },
+      { cancelCalls: 1, disposeCalls: 1 },
+    ],
+  });
 });
