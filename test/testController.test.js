@@ -1,6 +1,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 function collectionItems(collection) {
   const items = [];
   collection.forEach((item) => items.push(item));
@@ -269,7 +277,6 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     name: "Checkout",
     duration: 100,
   });
-  disposable.dispose();
 
   assert.deepEqual(collectionItems(controller.items).map((item) => item.id), [
     "/workspace/specs/example.spec",
@@ -277,6 +284,7 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
   assert.deepEqual(collectionItems(controller.items.get("/workspace/specs/example.spec").children).map((item) => item.id), [
     "/workspace/specs/example.spec:12",
   ]);
+  disposable.dispose();
   assert.deepEqual(calls, [
     ["controller", "gauge", "Gauge"],
     ["profile", "Run", 1, calls[1][3], true],
@@ -810,6 +818,212 @@ test("GaugeTestController resolves unopened workspace specs from Gauge LSP", asy
   }, {
     textDocument: { uri: "/workspace/gauge/specs/checkout.spec" },
     position: { line: 1, character: 1 },
+  });
+});
+
+test("GaugeTestController settles in-flight specification discovery when disposed", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const requestEntered = deferred();
+  const releaseRequest = deferred();
+  const { calls, controller, vscode } = createFakeVscode();
+  let cancelCalls = 0;
+  let createdItems = 0;
+  let sourceDisposals = 0;
+  const originalCreateTestItem = controller.createTestItem.bind(controller);
+  controller.createTestItem = (...args) => {
+    createdItems += 1;
+    return originalCreateTestItem(...args);
+  };
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.token = { isCancellationRequested: false };
+    }
+
+    cancel() {
+      cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      sourceDisposals += 1;
+    }
+  };
+  let specsCalls = 0;
+  const client = {
+    async sendRequest(method) {
+      if (method === "gauge/specs") {
+        specsCalls += 1;
+        if (specsCalls === 1) {
+          return [
+            {
+              heading: "Existing checkout",
+              executionIdentifier: "/workspace/gauge/specs/existing.spec",
+            },
+          ];
+        }
+        requestEntered.resolve();
+        return releaseRequest.promise;
+      }
+      if (method === "gauge/scenarios") {
+        return [
+          {
+            heading: "Existing scenario",
+            executionIdentifier: "/workspace/gauge/specs/existing.spec:4",
+            lineNo: 4,
+          },
+        ];
+      }
+      return [];
+    },
+  };
+  const clientsMap = new Map([
+    ["/workspace/gauge", { client }],
+  ]);
+  const gaugeTests = new GaugeTestController({ clientsMap, vscode });
+  const registration = gaugeTests.register();
+
+  await gaugeTests.discoverWorkspaceTests();
+  assert.equal(gaugeTests.items.size, 2);
+  assert.equal(controller.items.size, 1);
+  assert.equal(gaugeTests.workspaceDiscoveredIdsByClient.size, 1);
+
+  const pending = gaugeTests.discoverWorkspaceTests();
+  await requestEntered.promise;
+  registration.dispose();
+  registration.dispose();
+
+  releaseRequest.resolve([
+    {
+      heading: "Checkout",
+      executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+    },
+  ]);
+  const pendingResult = await pending;
+  const later = await gaugeTests.discoverWorkspaceTests();
+  gaugeTests.discoverDocument(createDocument(
+    "# Open specification\n## Scenario\n* step",
+    "/workspace/gauge/specs/open.spec",
+  ));
+  gaugeTests.setClientsMap(new Map([["/replacement", { client }]]));
+
+  assert.deepEqual({
+    cancelCalls,
+    clientsMapReleased: gaugeTests.clientsMap === undefined,
+    controllerDisposals: calls.filter((entry) => entry[0] === "dispose").length,
+    controllerItems: controller.items.size,
+    controllerReleased: gaugeTests.controller === undefined,
+    createdItems,
+    externalClients: clientsMap.size,
+    internalItems: gaugeTests.items.size,
+    later,
+    pendingResult,
+    sourceDisposals,
+    workspaceClients: gaugeTests.workspaceDiscoveredIdsByClient.size,
+  }, {
+    cancelCalls: 1,
+    clientsMapReleased: true,
+    controllerDisposals: 1,
+    controllerItems: 0,
+    controllerReleased: true,
+    createdItems: 2,
+    externalClients: 1,
+    internalItems: 0,
+    later: [],
+    pendingResult: [],
+    sourceDisposals: 2,
+    workspaceClients: 0,
+  });
+});
+
+test("GaugeTestController settles in-flight scenario discovery when disposed", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const scenarioEntered = deferred();
+  const releaseScenario = deferred();
+  const { controller, vscode } = createFakeVscode();
+  let cancelCalls = 0;
+  let createdItems = 0;
+  let scenarioCalls = 0;
+  let sourceDisposals = 0;
+  const originalCreateTestItem = controller.createTestItem.bind(controller);
+  controller.createTestItem = (...args) => {
+    createdItems += 1;
+    return originalCreateTestItem(...args);
+  };
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.token = { isCancellationRequested: false };
+    }
+
+    cancel() {
+      cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      sourceDisposals += 1;
+    }
+  };
+  const client = {
+    async sendRequest(method) {
+      if (method === "gauge/specs") {
+        return [
+          {
+            heading: "Checkout",
+            executionIdentifier: "/workspace/gauge/specs/checkout.spec",
+          },
+          {
+            heading: "Accounts",
+            executionIdentifier: "/workspace/gauge/specs/accounts.spec",
+          },
+        ];
+      }
+      if (method === "gauge/scenarios") {
+        scenarioCalls += 1;
+        if (scenarioCalls === 1) {
+          scenarioEntered.resolve();
+          return releaseScenario.promise;
+        }
+        return [];
+      }
+      return [];
+    },
+  };
+  const gaugeTests = new GaugeTestController({
+    clientsMap: new Map([["/workspace/gauge", { client }]]),
+    scenarioRequestConcurrency: 1,
+    vscode,
+  });
+  const registration = gaugeTests.register();
+
+  const pending = gaugeTests.discoverWorkspaceTests();
+  await scenarioEntered.promise;
+  registration.dispose();
+
+  releaseScenario.resolve([
+    {
+      heading: "Successful checkout",
+      executionIdentifier: "/workspace/gauge/specs/checkout.spec:12",
+      lineNo: 12,
+    },
+  ]);
+  const pendingResult = await pending;
+
+  assert.deepEqual({
+    cancelCalls,
+    controllerItems: controller.items.size,
+    createdItems,
+    internalItems: gaugeTests.items.size,
+    pendingResult,
+    scenarioCalls,
+    sourceDisposals,
+  }, {
+    cancelCalls: 1,
+    controllerItems: 0,
+    createdItems: 0,
+    internalItems: 0,
+    pendingResult: [],
+    scenarioCalls: 1,
+    sourceDisposals: 1,
   });
 });
 

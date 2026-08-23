@@ -76,13 +76,6 @@ function createRange(vscode, line, startCharacter = 0, endCharacter = 0) {
     : { start, end };
 }
 
-function createToken(vscode) {
-  if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
-  }
-  return undefined;
-}
-
 function cancellationRequested(token) {
   return Boolean(token && token.isCancellationRequested);
 }
@@ -471,9 +464,15 @@ class GaugeTestController {
     this.attemptCounts = new Map();
     this.activeAttemptIds = new Map();
     this.workspaceDiscoveredIdsByClient = new Map();
+    this.discoveryCancellationSources = new Set();
+    this.registrationDisposables = undefined;
+    this.disposed = false;
   }
 
   register() {
+    if (this.disposed || this.registrationDisposables !== undefined) {
+      return { dispose() {} };
+    }
     if (!this.vscode.tests || typeof this.vscode.tests.createTestController !== "function") {
       return undefined;
     }
@@ -485,16 +484,10 @@ class GaugeTestController {
     this.registerRunProfiles();
     const disposables = this.registerDocumentDiscovery();
     addDisposable(disposables, this.registerProjectChangeListener(this.projectChanges));
+    this.registrationDisposables = disposables;
     this.discoverOpenDocuments();
     return {
-      dispose: () => {
-        for (const disposable of disposables) {
-          disposable.dispose();
-        }
-        if (this.controller && typeof this.controller.dispose === "function") {
-          this.controller.dispose();
-        }
-      },
+      dispose: () => this.dispose(),
     };
   }
 
@@ -573,14 +566,18 @@ class GaugeTestController {
   }
 
   registerProjectChangeListener(projectChanges) {
-    if (!projectChanges || typeof projectChanges.onDidChangeProjects !== "function") {
+    if (
+      this.disposed
+      || !projectChanges
+      || typeof projectChanges.onDidChangeProjects !== "function"
+    ) {
       return undefined;
     }
     return projectChanges.onDidChangeProjects(() => this.refreshWorkspaceTests());
   }
 
   pruneRemovedClientWorkspaceTests() {
-    if (!this.clientsMap || typeof this.clientsMap.values !== "function") {
+    if (this.disposed || !this.clientsMap || typeof this.clientsMap.values !== "function") {
       return;
     }
     const activeClients = new Set(
@@ -600,11 +597,17 @@ class GaugeTestController {
   }
 
   refreshWorkspaceTests() {
+    if (this.disposed) {
+      return Promise.resolve([]);
+    }
     this.pruneRemovedClientWorkspaceTests();
     return Promise.resolve(this.discoverWorkspaceTests()).catch(() => []);
   }
 
   discoverOpenDocuments() {
+    if (this.disposed) {
+      return;
+    }
     const workspace = this.vscode.workspace || {};
     const documents = Array.isArray(workspace.textDocuments) ? workspace.textDocuments : [];
     for (const document of documents) {
@@ -613,12 +616,15 @@ class GaugeTestController {
   }
 
   removeDocumentItems(document, keepIds = new Set()) {
+    if (this.disposed) {
+      return;
+    }
     const filename = documentPath(document);
     this.removePathItems(filename, keepIds);
   }
 
   removePathItems(filename, keepIds = new Set()) {
-    if (!filename) {
+    if (this.disposed || !filename) {
       return;
     }
     for (const [id] of [...this.items]) {
@@ -630,7 +636,7 @@ class GaugeTestController {
 
   workspaceDiscoveredIdsForPath(filename) {
     const keepIds = new Set();
-    if (!filename) {
+    if (this.disposed || !filename) {
       return keepIds;
     }
     for (const ids of this.workspaceDiscoveredIdsByClient.values()) {
@@ -644,6 +650,9 @@ class GaugeTestController {
   }
 
   removeItem(id) {
+    if (this.disposed) {
+      return;
+    }
     collectionDelete(this.controller && this.controller.items, id);
     for (const item of this.items.values()) {
       collectionDelete(item && item.children, id);
@@ -653,6 +662,9 @@ class GaugeTestController {
   }
 
   cleanupResultOnlyItems() {
+    if (this.disposed) {
+      return;
+    }
     for (const id of [...this.resultOnlyItemIds]) {
       this.removeItem(id);
     }
@@ -668,7 +680,7 @@ class GaugeTestController {
   }
 
   upsertItem(id, label, uri, range, parentId, runnable = true) {
-    if (!id || !this.controller) {
+    if (this.disposed || !id || !this.controller) {
       return undefined;
     }
     let item = this.items.get(id);
@@ -716,7 +728,11 @@ class GaugeTestController {
 
   discoverDocument(document) {
     const markdownSpec = isMarkdownGaugeSpecificationDocument(document);
-    if (!this.controller || (!isGaugeSpecificationDocument(document) && !markdownSpec)) {
+    if (
+      this.disposed
+      || !this.controller
+      || (!isGaugeSpecificationDocument(document) && !markdownSpec)
+    ) {
       return [];
     }
     if (
@@ -757,11 +773,19 @@ class GaugeTestController {
   }
 
   setClientsMap(clientsMap) {
+    if (this.disposed) {
+      return;
+    }
     this.clientsMap = clientsMap;
   }
 
   async discoverWorkspaceTests() {
-    if (!this.controller || !this.clientsMap || typeof this.clientsMap.values !== "function") {
+    if (
+      this.disposed
+      || !this.controller
+      || !this.clientsMap
+      || typeof this.clientsMap.values !== "function"
+    ) {
       return [];
     }
     const discovered = [];
@@ -770,90 +794,140 @@ class GaugeTestController {
       if (!client || typeof client.sendRequest !== "function") {
         continue;
       }
-      discovered.push(...await this.discoverClientTests(client));
+      const clientTests = await this.discoverClientTests(client);
+      if (this.disposed) {
+        return [];
+      }
+      discovered.push(...clientTests);
     }
     return discovered;
+  }
+
+  createDiscoveryCancellationSource() {
+    if (this.disposed || typeof this.vscode.CancellationTokenSource !== "function") {
+      return undefined;
+    }
+    const source = new this.vscode.CancellationTokenSource();
+    this.discoveryCancellationSources.add(source);
+    return source;
+  }
+
+  releaseDiscoveryCancellationSource(source) {
+    if (!source || !this.discoveryCancellationSources.delete(source)) {
+      return;
+    }
+    if (typeof source.dispose === "function") {
+      source.dispose();
+    }
   }
 
   async discoverClientTests(client) {
-    let specs;
-    try {
-      specs = await client.sendRequest(SPECS_REQUEST, {}, createToken(this.vscode));
-    } catch (_error) {
+    if (this.disposed || !client || typeof client.sendRequest !== "function") {
       return [];
     }
-    const discovered = [];
-    const discoveredIds = new Set();
-    const specEntries = (specs || []).filter((spec) => (
-      spec && spec.heading && spec.executionIdentifier
-    ));
-    const scenarioLists = await mapWithConcurrency(
-      specEntries,
-      this.scenarioRequestConcurrency,
-      (spec) => {
-        let request;
-        try {
-          request = client.sendRequest(
-            SCENARIOS_REQUEST,
-            {
-              textDocument: { uri: spec.executionIdentifier },
-              position: createPosition(this.vscode, 1, 1),
-            },
-            createToken(this.vscode),
-          );
-        } catch (_error) {
-          return [];
-        }
-        return Promise.resolve(request).catch(() => []);
-      },
-    );
-    for (const [specIndex, spec] of specEntries.entries()) {
-      const specId = spec.executionIdentifier;
-      discoveredIds.add(specId);
-      const specItem = this.upsertItem(
-        specId,
-        spec.heading,
-        fileUri(this.vscode, specId),
-        undefined,
-        undefined,
+    const cancellation = this.createDiscoveryCancellationSource();
+    const token = cancellation && cancellation.token;
+    try {
+      let specs;
+      try {
+        specs = await client.sendRequest(SPECS_REQUEST, {}, token);
+      } catch (_error) {
+        return [];
+      }
+      if (this.disposed || cancellationRequested(token)) {
+        return [];
+      }
+      const discovered = [];
+      const discoveredIds = new Set();
+      const specEntries = (specs || []).filter((spec) => (
+        spec && spec.heading && spec.executionIdentifier
+      ));
+      const scenarioLists = await mapWithConcurrency(
+        specEntries,
+        this.scenarioRequestConcurrency,
+        (spec) => {
+          if (this.disposed || cancellationRequested(token)) {
+            return [];
+          }
+          let request;
+          try {
+            request = client.sendRequest(
+              SCENARIOS_REQUEST,
+              {
+                textDocument: { uri: spec.executionIdentifier },
+                position: createPosition(this.vscode, 1, 1),
+              },
+              token,
+            );
+          } catch (_error) {
+            return [];
+          }
+          return Promise.resolve(request)
+            .then((response) => (
+              this.disposed || cancellationRequested(token) ? [] : response
+            ))
+            .catch(() => []);
+        },
       );
-      if (specItem) {
-        discovered.push(specItem);
+      if (this.disposed || cancellationRequested(token)) {
+        return [];
       }
-
-      const scenarioResponse = scenarioLists[specIndex];
-      const scenarios = Array.isArray(scenarioResponse)
-        ? scenarioResponse
-        : scenarioResponse
-          ? [scenarioResponse]
-          : [];
-      for (const scenario of scenarios) {
-        if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
-          continue;
-        }
-        discoveredIds.add(scenario.executionIdentifier);
-        const scenarioFile = specFileFromExecutionIdentifier(
-          scenario.executionIdentifier,
-          scenario.lineNo,
-        ) || specId;
-        const scenarioItem = this.upsertItem(
-          scenario.executionIdentifier,
-          scenario.heading,
-          fileUri(this.vscode, scenarioFile),
-          createRange(this.vscode, lineNoToZeroBased(scenario.lineNo)),
+      for (const [specIndex, spec] of specEntries.entries()) {
+        const specId = spec.executionIdentifier;
+        discoveredIds.add(specId);
+        const specItem = this.upsertItem(
           specId,
+          spec.heading,
+          fileUri(this.vscode, specId),
+          undefined,
+          undefined,
         );
-        if (scenarioItem) {
-          discovered.push(scenarioItem);
+        if (specItem) {
+          discovered.push(specItem);
+        }
+
+        const scenarioResponse = scenarioLists[specIndex];
+        const scenarios = Array.isArray(scenarioResponse)
+          ? scenarioResponse
+          : scenarioResponse
+            ? [scenarioResponse]
+            : [];
+        for (const scenario of scenarios) {
+          if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
+            continue;
+          }
+          discoveredIds.add(scenario.executionIdentifier);
+          const scenarioFile = specFileFromExecutionIdentifier(
+            scenario.executionIdentifier,
+            scenario.lineNo,
+          ) || specId;
+          const scenarioItem = this.upsertItem(
+            scenario.executionIdentifier,
+            scenario.heading,
+            fileUri(this.vscode, scenarioFile),
+            createRange(this.vscode, lineNoToZeroBased(scenario.lineNo)),
+            specId,
+          );
+          if (scenarioItem) {
+            discovered.push(scenarioItem);
+          }
         }
       }
+      if (this.disposed || cancellationRequested(token)) {
+        return [];
+      }
+      this.pruneWorkspaceDiscoveredItems(client, discoveredIds);
+      this.workspaceDiscoveredIdsByClient.set(client, discoveredIds);
+      return discovered;
+    } finally {
+      this.releaseDiscoveryCancellationSource(cancellation);
     }
-    this.pruneWorkspaceDiscoveredItems(client, discoveredIds);
-    this.workspaceDiscoveredIdsByClient.set(client, discoveredIds);
-    return discovered;
   }
 
   pruneWorkspaceDiscoveredItems(client, discoveredIds) {
+    if (this.disposed) {
+      return;
+    }
     const previousIds = this.workspaceDiscoveredIdsByClient.get(client);
     if (!previousIds) {
       return;
@@ -867,6 +941,45 @@ class GaugeTestController {
 
   setExecutionController(executionController) {
     this.executionController = executionController;
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+
+    for (const source of [...this.discoveryCancellationSources]) {
+      this.discoveryCancellationSources.delete(source);
+      if (typeof source.cancel === "function") {
+        source.cancel();
+      }
+      if (typeof source.dispose === "function") {
+        source.dispose();
+      }
+    }
+
+    const controller = this.controller;
+    this.controller = undefined;
+    if (controller) {
+      controller.resolveHandler = undefined;
+      controller.refreshHandler = undefined;
+      if (controller.items && typeof controller.items.replace === "function") {
+        controller.items.replace([]);
+      }
+    }
+    this.items.clear();
+    this.workspaceDiscoveredIdsByClient.clear();
+    this.clientsMap = undefined;
+
+    const disposables = this.registrationDisposables || [];
+    this.registrationDisposables = undefined;
+    for (const disposable of disposables) {
+      disposable.dispose();
+    }
+    if (controller && typeof controller.dispose === "function") {
+      controller.dispose();
+    }
   }
 
   createRunContext(request) {
