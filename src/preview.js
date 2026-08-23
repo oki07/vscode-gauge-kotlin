@@ -356,8 +356,15 @@ function isSpectacleInstalled(cli) {
 
 async function installSpectacle(vscode, cli) {
   if (spectacleInstallPromise) {
-    await showInformation(vscode, SPECTACLE_INSTALL_IN_PROGRESS_MESSAGE);
-    return spectacleInstallPromise;
+    const sharedInstall = spectacleInstallPromise;
+    try {
+      Promise.resolve(
+        showInformation(vscode, SPECTACLE_INSTALL_IN_PROGRESS_MESSAGE),
+      ).catch(() => undefined);
+    } catch (_error) {
+      // The advisory notification does not own the shared installation.
+    }
+    return sharedInstall;
   }
   spectacleInstallPromise = Promise.resolve().then(() => cli.installGaugeRunner(SPECTACLE_PLUGIN_NAME));
   try {

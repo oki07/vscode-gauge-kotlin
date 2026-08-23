@@ -871,9 +871,9 @@ test("previewGaugeDocument uses the post-install version manifest on the next pr
   assert.equal(opened.length, 2);
 });
 
-test("previewGaugeDocument does not start duplicate Spectacle installs", async () => {
-  const { previewGaugeDocument } = require("../src/preview");
-  const { information, vscode } = createFakeVscode({
+test("GaugePreviewController does not block an install follower on the progress notification", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const { errorPrompts, information, opened, vscode } = createFakeVscode({
     document: {
       languageId: "gauge",
       uri: { fsPath: "/workspace/gauge/specs/example.spec" },
@@ -885,11 +885,12 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
     errorSelection: "Install Spectacle",
   });
   const informationEntered = deferred();
+  const informationResponse = deferred();
   const originalShowInformationMessage = vscode.window.showInformationMessage;
   vscode.window.showInformationMessage = (...args) => {
-    const result = originalShowInformationMessage(...args);
+    originalShowInformationMessage(...args);
     informationEntered.resolve();
-    return result;
+    return informationResponse.promise;
   };
   const installEntered = deferred();
   let finishInstall;
@@ -898,6 +899,7 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
     finishInstall = resolve;
   });
   const installs = [];
+  const writes = [];
   const cli = {
     isPluginInstalled(pluginName) {
       assert.equal(pluginName, "spectacle");
@@ -909,11 +911,13 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
       return installPromise;
     },
   };
-  const options = {
+  const controller = new GaugePreviewController({
     cli,
     fileSystem: {
       mkdirSync() {},
-      writeFileSync() {},
+      writeFileSync(filename) {
+        writes.push(filename);
+      },
     },
     pathModule: path.posix,
     projectFactory: {
@@ -925,24 +929,122 @@ test("previewGaugeDocument does not start duplicate Spectacle installs", async (
       return "/tmp/gauge-preview";
     },
     vscode,
-  };
+  });
 
-  const firstPreview = previewGaugeDocument(options);
+  const firstPreview = controller.preview();
   await installEntered.promise;
-  const secondPreview = previewGaugeDocument(options);
+  const secondPreview = controller.preview();
+  let secondOutcome = { status: "pending" };
+  secondPreview.then(
+    (value) => {
+      secondOutcome = { status: "fulfilled", value };
+    },
+    (error) => {
+      secondOutcome = { error, status: "rejected" };
+    },
+  );
   await informationEntered.promise;
-
   try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(secondOutcome, { status: "pending" });
+    assert.equal(controller.activeOperations.size, 2);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(opened, []);
+
+    finishInstall("installed");
+    await firstPreview;
+    await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(installs, ["spectacle"]);
     assert.equal(information.includes("Installation in progress..."), true);
+    assert.deepEqual(secondOutcome, { status: "fulfilled", value: true });
+    assert.equal(controller.activeOperations.size, 0);
+    assert.equal(errorPrompts.length, 2);
+    assert.equal(writes.length, 2);
+    assert.equal(opened.length, 2);
   } catch (error) {
     assertionError = error;
+  } finally {
+    finishInstall("installed");
+    informationResponse.reject(new Error("notification closed"));
+    await Promise.allSettled([firstPreview, secondPreview]);
+    await new Promise((resolve) => setImmediate(resolve));
   }
-  finishInstall("installed");
-  await Promise.all([firstPreview, secondPreview]);
+  try {
+    assert.equal(errorPrompts.length, 2);
+  } catch (error) {
+    if (!assertionError) {
+      assertionError = error;
+    }
+  }
   if (assertionError) {
     throw assertionError;
   }
+});
+
+test("GaugePreviewController follows a shared install when the progress notification throws", async () => {
+  const { GaugePreviewController } = require("../src/preview");
+  const installEntered = deferred();
+  const installResponse = deferred();
+  const notificationEntered = deferred();
+  const { errorPrompts, opened, vscode } = createFakeVscode({
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      fileName: "/workspace/gauge/specs/example.spec",
+      getText() {
+        return "# Checkout\n";
+      },
+    },
+    errorSelection: "Install Spectacle",
+  });
+  vscode.window.showInformationMessage = () => {
+    notificationEntered.resolve();
+    throw new Error("notification failed");
+  };
+  const installs = [];
+  const writes = [];
+  const controller = new GaugePreviewController({
+    cli: {
+      isPluginInstalled() {
+        return false;
+      },
+      installGaugeRunner(pluginName) {
+        installs.push(pluginName);
+        installEntered.resolve();
+        return installResponse.promise;
+      },
+    },
+    fileSystem: {
+      mkdirSync() {},
+      writeFileSync(filename) {
+        writes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  const firstPreview = controller.preview();
+  await installEntered.promise;
+  const secondPreview = controller.preview();
+  await notificationEntered.promise;
+  installResponse.resolve("installed");
+
+  assert.equal(await firstPreview, true);
+  assert.equal(await secondPreview, true);
+  assert.deepEqual(installs, ["spectacle"]);
+  assert.equal(errorPrompts.length, 2);
+  assert.equal(writes.length, 2);
+  assert.equal(opened.length, 2);
+  assert.equal(controller.activeOperations.size, 0);
 });
 
 test("previewGaugeDocument requires an active Gauge document", async () => {
