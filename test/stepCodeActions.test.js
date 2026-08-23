@@ -78,6 +78,31 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
   });
 });
 
+test("GaugeStepCodeActionProvider leaves runner-authored diagnostics to Gauge LSP", () => {
+  const { GaugeStepCodeActionProvider } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{
+      message: "Step implementation not found",
+      range,
+      code: "expected generated stub",
+      source: "gauge",
+    }],
+  });
+
+  assert.deepEqual(actions, []);
+});
+
 test("GaugeStepCodeActionProvider creates fixes for multiline Gauge steps when project allows them", () => {
   const {
     CREATE_CONCEPT_TITLE,
@@ -154,14 +179,8 @@ test("GaugeStepCodeActionProvider creates fixes for multiline Gauge steps when p
   }
 });
 
-test("GaugeStepCodeActionProvider uses diagnostic code as the step implementation stub", () => {
-  const {
-    CREATE_CONCEPT_TITLE,
-    CREATE_STEP_IMPLEMENTATION_TITLE,
-    GENERATE_CONCEPT_STUB,
-    GENERATE_STEP_STUB,
-    GaugeStepCodeActionProvider,
-  } = require("../src/stepCodeActions");
+test("GaugeStepCodeActionProvider does not reinterpret Gauge LSP stub code", () => {
+  const { GaugeStepCodeActionProvider } = require("../src/stepCodeActions");
   const vscode = createFakeVscode();
   const provider = new GaugeStepCodeActionProvider({ vscode });
   const document = createDocument([
@@ -182,26 +201,7 @@ test("GaugeStepCodeActionProvider uses diagnostic code as the step implementatio
     diagnostics: [diagnostic],
   });
 
-  assert.equal(actions.length, 2);
-  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
-  assert.deepEqual(actions[0].diagnostics, [diagnostic]);
-  assert.deepEqual(actions[0].command, {
-    command: GENERATE_STEP_STUB,
-    title: CREATE_STEP_IMPLEMENTATION_TITLE,
-    arguments: ["expected generated stub"],
-  });
-  assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
-  assert.deepEqual(actions[1].command, {
-    command: GENERATE_CONCEPT_STUB,
-    title: CREATE_CONCEPT_TITLE,
-    arguments: [
-      {
-        conceptName: "# Pay with <arg0>\n* ",
-        conceptFile: "",
-        dir: "",
-      },
-    ],
-  });
+  assert.deepEqual(actions, []);
 });
 
 test("GaugeStepCodeActionProvider ignores local undefined-step diagnostic code identifiers", () => {
@@ -279,12 +279,8 @@ test("GaugeStepCodeActionProvider creates fixes for gauge validate missing imple
   });
 });
 
-test("GaugeStepCodeActionProvider creates a diagnostic code step fix outside step lines", () => {
-  const {
-    CREATE_STEP_IMPLEMENTATION_TITLE,
-    GENERATE_STEP_STUB,
-    GaugeStepCodeActionProvider,
-  } = require("../src/stepCodeActions");
+test("GaugeStepCodeActionProvider ignores Gauge LSP stub code outside step lines", () => {
+  const { GaugeStepCodeActionProvider } = require("../src/stepCodeActions");
   const vscode = createFakeVscode();
   const provider = new GaugeStepCodeActionProvider({ vscode });
   const document = createDocument([
@@ -305,14 +301,7 @@ test("GaugeStepCodeActionProvider creates a diagnostic code step fix outside ste
     diagnostics: [diagnostic],
   });
 
-  assert.equal(actions.length, 1);
-  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
-  assert.deepEqual(actions[0].diagnostics, [diagnostic]);
-  assert.deepEqual(actions[0].command, {
-    command: GENERATE_STEP_STUB,
-    title: CREATE_STEP_IMPLEMENTATION_TITLE,
-    arguments: ["expected generated stub"],
-  });
+  assert.deepEqual(actions, []);
 });
 
 test("GaugeStepCodeActionProvider creates a Java step implementation quick fix for Java projects", () => {

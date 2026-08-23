@@ -1246,6 +1246,72 @@ test("clientMiddleware suppresses LSP code lenses owned by the local provider", 
   assert.equal(remoteCalls, 0);
 });
 
+test("clientMiddleware separates local and runner step code action ownership", async () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const forwarded = [];
+  const document = { uri: { fsPath: "/workspace/gauge/specs/e2e.spec" } };
+  const range = { start: { line: 1, character: 0 }, end: { line: 1, character: 8 } };
+  const token = { marker: "request-token" };
+  const only = { value: "quickfix" };
+  const localUndefined = {
+    message: "Undefined Step",
+    code: "gauge.undefinedStep",
+    source: "gauge",
+  };
+  const localValidate = {
+    message: "[ValidationError] Step implementation not found",
+    code: "gauge.validate",
+    source: "gauge",
+  };
+  const runnerDiagnostic = {
+    message: "Step implementation not found",
+    code: "expected generated stub",
+    source: "gauge",
+  };
+  const middleware = clientMiddleware({
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+  });
+  const next = (actualDocument, actualRange, context, actualToken) => {
+    forwarded.push({ actualDocument, actualRange, context, actualToken });
+    return Promise.resolve(["remote-action"]);
+  };
+
+  const mixedResult = await middleware.provideCodeActions(
+    document,
+    range,
+    {
+      diagnostics: [localUndefined, runnerDiagnostic, localValidate],
+      only,
+      triggerKind: 2,
+    },
+    token,
+    next,
+  );
+  const localResult = await middleware.provideCodeActions(
+    document,
+    range,
+    { diagnostics: [localUndefined, localValidate], only },
+    token,
+    next,
+  );
+
+  assert.deepEqual(mixedResult, ["remote-action"]);
+  assert.deepEqual(localResult, []);
+  assert.equal(forwarded.length, 1);
+  assert.equal(forwarded[0].actualDocument, document);
+  assert.equal(forwarded[0].actualRange, range);
+  assert.equal(forwarded[0].actualToken, token);
+  assert.deepEqual(forwarded[0].context, {
+    diagnostics: [runnerDiagnostic],
+    only,
+    triggerKind: 2,
+  });
+});
+
 function missingImplementationDiagnostic(line) {
   return {
     message: "Step implementation not found",

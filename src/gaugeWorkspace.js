@@ -10,6 +10,7 @@ const { GaugeClients } = require("./gaugeClients");
 const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
 const { MavenProject } = require("./project/mavenProject");
 const { createProjectFactory } = require("./project/projectFactory");
+const { isLocalStepCodeActionDiagnostic } = require("./stepCodeActions");
 const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
 
@@ -272,6 +273,21 @@ function clientMiddleware(options = {}) {
   return {
     provideCodeLenses() {
       return [];
+    },
+    provideCodeActions(document, range, context, token, next) {
+      const diagnostics = context && Array.isArray(context.diagnostics)
+        ? context.diagnostics
+        : undefined;
+      if (!diagnostics || !diagnostics.some(isLocalStepCodeActionDiagnostic)) {
+        return next(document, range, context, token);
+      }
+      const remoteDiagnostics = diagnostics.filter(
+        (diagnostic) => !isLocalStepCodeActionDiagnostic(diagnostic),
+      );
+      if (remoteDiagnostics.length === 0) {
+        return [];
+      }
+      return next(document, range, { ...context, diagnostics: remoteDiagnostics }, token);
     },
     handleDiagnostics(uri, diagnostics, next) {
       next(uri, arbitratedDiagnostics(uri, diagnostics, options));

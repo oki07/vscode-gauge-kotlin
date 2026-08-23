@@ -14,6 +14,7 @@ const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const JAVA_LANGUAGE = "java";
+const VALIDATE_DIAGNOSTIC_CODE = "gauge.validate";
 const VALIDATE_MISSING_IMPLEMENTATION_MESSAGE = "Step implementation not found";
 
 function getVscode(vscode) {
@@ -371,16 +372,22 @@ function isMissingImplementationDiagnostic(diagnostic) {
   );
 }
 
+function isLocalStepCodeActionDiagnostic(diagnostic) {
+  return Boolean(
+    diagnostic
+    && (
+      diagnostic.message === UNDEFINED_STEP_MESSAGE
+      || (
+        diagnostic.code === VALIDATE_DIAGNOSTIC_CODE
+        && isMissingImplementationDiagnostic(diagnostic)
+      )
+    )
+  );
+}
+
 function undefinedStepDiagnostics(context) {
   return (context && Array.isArray(context.diagnostics) ? context.diagnostics : [])
-    .filter((diagnostic) => (
-      diagnostic
-      && (
-        diagnostic.message === UNDEFINED_STEP_MESSAGE
-        || isMissingImplementationDiagnostic(diagnostic)
-        || diagnosticStubCode(diagnostic) !== undefined
-      )
-    ));
+    .filter(isLocalStepCodeActionDiagnostic);
 }
 
 class GaugeStepCodeActionProvider {
@@ -487,6 +494,7 @@ module.exports = {
   conceptInfo,
   conceptStepText,
   javaStepStubCode,
+  isLocalStepCodeActionDiagnostic,
   kotlinFunctionNames,
   stepImplementationName,
   stepStubCode,
