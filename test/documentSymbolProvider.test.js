@@ -55,6 +55,14 @@ function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec", la
   };
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
@@ -650,6 +658,144 @@ test("GaugeDocumentSymbolProvider restores workspace symbol invalidations after 
     (await provider.provideWorkspaceSymbols("File")).map((symbol) => symbol.name),
     ["# File Refresh"],
   );
+});
+
+test("GaugeDocumentSymbolProvider returns no workspace symbols after disposal during refresh", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const refreshEntered = deferred();
+  const releaseRefresh = deferred();
+  const listeners = new Set();
+  let analyses = 0;
+  let documentReads = 0;
+  let readyCalls = 0;
+  const documentStore = {
+    documents() {
+      documentReads += 1;
+      return [createDocument("# Disposed Refresh")];
+    },
+    onDidChangeDocuments(listener) {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+    async whenReady() {
+      readyCalls += 1;
+      refreshEntered.resolve();
+      await releaseRefresh.promise;
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const analyze = provider.provideDocumentSymbols.bind(provider);
+  provider.provideDocumentSymbols = (document) => {
+    analyses += 1;
+    return analyze(document);
+  };
+
+  const pendingSymbols = provider.provideWorkspaceSymbols("Disposed");
+  await refreshEntered.promise;
+
+  assert.equal(listeners.size, 1);
+  provider.dispose();
+  assert.equal(listeners.size, 0);
+  assert.equal(provider.workspaceSymbolRecords.size, 0);
+  assert.deepEqual(provider.workspaceSymbolEntries, []);
+
+  releaseRefresh.resolve();
+  assert.deepEqual(await pendingSymbols, []);
+  assert.deepEqual(await provider.provideWorkspaceSymbols("Disposed"), []);
+  assert.deepEqual({
+    analyses,
+    documentReads,
+    entries: provider.workspaceSymbolEntries,
+    readyCalls,
+    records: provider.workspaceSymbolRecords.size,
+  }, {
+    analyses: 0,
+    documentReads: 0,
+    entries: [],
+    readyCalls: 1,
+    records: 0,
+  });
+});
+
+test("GaugeDocumentSymbolProvider suppresses refresh failures after disposal", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const refreshEntered = deferred();
+  const releaseRefresh = deferred();
+  const listeners = new Set();
+  let readyCalls = 0;
+  const documentStore = {
+    documents() {
+      throw new Error("documents must not be read after disposal");
+    },
+    onDidChangeDocuments(listener) {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+    async whenReady() {
+      readyCalls += 1;
+      refreshEntered.resolve();
+      await releaseRefresh.promise;
+      throw new Error("disposed workspace symbol refresh failed");
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+
+  const pendingSymbols = provider.provideWorkspaceSymbols("Disposed");
+  await refreshEntered.promise;
+  provider.dispose();
+  releaseRefresh.resolve();
+
+  assert.deepEqual(await pendingSymbols, []);
+  assert.deepEqual(await provider.provideWorkspaceSymbols("Disposed"), []);
+  assert.deepEqual({
+    entries: provider.workspaceSymbolEntries,
+    listeners: listeners.size,
+    readyCalls,
+    records: provider.workspaceSymbolRecords.size,
+  }, {
+    entries: [],
+    listeners: 0,
+    readyCalls: 1,
+    records: 0,
+  });
+});
+
+test("GaugeDocumentSymbolProvider stops fallback document reads after disposal", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const readEntered = deferred();
+  const releaseRead = deferred();
+  const firstUri = { fsPath: "/workspace/gauge/specs/first.spec" };
+  const secondUri = { fsPath: "/workspace/gauge/specs/second.spec" };
+  let findCalls = 0;
+  let openCalls = 0;
+  vscode.workspace = {
+    async findFiles() {
+      findCalls += 1;
+      return findCalls === 1 ? [firstUri, secondUri] : [];
+    },
+    async openTextDocument(uri) {
+      openCalls += 1;
+      if (uri === firstUri) {
+        readEntered.resolve();
+        await releaseRead.promise;
+        throw new Error("disposed fallback read failed");
+      }
+      return createDocument("# Second", uri.fsPath);
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ vscode });
+
+  const pendingSymbols = provider.provideWorkspaceSymbols("Second");
+  await readEntered.promise;
+  provider.dispose();
+  releaseRead.resolve();
+
+  assert.deepEqual(await pendingSymbols, []);
+  assert.deepEqual(await provider.provideWorkspaceSymbols("Second"), []);
+  assert.deepEqual({ findCalls, openCalls }, { findCalls: 3, openCalls: 1 });
 });
 
 test("GaugeDocumentSymbolProvider returns no workspace symbols for one-character queries", async () => {

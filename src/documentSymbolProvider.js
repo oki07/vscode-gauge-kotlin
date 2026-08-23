@@ -222,6 +222,7 @@ class GaugeDocumentSymbolProvider {
     this.workspaceSymbolReady = false;
     this.workspaceSymbolPending = undefined;
     this.documentStoreSubscription = undefined;
+    this.disposed = false;
     if (
       this.documentStore
       && typeof this.documentStore.onDidChangeDocuments === "function"
@@ -238,6 +239,7 @@ class GaugeDocumentSymbolProvider {
   }
 
   dispose() {
+    this.disposed = true;
     if (
       this.documentStoreSubscription
       && typeof this.documentStoreSubscription.dispose === "function"
@@ -247,6 +249,9 @@ class GaugeDocumentSymbolProvider {
     this.documentStoreSubscription = undefined;
     this.workspaceSymbolRecords.clear();
     this.workspaceSymbolEntries = [];
+    this.workspaceSymbolDirtyFiles.clear();
+    this.workspaceSymbolFullDirty = false;
+    this.workspaceSymbolReady = false;
   }
 
   provideDocumentSymbols(document) {
@@ -290,8 +295,14 @@ class GaugeDocumentSymbolProvider {
   }
 
   async workspaceDocuments() {
+    if (this.disposed) {
+      return [];
+    }
     if (this.documentStore) {
       await this.documentStore.whenReady();
+      if (this.disposed) {
+        return [];
+      }
       return this.documentStore.documents().filter((document) => {
         const file = documentPath(document);
         return SPEC_FILE_PATTERN.test(file)
@@ -315,6 +326,9 @@ class GaugeDocumentSymbolProvider {
       CONCEPT_WORKSPACE_PATTERN,
     ]) {
       const uris = await workspace.findFiles(pattern);
+      if (this.disposed) {
+        return [];
+      }
       for (const uri of uris || []) {
         urisByKey.set(uriKey(uri), uri);
       }
@@ -324,10 +338,16 @@ class GaugeDocumentSymbolProvider {
     for (const uri of urisByKey.values()) {
       try {
         const document = await workspace.openTextDocument(uri);
+        if (this.disposed) {
+          return [];
+        }
         if (document) {
           documents.push(document);
         }
       } catch (_error) {
+        if (this.disposed) {
+          return [];
+        }
         // Ignore unreadable files so one stale workspace entry does not hide
         // symbols from the rest of the Gauge project.
       }
@@ -345,6 +365,9 @@ class GaugeDocumentSymbolProvider {
 
     try {
       const documents = await this.workspaceDocuments();
+      if (this.disposed) {
+        return [];
+      }
       const currentByPath = new Map(
         documents.map((document) => [documentPath(document), document]),
       );
@@ -373,6 +396,9 @@ class GaugeDocumentSymbolProvider {
       this.workspaceSymbolReady = true;
       return this.workspaceSymbolEntries;
     } catch (error) {
+      if (this.disposed) {
+        return [];
+      }
       if (refreshAll) {
         this.workspaceSymbolFullDirty = true;
       }
@@ -384,6 +410,9 @@ class GaugeDocumentSymbolProvider {
   }
 
   async cachedWorkspaceSymbols() {
+    if (this.disposed) {
+      return [];
+    }
     if (!this.documentStore) {
       return undefined;
     }
@@ -400,7 +429,17 @@ class GaugeDocumentSymbolProvider {
         this.workspaceSymbolPending = undefined;
       });
     }
-    await this.workspaceSymbolPending;
+    try {
+      await this.workspaceSymbolPending;
+    } catch (error) {
+      if (this.disposed) {
+        return [];
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      return [];
+    }
     if (
       this.workspaceSymbolPending
       || this.workspaceSymbolFullDirty
@@ -412,6 +451,9 @@ class GaugeDocumentSymbolProvider {
   }
 
   async provideWorkspaceSymbols(query) {
+    if (this.disposed) {
+      return [];
+    }
     const normalizedQuery = workspaceSymbolQuery(query);
     if (normalizedQuery.length < 2) {
       return [];
@@ -422,8 +464,19 @@ class GaugeDocumentSymbolProvider {
     const scenarioSymbols = [];
     let symbols = await this.cachedWorkspaceSymbols();
     if (!symbols) {
-      const documents = await this.workspaceDocuments();
+      let documents;
+      try {
+        documents = await this.workspaceDocuments();
+      } catch (error) {
+        if (this.disposed) {
+          return [];
+        }
+        throw error;
+      }
       symbols = documents.flatMap((document) => this.provideDocumentSymbols(document));
+    }
+    if (this.disposed) {
+      return [];
     }
     for (const symbol of symbols) {
       if (!symbol.name.toLowerCase().includes(queryText)) {
