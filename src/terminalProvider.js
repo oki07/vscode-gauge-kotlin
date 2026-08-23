@@ -12,7 +12,10 @@ function getVscode(vscode) {
 class TerminalProvider {
   constructor(_context, options = {}) {
     this.vscode = getVscode(options.vscode);
+    this.clearTimeout = options.clearTimeout || clearTimeout;
     this.setTimeout = options.setTimeout || setTimeout;
+    this.disposed = false;
+    this.reloadTimers = new Set();
     this.terminals = [];
     this.disposable = this.register();
   }
@@ -22,25 +25,60 @@ class TerminalProvider {
   }
 
   execute(text) {
-    if (!this.vscode.window || typeof this.vscode.window.createTerminal !== "function") {
+    if (
+      this.disposed ||
+      !this.vscode.window ||
+      typeof this.vscode.window.createTerminal !== "function"
+    ) {
       return undefined;
     }
-    this.terminals.push(this.vscode.window.createTerminal(TERMINAL_NAME));
-    const terminal = this.latestTerminal();
+    const terminal = this.vscode.window.createTerminal(TERMINAL_NAME);
+    if (this.disposed) {
+      return undefined;
+    }
+    this.terminals.push(terminal);
     if (terminal && typeof terminal.show === "function") {
       terminal.show();
+    }
+    if (this.disposed) {
+      return undefined;
     }
     if (terminal && typeof terminal.sendText === "function") {
       terminal.sendText(text);
     }
-    return this.setTimeout(() => {
-      if (this.vscode.window && typeof this.vscode.window.showInformationMessage === "function") {
-        this.vscode.window.showInformationMessage(RELOAD_MESSAGE);
+    if (this.disposed) {
+      return undefined;
+    }
+    let handle;
+    let fired = false;
+    const callback = () => {
+      fired = true;
+      if (handle !== undefined) {
+        this.reloadTimers.delete(handle);
       }
-    }, RELOAD_MESSAGE_DELAY_MS);
+      if (this.disposed) {
+        return undefined;
+      }
+      if (this.vscode.window && typeof this.vscode.window.showInformationMessage === "function") {
+        return this.vscode.window.showInformationMessage(RELOAD_MESSAGE);
+      }
+      return undefined;
+    };
+    handle = this.setTimeout(callback, RELOAD_MESSAGE_DELAY_MS);
+    if (!fired && handle !== undefined) {
+      if (this.disposed) {
+        this.clearTimeout(handle);
+      } else {
+        this.reloadTimers.add(handle);
+      }
+    }
+    return handle;
   }
 
   register() {
+    if (this.disposed) {
+      return { dispose() {} };
+    }
     if (!this.vscode.commands || typeof this.vscode.commands.registerCommand !== "function") {
       return { dispose() {} };
     }
@@ -51,9 +89,20 @@ class TerminalProvider {
   }
 
   dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    for (const handle of [...this.reloadTimers]) {
+      if (this.reloadTimers.delete(handle)) {
+        this.clearTimeout(handle);
+      }
+    }
+    this.terminals.length = 0;
     if (this.disposable && typeof this.disposable.dispose === "function") {
       this.disposable.dispose();
     }
+    this.disposable = undefined;
   }
 }
 
