@@ -533,6 +533,125 @@ test("GaugeDocumentSymbolProvider reparses only changed workspace symbol documen
   ]);
 });
 
+test("GaugeDocumentSymbolProvider waits for the latest pending workspace symbol refresh", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const file = "/workspace/gauge/specs/example.spec";
+  const original = createDocument("# Original", file, "gauge");
+  const intermediate = createDocument("# Intermediate", file, "gauge");
+  const finalDocument = createDocument("# Final", file, "gauge");
+  const listeners = [];
+  let documents = [original];
+  let replaceDuringNextRead = false;
+  let readyCalls = 0;
+  let markRefreshEntered;
+  const refreshEntered = new Promise((resolve) => {
+    markRefreshEntered = resolve;
+  });
+  let releaseRefresh;
+  const refreshGate = new Promise((resolve) => {
+    releaseRefresh = resolve;
+  });
+  const documentStore = {
+    documents() {
+      const result = documents;
+      if (replaceDuringNextRead) {
+        replaceDuringNextRead = false;
+        documents = [finalDocument];
+        for (const listener of listeners) {
+          listener({ file });
+        }
+      }
+      return result;
+    },
+    onDidChangeDocuments(listener) {
+      listeners.push(listener);
+      return { dispose() {} };
+    },
+    async whenReady() {
+      readyCalls += 1;
+      if (readyCalls === 2) {
+        markRefreshEntered();
+        await refreshGate;
+      }
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+
+  assert.deepEqual(
+    (await provider.provideWorkspaceSymbols("Original")).map((symbol) => symbol.name),
+    ["# Original"],
+  );
+
+  documents = [intermediate];
+  listeners[0]({ file });
+  replaceDuringNextRead = true;
+  const firstSymbols = provider.provideWorkspaceSymbols("Final");
+  await refreshEntered;
+  const concurrentSymbols = provider.provideWorkspaceSymbols("Final");
+  releaseRefresh();
+
+  const [firstResult, concurrentResult] = await Promise.all([firstSymbols, concurrentSymbols]);
+  assert.deepEqual(firstResult.map((symbol) => symbol.name), ["# Final"]);
+  assert.deepEqual(concurrentResult.map((symbol) => symbol.name), ["# Final"]);
+  assert.equal(readyCalls, 3);
+});
+
+test("GaugeDocumentSymbolProvider restores workspace symbol invalidations after refresh failure", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const file = "/workspace/gauge/specs/example.spec";
+  const listeners = [];
+  let documents = [createDocument("# Original", file, "gauge")];
+  let nextFailure;
+  const documentStore = {
+    documents() {
+      return documents;
+    },
+    onDidChangeDocuments(listener) {
+      listeners.push(listener);
+      return { dispose() {} };
+    },
+    async whenReady() {
+      if (nextFailure) {
+        const failure = nextFailure;
+        nextFailure = undefined;
+        throw new Error(failure);
+      }
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+
+  assert.deepEqual(
+    (await provider.provideWorkspaceSymbols("Original")).map((symbol) => symbol.name),
+    ["# Original"],
+  );
+
+  documents = [createDocument("# Full Refresh", file, "gauge")];
+  listeners[0]({});
+  nextFailure = "full refresh failed";
+  await assert.rejects(
+    () => provider.provideWorkspaceSymbols("Full"),
+    /full refresh failed/,
+  );
+  assert.deepEqual(
+    (await provider.provideWorkspaceSymbols("Full")).map((symbol) => symbol.name),
+    ["# Full Refresh"],
+  );
+
+  documents = [createDocument("# File Refresh", file, "gauge")];
+  listeners[0]({ file });
+  nextFailure = "file refresh failed";
+  await assert.rejects(
+    () => provider.provideWorkspaceSymbols("File"),
+    /file refresh failed/,
+  );
+  assert.deepEqual(
+    (await provider.provideWorkspaceSymbols("File")).map((symbol) => symbol.name),
+    ["# File Refresh"],
+  );
+});
+
 test("GaugeDocumentSymbolProvider returns no workspace symbols for one-character queries", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();

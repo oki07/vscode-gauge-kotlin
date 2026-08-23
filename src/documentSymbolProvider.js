@@ -343,34 +343,44 @@ class GaugeDocumentSymbolProvider {
       this.workspaceSymbolDirtyFiles.delete(file);
     }
 
-    const documents = await this.workspaceDocuments();
-    const currentByPath = new Map(
-      documents.map((document) => [documentPath(document), document]),
-    );
-    for (const file of [...this.workspaceSymbolRecords.keys()]) {
-      if (!currentByPath.has(file)) {
-        this.workspaceSymbolRecords.delete(file);
+    try {
+      const documents = await this.workspaceDocuments();
+      const currentByPath = new Map(
+        documents.map((document) => [documentPath(document), document]),
+      );
+      for (const file of [...this.workspaceSymbolRecords.keys()]) {
+        if (!currentByPath.has(file)) {
+          this.workspaceSymbolRecords.delete(file);
+        }
       }
-    }
-    for (const document of documents) {
-      const file = documentPath(document);
-      if (
-        refreshAll
-        || dirtyFiles.has(file)
-        || !this.workspaceSymbolRecords.has(file)
-      ) {
-        this.workspaceSymbolRecords.set(file, {
-          document,
-          symbols: this.provideDocumentSymbols(document),
-        });
+      for (const document of documents) {
+        const file = documentPath(document);
+        if (
+          refreshAll
+          || dirtyFiles.has(file)
+          || !this.workspaceSymbolRecords.has(file)
+        ) {
+          this.workspaceSymbolRecords.set(file, {
+            document,
+            symbols: this.provideDocumentSymbols(document),
+          });
+        }
       }
+      this.workspaceSymbolEntries = documents.flatMap((document) => {
+        const record = this.workspaceSymbolRecords.get(documentPath(document));
+        return record ? record.symbols : [];
+      });
+      this.workspaceSymbolReady = true;
+      return this.workspaceSymbolEntries;
+    } catch (error) {
+      if (refreshAll) {
+        this.workspaceSymbolFullDirty = true;
+      }
+      for (const file of dirtyFiles) {
+        this.workspaceSymbolDirtyFiles.add(file);
+      }
+      throw error;
     }
-    this.workspaceSymbolEntries = documents.flatMap((document) => {
-      const record = this.workspaceSymbolRecords.get(documentPath(document));
-      return record ? record.symbols : [];
-    });
-    this.workspaceSymbolReady = true;
-    return this.workspaceSymbolEntries;
   }
 
   async cachedWorkspaceSymbols() {
@@ -379,6 +389,7 @@ class GaugeDocumentSymbolProvider {
     }
     if (
       this.workspaceSymbolReady
+      && !this.workspaceSymbolPending
       && !this.workspaceSymbolFullDirty
       && this.workspaceSymbolDirtyFiles.size === 0
     ) {
@@ -390,7 +401,11 @@ class GaugeDocumentSymbolProvider {
       });
     }
     await this.workspaceSymbolPending;
-    if (this.workspaceSymbolFullDirty || this.workspaceSymbolDirtyFiles.size > 0) {
+    if (
+      this.workspaceSymbolPending
+      || this.workspaceSymbolFullDirty
+      || this.workspaceSymbolDirtyFiles.size > 0
+    ) {
       return this.cachedWorkspaceSymbols();
     }
     return this.workspaceSymbolEntries;
