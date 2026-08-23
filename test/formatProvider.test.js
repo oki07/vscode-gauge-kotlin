@@ -163,6 +163,7 @@ test("GaugeFormatProvider returns full document edits from gauge format output",
     "",
   ].join("\n")));
 
+  assert.equal(provider.activeRequests.size, 0);
   assert.deepEqual(spawned, [
     {
       args: ["format", "/workspace/gauge/specs/example.spec"],
@@ -1087,4 +1088,249 @@ test("GaugeFormatProvider cancellation handles synchronous token and kill callba
       streamListeners: { stderr: 0, stdout: 0 },
     });
   }
+});
+
+test("GaugeFormatProvider disposal neutralizes pending preparation and later work", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+
+  for (const boundaryName of ["save", "environment"]) {
+    for (const outcome of ["resolve", "reject"]) {
+      const boundary = deferred();
+      const entered = deferred();
+      const errors = [];
+      let environmentCalls = 0;
+      let gaugeCommandCalls = 0;
+      let projectCalls = 0;
+      let readCalls = 0;
+      let saveCalls = 0;
+      let spawnCalls = 0;
+      const document = createDocument("# Original\n");
+      document.save = () => {
+        saveCalls += 1;
+        if (boundaryName === "save") {
+          entered.resolve();
+          return boundary.promise;
+        }
+        return Promise.resolve(true);
+      };
+      const provider = new GaugeFormatProvider({
+        cli: {
+          gaugeCommand() {
+            gaugeCommandCalls += 1;
+            return {
+              spawn() {
+                spawnCalls += 1;
+                throw new Error("should not spawn");
+              },
+            };
+          },
+        },
+        fileSystem: {
+          readFileSync() {
+            readCalls += 1;
+            return Buffer.from("# Formatted\n");
+          },
+        },
+        projectEnvironmentService: {
+          environmentFor() {
+            environmentCalls += 1;
+            if (boundaryName !== "environment") {
+              throw new Error("environment lookup should not start");
+            }
+            entered.resolve();
+            return boundary.promise;
+          },
+        },
+        projectFactory: {
+          getProjectByFilepath() {
+            projectCalls += 1;
+            return {
+              root() {
+                return "/workspace/gauge";
+              },
+            };
+          },
+          isGaugeProject() {
+            return true;
+          },
+        },
+        vscode: createFakeVscode({ errors }),
+      });
+      provider.projectEnvironments.set("/workspace/warm", { WARM: "true" });
+      const pending = provider.provideDocumentFormattingEdits(document);
+
+      await entered.promise;
+      provider.dispose();
+      provider.dispose();
+      const activeRequestCountAfterDispose = provider.activeRequests.size;
+      const cacheSizeAfterDispose = provider.projectEnvironments.size;
+      if (outcome === "resolve") {
+        boundary.resolve(boundaryName === "save" ? true : {});
+      } else {
+        boundary.resolve(Promise.reject(new Error(`${boundaryName} failed`)));
+      }
+      const [pendingOutcome, laterOutcome] = await Promise.allSettled([
+        pending,
+        provider.provideDocumentFormattingEdits(document),
+      ]);
+
+      assert.deepEqual({
+        boundaryName,
+        activeRequestCountAfterDispose,
+        cacheSizeAfterDispose,
+        environmentCalls,
+        errors,
+        gaugeCommandCalls,
+        laterOutcome,
+        outcome,
+        pendingOutcome,
+        projectCalls,
+        readCalls,
+        saveCalls,
+        spawnCalls,
+      }, {
+        boundaryName,
+        activeRequestCountAfterDispose: 0,
+        cacheSizeAfterDispose: 0,
+        environmentCalls: boundaryName === "environment" ? 1 : 0,
+        errors: [],
+        gaugeCommandCalls: boundaryName === "environment" ? 1 : 0,
+        laterOutcome: { status: "fulfilled", value: [] },
+        outcome,
+        pendingOutcome: { status: "fulfilled", value: [] },
+        projectCalls: 1,
+        readCalls: 0,
+        saveCalls: 1,
+        spawnCalls: 0,
+      });
+    }
+  }
+});
+
+test("GaugeFormatProvider disposal cancels concurrent formats during synchronous spawn", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  const cancellation = createCancellation();
+  const errors = [];
+  const firstSpawned = deferred();
+  const secondSpawned = deferred();
+  const children = [new EventEmitter(), new EventEmitter()];
+  for (const [index, child] of children.entries()) {
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.killCalls = 0;
+    child.kill = () => {
+      child.killCalls += 1;
+      if (index === 0) {
+        child.emit("error", new Error("synchronous disposal kill error"));
+      }
+      child.emit("close", 1);
+      return true;
+    };
+  }
+  let provider;
+  let readCalls = 0;
+  let spawnCalls = 0;
+  const command = {
+    spawn() {
+      const index = spawnCalls;
+      spawnCalls += 1;
+      const child = children[index];
+      if (index === 0) {
+        firstSpawned.resolve();
+      } else {
+        secondSpawned.resolve();
+        provider.dispose();
+      }
+      return child;
+    },
+  };
+  provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand() {
+        return command;
+      },
+    },
+    fileSystem: {
+      readFileSync() {
+        readCalls += 1;
+        return Buffer.from("# Formatted\n");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode: createFakeVscode({ errors }),
+  });
+  const settled = [false, false];
+  const pending = [provider.provideDocumentFormattingEdits(
+    createDocument("# First\n"),
+    {},
+    cancellation.token,
+  )];
+  pending[0] = pending[0].then((value) => {
+    settled[0] = true;
+    return value;
+  });
+
+  await firstSpawned.promise;
+  pending.push(provider.provideDocumentFormattingEdits(createDocument("# Second\n")));
+  pending[1] = pending[1].then((value) => {
+    settled[1] = true;
+    return value;
+  });
+  await secondSpawned.promise;
+  const activeRequestCountAfterDispose = provider.activeRequests.size;
+  provider.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const settledBeforeCleanup = [...settled];
+  for (const [index, child] of children.entries()) {
+    if (!settled[index]) {
+      child.emit("close", 1);
+    }
+  }
+  const outcomes = await Promise.allSettled(pending);
+  const later = await provider.provideDocumentFormattingEdits(createDocument("# Later\n"));
+
+  assert.deepEqual({
+    activeRequestCountAfterDispose,
+    childListeners: children.map((child) => ({
+      close: child.listenerCount("close"),
+      error: child.listenerCount("error"),
+      exit: child.listenerCount("exit"),
+      stderr: child.stderr.listenerCount("data"),
+      stdout: child.stdout.listenerCount("data"),
+    })),
+    errors,
+    hostListenerDisposals: cancellation.listenerDisposals(),
+    hostListenerCount: cancellation.listenerCount(),
+    hostRegistrations: cancellation.registrations(),
+    killCalls: children.map((child) => child.killCalls),
+    later,
+    outcomes,
+    readCalls,
+    settledBeforeCleanup,
+    spawnCalls,
+  }, {
+    activeRequestCountAfterDispose: 0,
+    childListeners: [
+      { close: 0, error: 0, exit: 0, stderr: 0, stdout: 0 },
+      { close: 0, error: 0, exit: 0, stderr: 0, stdout: 0 },
+    ],
+    errors: [],
+    hostListenerDisposals: 1,
+    hostListenerCount: 0,
+    hostRegistrations: 1,
+    killCalls: [1, 1],
+    later: [],
+    outcomes: [
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+    ],
+    readCalls: 0,
+    settledBeforeCleanup: [true, true],
+    spawnCalls: 2,
+  });
 });

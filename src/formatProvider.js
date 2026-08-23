@@ -70,6 +70,75 @@ function protectCancelledChild(child) {
   child.on("close", onClose);
 }
 
+function createRequestCancellation(hostToken) {
+  let cancelled = false;
+  let disposed = false;
+  const subscriptions = new Set();
+  const token = {
+    get isCancellationRequested() {
+      return disposed || cancelled || cancellationRequested(hostToken);
+    },
+    onCancellationRequested(listener) {
+      let hostDisposable;
+      let subscriptionDisposed = false;
+      const subscription = {
+        dispose() {
+          if (subscriptionDisposed) {
+            return;
+          }
+          subscriptionDisposed = true;
+          subscriptions.delete(subscription);
+          if (hostDisposable && typeof hostDisposable.dispose === "function") {
+            hostDisposable.dispose();
+          }
+          hostDisposable = undefined;
+        },
+        notify() {
+          if (!subscriptionDisposed) {
+            listener();
+          }
+        },
+      };
+      subscriptions.add(subscription);
+      if (hostToken && typeof hostToken.onCancellationRequested === "function") {
+        const disposable = hostToken.onCancellationRequested(() => subscription.notify());
+        if (subscriptionDisposed) {
+          if (disposable && typeof disposable.dispose === "function") {
+            disposable.dispose();
+          }
+        } else {
+          hostDisposable = disposable;
+        }
+      }
+      if (cancelled) {
+        subscription.notify();
+      }
+      return { dispose: () => subscription.dispose() };
+    },
+  };
+  return {
+    cancel() {
+      if (cancelled || disposed) {
+        return;
+      }
+      cancelled = true;
+      for (const subscription of [...subscriptions]) {
+        subscription.notify();
+      }
+    },
+    dispose() {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      for (const subscription of [...subscriptions]) {
+        subscription.dispose();
+      }
+    },
+    token,
+  };
+}
+
 function waitForProcess(command, args, options, token) {
   return new Promise((resolve) => {
     let settled = false;
@@ -288,6 +357,8 @@ class GaugeFormatProvider {
     this.projectFactory = options.projectFactory;
     this.projectEnvironmentService = options.projectEnvironmentService;
     this.vscode = getVscode(options.vscode);
+    this.activeRequests = new Set();
+    this.disposed = false;
     this.projectEnvironments = new Map();
   }
 
@@ -378,7 +449,25 @@ class GaugeFormatProvider {
     };
   }
 
-  async provideDocumentFormattingEdits(document, _formattingOptions, token) {
+  async provideDocumentFormattingEdits(document, formattingOptions, hostToken) {
+    if (this.disposed) {
+      return [];
+    }
+    const request = createRequestCancellation(hostToken);
+    this.activeRequests.add(request);
+    try {
+      return await this.provideDocumentFormattingEditsForRequest(
+        document,
+        formattingOptions,
+        request.token,
+      );
+    } finally {
+      this.activeRequests.delete(request);
+      request.dispose();
+    }
+  }
+
+  async provideDocumentFormattingEditsForRequest(document, _formattingOptions, token) {
     if (cancellationRequested(token) || !this.shouldFormat(document)) {
       return [];
     }
@@ -499,6 +588,19 @@ class GaugeFormatProvider {
       formatted,
     );
     return cancellationRequested(token) ? [] : [edit];
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.projectEnvironments.clear();
+    const requests = [...this.activeRequests];
+    this.activeRequests.clear();
+    for (const request of requests) {
+      request.cancel();
+    }
   }
 }
 

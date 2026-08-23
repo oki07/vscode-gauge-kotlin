@@ -2442,6 +2442,8 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
     constructor(options) {
       this.options = options;
     }
+
+    dispose() {}
   }
 
   extension.activate(context, fakeVscode, {
@@ -2501,6 +2503,7 @@ test("activation registers Gauge document formatting for Gauge documents", () =>
   assert.equal(formattingProviders[0].provider.options.cli, cli);
   assert.equal(typeof formattingProviders[0].provider.options.projectFactory.isGaugeProject, "function");
   assert.equal(context.subscriptions.includes(formattingProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(formattingProviders[0].provider), true);
 });
 
 test("activation registers Gauge document symbols for Gauge documents", () => {

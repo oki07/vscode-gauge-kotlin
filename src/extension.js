@@ -555,6 +555,9 @@ function registerFormatProvider(context, vscode, options) {
   if (disposable) {
     context.subscriptions.push(disposable);
   }
+  if (typeof provider.dispose === "function") {
+    context.subscriptions.push(provider);
+  }
 }
 
 function registerDocumentSymbolProvider(context, vscode, options) {
