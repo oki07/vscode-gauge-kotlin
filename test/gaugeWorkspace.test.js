@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -1684,15 +1685,30 @@ test("GaugeWorkspace generates Java config after installing a missing Java runne
     errors.push({ actions, message, options });
     return Promise.resolve("Yes");
   };
-  const cli = new CLI(new Command("gauge"), {
+  const gaugeCommand = new Command("gauge");
+  gaugeCommand.spawn = (args) => {
+    events.push(`install:${args[1]}`);
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    setImmediate(() => child.emit("exit", 0));
+    return child;
+  };
+  gaugeCommand.spawnSync = (args) => {
+    assert.deepEqual(args, ["--version", "--machine-readable"]);
+    events.push("refresh:manifest");
+    return {
+      status: 0,
+      stdout: Buffer.from(JSON.stringify({
+        version: "1.2.3",
+        plugins: [{ name: "java", version: "1.0.0" }],
+      })),
+    };
+  };
+  const cli = new CLI(gaugeCommand, {
     version: "1.2.3",
     plugins: [],
   });
-  cli.installGaugeRunner = (language) => {
-    events.push(`install:${language}`);
-    cli.gaugePlugins = [{ name: "java", version: "1.0.0" }];
-    return Promise.resolve(undefined);
-  };
 
   class FakeJavaProjectConfig {
     constructor(projectRoot, pluginVersion) {
@@ -1720,6 +1736,7 @@ test("GaugeWorkspace generates Java config after installing a missing Java runne
   const entry = clients.get("/workspace/gauge");
   assert.deepEqual(events, [
     "install:java",
+    "refresh:manifest",
     "generate:/workspace/gauge:1.0.0",
   ]);
   assert.equal(env.SHOULD_BUILD_PROJECT, "false");

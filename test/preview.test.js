@@ -774,6 +774,103 @@ test("previewGaugeDocument installs Spectacle when the missing plugin action is 
   ]);
 });
 
+test("previewGaugeDocument uses the post-install version manifest on the next preview", async () => {
+  const { CLI } = require("../src/cli");
+  const { GaugePreviewController } = require("../src/preview");
+  const installChild = createDeferredChild();
+  const docsChild = createDeferredChild();
+  const installEntered = deferred();
+  const spawns = [];
+  const command = {
+    spawn(args, options) {
+      spawns.push({ args, options });
+      if (args[0] === "install") {
+        if (spawns.filter((entry) => entry.args[0] === "install").length === 1) {
+          installEntered.resolve();
+          return installChild;
+        }
+        const repeatedInstallChild = createDeferredChild();
+        setImmediate(() => repeatedInstallChild.emit("exit", 0));
+        return repeatedInstallChild;
+      }
+      setImmediate(() => {
+        docsChild.emit("exit", 0);
+        docsChild.emit("close", 0);
+      });
+      return docsChild;
+    },
+    spawnSync(args) {
+      assert.deepEqual(args, ["--version", "--machine-readable"]);
+      return {
+        status: 0,
+        stdout: Buffer.from(JSON.stringify({
+          version: "1.2.3",
+          plugins: [{ name: "Spectacle", version: "1.0.0" }],
+        })),
+      };
+    },
+  };
+  const cli = new CLI(command, { version: "1.2.3", plugins: [] });
+  const {
+    errorPrompts,
+    opened,
+    vscode,
+  } = createFakeVscode({
+    document: {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+      fileName: "/workspace/gauge/specs/example.spec",
+      getText() {
+        return "# Checkout\n";
+      },
+    },
+    errorSelection: "Install Spectacle",
+  });
+  vscode.window.createOutputChannel = () => ({ appendLine() {}, clear() {}, show() {} });
+  const installGaugeRunner = cli.installGaugeRunner.bind(cli);
+  cli.installGaugeRunner = (name) => installGaugeRunner(name, {
+    env: { PATH: "/bin" },
+    vscode,
+  });
+  const writes = [];
+  const controller = new GaugePreviewController({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: {
+      mkdirSync() {},
+      writeFileSync(filename) {
+        writes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  const firstPreview = controller.preview();
+  await installEntered.promise;
+  installChild.emit("exit", 0);
+  await firstPreview;
+
+  const secondPreview = controller.preview();
+  await secondPreview;
+
+  assert.deepEqual(spawns.map((entry) => entry.args), [
+    ["install", "spectacle"],
+    ["docs", "spectacle", "/workspace/gauge/specs/example.spec"],
+  ]);
+  assert.equal(errorPrompts.length, 1);
+  assert.equal(writes.length, 1);
+  assert.equal(opened.length, 2);
+});
+
 test("previewGaugeDocument does not start duplicate Spectacle installs", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { information, vscode } = createFakeVscode({

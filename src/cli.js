@@ -120,6 +120,36 @@ class CLI {
     return plugin && plugin.version;
   }
 
+  refreshGaugeVersionManifest(env) {
+    if (!this.command || typeof this.command.spawnSync !== "function") {
+      return false;
+    }
+    try {
+      const result = this.command.spawnSync(
+        [GAUGE_VERSION_ARG, MACHINE_READABLE_ARG],
+        { env },
+      );
+      if (!result || result.error || result.status !== 0) {
+        return false;
+      }
+      const manifest = JSON.parse(removeDeprecatedOutputLines(result.stdout.toString()));
+      if (
+        !manifest
+        || Array.isArray(manifest)
+        || typeof manifest.version !== "string"
+        || !Array.isArray(manifest.plugins)
+      ) {
+        return false;
+      }
+      this.gaugeVersion = manifest.version;
+      this.gaugeCommitHash = manifest.commitHash;
+      this.gaugePlugins = manifest.plugins;
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   installGaugeRunner(language, options = {}) {
     const vscode = getVscode(options.vscode);
     const channel = vscode.window.createOutputChannel("Gauge Install");
@@ -133,6 +163,9 @@ class CLI {
       child.stdout.on("data", (chunk) => output.appendOutBuf(chunk.toString()));
       child.stderr.on("data", (chunk) => output.appendErrBuf(chunk.toString()));
       child.on("exit", (code) => {
+        if (code === 0) {
+          this.refreshGaugeVersionManifest(env);
+        }
         output.onFinish(
           resolve,
           code,

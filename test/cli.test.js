@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -90,6 +91,176 @@ test("CLI reports whether Gauge is installed", () => {
 
   assert.equal(new CLI(new Command("gauge"), {}, undefined, undefined).isGaugeInstalled(), true);
   assert.equal(new CLI(null, {}, undefined, undefined).isGaugeInstalled(), false);
+});
+
+test("CLI refreshes the version manifest after a successful plugin install", async () => {
+  const { CLI } = require("../src/cli");
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const calls = [];
+  const expectedEnv = {
+    PATH: "/usr/bin",
+    GAUGE_HOME: "/tools/gauge-home",
+  };
+  const command = {
+    spawn(args, options) {
+      calls.push({ args, options, type: "install" });
+      return child;
+    },
+    spawnSync(args, options) {
+      calls.push({ args, options, type: "version" });
+      return {
+        status: 0,
+        stdout: Buffer.from([
+          "[DEPRECATED] Ignore this warning.",
+          JSON.stringify({
+            version: "1.3.0",
+            commitHash: "new-commit",
+            plugins: [
+              { name: "kotlin", version: "0.10.0" },
+              { name: "Spectacle", version: "1.0.2" },
+            ],
+          }),
+        ].join("\n")),
+      };
+    },
+  };
+  const cli = new CLI(command, {
+    version: "1.2.3",
+    commitHash: "old-commit",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  });
+  const vscode = {
+    window: {
+      createOutputChannel() {
+        return { appendLine() {}, clear() {}, show() {} };
+      },
+    },
+    workspace: {
+      getConfiguration() {
+        return {
+          get(key) {
+            return key === "home" ? "/tools/gauge-home" : undefined;
+          },
+        };
+      },
+    },
+  };
+
+  const installation = cli.installGaugeRunner("spectacle", {
+    env: { PATH: "/usr/bin" },
+    vscode,
+  });
+  assert.equal(cli.isPluginInstalled("spectacle"), false);
+  child.emit("exit", 0);
+
+  assert.equal(await installation, true);
+  assert.equal(cli.gaugeVersion, "1.3.0");
+  assert.equal(cli.gaugeCommitHash, "new-commit");
+  assert.deepEqual(cli.gaugePlugins, [
+    { name: "kotlin", version: "0.10.0" },
+    { name: "Spectacle", version: "1.0.2" },
+  ]);
+  assert.equal(cli.isPluginInstalled("spectacle"), true);
+  assert.equal(cli.getGaugePluginVersion("SPECTACLE"), "1.0.2");
+  assert.deepEqual(calls, [
+    {
+      args: ["install", "spectacle"],
+      options: { env: expectedEnv },
+      type: "install",
+    },
+    {
+      args: ["--version", "--machine-readable"],
+      options: { env: expectedEnv },
+      type: "version",
+    },
+  ]);
+});
+
+test("CLI preserves the version manifest when installation or refresh fails", async () => {
+  const { CLI } = require("../src/cli");
+  const originalManifest = {
+    version: "1.2.3",
+    commitHash: "old-commit",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  };
+
+  for (const scenario of [
+    { installCode: 1, probeOutput: undefined, result: false },
+    { installCode: 0, probeOutput: "not json", result: true },
+    {
+      installCode: 0,
+      probeOutput: JSON.stringify({ version: "1.3.0", plugins: null }),
+      result: true,
+    },
+    {
+      installCode: 0,
+      probeOutput: JSON.stringify({ version: "1.3.0", commitHash: "new-commit" }),
+      result: true,
+    },
+    {
+      installCode: 0,
+      probeOutput: JSON.stringify({
+        version: 130,
+        plugins: [{ name: "spectacle", version: "1.0.0" }],
+      }),
+      result: true,
+    },
+    {
+      installCode: 0,
+      probeResult: { status: 1, stdout: Buffer.from("version probe failed") },
+      result: true,
+    },
+    {
+      installCode: 0,
+      probeResult: {
+        error: new Error("version probe did not start"),
+        status: 0,
+        stdout: Buffer.from(""),
+      },
+      result: true,
+    },
+    { installCode: 0, probeError: new Error("version probe failed"), result: true },
+  ]) {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    let probeCalls = 0;
+    const command = {
+      spawn() {
+        return child;
+      },
+      spawnSync() {
+        probeCalls += 1;
+        if (scenario.probeError) {
+          throw scenario.probeError;
+        }
+        if (scenario.probeResult) {
+          return scenario.probeResult;
+        }
+        return { status: 0, stdout: Buffer.from(scenario.probeOutput) };
+      },
+    };
+    const cli = new CLI(command, originalManifest);
+    const installation = cli.installGaugeRunner("spectacle", {
+      vscode: {
+        window: {
+          createOutputChannel() {
+            return { appendLine() {}, clear() {}, show() {} };
+          },
+        },
+      },
+    });
+
+    child.emit("exit", scenario.installCode);
+
+    assert.equal(await installation, scenario.result);
+    assert.equal(probeCalls, scenario.installCode === 0 ? 1 : 0);
+    assert.equal(cli.gaugeVersion, originalManifest.version);
+    assert.equal(cli.gaugeCommitHash, originalManifest.commitHash);
+    assert.deepEqual(cli.gaugePlugins, originalManifest.plugins);
+  }
 });
 
 test("CLI parses Gauge machine-readable version output with deprecated warnings", () => {
