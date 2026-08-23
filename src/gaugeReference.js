@@ -904,6 +904,7 @@ class ReferenceProvider {
       cancellation: new Promise((resolve) => {
         resolveCancellation = resolve;
       }),
+      hostCancellationDisposable: undefined,
       resolveCancellation,
       sources: new Set(),
     };
@@ -935,6 +936,21 @@ class ReferenceProvider {
     }
   }
 
+  disposeHostCancellation(operation) {
+    const disposable = operation && operation.hostCancellationDisposable;
+    if (!disposable) {
+      return;
+    }
+    operation.hostCancellationDisposable = undefined;
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Host listener cleanup cannot reactivate a completed provider request.
+      }
+    }
+  }
+
   cancelOperation(operation) {
     if (!operation || !operation.active) {
       return;
@@ -944,6 +960,7 @@ class ReferenceProvider {
     const sources = [...operation.sources];
     operation.sources.clear();
     operation.resolveCancellation(CANCELLED_REFERENCE_OPERATION);
+    this.disposeHostCancellation(operation);
     for (const source of sources) {
       this.disposeRequestSource(source, true);
     }
@@ -957,25 +974,71 @@ class ReferenceProvider {
     this.activeOperations.delete(operation);
     const sources = [...operation.sources];
     operation.sources.clear();
+    this.disposeHostCancellation(operation);
     for (const source of sources) {
       this.disposeRequestSource(source, false);
     }
   }
 
-  runCommandOperation(callback) {
+  linkOperationCancellation(operation, token) {
+    if (!token) {
+      return true;
+    }
+    if (token.isCancellationRequested) {
+      this.cancelOperation(operation);
+      return false;
+    }
+    if (typeof token.onCancellationRequested !== "function") {
+      return true;
+    }
+    let disposable;
+    try {
+      disposable = token.onCancellationRequested(() => this.cancelOperation(operation));
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return false;
+      }
+      throw error;
+    }
+    if (this.isOperationActive(operation)) {
+      operation.hostCancellationDisposable = disposable;
+    } else if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // The operation already settled while the host registered the listener.
+      }
+    }
+    if (token.isCancellationRequested && this.isOperationActive(operation)) {
+      this.cancelOperation(operation);
+    }
+    return this.isOperationActive(operation);
+  }
+
+  runOperation(callback, neutralValue, token) {
     const operation = this.createOperation();
     if (!operation) {
-      return Promise.resolve(undefined);
+      return Promise.resolve(neutralValue);
     }
     let workflow;
     try {
-      workflow = Promise.resolve(callback(operation));
+      workflow = this.linkOperationCancellation(operation, token)
+        ? Promise.resolve(callback(operation))
+        : Promise.resolve(CANCELLED_REFERENCE_OPERATION);
     } catch (error) {
       workflow = Promise.reject(error);
     }
     return Promise.race([workflow, operation.cancellation])
-      .then((value) => value === CANCELLED_REFERENCE_OPERATION ? undefined : value)
+      .then((value) => value === CANCELLED_REFERENCE_OPERATION ? neutralValue : value)
       .finally(() => this.finishOperation(operation));
+  }
+
+  runCommandOperation(callback) {
+    return this.runOperation(callback, undefined, undefined);
+  }
+
+  runReferenceOperation(token, callback) {
+    return this.runOperation(callback, [], token);
   }
 
   callSyncForOperation(operation, callback) {
@@ -1433,13 +1496,50 @@ class ReferenceProvider {
     });
   }
 
-  async provideReferences(document, position) {
-    const languageClient = this.languageClientForUri(document && document.uri);
-    const stepValues = await this.stepValuesAt(document, position, languageClient);
+  referenceCancellationToken(contextOrToken, token) {
+    if (token) {
+      return token;
+    }
+    if (
+      contextOrToken
+      && (typeof contextOrToken === "object" || typeof contextOrToken === "function")
+      && (
+        typeof contextOrToken.onCancellationRequested === "function"
+        || "isCancellationRequested" in contextOrToken
+      )
+    ) {
+      return contextOrToken;
+    }
+    return undefined;
+  }
+
+  provideReferences(document, position, contextOrToken, token) {
+    const cancellationToken = this.referenceCancellationToken(contextOrToken, token);
+    return this.runReferenceOperation(
+      cancellationToken,
+      (operation) => this.provideReferencesForOperation(operation, document, position),
+    );
+  }
+
+  async provideReferencesForOperation(operation, document, position) {
+    const languageClient = this.callSyncForOperation(
+      operation,
+      () => this.languageClientForUri(document && document.uri),
+    );
+    if (languageClient === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const stepValues = await this.stepValuesAt(document, position, languageClient, operation);
+    if (stepValues === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
     const locations = await this.referenceLocationsForStepValues(languageClient, stepValues, {
       sourceDocument: document,
-    });
-    return this.convertLocations(locations, languageClient);
+    }, operation);
+    if (locations === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    return this.convertLocationsForOperation(operation, locations, languageClient);
   }
 
   sourceGaugeProjectRoot(options = {}) {

@@ -38,6 +38,59 @@ function trackCancellationSources(vscode, sources, onConstruct) {
   };
 }
 
+function createCancellation(options = {}) {
+  let cancelled = Boolean(options.cancelled);
+  let registrations = 0;
+  let listenerDisposals = 0;
+  const listeners = new Set();
+  const token = {
+    get isCancellationRequested() {
+      return cancelled;
+    },
+    onCancellationRequested(listener) {
+      registrations += 1;
+      let disposed = false;
+      const disposable = {
+        dispose() {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          listenerDisposals += 1;
+          listeners.delete(listener);
+        },
+      };
+      listeners.add(listener);
+      if (options.cancelDuringRegistration) {
+        cancelled = true;
+        listener();
+      }
+      return disposable;
+    },
+  };
+  return {
+    cancel() {
+      if (cancelled) {
+        return;
+      }
+      cancelled = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    listenerDisposals() {
+      return listenerDisposals;
+    },
+    registrations() {
+      return registrations;
+    },
+    token,
+  };
+}
+
 function plainLocations(value) {
   const locations = Array.isArray(value) ? value : [value];
   return locations.map((location) => ({
@@ -3287,6 +3340,629 @@ test("ReferenceProvider closes registrations after synchronous registration disp
   assert.equal(clientLookups, 0);
   assert.deepEqual(calls.commands, []);
   assert.deepEqual(calls.information, []);
+});
+
+test("ReferenceProvider returns no references for pre-cancelled or disposed callbacks", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  for (const state of ["preCancelled", "disposed"]) {
+    const sources = [];
+    let clientLookups = 0;
+    let requestCalls = 0;
+    const { vscode } = createFakeVscode();
+    trackCancellationSources(vscode, sources);
+    const cancellation = createCancellation({ cancelled: state === "preCancelled" });
+    const document = {
+      languageId: "gauge",
+      uri: {
+        fsPath: "/workspace/specs/example.spec",
+        toString() {
+          return "file:///workspace/specs/example.spec";
+        },
+      },
+      getText() {
+        return "* Say hello";
+      },
+    };
+    const provider = new ReferenceProvider({
+      get() {
+        clientLookups += 1;
+        return {
+          client: {
+            sendRequest(method) {
+              requestCalls += 1;
+              return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : []);
+            },
+          },
+        };
+      },
+    }, { vscode });
+    if (state === "disposed") {
+      provider.dispose();
+    }
+
+    const result = state === "preCancelled"
+      ? await provider.provideReferences(document, { line: 0, character: 3 }, cancellation.token)
+      : await provider.provideReferences(
+        document,
+        { line: 0, character: 3 },
+        { includeDeclaration: true },
+        cancellation.token,
+      );
+
+    assert.deepEqual(result, []);
+    assert.equal(clientLookups, 0);
+    assert.equal(requestCalls, 0);
+    assert.equal(sources.length, 0);
+    assert.equal(provider.activeOperations.size, 0);
+    assert.equal(cancellation.registrations(), 0);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(cancellation.listenerDisposals(), 0);
+  }
+});
+
+test("ReferenceProvider cancels pending LSP callbacks from host or provider shutdown", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const lateError = new Error("late reference provider request failed");
+  for (const pendingMethod of ["gauge/stepValueAt", "gauge/stepReferences"]) {
+    for (const trigger of ["hostCancel", "providerDispose"]) {
+      for (const settlement of ["resolve", "reject"]) {
+      const requestEntered = deferred();
+      const requestGate = deferred();
+      const requests = [];
+      const sources = [];
+      let converterCalls = 0;
+      const { vscode } = createFakeVscode();
+      trackCancellationSources(vscode, sources);
+      const cancellation = createCancellation();
+      const document = {
+        languageId: "gauge",
+        uri: {
+          fsPath: "/workspace/specs/example.spec",
+          toString() {
+            return "file:///workspace/specs/example.spec";
+          },
+        },
+        getText() {
+          return "* Say hello";
+        },
+      };
+      const client = {
+        sendRequest(method, params, token) {
+          requests.push({ method, params, token });
+          if (method === pendingMethod) {
+            requestEntered.resolve();
+            return requestGate.promise;
+          }
+          return Promise.resolve("Say hello");
+        },
+        protocol2CodeConverter: {
+          asLocation(location) {
+            converterCalls += 1;
+            return location;
+          },
+        },
+      };
+      const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+      let outcome;
+      const invocation = provider.provideReferences(
+        document,
+        { line: 0, character: 3 },
+        { includeDeclaration: true },
+        cancellation.token,
+      );
+      invocation.then(
+        (value) => {
+          outcome = { status: "fulfilled", value };
+        },
+        (reason) => {
+          outcome = { status: "rejected", reason };
+        },
+      );
+      await requestEntered.promise;
+
+      let observedBeforeRelease;
+      try {
+        if (trigger === "hostCancel") {
+          cancellation.cancel();
+        } else {
+          provider.dispose();
+        }
+        await nextTurn();
+        observedBeforeRelease = outcome;
+      } finally {
+        if (settlement === "resolve") {
+          requestGate.resolve(pendingMethod === "gauge/stepValueAt"
+            ? "Say hello"
+            : [
+              {
+                uri: "file:///workspace/specs/example.spec",
+                range: { start: { line: 0, character: 0 } },
+              },
+            ]);
+        } else {
+          requestGate.reject(lateError);
+        }
+        await Promise.allSettled([invocation]);
+      }
+
+      assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+      assert.deepEqual(
+        requests.map((request) => request.method),
+        pendingMethod === "gauge/stepValueAt"
+          ? ["gauge/stepValueAt"]
+          : ["gauge/stepValueAt", "gauge/stepReferences"],
+      );
+      assert.equal(sources.length, pendingMethod === "gauge/stepValueAt" ? 1 : 2);
+      assert.deepEqual(
+        requests.map((request) => request.token),
+        sources.map((source) => source.token),
+      );
+      assert.equal(requests.some((request) => request.token === cancellation.token), false);
+      assert.deepEqual(
+        sources.map((source) => source.cancelCalls),
+        pendingMethod === "gauge/stepValueAt" ? [1] : [0, 1],
+      );
+      assert.deepEqual(sources.map((source) => source.disposeCalls),
+        pendingMethod === "gauge/stepValueAt" ? [1] : [1, 1]);
+      assert.equal(sources.at(-1).token.isCancellationRequested, true);
+      assert.equal(provider.activeOperations.size, 0);
+      assert.equal(cancellation.registrations(), 1);
+      assert.equal(cancellation.listenerDisposals(), 1);
+      assert.equal(cancellation.listenerCount(), 0);
+      assert.equal(cancellation.token.isCancellationRequested, trigger === "hostCancel");
+      assert.equal(converterCalls, 0);
+      }
+    }
+  }
+});
+
+test("ReferenceProvider cancels pending local callbacks from host or provider shutdown", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const lateError = new Error("late local reference provider request failed");
+  for (const trigger of ["hostCancel", "providerDispose"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const fallbackEntered = deferred();
+      const fallbackGate = deferred();
+      const requests = [];
+      const sources = [];
+      let converterCalls = 0;
+      const { vscode } = createFakeVscode();
+      trackCancellationSources(vscode, sources);
+      const cancellation = createCancellation();
+      const document = {
+        languageId: "gauge",
+        uri: {
+          fsPath: "/workspace/specs/example.spec",
+          toString() {
+            return "file:///workspace/specs/example.spec";
+          },
+        },
+        getText() {
+          return "* Say hello";
+        },
+      };
+      const client = {
+        sendRequest(method, params, token) {
+          requests.push({ method, params, token });
+          return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : []);
+        },
+        protocol2CodeConverter: {
+          asLocation(location) {
+            converterCalls += 1;
+            return location;
+          },
+        },
+      };
+      const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+        vscode,
+        workspaceStepIndex: {
+          referenceLocations() {
+            fallbackEntered.resolve();
+            return fallbackGate.promise;
+          },
+        },
+      });
+      let outcome;
+      const invocation = provider.provideReferences(
+        document,
+        { line: 0, character: 3 },
+        { includeDeclaration: true },
+        cancellation.token,
+      );
+      invocation.then(
+        (value) => {
+          outcome = { status: "fulfilled", value };
+        },
+        (reason) => {
+          outcome = { status: "rejected", reason };
+        },
+      );
+      await fallbackEntered.promise;
+
+      let observedBeforeRelease;
+      try {
+        if (trigger === "hostCancel") {
+          cancellation.cancel();
+        } else {
+          provider.dispose();
+        }
+        await nextTurn();
+        observedBeforeRelease = outcome;
+      } finally {
+        if (settlement === "resolve") {
+          fallbackGate.resolve([
+            { uri: "file:///workspace/specs/example.spec", range: { start: { line: 0, character: 0 } } },
+          ]);
+        } else {
+          fallbackGate.reject(lateError);
+        }
+        await Promise.allSettled([invocation]);
+      }
+
+      assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+      assert.deepEqual(requests.map((request) => request.method), [
+        "gauge/stepValueAt",
+        "gauge/stepReferences",
+      ]);
+      assert.equal(sources.length, 2);
+      assert.deepEqual(sources.map((source) => source.cancelCalls), [0, 0]);
+      assert.deepEqual(sources.map((source) => source.disposeCalls), [1, 1]);
+      assert.equal(provider.activeOperations.size, 0);
+      assert.equal(cancellation.registrations(), 1);
+      assert.equal(cancellation.listenerDisposals(), 1);
+      assert.equal(cancellation.listenerCount(), 0);
+      assert.equal(converterCalls, 0);
+    }
+  }
+});
+
+test("ReferenceProvider cancels pending local step-value callbacks", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const lateError = new Error("late local step-value callback failed");
+  for (const trigger of ["hostCancel", "providerDispose"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const stepEntriesEntered = deferred();
+      const stepEntriesGate = deferred();
+      let referenceCalls = 0;
+      let converterCalls = 0;
+      const { vscode } = createFakeVscode();
+      const cancellation = createCancellation();
+      const document = {
+        languageId: "kotlin",
+        uri: {
+          fsPath: "/workspace/tests/Steps.kt",
+          toString() {
+            return "file:///workspace/tests/Steps.kt";
+          },
+        },
+        getText() {
+          return [
+            "import com.thoughtworks.gauge.Step",
+            "",
+            "@Step(\"Say hello\")",
+            "fun sayHello() {}",
+          ].join("\n");
+        },
+      };
+      const provider = new ReferenceProvider({ get: () => undefined }, {
+        vscode,
+        workspaceStepIndex: {
+          referenceLocations() {
+            referenceCalls += 1;
+            return [];
+          },
+          stepEntriesForDocument() {
+            stepEntriesEntered.resolve();
+            return stepEntriesGate.promise;
+          },
+        },
+      });
+      const convertLocations = provider.convertLocationsForOperation.bind(provider);
+      provider.convertLocationsForOperation = (...args) => {
+        converterCalls += 1;
+        return convertLocations(...args);
+      };
+      let outcome;
+      const invocation = provider.provideReferences(
+        document,
+        { line: 3, character: 5 },
+        { includeDeclaration: true },
+        cancellation.token,
+      );
+      invocation.then(
+        (value) => {
+          outcome = { status: "fulfilled", value };
+        },
+        (reason) => {
+          outcome = { status: "rejected", reason };
+        },
+      );
+      await stepEntriesEntered.promise;
+
+      let observedBeforeRelease;
+      try {
+        if (trigger === "hostCancel") {
+          cancellation.cancel();
+        } else {
+          provider.dispose();
+        }
+        await nextTurn();
+        observedBeforeRelease = outcome;
+      } finally {
+        if (settlement === "resolve") {
+          stepEntriesGate.resolve([]);
+        } else {
+          stepEntriesGate.reject(lateError);
+        }
+        await Promise.allSettled([invocation]);
+      }
+
+      assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+      assert.equal(referenceCalls, 0);
+      assert.equal(converterCalls, 0);
+      assert.equal(provider.activeOperations.size, 0);
+      assert.equal(cancellation.registrations(), 1);
+      assert.equal(cancellation.listenerDisposals(), 1);
+      assert.equal(cancellation.listenerCount(), 0);
+    }
+  }
+});
+
+test("ReferenceProvider preserves live callback results and errors", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const stepValueError = new Error("live step value request failed");
+  const referencesError = new Error("live references request failed");
+  const localError = new Error("live local references failed");
+  const converterError = new Error("live location conversion failed");
+  for (const scenario of [
+    "success",
+    "stepValueError",
+    "referencesError",
+    "localError",
+    "converterError",
+  ]) {
+    const requests = [];
+    const sources = [];
+    let converterCalls = 0;
+    const { vscode } = createFakeVscode();
+    trackCancellationSources(vscode, sources);
+    const cancellation = createCancellation();
+    const document = {
+      languageId: "gauge",
+      uri: {
+        fsPath: "/workspace/specs/example.spec",
+        toString() {
+          return "file:///workspace/specs/example.spec";
+        },
+      },
+      getText() {
+        return "* Say hello";
+      },
+    };
+    const location = {
+      uri: "file:///workspace/specs/example.spec",
+      range: { start: { line: 0, character: 0 } },
+    };
+    const convertedLocation = { ...location, converted: true };
+    const client = {
+      sendRequest(method, params, token) {
+        requests.push({ method, params, token });
+        if (method === "gauge/stepValueAt") {
+          return scenario === "stepValueError"
+            ? Promise.reject(stepValueError)
+            : Promise.resolve("Say hello");
+        }
+        return scenario === "referencesError"
+          ? Promise.reject(referencesError)
+          : Promise.resolve(scenario === "localError" ? [] : [location]);
+      },
+      protocol2CodeConverter: {
+        asLocation(value) {
+          converterCalls += 1;
+          assert.equal(value, location);
+          if (scenario === "converterError") {
+            throw converterError;
+          }
+          return convertedLocation;
+        },
+      },
+    };
+    const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+      vscode,
+      workspaceStepIndex: scenario === "localError" ? {
+        referenceLocations() {
+          return Promise.reject(localError);
+        },
+      } : undefined,
+    });
+
+    const outcome = await Promise.allSettled([
+      provider.provideReferences(
+        document,
+        { line: 0, character: 3 },
+        { includeDeclaration: true },
+        cancellation.token,
+      ),
+    ]);
+
+    const expectedError = {
+      converterError,
+      localError,
+      referencesError,
+      stepValueError,
+    }[scenario];
+    assert.deepEqual(outcome, scenario === "success"
+      ? [{ status: "fulfilled", value: [convertedLocation] }]
+      : [{ status: "rejected", reason: expectedError }]);
+    assert.deepEqual(
+      requests.map((request) => request.method),
+      scenario === "stepValueError"
+        ? ["gauge/stepValueAt"]
+        : ["gauge/stepValueAt", "gauge/stepReferences"],
+    );
+    assert.deepEqual(sources.map((source) => source.cancelCalls),
+      scenario === "stepValueError" ? [0] : [0, 0]);
+    assert.deepEqual(sources.map((source) => source.disposeCalls),
+      scenario === "stepValueError" ? [1] : [1, 1]);
+    assert.equal(converterCalls, scenario === "success" || scenario === "converterError" ? 1 : 0);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+});
+
+test("ReferenceProvider normalizes synchronous host cancellation boundaries", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const lateError = new Error("synchronous provider cancellation failed");
+  for (const boundary of ["registration", "request", "converter"]) {
+    const requests = [];
+    const sources = [];
+    let converterCalls = 0;
+    const { vscode } = createFakeVscode();
+    trackCancellationSources(vscode, sources);
+    const cancellation = createCancellation({
+      cancelDuringRegistration: boundary === "registration",
+    });
+    const document = {
+      languageId: "gauge",
+      uri: {
+        fsPath: "/workspace/specs/example.spec",
+        toString() {
+          return "file:///workspace/specs/example.spec";
+        },
+      },
+      getText() {
+        return "* Say hello";
+      },
+    };
+    const locations = [
+      { uri: "file:///workspace/specs/one.spec", range: { start: { line: 0, character: 0 } } },
+      { uri: "file:///workspace/specs/two.spec", range: { start: { line: 1, character: 0 } } },
+    ];
+    const client = {
+      sendRequest(method, params, token) {
+        requests.push({ method, params, token });
+        if (boundary === "request") {
+          cancellation.cancel();
+          return Promise.reject(lateError);
+        }
+        return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : locations);
+      },
+      protocol2CodeConverter: {
+        asLocation(location) {
+          converterCalls += 1;
+          if (boundary === "converter") {
+            cancellation.cancel();
+          }
+          return location;
+        },
+      },
+    };
+    const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+
+    const outcome = await Promise.allSettled([
+      provider.provideReferences(
+        document,
+        { line: 0, character: 3 },
+        { includeDeclaration: true },
+        cancellation.token,
+      ),
+    ]);
+    await nextTurn();
+
+    assert.deepEqual(outcome, [{ status: "fulfilled", value: [] }]);
+    assert.equal(provider.activeOperations.size, 0);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(requests.length, boundary === "registration" ? 0 : boundary === "request" ? 1 : 2);
+    assert.deepEqual(sources.map((source) => source.cancelCalls),
+      boundary === "registration" ? [] : boundary === "request" ? [1] : [0, 0]);
+    assert.deepEqual(sources.map((source) => source.disposeCalls),
+      boundary === "registration" ? [] : boundary === "request" ? [1] : [1, 1]);
+    assert.equal(converterCalls, boundary === "converter" ? 1 : 0);
+  }
+});
+
+test("ReferenceProvider isolates concurrent callback cancellation", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const gates = [deferred(), deferred()];
+  const sources = [];
+  const { vscode } = createFakeVscode();
+  trackCancellationSources(vscode, sources);
+  const cancellations = [createCancellation(), createCancellation()];
+  const document = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/example.spec",
+      toString() {
+        return "file:///workspace/specs/example.spec";
+      },
+    },
+    getText() {
+      return "* Say hello";
+    },
+  };
+  let requestIndex = 0;
+  const client = {
+    sendRequest() {
+      const gate = gates[requestIndex];
+      requestIndex += 1;
+      return gate.promise;
+    },
+  };
+  const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+  const invocations = cancellations.map((cancellation) => provider.provideReferences(
+    document,
+    { line: 0, character: 3 },
+    { includeDeclaration: true },
+    cancellation.token,
+  ));
+  const outcomes = [
+    { status: "pending" },
+    { status: "pending" },
+  ];
+  invocations.forEach((invocation, index) => invocation.then(
+    (value) => {
+      outcomes[index] = { status: "fulfilled", value };
+    },
+    (reason) => {
+      outcomes[index] = { status: "rejected", reason };
+    },
+  ));
+
+  let afterHostCancel;
+  let afterProviderDispose;
+  try {
+    assert.equal(provider.activeOperations.size, 2);
+    cancellations[0].cancel();
+    await nextTurn();
+    afterHostCancel = outcomes.map((outcome) => ({ ...outcome }));
+    assert.equal(provider.activeOperations.size, 1);
+    provider.dispose();
+    await nextTurn();
+    afterProviderDispose = outcomes.map((outcome) => ({ ...outcome }));
+  } finally {
+    gates[0].reject(new Error("late first provider request failed"));
+    gates[1].resolve("Say hello");
+    await Promise.allSettled(invocations);
+  }
+
+  assert.deepEqual(afterHostCancel, [
+    { status: "fulfilled", value: [] },
+    { status: "pending" },
+  ]);
+  assert.deepEqual(afterProviderDispose, [
+    { status: "fulfilled", value: [] },
+    { status: "fulfilled", value: [] },
+  ]);
+  assert.equal(provider.activeOperations.size, 0);
+  assert.deepEqual(sources.map((source) => source.cancelCalls), [1, 1]);
+  assert.deepEqual(sources.map((source) => source.disposeCalls), [1, 1]);
+  assert.equal(cancellations[0].token.isCancellationRequested, true);
+  assert.equal(cancellations[1].token.isCancellationRequested, false);
+  assert.deepEqual(cancellations.map((cancellation) => cancellation.listenerDisposals()), [1, 1]);
 });
 
 test("ReferenceProvider registers explicit spec and concept reference selectors", () => {
