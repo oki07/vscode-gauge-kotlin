@@ -447,6 +447,648 @@ test("SpecNodeProvider changes client when workspace projects change", async () 
   assert.deepEqual(secondClient.requests.map((request) => request.method), ["gauge/specs"]);
 });
 
+test("SpecNodeProvider client generation lets the latest project switch win", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const cases = [
+    {
+      current: "resolve",
+      expectedErrors: [],
+      expectedFolder: "/workspace/two",
+      expectedTimers: 1,
+      stale: "resolve",
+    },
+    {
+      current: "resolve",
+      expectedErrors: [],
+      expectedFolder: "/workspace/two",
+      expectedTimers: 1,
+      stale: "reject",
+    },
+    {
+      current: "reject",
+      expectedErrors: ["Failed to create test explorer. current start failed"],
+      expectedFolder: undefined,
+      expectedTimers: 0,
+      stale: "resolve",
+    },
+  ];
+
+  for (const entry of cases) {
+    const slowStart = deferred();
+    const firstClient = createFakeClient();
+    const secondClient = createFakeClient();
+    firstClient.start = () => slowStart.promise;
+    secondClient.start = () => entry.current === "resolve"
+      ? Promise.resolve(undefined)
+      : Promise.reject(new Error("current start failed"));
+    secondClient.sendRequest = (method, params, token) => {
+      secondClient.requests.push({ method, params, token });
+      return Promise.resolve([
+        {
+          heading: "Second project",
+          executionIdentifier: "/workspace/two/specs/second.spec",
+        },
+      ]);
+    };
+    const clientsMap = new Map([
+      ["/workspace/one", { client: firstClient }],
+      ["/workspace/two", { client: secondClient }],
+    ]);
+    const timers = [];
+    const { contexts, errors, vscode } = createFakeVscode();
+    const workspace = createFakeWorkspace(firstClient, {
+      clientsMap,
+      getDefaultFolder() {
+        return undefined;
+      },
+    });
+    const provider = new SpecNodeProvider(workspace, {
+      clearTimeout(handle) {
+        handle.clearCalls += 1;
+      },
+      pathModule: path.posix,
+      setTimeout(callback, delay) {
+        const handle = { callback, clearCalls: 0, delay, unref() {} };
+        timers.push(handle);
+        return handle;
+      },
+      vscode,
+    });
+    await provider.ready();
+    const refreshes = [];
+    provider.onDidChangeTreeData((value) => refreshes.push(value));
+
+    const staleActivation = provider.changeClient("/workspace/one");
+    const currentActivation = provider.changeClient("/workspace/two");
+    await currentActivation;
+    const refreshCountAfterCurrent = refreshes.length;
+    if (entry.stale === "resolve") {
+      slowStart.resolve(undefined);
+    } else {
+      slowStart.reject(new Error("stale start failed"));
+    }
+    await staleActivation;
+    for (const timer of timers) {
+      await Promise.resolve(timer.callback());
+    }
+    const specifications = entry.expectedFolder
+      ? await provider.getChildren()
+      : [];
+
+    assert.deepEqual({
+      activeFolder: provider.activeFolder,
+      contextTrueCalls: contexts.filter((context) => context.value === true).length,
+      errors: errors.map((error) => error.message),
+      firstRequests: firstClient.requests.map((request) => request.method),
+      languageClient: provider.languageClient,
+      refreshCount: refreshes.length,
+      refreshCountAfterCurrent,
+      secondRequests: secondClient.requests.map((request) => request.method),
+      specifications: specifications.map((specification) => specification.label),
+      timers: timers.length,
+    }, {
+      activeFolder: entry.expectedFolder,
+      contextTrueCalls: entry.current === "resolve" ? 1 : 0,
+      errors: entry.expectedErrors,
+      firstRequests: [],
+      languageClient: entry.current === "resolve" ? secondClient : undefined,
+      refreshCount: refreshCountAfterCurrent,
+      refreshCountAfterCurrent,
+      secondRequests: entry.current === "resolve" ? ["gauge/specs"] : [],
+      specifications: entry.current === "resolve" ? ["Second project"] : [],
+      timers: entry.expectedTimers,
+    });
+    provider.dispose();
+  }
+});
+
+test("SpecNodeProvider client generation clears the tree when projects disappear", async () => {
+  const { Spec, SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const specsEntered = deferred();
+  const specsResponse = deferred();
+  const scenariosEntered = deferred();
+  const scenariosResponse = deferred();
+  const client = createFakeClient();
+  client.sendRequest = (method, params, token) => {
+    client.requests.push({ method, params, token });
+    if (method === "gauge/specs") {
+      specsEntered.resolve();
+      return specsResponse.promise;
+    }
+    scenariosEntered.resolve();
+    return scenariosResponse.promise;
+  };
+  const clientsMap = new Map([
+    ["/workspace/gauge", { client }],
+  ]);
+  const sources = [];
+  const timers = [];
+  const { contexts, vscode } = createFakeVscode();
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+  const workspace = createFakeWorkspace(client, { clientsMap });
+  const provider = new SpecNodeProvider(workspace, {
+    clearTimeout(handle) {
+      handle.clearCalls += 1;
+    },
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, clearCalls: 0, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  await provider.ready();
+  const refreshes = [];
+  provider.onDidChangeTreeData((value) => refreshes.push(value));
+  const spec = new Spec("Checkout", "/workspace/gauge/specs/checkout.spec", vscode);
+  const pendingSpecifications = provider.getSpecifications();
+  const pendingScenarios = provider.getScenarios(spec);
+  await Promise.all([specsEntered.promise, scenariosEntered.promise]);
+
+  clientsMap.delete("/workspace/gauge");
+  await workspace.projectChangeListeners[0](undefined);
+  const stateAfterRemoval = {
+    activeFolder: provider.activeFolder,
+    languageClient: provider.languageClient,
+    refreshes: [...refreshes],
+    sourceCalls: sources.map((source) => ({
+      cancel: source.cancelCalls,
+      dispose: source.disposeCalls,
+    })),
+    timerClearCalls: timers[0].clearCalls,
+  };
+  specsResponse.resolve([
+    {
+      heading: "Removed specification",
+      executionIdentifier: "/workspace/gauge/specs/removed.spec",
+    },
+  ]);
+  scenariosResponse.reject(new Error("removed scenario failed"));
+  const pendingOutcomes = await Promise.allSettled([
+    pendingSpecifications,
+    pendingScenarios,
+  ]);
+  await Promise.resolve(timers[0].callback());
+  const later = await Promise.all([
+    provider.getSpecifications(),
+    provider.getScenarios(spec),
+  ]);
+
+  assert.deepEqual({
+    contextTrueCalls: contexts.filter((context) => context.value === true).length,
+    later,
+    pendingOutcomes,
+    requests: client.requests.map((request) => request.method),
+    stateAfterRemoval,
+  }, {
+    contextTrueCalls: 0,
+    later: [[], []],
+    pendingOutcomes: [
+      { status: "fulfilled", value: [] },
+      { status: "fulfilled", value: [] },
+    ],
+    requests: ["gauge/specs", "gauge/scenarios"],
+    stateAfterRemoval: {
+      activeFolder: undefined,
+      languageClient: undefined,
+      refreshes: [undefined],
+      sourceCalls: [
+        { cancel: 1, dispose: 1 },
+        { cancel: 1, dispose: 1 },
+      ],
+      timerClearCalls: 1,
+    },
+  });
+});
+
+test("SpecNodeProvider client generation cancels stale tree requests", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const specsEntered = deferred();
+  const specsResponse = deferred();
+  const scenariosEntered = deferred();
+  const scenariosResponse = deferred();
+  const firstClient = createFakeClient();
+  let firstSpecsCalls = 0;
+  firstClient.sendRequest = (method, params, token) => {
+    firstClient.requests.push({ method, params, token });
+    if (method === "gauge/specs") {
+      firstSpecsCalls += 1;
+      if (firstSpecsCalls === 1) {
+        return Promise.resolve([
+          {
+            heading: "First project",
+            executionIdentifier: "/workspace/one/specs/first.spec",
+          },
+        ]);
+      }
+      specsEntered.resolve();
+      return specsResponse.promise;
+    }
+    scenariosEntered.resolve();
+    return scenariosResponse.promise;
+  };
+  const secondClient = createFakeClient();
+  secondClient.sendRequest = (method, params, token) => {
+    secondClient.requests.push({ method, params, token });
+    if (method === "gauge/specs") {
+      return Promise.resolve([
+        {
+          heading: "Second project",
+          executionIdentifier: "/workspace/two/specs/second.spec",
+        },
+      ]);
+    }
+    return Promise.resolve([
+      {
+        heading: "Wrong project scenario",
+        executionIdentifier: "/workspace/one/specs/first.spec:9",
+        lineNo: 9,
+      },
+    ]);
+  };
+  const clientsMap = new Map([
+    ["/workspace/one", { client: firstClient }],
+    ["/workspace/two", { client: secondClient }],
+  ]);
+  const sources = [];
+  const { vscode } = createFakeVscode();
+  vscode.CancellationTokenSource = class CancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      this.token = { isCancellationRequested: false };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      this.token.isCancellationRequested = true;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+  };
+  const provider = new SpecNodeProvider(createFakeWorkspace(firstClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return "/workspace/one";
+    },
+  }), {
+    pathModule: path.posix,
+    setTimeout() {
+      return undefined;
+    },
+    vscode,
+  });
+  await provider.ready();
+  const firstSpecifications = await provider.getChildren();
+  const pendingSpecifications = provider.getChildren();
+  const pendingScenarios = provider.getChildren(firstSpecifications[0]);
+  await Promise.all([specsEntered.promise, scenariosEntered.promise]);
+
+  await provider.changeClient("/workspace/two");
+  const sourceCallsAfterSwitch = sources.slice(1).map((source) => ({
+    cancel: source.cancelCalls,
+    dispose: source.disposeCalls,
+  }));
+  specsResponse.resolve([
+    {
+      heading: "Stale specification",
+      executionIdentifier: "/workspace/one/specs/stale.spec",
+    },
+  ]);
+  scenariosResponse.resolve([
+    {
+      heading: "Stale scenario",
+      executionIdentifier: "/workspace/one/specs/first.spec:8",
+      lineNo: 8,
+    },
+  ]);
+  const staleResults = await Promise.all([pendingSpecifications, pendingScenarios]);
+  const currentSpecifications = await provider.getChildren();
+  const oldNodeScenarios = await provider.getChildren(firstSpecifications[0]);
+
+  assert.deepEqual({
+    currentSpecifications: currentSpecifications.map((specification) => specification.label),
+    firstRequests: firstClient.requests.map((request) => request.method),
+    oldNodeScenarios,
+    secondRequests: secondClient.requests.map((request) => request.method),
+    sourceCalls: sources.map((source) => ({
+      cancel: source.cancelCalls,
+      dispose: source.disposeCalls,
+    })),
+    sourceCallsAfterSwitch,
+    staleResults,
+  }, {
+    currentSpecifications: ["Second project"],
+    firstRequests: ["gauge/specs", "gauge/specs", "gauge/scenarios"],
+    oldNodeScenarios: [],
+    secondRequests: ["gauge/specs"],
+    sourceCalls: [
+      { cancel: 0, dispose: 1 },
+      { cancel: 1, dispose: 1 },
+      { cancel: 1, dispose: 1 },
+      { cancel: 0, dispose: 1 },
+    ],
+    sourceCallsAfterSwitch: [
+      { cancel: 1, dispose: 1 },
+      { cancel: 1, dispose: 1 },
+    ],
+    staleResults: [[], []],
+  });
+});
+
+test("SpecNodeProvider client generation rejects replaced pending activations", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const startEntered = deferred();
+  const startResponse = deferred();
+  const oldClient = createFakeClient();
+  oldClient.start = () => {
+    startEntered.resolve();
+    return startResponse.promise;
+  };
+  const replacementClient = createFakeClient();
+  const clientsMap = new Map([
+    ["/workspace/gauge", { client: oldClient }],
+  ]);
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(oldClient, { clientsMap }), {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
+    vscode,
+  });
+  const refreshes = [];
+  provider.onDidChangeTreeData((value) => refreshes.push(value));
+  await startEntered.promise;
+  const pendingChildren = await provider.getChildren();
+
+  clientsMap.set("/workspace/gauge", { client: replacementClient });
+  startResponse.resolve(undefined);
+  await provider.ready();
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    errors,
+    languageClient: provider.languageClient,
+    pendingChildren,
+    refreshes,
+    timers: timers.length,
+  }, {
+    activeFolder: "/workspace/gauge",
+    errors: [],
+    languageClient: undefined,
+    pendingChildren: [],
+    refreshes: [],
+    timers: 0,
+  });
+});
+
+test("SpecNodeProvider client generation preserves the active tree after switch failure", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const firstClient = createFakeClient();
+  const secondClient = createFakeClient();
+  secondClient.start = () => Promise.reject(new Error("replacement start failed"));
+  const clientsMap = new Map([
+    ["/workspace/one", { client: firstClient }],
+    ["/workspace/two", { client: secondClient }],
+  ]);
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(firstClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return "/workspace/one";
+    },
+  }), {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  await provider.ready();
+  await Promise.resolve(timers[0].callback());
+
+  await provider.changeClient("/workspace/two");
+  const specifications = await provider.getChildren();
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    errors: errors.map((error) => error.message),
+    firstRequests: firstClient.requests.map((request) => request.method),
+    languageClient: provider.languageClient,
+    secondRequests: secondClient.requests.map((request) => request.method),
+    specifications: specifications.map((specification) => specification.label),
+  }, {
+    activeFolder: "/workspace/one",
+    errors: ["Failed to create test explorer. replacement start failed"],
+    firstRequests: ["gauge/specs"],
+    languageClient: firstClient,
+    secondRequests: [],
+    specifications: ["Checkout"],
+  });
+});
+
+test("SpecNodeProvider client generation clears a removed active client before replacement", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const replacementStart = deferred();
+  const firstClient = createFakeClient();
+  const secondClient = createFakeClient();
+  secondClient.start = () => replacementStart.promise;
+  const clientsMap = new Map([
+    ["/workspace/one", { client: firstClient }],
+    ["/workspace/two", { client: secondClient }],
+  ]);
+  const timers = [];
+  const { errors, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(firstClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return "/workspace/one";
+    },
+  }), {
+    clearTimeout(handle) {
+      handle.clearCalls += 1;
+    },
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, clearCalls: 0, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  await provider.ready();
+  const refreshes = [];
+  provider.onDidChangeTreeData((value) => refreshes.push(value));
+
+  clientsMap.delete("/workspace/one");
+  const activation = provider.changeClient("/workspace/two");
+  const stateWhilePending = {
+    activeFolder: provider.activeFolder,
+    languageClient: provider.languageClient,
+    refreshes: [...refreshes],
+    timerClearCalls: timers[0].clearCalls,
+  };
+  replacementStart.reject(new Error("replacement for removed client failed"));
+  await activation;
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    errors: errors.map((error) => error.message),
+    languageClient: provider.languageClient,
+    stateWhilePending,
+  }, {
+    activeFolder: undefined,
+    errors: ["Failed to create test explorer. replacement for removed client failed"],
+    languageClient: undefined,
+    stateWhilePending: {
+      activeFolder: undefined,
+      languageClient: undefined,
+      refreshes: [undefined],
+      timerClearCalls: 1,
+    },
+  });
+});
+
+test("SpecNodeProvider client generation survives a switch during refresh", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const firstClient = createFakeClient();
+  const secondClient = createFakeClient();
+  const clientsMap = new Map([
+    ["/workspace/one", { client: firstClient }],
+    ["/workspace/two", { client: secondClient }],
+  ]);
+  const timers = [];
+  const { contexts, vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(firstClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return undefined;
+    },
+  }), {
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  await provider.ready();
+  let nestedActivation;
+  provider.onDidChangeTreeData(() => {
+    if (provider.activeFolder === "/workspace/one" && !nestedActivation) {
+      nestedActivation = provider.changeClient("/workspace/two");
+    }
+  });
+
+  await provider.changeClient("/workspace/one");
+  await nestedActivation;
+  for (const timer of timers) {
+    await Promise.resolve(timer.callback());
+  }
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    contextTrueCalls: contexts.filter((context) => context.value === true).length,
+    languageClient: provider.languageClient,
+    timers: timers.length,
+  }, {
+    activeFolder: "/workspace/two",
+    contextTrueCalls: 1,
+    languageClient: secondClient,
+    timers: 1,
+  });
+});
+
+test("SpecNodeProvider client generation handles timer cancellation reentrancy", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const initialClient = createFakeClient();
+  const firstClient = createFakeClient();
+  const secondClient = createFakeClient();
+  const clientsMap = new Map([
+    ["/workspace/initial", { client: initialClient }],
+    ["/workspace/one", { client: firstClient }],
+    ["/workspace/two", { client: secondClient }],
+  ]);
+  const timers = [];
+  const { contexts, vscode } = createFakeVscode();
+  let nestedActivation;
+  let provider;
+  let reentered = false;
+  provider = new SpecNodeProvider(createFakeWorkspace(initialClient, {
+    clientsMap,
+    getDefaultFolder() {
+      return "/workspace/initial";
+    },
+  }), {
+    clearTimeout(handle) {
+      handle.clearCalls += 1;
+      if (!reentered) {
+        reentered = true;
+        nestedActivation = provider.changeClient("/workspace/two");
+      }
+    },
+    pathModule: path.posix,
+    setTimeout(callback, delay) {
+      const handle = { callback, clearCalls: 0, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    vscode,
+  });
+  await provider.ready();
+
+  const staleActivation = provider.changeClient("/workspace/one");
+  await Promise.all([staleActivation, nestedActivation]);
+  for (const timer of timers) {
+    await Promise.resolve(timer.callback());
+  }
+
+  assert.deepEqual({
+    activeFolder: provider.activeFolder,
+    contextTrueCalls: contexts.filter((context) => context.value === true).length,
+    firstStartCalls: firstClient.started,
+    initialTimerClearCalls: timers[0].clearCalls,
+    languageClient: provider.languageClient,
+    secondStartCalls: secondClient.started,
+    timers: timers.length,
+  }, {
+    activeFolder: "/workspace/two",
+    contextTrueCalls: 1,
+    firstStartCalls: 0,
+    initialTimerClearCalls: 1,
+    languageClient: secondClient,
+    secondStartCalls: 1,
+    timers: 2,
+  });
+});
+
 test("SpecNodeProvider disables the activated context when spec explorer is disabled", async () => {
   const { SpecNodeProvider } = require("../src/explorer/specExplorer");
   const client = createFakeClient();

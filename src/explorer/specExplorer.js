@@ -8,6 +8,9 @@ const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPEC_EXPLORER_VIEW = "gauge:specExplorer";
 const SPECS_REQUEST = "gauge/specs";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
+const SPEC_CLIENT = Symbol("specClient");
+const SPEC_CLIENT_GENERATION = Symbol("specClientGeneration");
+const SPEC_PROJECT_FOLDER = Symbol("specProjectFolder");
 
 function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");
@@ -105,8 +108,10 @@ class SpecNodeProvider {
     this.activationTimers = new Set();
     this.requestCancellationSources = new Set();
     this.activeFolder = undefined;
+    this.activeClientGeneration = 0;
     this.languageClient = undefined;
     this.activation = Promise.resolve(undefined);
+    this.clientGeneration = 0;
     this.disposed = false;
     this.onDidChangeTreeDataEmitter = new this.vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
@@ -117,11 +122,13 @@ class SpecNodeProvider {
         this.disposables,
         this.vscode.window.registerTreeDataProvider(SPEC_EXPLORER_VIEW, this),
       );
-      this.activeFolder = this.gaugeWorkspace.getDefaultFolder();
       this.registerRefreshListeners();
       this.registerCommands();
       this.registerProjectChangeListener();
-      this.activation = this.activateTreeDataProvider(this.activeFolder);
+      const initialFolder = this.gaugeWorkspace.getDefaultFolder();
+      this.activeFolder = initialFolder;
+      const generation = ++this.clientGeneration;
+      this.activation = this.activateTreeDataProvider(initialFolder, generation);
     }
   }
 
@@ -134,23 +141,11 @@ class SpecNodeProvider {
       return;
     }
     this.disposed = true;
+    this.clientGeneration += 1;
     this.activeFolder = undefined;
+    this.activeClientGeneration = 0;
     this.languageClient = undefined;
-
-    for (const timeout of this.activationTimers) {
-      this.clearTimeout(timeout);
-    }
-    this.activationTimers.clear();
-
-    for (const source of [...this.requestCancellationSources]) {
-      this.requestCancellationSources.delete(source);
-      if (typeof source.cancel === "function") {
-        source.cancel();
-      }
-      if (typeof source.dispose === "function") {
-        source.dispose();
-      }
-    }
+    this.cancelClientWork();
 
     const disposables = this.disposables;
     this.disposables = [];
@@ -195,10 +190,21 @@ class SpecNodeProvider {
   }
 
   async getSpecifications() {
-    if (this.disposed || !this.languageClient) {
+    if (this.disposed || !this.languageClient || !this.activeFolder) {
       return [];
     }
     const client = this.languageClient;
+    const activeGeneration = this.activeClientGeneration;
+    const requestGeneration = this.clientGeneration;
+    const projectFolder = this.activeFolder;
+    if (!this.isActiveRequestCurrent(
+      projectFolder,
+      client,
+      activeGeneration,
+      requestGeneration,
+    )) {
+      return [];
+    }
     const cancellation = this.createRequestCancellationSource();
     const token = cancellation && cancellation.token;
     try {
@@ -206,27 +212,72 @@ class SpecNodeProvider {
       try {
         values = await client.sendRequest(SPECS_REQUEST, {}, token);
       } catch (error) {
-        if (this.disposed || cancellationRequested(token)) {
+        if (
+          cancellationRequested(token)
+          || !this.isActiveRequestCurrent(
+            projectFolder,
+            client,
+            activeGeneration,
+            requestGeneration,
+          )
+        ) {
           return [];
         }
         throw error;
       }
-      if (this.disposed || cancellationRequested(token)) {
+      if (
+        cancellationRequested(token)
+        || !this.isActiveRequestCurrent(
+          projectFolder,
+          client,
+          activeGeneration,
+          requestGeneration,
+        )
+      ) {
         return [];
       }
       return (values || [])
         .filter((entry) => entry && entry.heading)
-        .map((entry) => new Spec(entry.heading, entry.executionIdentifier, this.vscode));
+        .map((entry) => {
+          const spec = new Spec(entry.heading, entry.executionIdentifier, this.vscode);
+          Object.defineProperties(spec, {
+            [SPEC_CLIENT]: { value: client },
+            [SPEC_CLIENT_GENERATION]: { value: activeGeneration },
+            [SPEC_PROJECT_FOLDER]: { value: projectFolder },
+          });
+          return spec;
+        });
     } finally {
       this.releaseRequestCancellationSource(cancellation);
     }
   }
 
   async getScenarios(spec) {
-    if (this.disposed || !this.languageClient) {
+    if (this.disposed || !this.languageClient || !this.activeFolder) {
       return [];
     }
     const client = this.languageClient;
+    const activeGeneration = this.activeClientGeneration;
+    const requestGeneration = this.clientGeneration;
+    const projectFolder = this.activeFolder;
+    if (
+      !this.isActiveRequestCurrent(
+        projectFolder,
+        client,
+        activeGeneration,
+        requestGeneration,
+      )
+      || (
+        Object.prototype.hasOwnProperty.call(spec, SPEC_CLIENT_GENERATION)
+        && (
+          spec[SPEC_CLIENT_GENERATION] !== activeGeneration
+          || spec[SPEC_CLIENT] !== client
+          || spec[SPEC_PROJECT_FOLDER] !== projectFolder
+        )
+      )
+    ) {
+      return [];
+    }
     const cancellation = this.createRequestCancellationSource();
     const token = cancellation && cancellation.token;
     try {
@@ -241,12 +292,28 @@ class SpecNodeProvider {
           token,
         );
       } catch (error) {
-        if (this.disposed || cancellationRequested(token)) {
+        if (
+          cancellationRequested(token)
+          || !this.isActiveRequestCurrent(
+            projectFolder,
+            client,
+            activeGeneration,
+            requestGeneration,
+          )
+        ) {
           return [];
         }
         throw error;
       }
-      if (this.disposed || cancellationRequested(token)) {
+      if (
+        cancellationRequested(token)
+        || !this.isActiveRequestCurrent(
+          projectFolder,
+          client,
+          activeGeneration,
+          requestGeneration,
+        )
+      ) {
         return [];
       }
       return (values || []).map((entry) => new Scenario(
@@ -278,53 +345,156 @@ class SpecNodeProvider {
     }
   }
 
-  changeClient(projectPath) {
-    if (this.disposed) {
-      return undefined;
+  cancelClientWork() {
+    for (const timeout of [...this.activationTimers]) {
+      if (!this.activationTimers.delete(timeout)) {
+        continue;
+      }
+      this.clearTimeout(timeout);
     }
-    setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
-    if (!isSpecExplorerEnabled(this.vscode)) {
-      return undefined;
+
+    for (const source of [...this.requestCancellationSources]) {
+      if (!this.requestCancellationSources.delete(source)) {
+        continue;
+      }
+      if (typeof source.cancel === "function") {
+        source.cancel();
+      }
+      if (typeof source.dispose === "function") {
+        source.dispose();
+      }
     }
-    this.activation = this.activateTreeDataProvider(projectPath);
-    return this.activation;
   }
 
-  activateTreeDataProvider(projectPath) {
-    if (this.disposed || !projectPath) {
-      return Promise.resolve(undefined);
+  clientEntryFor(projectPath) {
+    if (!projectPath) {
+      return undefined;
     }
     const workspacePath = this.vscode.Uri && typeof this.vscode.Uri.file === "function"
       ? this.vscode.Uri.file(projectPath).fsPath
       : projectPath;
-    const entry = this.gaugeWorkspace.getClientsMap().get(workspacePath);
+    return this.gaugeWorkspace.getClientsMap().get(workspacePath);
+  }
+
+  isClientIntentCurrent(projectPath, client, generation) {
+    if (this.disposed || generation !== this.clientGeneration) {
+      return false;
+    }
+    const entry = this.clientEntryFor(projectPath);
+    return Boolean(entry && entry.client === client);
+  }
+
+  isActiveClientCurrent(projectPath, client, generation) {
+    return this.activeFolder === projectPath
+      && this.languageClient === client
+      && this.activeClientGeneration === generation
+      && Boolean(this.clientEntryFor(projectPath)?.client === client);
+  }
+
+  isActiveRequestCurrent(projectPath, client, activeGeneration, requestGeneration) {
+    return requestGeneration === this.clientGeneration
+      && this.isActiveClientCurrent(projectPath, client, activeGeneration);
+  }
+
+  isActivatedClientCurrent(projectPath, client, generation) {
+    return generation === this.clientGeneration
+      && this.isActiveClientCurrent(projectPath, client, generation);
+  }
+
+  changeClient(projectPath) {
+    if (this.disposed) {
+      return undefined;
+    }
+    const generation = ++this.clientGeneration;
+    this.cancelClientWork();
+    setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
+    if (this.disposed || generation !== this.clientGeneration) {
+      return Promise.resolve(undefined);
+    }
+    const enabled = isSpecExplorerEnabled(this.vscode);
+    const entry = enabled ? this.clientEntryFor(projectPath) : undefined;
+    if (this.disposed || generation !== this.clientGeneration) {
+      return Promise.resolve(undefined);
+    }
+    let clearedRemovedClient = false;
+    if (
+      this.languageClient
+      && !this.isActiveClientCurrent(
+        this.activeFolder,
+        this.languageClient,
+        this.activeClientGeneration,
+      )
+    ) {
+      this.activeFolder = undefined;
+      this.activeClientGeneration = 0;
+      this.languageClient = undefined;
+      this.refresh();
+      clearedRemovedClient = true;
+      if (this.disposed || generation !== this.clientGeneration) {
+        return Promise.resolve(undefined);
+      }
+    }
+    if (!projectPath || !entry || !entry.client) {
+      this.activeFolder = undefined;
+      this.activeClientGeneration = 0;
+      this.languageClient = undefined;
+      if (!clearedRemovedClient) {
+        this.refresh();
+      }
+      const activation = Promise.resolve(undefined);
+      if (!this.disposed && generation === this.clientGeneration) {
+        this.activation = activation;
+      }
+      return activation;
+    }
+    const activation = this.activateTreeDataProvider(projectPath, generation);
+    if (generation === this.clientGeneration) {
+      this.activation = activation;
+    }
+    return activation;
+  }
+
+  activateTreeDataProvider(projectPath, generation) {
+    if (this.disposed || generation !== this.clientGeneration || !projectPath) {
+      return Promise.resolve(undefined);
+    }
+    const entry = this.clientEntryFor(projectPath);
     if (!entry || !entry.client) {
       return Promise.resolve(undefined);
     }
+    const client = entry.client;
     return Promise.resolve(entry.client.start())
       .then(() => {
-        if (this.disposed) {
+        if (!this.isClientIntentCurrent(projectPath, client, generation)) {
           return undefined;
         }
-        this.languageClient = entry.client;
+        this.cancelClientWork();
+        if (!this.isClientIntentCurrent(projectPath, client, generation)) {
+          return undefined;
+        }
+        this.languageClient = client;
         this.activeFolder = projectPath;
+        this.activeClientGeneration = generation;
         this.refresh();
-        if (this.disposed) {
+        if (!this.isActivatedClientCurrent(projectPath, client, generation)) {
           return undefined;
         }
-        this.scheduleActivatedContext();
+        this.scheduleActivatedContext(projectPath, client, generation);
         return undefined;
       })
       // A second argument is read as options or an item, so the reason would
       // be dropped: fold it in. This fires exactly when the Gauge daemon
       // failed to start, which is when the user most needs to see why.
       .catch((reason) => {
-        return this.showActivationError(reason);
+        if (!this.isClientIntentCurrent(projectPath, client, generation)) {
+          return undefined;
+        }
+        return this.showActivationError(reason, projectPath, client, generation);
       });
   }
 
-  async showActivationError(reason) {
-    if (this.disposed) {
+  async showActivationError(reason, projectPath, client, generation) {
+    if (!this.isClientIntentCurrent(projectPath, client, generation)) {
       return undefined;
     }
     const detail = (reason && reason.message) || String(reason || "");
@@ -332,17 +502,19 @@ class SpecNodeProvider {
       const result = await this.vscode.window.showErrorMessage(
         `Failed to create test explorer.${detail ? ` ${detail}` : ""}`,
       );
-      return this.disposed ? undefined : result;
+      return this.isClientIntentCurrent(projectPath, client, generation)
+        ? result
+        : undefined;
     } catch (error) {
-      if (this.disposed) {
+      if (!this.isClientIntentCurrent(projectPath, client, generation)) {
         return undefined;
       }
       throw error;
     }
   }
 
-  scheduleActivatedContext() {
-    if (this.disposed) {
+  scheduleActivatedContext(projectPath, client, generation) {
+    if (!this.isActivatedClientCurrent(projectPath, client, generation)) {
       return;
     }
     let timeout;
@@ -352,7 +524,7 @@ class SpecNodeProvider {
       if (timeout !== undefined) {
         this.activationTimers.delete(timeout);
       }
-      if (this.disposed) {
+      if (!this.isActivatedClientCurrent(projectPath, client, generation)) {
         return undefined;
       }
       return setCommandContext(this.vscode, ACTIVATED_CONTEXT, true);
