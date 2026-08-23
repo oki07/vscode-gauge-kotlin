@@ -665,6 +665,7 @@ function createGaugeExecutionController(options = {}) {
   let activeRun;
   let activeExecutionProjectRoot;
   let activeDebugger;
+  let activeDebuggerSessionSubscription;
   let activeRunUserAborted = false;
   let executionLoop;
   let latestScheduledExecutionSequence = 0;
@@ -841,7 +842,7 @@ function createGaugeExecutionController(options = {}) {
           debugPortProvider: options.debugPortProvider,
         });
         if (typeof activeDebugger.registerStopDebugger === "function") {
-          activeDebugger.registerStopDebugger(() => {
+          activeDebuggerSessionSubscription = activeDebugger.registerStopDebugger(() => {
             cancelExecutionRequest(request, false);
           });
         }
@@ -875,6 +876,13 @@ function createGaugeExecutionController(options = {}) {
       }
       return result;
     } finally {
+      if (
+        activeDebuggerSessionSubscription
+        && typeof activeDebuggerSessionSubscription.dispose === "function"
+      ) {
+        activeDebuggerSessionSubscription.dispose();
+      }
+      activeDebuggerSessionSubscription = undefined;
       await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
       await setExecutingContext(vscode, false);
       activeExecutionProjectRoot = undefined;
@@ -1431,6 +1439,13 @@ function createGaugeExecutionController(options = {}) {
     executeScenario,
     dispose() {
       executionStatusBar.dispose();
+      if (
+        activeDebuggerSessionSubscription
+        && typeof activeDebuggerSessionSubscription.dispose === "function"
+      ) {
+        activeDebuggerSessionSubscription.dispose();
+      }
+      activeDebuggerSessionSubscription = undefined;
       if (
         ownsProjectEnvironmentService
         && projectEnvironmentService

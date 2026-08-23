@@ -66,22 +66,25 @@ test("GaugeDebugger starts VS Code Java attach debugging", async () => {
 
   await debuggerSession.addDebugEnv();
   const result = await debuggerSession.startDebugger();
+  const { __gaugeExecutionId, ...debugConfiguration } = calls[1][2];
 
   assert.equal(result, true);
+  assert.match(__gaugeExecutionId, /^gauge-debug-\d+$/);
   assert.deepEqual(calls, [
     ["folder", { fsPath: "/workspace" }],
     [
       "start",
       { uri: { fsPath: "/workspace" }, name: "workspace" },
-      {
-        name: "Gauge Debugger",
-        type: "java",
-        request: "attach",
-        hostName: "127.0.0.1",
-        port: 5005,
-      },
+      calls[1][2],
     ],
   ]);
+  assert.deepEqual(debugConfiguration, {
+    name: "Gauge Debugger",
+    type: "java",
+    request: "attach",
+    hostName: "127.0.0.1",
+    port: 5005,
+  });
 });
 
 test("GaugeDebugger retries VS Code attach debugging while the runner starts", async () => {
@@ -127,11 +130,13 @@ test("GaugeDebugger retries VS Code attach debugging while the runner starts", a
 
   await debuggerSession.addDebugEnv();
   const result = await debuggerSession.startDebugger();
+  const { __gaugeExecutionId, ...debugConfiguration } = attempts[2].configuration;
 
   assert.equal(result, true);
   assert.deepEqual(sleeps, [100, 5000, 5000]);
   assert.equal(attempts.length, 3);
-  assert.deepEqual(attempts[2].configuration, {
+  assert.match(__gaugeExecutionId, /^gauge-debug-\d+$/);
+  assert.deepEqual(debugConfiguration, {
     name: "Gauge Debugger",
     type: "java",
     request: "attach",
@@ -356,19 +361,58 @@ test("GaugeDebugger copies C# launch debug options", async () => {
   });
 });
 
-test("GaugeDebugger registers debug session termination callbacks", () => {
+test("GaugeDebugger owns only the debug session it starts", async () => {
   const { createGaugeDebugger } = require("../../src/execution/debug");
-  const callbacks = [];
+  const startCallbacks = [];
+  const terminateCallbacks = [];
   const calls = [];
+  const unrelatedSession = {
+    configuration: {},
+    id: "unrelated",
+    name: "Gauge Debugger",
+  };
+  let ownedSession;
   const vscode = {
+    workspace: {
+      getWorkspaceFolder(uri) {
+        return { uri, name: "workspace" };
+      },
+    },
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
     debug: {
-      onDidTerminateDebugSession(callback) {
-        callbacks.push(callback);
+      activeDebugSession: unrelatedSession,
+      onDidStartDebugSession(callback) {
+        startCallbacks.push(callback);
         return {
           dispose() {
-            calls.push(["dispose"]);
+            calls.push(["dispose", "start"]);
           },
         };
+      },
+      onDidTerminateDebugSession(callback) {
+        terminateCallbacks.push(callback);
+        return {
+          dispose() {
+            calls.push(["dispose", "terminate"]);
+          },
+        };
+      },
+      async startDebugging(_folder, configuration) {
+        ownedSession = {
+          configuration,
+          id: "owned",
+          name: "Gauge Debugger",
+        };
+        vscode.debug.activeDebugSession = ownedSession;
+        startCallbacks[0](ownedSession);
+        return true;
+      },
+      async stopDebugging(session) {
+        calls.push(["stop", session.id]);
       },
     },
   };
@@ -377,14 +421,36 @@ test("GaugeDebugger registers debug session termination callbacks", () => {
     vscode,
     projectRoot: "/workspace",
     language: "kotlin",
+    debugStartDelayMs: 0,
+    async debugPortProvider() {
+      return 5005;
+    },
   });
-  debuggerSession.registerStopDebugger((session) => {
-    calls.push(["terminated", session.name]);
+  await debuggerSession.addDebugEnv();
+  const subscription = debuggerSession.registerStopDebugger((session) => {
+    calls.push(["terminated", session.id]);
   });
 
-  callbacks[0]({ name: "Gauge Debugger" });
+  terminateCallbacks[0](unrelatedSession);
+  assert.deepEqual(calls, []);
+
+  await debuggerSession.startDebugger();
+  const correlatedChildSession = {
+    configuration: ownedSession.configuration,
+    id: "owned-child",
+    name: "Gauge Debugger Child",
+  };
+  vscode.debug.activeDebugSession = unrelatedSession;
+  await debuggerSession.stopDebugger();
+  terminateCallbacks[0](unrelatedSession);
+  terminateCallbacks[0](correlatedChildSession);
+  terminateCallbacks[0](ownedSession);
+  subscription.dispose();
 
   assert.deepEqual(calls, [
-    ["terminated", "Gauge Debugger"],
+    ["dispose", "start"],
+    ["stop", "owned"],
+    ["terminated", "owned"],
+    ["dispose", "terminate"],
   ]);
 });

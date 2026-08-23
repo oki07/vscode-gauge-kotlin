@@ -6,6 +6,9 @@ const DEFAULT_DEBUG_PORT = 9229;
 const DEFAULT_DEBUG_START_DELAY_MS = 100;
 const DEFAULT_DEBUG_ATTACH_RETRY_DELAY_MS = 5000;
 const DEFAULT_DEBUG_ATTACH_TIMEOUT_MS = 25000;
+const DEBUG_SESSION_OWNER_KEY = "__gaugeExecutionId";
+
+let nextDebugSessionId = 0;
 
 function javaLike(language) {
   return language === "java" || language === "kotlin";
@@ -105,8 +108,22 @@ function createGaugeDebugger(options = {}) {
   const debugAttachRetryDelayMs = options.debugAttachRetryDelayMs ?? DEFAULT_DEBUG_ATTACH_RETRY_DELAY_MS;
   const debugAttachTimeoutMs = options.debugAttachTimeoutMs ?? DEFAULT_DEBUG_ATTACH_TIMEOUT_MS;
   const sleepProvider = options.sleep || sleep;
+  const debugSessionId = `gauge-debug-${++nextDebugSessionId}`;
   let debugPort = options.debugPort;
+  let debugSession;
   let processId;
+
+  function ownsDebugSession(session) {
+    return Boolean(
+      session
+      && session.configuration
+      && session.configuration[DEBUG_SESSION_OWNER_KEY] === debugSessionId,
+    );
+  }
+
+  function isOwnedDebugSession(session) {
+    return Boolean(debugSession && session && session.id === debugSession.id);
+  }
 
   async function addDebugEnv(env = baseEnv) {
     const preferredPort = debugPort || getConfiguredDebugPort(vscode);
@@ -212,14 +229,21 @@ function createGaugeDebugger(options = {}) {
     }
     await sleepProvider(debugStartDelayMs);
     const maxAttempts = debugAttachAttempts(debugAttachTimeoutMs, debugAttachRetryDelayMs);
+    const configuration = {
+      ...getDebuggerConfiguration(),
+      [DEBUG_SESSION_OWNER_KEY]: debugSessionId,
+    };
     let lastError;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (attempt > 0) {
         await sleepProvider(debugAttachRetryDelayMs);
       }
       try {
-        const started = await vscode.debug.startDebugging(folder, getDebuggerConfiguration());
+        const started = await vscode.debug.startDebugging(folder, configuration);
         if (started) {
+          if (!debugSession && ownsDebugSession(vscode.debug.activeDebugSession)) {
+            debugSession = vscode.debug.activeDebugSession;
+          }
           return started;
         }
         lastError = new Error("VS Code did not start the debugger.");
@@ -232,17 +256,56 @@ function createGaugeDebugger(options = {}) {
 
   function registerStopDebugger(callback) {
     vscode = vscode || require("vscode");
-    if (!vscode.debug || typeof vscode.debug.onDidTerminateDebugSession !== "function") {
+    if (!vscode.debug) {
       return undefined;
     }
-    return vscode.debug.onDidTerminateDebugSession((session) => {
-      callback(session);
-    });
+    let startSubscription;
+    let terminationSubscription;
+    if (typeof vscode.debug.onDidStartDebugSession === "function") {
+      startSubscription = vscode.debug.onDidStartDebugSession((session) => {
+        if (!ownsDebugSession(session)) {
+          return;
+        }
+        debugSession = session;
+        startSubscription.dispose();
+        startSubscription = undefined;
+      });
+    }
+    if (typeof vscode.debug.onDidTerminateDebugSession === "function") {
+      terminationSubscription = vscode.debug.onDidTerminateDebugSession((session) => {
+        if (!isOwnedDebugSession(session)) {
+          return;
+        }
+        debugSession = undefined;
+        callback(session);
+      });
+    }
+    if (!startSubscription && !terminationSubscription) {
+      return undefined;
+    }
+    return {
+      dispose() {
+        if (startSubscription) {
+          startSubscription.dispose();
+          startSubscription = undefined;
+        }
+        if (terminationSubscription) {
+          terminationSubscription.dispose();
+          terminationSubscription = undefined;
+        }
+      },
+    };
   }
 
   function stopDebugger() {
-    if (vscode && vscode.debug && vscode.debug.activeDebugSession) {
-      return vscode.debug.activeDebugSession.customRequest("disconnect");
+    if (!vscode || !vscode.debug || !debugSession) {
+      return undefined;
+    }
+    if (typeof vscode.debug.stopDebugging === "function") {
+      return vscode.debug.stopDebugging(debugSession);
+    }
+    if (typeof debugSession.customRequest === "function") {
+      return debugSession.customRequest("disconnect");
     }
     return undefined;
   }

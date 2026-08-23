@@ -3112,6 +3112,13 @@ test("debug node executes with JVM debug env and starts debugger on runner readi
           calls.push(["start"]);
           return Promise.resolve(true);
         },
+        registerStopDebugger() {
+          return {
+            dispose() {
+              calls.push(["dispose"]);
+            },
+          };
+        },
         stopDebugger() {
           calls.push(["stop"]);
         },
@@ -3160,6 +3167,7 @@ test("debug node executes with JVM debug env and starts debugger on runner readi
     ],
     ["pid", 2468],
     ["start"],
+    ["dispose"],
   ]);
 });
 
@@ -3369,6 +3377,7 @@ test("debug node passes configured GAUGE_HOME to the debug environment", async (
 test("debug node cancels Gauge execution when the debug session terminates", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const cancelCalls = [];
+  let disposeCalls = 0;
   let finish;
   let stopCallback;
   const { vscode } = createFakeVscode();
@@ -3393,6 +3402,11 @@ test("debug node cancels Gauge execution when the debug session terminates", asy
         },
         registerStopDebugger(callback) {
           stopCallback = callback;
+          return {
+            dispose() {
+              disposeCalls += 1;
+            },
+          };
         },
         stopDebugger() {},
       };
@@ -3421,6 +3435,7 @@ test("debug node cancels Gauge execution when the debug session terminates", asy
 
   assert.equal(await run, false);
   assert.deepEqual(cancelCalls, [false]);
+  assert.equal(disposeCalls, 1);
 });
 
 function createMavenExecutionFixture(overrides = {}) {
