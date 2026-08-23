@@ -215,6 +215,92 @@ test("WorkspaceStepIndex restores consumed invalidations after refresh failure",
   assert.equal(analyses, 4);
 });
 
+test("WorkspaceStepIndex returns no state after disposal during refresh", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const specification = createDocument(
+    "# Example\ntags: smoke",
+    "/workspace/gauge/specs/example.spec",
+    "gauge",
+    1,
+  );
+  const store = new FakeDocumentStore([specification]);
+  let markAnalysisEntered;
+  const analysisEntered = new Promise((resolve) => {
+    markAnalysisEntered = resolve;
+  });
+  let releaseAnalysis;
+  const analysisGate = new Promise((resolve) => {
+    releaseAnalysis = resolve;
+  });
+  let analyses = 0;
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    async tagEntriesProvider() {
+      analyses += 1;
+      markAnalysisEntered();
+      await analysisGate;
+      return ["smoke"];
+    },
+    vscode: { workspace: { textDocuments: [specification] } },
+  });
+
+  const pendingTags = index.tagEntries(specification);
+  await analysisEntered;
+  assert.equal(store.listeners.size, 1);
+  assert.equal(index.states.size, 1);
+  index.dispose();
+  assert.equal(store.listeners.size, 0);
+  assert.equal(index.states.size, 0);
+  releaseAnalysis();
+  const pendingResult = await pendingTags;
+  const disposedResult = await index.tagEntries(specification);
+
+  assert.deepEqual(pendingResult, []);
+  assert.deepEqual(disposedResult, []);
+  assert.equal(analyses, 1);
+  assert.equal(index.states.size, 0);
+  assert.equal(store.listeners.size, 0);
+});
+
+test("WorkspaceStepIndex suppresses refresh failures after disposal", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const specification = createDocument(
+    "# Example\ntags: smoke",
+    "/workspace/gauge/specs/example.spec",
+    "gauge",
+    1,
+  );
+  const store = new FakeDocumentStore([specification]);
+  let markAnalysisEntered;
+  const analysisEntered = new Promise((resolve) => {
+    markAnalysisEntered = resolve;
+  });
+  let releaseAnalysis;
+  const analysisGate = new Promise((resolve) => {
+    releaseAnalysis = resolve;
+  });
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    async tagEntriesProvider() {
+      markAnalysisEntered();
+      await analysisGate;
+      throw new Error("disposed refresh failed");
+    },
+    vscode: { workspace: { textDocuments: [specification] } },
+  });
+
+  const pendingTags = index.tagEntries(specification);
+  await analysisEntered;
+  index.dispose();
+  releaseAnalysis();
+
+  assert.deepEqual(await pendingTags, []);
+  assert.equal(index.states.size, 0);
+  assert.equal(store.listeners.size, 0);
+});
+
 test("WorkspaceStepIndex does not reanalyze unchanged queries", async () => {
   const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
   const implementation = createDocument(

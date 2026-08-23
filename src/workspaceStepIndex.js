@@ -429,8 +429,8 @@ class WorkspaceStepIndex {
   }
 
   async snapshotForRoot(root, sourceDocument) {
-    if (root === undefined) {
-      return emptyState(undefined);
+    if (root === undefined || this.disposed) {
+      return emptyState(root);
     }
     const state = this.stateFor(root);
     if (!state.pending && !state.fullDirty && state.dirtyFiles.size === 0) {
@@ -441,7 +441,17 @@ class WorkspaceStepIndex {
         state.pending = undefined;
       });
     }
-    await state.pending;
+    try {
+      await state.pending;
+    } catch (error) {
+      if (this.disposed) {
+        return emptyState(root);
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      return emptyState(root);
+    }
     if (state.pending || state.fullDirty || state.dirtyFiles.size > 0) {
       return this.snapshotForRoot(root, sourceDocument);
     }
