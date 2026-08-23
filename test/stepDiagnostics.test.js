@@ -1,6 +1,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 function createFakeVscode() {
   return {
     Diagnostic: class Diagnostic {
@@ -7212,6 +7220,404 @@ function createSchedulerFileSystem(files) {
     },
   };
 }
+
+test("GaugeStepDiagnosticsProvider settles a pending refresh when disposed", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  let changeListener;
+  let closeListener;
+  let closeSubscriptionDisposals = 0;
+  let collectionDisposals = 0;
+  let deleteCalls = 0;
+  let subscriptionDisposals = 0;
+  const collection = {
+    delete() {
+      deleteCalls += 1;
+    },
+    dispose() {
+      collectionDisposals += 1;
+    },
+    set() {},
+  };
+  const documentStore = {
+    documents: () => [],
+    onDidChangeDocuments(listener) {
+      changeListener = listener;
+      return {
+        dispose() {
+          subscriptionDisposals += 1;
+        },
+      };
+    },
+    start() {},
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    documentStore,
+    refreshDelayMs: 60_000,
+    vscode: {
+      ...createFakeVscode(),
+      languages: {
+        createDiagnosticCollection: () => collection,
+      },
+      workspace: {
+        textDocuments: [],
+        onDidCloseTextDocument(listener) {
+          closeListener = listener;
+          return {
+            dispose() {
+              closeSubscriptionDisposals += 1;
+            },
+          };
+        },
+      },
+    },
+  });
+  const registration = provider.register();
+  const pending = provider.waitForPendingRefresh();
+  let pendingSettled = false;
+  pending.then(() => {
+    pendingSettled = true;
+  });
+
+  registration.dispose();
+  registration.dispose();
+  changeListener({ file: "/workspace/gauge/specs/example.spec" });
+  closeListener({ uri: { fsPath: "/workspace/gauge/specs/example.spec" } });
+  await Promise.resolve();
+
+  const actual = {
+    closeSubscriptionDisposals,
+    collectionDisposals,
+    deleteCalls,
+    hasPendingChanges: provider.pendingChanges !== undefined,
+    hasPendingPromise: provider.pendingRefreshPromise !== undefined,
+    hasRefreshTimer: provider.refreshTimer !== undefined,
+    pendingSettled,
+    subscriptionDisposals,
+  };
+  if (provider.refreshTimer !== undefined) {
+    clearTimeout(provider.refreshTimer);
+  }
+  assert.deepEqual(actual, {
+    closeSubscriptionDisposals: 1,
+    collectionDisposals: 1,
+    deleteCalls: 0,
+    hasPendingChanges: false,
+    hasPendingPromise: false,
+    hasRefreshTimer: false,
+    pendingSettled: true,
+    subscriptionDisposals: 1,
+  });
+});
+
+test("GaugeStepDiagnosticsProvider does not resume dependency refreshes after disposal", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const dependencyEntered = deferred();
+  const dependencyFinished = deferred();
+  const releaseDependency = deferred();
+  const specDocument = {
+    ...createDocument(
+      "# Specification\n## Scenario\n* missing step",
+      "gauge",
+      "/workspace/gauge/specs/example.spec",
+    ),
+    version: 1,
+  };
+  let collectionDisposals = 0;
+  let dependencyCalls = 0;
+  let subscriptionDisposals = 0;
+  const sets = [];
+  const collection = {
+    delete() {},
+    dispose() {
+      collectionDisposals += 1;
+    },
+    set(uri, diagnostics) {
+      sets.push({ diagnostics, uri });
+    },
+  };
+  const dependencyStepIndex = {
+    generation: 0,
+    async refresh() {
+      dependencyCalls += 1;
+      if (dependencyCalls === 1) {
+        dependencyEntered.resolve();
+        await releaseDependency.promise;
+        this.generation += 1;
+        dependencyFinished.resolve();
+      }
+    },
+    stepTemplates: () => new Set(),
+  };
+  const documentStore = {
+    documents: () => [specDocument],
+    onDidChangeDocuments() {
+      return {
+        dispose() {
+          subscriptionDisposals += 1;
+        },
+      };
+    },
+    start() {},
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    dependencyStepIndex,
+    documentStore,
+    projectFactory: createProjectFactory(),
+    refreshDelayMs: 0,
+    vscode: {
+      ...createFakeVscode(),
+      languages: {
+        createDiagnosticCollection: () => collection,
+      },
+      workspace: { textDocuments: [specDocument] },
+    },
+  });
+  const registration = provider.register();
+
+  await dependencyEntered.promise;
+  sets.length = 0;
+  registration.dispose();
+  releaseDependency.resolve();
+  await dependencyFinished.promise;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const actual = {
+    collectionDisposals,
+    dependencyCalls,
+    hasPendingChanges: provider.pendingChanges !== undefined,
+    hasPendingPromise: provider.pendingRefreshPromise !== undefined,
+    hasRefreshTimer: provider.refreshTimer !== undefined,
+    sets: sets.length,
+    subscriptionDisposals,
+  };
+  if (provider.refreshTimer !== undefined) {
+    clearTimeout(provider.refreshTimer);
+  }
+  assert.deepEqual(actual, {
+    collectionDisposals: 1,
+    dependencyCalls: 1,
+    hasPendingChanges: false,
+    hasPendingPromise: false,
+    hasRefreshTimer: false,
+    sets: 0,
+    subscriptionDisposals: 1,
+  });
+});
+
+test("GaugeStepDiagnosticsProvider does not publish a direct refresh after disposal", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const dependencyEntered = deferred();
+  const releaseDependency = deferred();
+  const specDocument = createDocument(
+    "# Specification\n## Scenario\n* missing step",
+    "gauge",
+    "/workspace/gauge/specs/example.spec",
+  );
+  const documents = [specDocument];
+  let dependencyCalls = 0;
+  const sets = [];
+  const collection = {
+    delete() {},
+    dispose() {},
+    set(uri, diagnostics) {
+      sets.push({ diagnostics, uri });
+    },
+  };
+  const dependencyStepIndex = {
+    generation: 0,
+    async refresh() {
+      dependencyCalls += 1;
+      if (dependencyCalls === 1) {
+        dependencyEntered.resolve();
+        await releaseDependency.promise;
+      }
+    },
+    stepTemplates: () => new Set(),
+  };
+  const documentStore = {
+    cachedDocuments: documents,
+    documents: () => documents,
+    isScanComplete: () => true,
+    onDidChangeDocuments: () => ({ dispose() {} }),
+    start() {},
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    dependencyStepIndex,
+    documentStore,
+    projectFactory: createProjectFactory(),
+    refreshDelayMs: 60_000,
+    vscode: {
+      ...createFakeVscode(),
+      languages: {
+        createDiagnosticCollection: () => collection,
+      },
+      workspace: { textDocuments: [specDocument] },
+    },
+  });
+  const registration = provider.register();
+
+  const pending = provider.refreshDocuments(collection);
+  await dependencyEntered.promise;
+  registration.dispose();
+  releaseDependency.resolve();
+  await pending;
+  await provider.refreshDocuments(collection);
+
+  assert.deepEqual({ dependencyCalls, sets: sets.length }, {
+    dependencyCalls: 1,
+    sets: 0,
+  });
+});
+
+test("GaugeStepDiagnosticsProvider stops a workspace scan after disposal", async () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const findFilesEntered = deferred();
+  const releaseFindFiles = deferred();
+  const stepDocument = createDocument(
+    "@Step(\"a step\")\nfun step() {}",
+    "kotlin",
+    "/workspace/gauge/src/test/kotlin/Steps.kt",
+  );
+  let dependencyCalls = 0;
+  let findFilesCalls = 0;
+  let openTextDocumentCalls = 0;
+  const collection = { delete() {}, dispose() {}, set() {} };
+  const documentStore = {
+    documents: () => [],
+    isScanComplete: () => false,
+    onDidChangeDocuments: () => ({ dispose() {} }),
+    start() {},
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    dependencyStepIndex: {
+      async refresh() {
+        dependencyCalls += 1;
+      },
+      stepTemplates: () => new Set(),
+    },
+    documentStore,
+    projectFactory: createProjectFactory(),
+    refreshDelayMs: 60_000,
+    vscode: {
+      ...createFakeVscode(),
+      languages: {
+        createDiagnosticCollection: () => collection,
+      },
+      workspace: {
+        textDocuments: [],
+        async findFiles() {
+          findFilesCalls += 1;
+          if (findFilesCalls === 1) {
+            findFilesEntered.resolve();
+            await releaseFindFiles.promise;
+            return [stepDocument.uri];
+          }
+          return [];
+        },
+        async openTextDocument() {
+          openTextDocumentCalls += 1;
+          return stepDocument;
+        },
+      },
+    },
+  });
+  const registration = provider.register();
+
+  const pending = provider.refreshDocuments(collection);
+  await findFilesEntered.promise;
+  registration.dispose();
+  releaseFindFiles.resolve();
+  await pending;
+
+  assert.deepEqual({
+    dependencyCalls,
+    findFilesCalls,
+    openTextDocumentCalls,
+    pendingWorkspaceDocuments: provider.pendingWorkspaceDocuments,
+  }, {
+    dependencyCalls: 0,
+    findFilesCalls: 1,
+    openTextDocumentCalls: 0,
+    pendingWorkspaceDocuments: undefined,
+  });
+});
+
+test("GaugeStepDiagnosticsProvider clears diagnostic arbitration on disposal", () => {
+  const {
+    GaugeStepDiagnosticsProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepDiagnostics");
+  const specDocument = {
+    ...createDocument(
+      "# Specification\n## Scenario\n* missing step",
+      "gauge",
+      "/workspace/gauge/specs/example.spec",
+    ),
+    version: 1,
+  };
+  const documents = [specDocument];
+  const collection = { delete() {}, dispose() {}, set() {} };
+  const documentStore = {
+    cachedDocuments: documents,
+    documents: () => documents,
+    isScanComplete: () => true,
+    onDidChangeDocuments: () => ({ dispose() {} }),
+    start() {},
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    dependencyStepIndex: {
+      generation: 0,
+      refresh() {},
+      stepTemplates: () => new Set(["implemented step"]),
+    },
+    documentStore,
+    projectFactory: createProjectFactory(),
+    refreshDelayMs: 60_000,
+    vscode: {
+      ...createFakeVscode(),
+      languages: {
+        createDiagnosticCollection: () => collection,
+      },
+      workspace: { textDocuments: [specDocument] },
+    },
+  });
+  const registration = provider.register();
+  provider.updateDocument(collection, specDocument, documents);
+
+  assert.deepEqual(
+    [...provider.publishedDiagnosticLines(specDocument, UNDEFINED_STEP_MESSAGE)],
+    [2],
+  );
+  assert.equal(provider.stepImplementedAt(specDocument, 2, documents), false);
+  assert.deepEqual(
+    provider.provideDiagnostics(specDocument, documents).map((entry) => entry.message),
+    [UNDEFINED_STEP_MESSAGE],
+  );
+
+  registration.dispose();
+
+  assert.deepEqual({
+    diagnostics: provider.provideDiagnostics(specDocument, documents),
+    diagnosisKeys: provider.lastDiagnosisKeys.size,
+    docStrings: provider.storeDocStringsCache.size,
+    implemented: provider.stepImplementedAt(specDocument, 2, documents),
+    lines: provider.publishedDiagnosticLines(specDocument, UNDEFINED_STEP_MESSAGE),
+    publishedLines: provider.publishedLines.size,
+    rootGenerations: provider.rootGenerations.size,
+    templates: provider.storeTemplatesCache.size,
+    workspaceConstants: provider.storeConstantsCache.size,
+  }, {
+    diagnostics: [],
+    diagnosisKeys: 0,
+    docStrings: 0,
+    implemented: undefined,
+    lines: undefined,
+    publishedLines: 0,
+    rootGenerations: 0,
+    templates: 0,
+    workspaceConstants: 0,
+  });
+});
 
 test("GaugeStepDiagnosticsProvider register does not rescan the workspace on change events", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");

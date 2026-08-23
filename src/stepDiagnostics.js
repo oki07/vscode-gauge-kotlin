@@ -8404,14 +8404,23 @@ class GaugeStepDiagnosticsProvider {
     this.pendingChanges = undefined;
     this.refreshTimer = undefined;
     this.pendingRefreshPromise = undefined;
+    this.pendingRefreshResolve = undefined;
     this.lastDependencyGeneration = undefined;
+    this.registrationDisposables = undefined;
+    this.disposed = false;
   }
 
   activeDocumentStore() {
+    if (this.disposed) {
+      return undefined;
+    }
     return this.documentStore || this.ownedStore;
   }
 
   storeFor(workspaceDocuments) {
+    if (this.disposed) {
+      return undefined;
+    }
     const store = this.activeDocumentStore();
     return store
       && Array.isArray(workspaceDocuments)
@@ -8773,6 +8782,9 @@ class GaugeStepDiagnosticsProvider {
   }
 
   provideDiagnostics(document, workspaceDocuments) {
+    if (this.disposed) {
+      return [];
+    }
     if (!this.shouldDiagnose(document)) {
       return [];
     }
@@ -9005,7 +9017,8 @@ class GaugeStepDiagnosticsProvider {
   // workspace implementation scan has not produced a template set yet).
   stepImplementedAt(document, line, workspaceDocuments) {
     if (
-      !document
+      this.disposed
+      || !document
       || typeof document.getText !== "function"
       || !isGaugeStepSourceDocument(document)
       || typeof line !== "number"
@@ -9111,7 +9124,7 @@ class GaugeStepDiagnosticsProvider {
   }
 
   updateDocument(collection, document, workspaceDocuments) {
-    if (!document || !document.uri) {
+    if (this.disposed || !document || !document.uri) {
       return;
     }
     if (!this.shouldDiagnose(document)) {
@@ -9131,6 +9144,9 @@ class GaugeStepDiagnosticsProvider {
   // arbitration in the language client a map lookup instead of a second,
   // expensive analysis pass.
   rememberPublishedLines(document, diagnostics) {
+    if (this.disposed) {
+      return;
+    }
     const file = documentPath(document);
     if (!file) {
       return;
@@ -9151,6 +9167,9 @@ class GaugeStepDiagnosticsProvider {
   }
 
   publishedDiagnosticLines(document, message) {
+    if (this.disposed) {
+      return undefined;
+    }
     const lines = this.publishedLines.get(documentPath(document));
     if (!lines) {
       return undefined;
@@ -9189,6 +9208,9 @@ class GaugeStepDiagnosticsProvider {
   }
 
   workspaceDocuments() {
+    if (this.disposed) {
+      return [];
+    }
     const store = this.activeDocumentStore();
     if (store && store.isScanComplete()) {
       return store.documents();
@@ -9210,7 +9232,9 @@ class GaugeStepDiagnosticsProvider {
 
     if (this.pendingWorkspaceDocuments) {
       return this.pendingWorkspaceDocuments.then((scannedDocuments) => (
-        this.mergeWorkspaceDocuments(workspace.textDocuments, scannedDocuments)
+        this.disposed
+          ? []
+          : this.mergeWorkspaceDocuments(workspace.textDocuments, scannedDocuments)
       ));
     }
 
@@ -9238,13 +9262,25 @@ class GaugeStepDiagnosticsProvider {
         },
       ];
       for (const { matches, pattern } of documentPatterns) {
+        if (this.disposed) {
+          return [];
+        }
         let uris;
         try {
           uris = await workspace.findFiles(pattern);
         } catch (_error) {
+          if (this.disposed) {
+            return [];
+          }
           continue;
         }
+        if (this.disposed) {
+          return [];
+        }
         for (const uri of uris || []) {
+          if (this.disposed) {
+            return [];
+          }
           const file = uriPath(uri);
           if (file && seenPaths.has(file)) {
             continue;
@@ -9260,15 +9296,21 @@ class GaugeStepDiagnosticsProvider {
 
           try {
             const document = await workspace.openTextDocument(uri);
+            if (this.disposed) {
+              return [];
+            }
             if (matches(document)) {
               this.addWorkspaceDocument(documents, seenPaths, document);
             }
           } catch (_error) {
+            if (this.disposed) {
+              return [];
+            }
             // Keep diagnostics available when one workspace URI is stale or unreadable.
           }
         }
       }
-      return markWorkspaceStepImplementationScanComplete(documents);
+      return this.disposed ? [] : markWorkspaceStepImplementationScanComplete(documents);
     })();
     const pendingScan = scan.finally(() => {
       if (this.pendingWorkspaceDocuments === pendingScan) {
@@ -9280,6 +9322,9 @@ class GaugeStepDiagnosticsProvider {
   }
 
   refreshDocumentsWith(collection, workspaceDocuments) {
+    if (this.disposed) {
+      return;
+    }
     const workspace = this.vscode.workspace || {};
     for (const document of workspace.textDocuments || []) {
       this.updateDocument(collection, document, workspaceDocuments);
@@ -9288,7 +9333,8 @@ class GaugeStepDiagnosticsProvider {
 
   refreshDependencySteps(workspaceDocuments) {
     if (
-      !this.dependencyStepIndex
+      this.disposed
+      || !this.dependencyStepIndex
       || typeof this.dependencyStepIndex.refresh !== "function"
     ) {
       return undefined;
@@ -9301,16 +9347,29 @@ class GaugeStepDiagnosticsProvider {
       }
     }
     return Promise.all([...roots].map((root) => (
-      Promise.resolve(this.dependencyStepIndex.refresh(root)).catch(() => undefined)
+      this.disposed
+        ? Promise.resolve(undefined)
+        : Promise.resolve(this.dependencyStepIndex.refresh(root)).catch(() => undefined)
     )));
   }
 
   refreshDocuments(collection) {
+    if (this.disposed) {
+      return undefined;
+    }
     const workspaceDocuments = this.workspaceDocuments();
     const refresh = (documents) => {
+      if (this.disposed) {
+        return undefined;
+      }
       const dependencyRefresh = this.refreshDependencySteps(documents);
       if (dependencyRefresh && typeof dependencyRefresh.then === "function") {
-        return dependencyRefresh.then(() => this.refreshDocumentsWith(collection, documents));
+        return dependencyRefresh.then(() => {
+          if (this.disposed) {
+            return undefined;
+          }
+          return this.refreshDocumentsWith(collection, documents);
+        });
       }
       this.refreshDocumentsWith(collection, documents);
       return undefined;
@@ -9322,6 +9381,9 @@ class GaugeStepDiagnosticsProvider {
   }
 
   scheduleRefresh(collection, store, change) {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
     if (!this.pendingChanges) {
       this.pendingChanges = { files: new Set(), full: false };
     }
@@ -9335,13 +9397,16 @@ class GaugeStepDiagnosticsProvider {
       return this.pendingRefreshPromise;
     }
     this.pendingRefreshPromise = new Promise((resolve) => {
+      this.pendingRefreshResolve = resolve;
       const run = () => {
         this.refreshTimer = undefined;
         this.pendingChanges = undefined;
         try {
-          this.performScheduledRefresh(collection, store);
+          if (!this.disposed) {
+            this.performScheduledRefresh(collection, store);
+          }
         } finally {
-          resolve();
+          this.settlePendingRefresh();
         }
       };
       this.refreshTimer = setTimeout(run, this.refreshDelayMs);
@@ -9350,6 +9415,16 @@ class GaugeStepDiagnosticsProvider {
       }
     });
     return this.pendingRefreshPromise;
+  }
+
+  settlePendingRefresh() {
+    const resolve = this.pendingRefreshResolve;
+    this.pendingRefreshResolve = undefined;
+    this.pendingRefreshPromise = undefined;
+    this.pendingChanges = undefined;
+    if (resolve) {
+      resolve();
+    }
   }
 
   waitForPendingRefresh() {
@@ -9386,7 +9461,7 @@ class GaugeStepDiagnosticsProvider {
   }
 
   updateDocumentIfStale(collection, document, workspaceDocuments) {
-    if (!document || !document.uri) {
+    if (this.disposed || !document || !document.uri) {
       return;
     }
     const file = documentPath(document);
@@ -9401,6 +9476,9 @@ class GaugeStepDiagnosticsProvider {
   }
 
   performScheduledRefresh(collection, store) {
+    if (this.disposed) {
+      return;
+    }
     const workspaceDocuments = store.documents();
     const workspace = this.vscode.workspace || {};
     for (const document of workspace.textDocuments || []) {
@@ -9412,6 +9490,9 @@ class GaugeStepDiagnosticsProvider {
     const dependencyRefresh = this.refreshDependencySteps(workspaceDocuments);
     if (dependencyRefresh && typeof dependencyRefresh.then === "function") {
       dependencyRefresh.then(() => {
+        if (this.disposed) {
+          return;
+        }
         const dependencyGeneration = this.dependencyGeneration();
         if (dependencyGeneration !== this.lastDependencyGeneration) {
           this.lastDependencyGeneration = dependencyGeneration;
@@ -9422,13 +9503,18 @@ class GaugeStepDiagnosticsProvider {
   }
 
   register() {
-    if (!this.vscode.languages || typeof this.vscode.languages.createDiagnosticCollection !== "function") {
+    if (this.disposed || this.registrationDisposables !== undefined) {
       return { dispose() {} };
+    }
+    if (!this.vscode.languages || typeof this.vscode.languages.createDiagnosticCollection !== "function") {
+      this.registrationDisposables = [];
+      return { dispose: () => this.dispose() };
     }
 
     const collection = this.vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
     const workspace = this.vscode.workspace || {};
     const disposables = [collection];
+    this.registrationDisposables = disposables;
 
     let store = this.documentStore;
     if (!store) {
@@ -9445,6 +9531,9 @@ class GaugeStepDiagnosticsProvider {
 
     if (typeof workspace.onDidCloseTextDocument === "function") {
       const closeDisposable = workspace.onDidCloseTextDocument((document) => {
+        if (this.disposed) {
+          return;
+        }
         if (document && document.uri && typeof collection.delete === "function") {
           collection.delete(document.uri);
         }
@@ -9467,21 +9556,41 @@ class GaugeStepDiagnosticsProvider {
     store.start();
     this.scheduleRefresh(collection, store, undefined);
 
-    const provider = this;
     return {
-      dispose() {
-        if (provider.refreshTimer !== undefined) {
-          clearTimeout(provider.refreshTimer);
-          provider.refreshTimer = undefined;
-          provider.pendingChanges = undefined;
-        }
-        for (const disposable of disposables) {
-          if (disposable && typeof disposable.dispose === "function") {
-            disposable.dispose();
-          }
-        }
-      },
+      dispose: () => this.dispose(),
     };
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+    this.settlePendingRefresh();
+    this.pendingWorkspaceDocuments = undefined;
+    this.analysisCache = new WeakMap();
+    this.stepFunctionsCache = new WeakMap();
+    this.workspaceMemos = new WeakMap();
+    this.storeConstantsCache.clear();
+    this.storeTemplatesCache.clear();
+    this.storeDocStringsCache.clear();
+    this.lastDiagnosisKeys.clear();
+    this.publishedLines.clear();
+    this.rootGenerations.clear();
+    this.lastDependencyGeneration = undefined;
+
+    const disposables = this.registrationDisposables || [];
+    this.registrationDisposables = undefined;
+    for (const disposable of disposables) {
+      if (disposable && typeof disposable.dispose === "function") {
+        disposable.dispose();
+      }
+    }
+    this.ownedStore = undefined;
   }
 }
 
