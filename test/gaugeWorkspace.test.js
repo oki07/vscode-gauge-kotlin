@@ -233,6 +233,36 @@ class FakeLanguageClient {
   }
 }
 
+function createEmptyKotlinWorkspace(LanguageClient = FakeLanguageClient) {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const fakeVscode = createFakeVscode({ workspaceFolders: [] });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    execSync() {
+      return Buffer.from("/workspace/gauge/build/classes\n");
+    },
+    fileSystem,
+    LanguageClient,
+    pathModule: path.posix,
+    vscode: fakeVscode.vscode,
+  });
+  return { clients, workspace, ...fakeVscode };
+}
+
 test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
@@ -421,7 +451,7 @@ test("GaugeWorkspace abandons an in-flight language server start after disposal"
   assert.equal(startedClient, undefined);
   assert.equal(clients.size, 0);
   assert.equal(workspace.getClientLanguageMap().size, 0);
-  assert.equal(constructedClients.filter((client) => !client.stopped).length, 0);
+  assert.equal(constructedClients.length, 0);
 });
 
 test("GaugeWorkspace abandons a registered language server start after disposal", async () => {
@@ -477,6 +507,129 @@ test("GaugeWorkspace abandons a registered language server start after disposal"
   assert.equal(entry.client.stopped, true);
   assert.equal(clients.size, 0);
   assert.equal(workspace.getClientLanguageMap().size, 0);
+});
+
+test("GaugeWorkspace stops a client-start boundary once during disposal", async () => {
+  let markStartEntered;
+  const startEntered = new Promise((resolve) => {
+    markStartEntered = resolve;
+  });
+  let releaseStart;
+  const startGate = new Promise((resolve) => {
+    releaseStart = resolve;
+  });
+  let stopCalls = 0;
+
+  class PendingStartLanguageClient extends FakeLanguageClient {
+    start() {
+      this.started = true;
+      markStartEntered();
+      return startGate;
+    }
+
+    stop() {
+      stopCalls += 1;
+      return super.stop();
+    }
+  }
+
+  const { clients, workspace } = createEmptyKotlinWorkspace(PendingStartLanguageClient);
+  await workspace.ready();
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await startEntered;
+  const client = clients.get("/workspace/gauge").client;
+  await workspace.dispose();
+  releaseStart();
+
+  assert.equal(await start, undefined);
+  assert.equal(stopCalls, 1);
+  assert.equal(client.stopped, true);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.getClientLanguageMap().size, 0);
+});
+
+test("GaugeWorkspace rejects runner language after disposal", async () => {
+  let markLanguageRequestEntered;
+  const languageRequestEntered = new Promise((resolve) => {
+    markLanguageRequestEntered = resolve;
+  });
+  let releaseLanguageRequest;
+  const languageRequestGate = new Promise((resolve) => {
+    releaseLanguageRequest = resolve;
+  });
+  let stopCalls = 0;
+
+  class PendingLanguageClient extends FakeLanguageClient {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getRunnerLanguage");
+      markLanguageRequestEntered();
+      return languageRequestGate.then(() => "kotlin");
+    }
+
+    stop() {
+      stopCalls += 1;
+      return super.stop();
+    }
+  }
+
+  const { clients, workspace } = createEmptyKotlinWorkspace(PendingLanguageClient);
+  await workspace.ready();
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await languageRequestEntered;
+  const client = clients.get("/workspace/gauge").client;
+  await workspace.dispose();
+  releaseLanguageRequest();
+
+  assert.equal(await start, undefined);
+  assert.equal(stopCalls, 1);
+  assert.equal(client.stopped, true);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.getClientLanguageMap().size, 0);
+});
+
+test("GaugeWorkspace retries a failed stop after pending client startup settles", async () => {
+  let markStartEntered;
+  const startEntered = new Promise((resolve) => {
+    markStartEntered = resolve;
+  });
+  let releaseStart;
+  const startGate = new Promise((resolve) => {
+    releaseStart = resolve;
+  });
+  let stopCalls = 0;
+
+  class StopRetryLanguageClient extends FakeLanguageClient {
+    start() {
+      this.started = true;
+      markStartEntered();
+      return startGate;
+    }
+
+    stop() {
+      stopCalls += 1;
+      if (stopCalls === 1) {
+        return Promise.reject(new Error("still starting"));
+      }
+      return super.stop();
+    }
+  }
+
+  const { clients, errors, workspace } = createEmptyKotlinWorkspace(StopRetryLanguageClient);
+  await workspace.ready();
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  await startEntered;
+  const client = clients.get("/workspace/gauge").client;
+  await workspace.dispose();
+  releaseStart();
+
+  assert.equal(await start, undefined);
+  assert.equal(stopCalls, 2);
+  assert.equal(client.stopped, true);
+  assert.equal(clients.size, 0);
+  assert.deepEqual(errors, []);
 });
 
 test("GaugeWorkspace cancels an in-flight language server start when its folder is removed", async () => {

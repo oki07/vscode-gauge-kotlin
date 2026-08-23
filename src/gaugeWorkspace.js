@@ -348,6 +348,7 @@ class GaugeWorkspace {
     this.projectEnvironmentCache = new Map();
     this.pendingServerStarts = new Map();
     this.serverStartGenerations = new Map();
+    this.stoppedLanguageClients = new WeakSet();
     this.disposed = false;
     this.env = envWithGaugeHome(options.env || process.env, {
       vscode: this.vscode,
@@ -699,7 +700,7 @@ class GaugeWorkspace {
     this.clientLanguageMap.delete(projectRoot);
     this.projectEnvironmentCache.delete(projectRoot);
     if (projectClient.client && typeof projectClient.client.stop === "function") {
-      await projectClient.client.stop();
+      await this.stopLanguageClient(projectClient.client, false);
     }
   }
 
@@ -883,11 +884,24 @@ class GaugeWorkspace {
       this.clientLanguageMap.delete(projectRoot);
       this.projectEnvironmentCache.delete(projectRoot);
     }
-    if (languageClient && typeof languageClient.stop === "function") {
-      try {
-        await languageClient.stop();
-      } catch (_stopError) {
-        return undefined;
+    await this.stopLanguageClient(languageClient, true);
+    return undefined;
+  }
+
+  async stopLanguageClient(languageClient, suppressStopError) {
+    if (
+      !languageClient
+      || typeof languageClient.stop !== "function"
+      || this.stoppedLanguageClients.has(languageClient)
+    ) {
+      return undefined;
+    }
+    try {
+      await languageClient.stop();
+      this.stoppedLanguageClients.add(languageClient);
+    } catch (error) {
+      if (!suppressStopError) {
+        throw error;
       }
     }
     return undefined;
