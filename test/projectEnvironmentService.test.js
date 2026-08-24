@@ -117,6 +117,162 @@ test("ProjectEnvironmentService reuses Maven preparation until source inputs cha
   ]);
 });
 
+test("ProjectEnvironmentService preserves source invalidation during in-flight Maven preparation", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const buildEntered = deferred();
+  const releaseBuild = deferred();
+  const calls = [];
+  const environment = {
+    gauge_custom_classpath: "/workspace/gauge/target/test-classes",
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    executionPreparationCacheable() {
+      return true;
+    },
+    async executionEnvsAsync(_cli, cached, options) {
+      calls.push({
+        cached,
+        skipBuild: Boolean(options && options.skipBuild),
+      });
+      if (calls.length === 1) {
+        buildEntered.resolve();
+        await releaseBuild.promise;
+      }
+      return environment;
+    },
+  };
+  const { saveListeners, vscode } = createVscode();
+  const service = new ProjectEnvironmentService({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  const firstEnvironment = service.executionEnvironmentFor(project);
+  await buildEntered.promise;
+  saveListeners[0]({
+    uri: { fsPath: "/workspace/gauge/src/test/kotlin/Steps.kt" },
+  });
+  releaseBuild.resolve();
+  assert.equal(await firstEnvironment, environment);
+
+  const preparedAfterInvalidatedBuild = service.preparedExecutionRoots.has(
+    "/workspace/gauge",
+  );
+  assert.equal(await service.executionEnvironmentFor(project), environment);
+
+  assert.equal(preparedAfterInvalidatedBuild, false);
+  assert.deepEqual(calls, [
+    { cached: undefined, skipBuild: false },
+    { cached: environment, skipBuild: false },
+  ]);
+});
+
+test("ProjectEnvironmentService keeps another root prepared when one in-flight Maven build is invalidated", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const roots = ["/workspace/a", "/workspace/b"];
+  const entered = new Map(roots.map((root) => [root, deferred()]));
+  const releases = new Map(roots.map((root) => [root, deferred()]));
+  const calls = new Map(roots.map((root) => [root, []]));
+  const projects = roots.map((root) => ({
+    root() {
+      return root;
+    },
+    executionPreparationCacheable() {
+      return true;
+    },
+    async executionEnvsAsync(_cli, _cached, options) {
+      const rootCalls = calls.get(root);
+      rootCalls.push(Boolean(options && options.skipBuild));
+      if (rootCalls.length === 1) {
+        entered.get(root).resolve();
+        await releases.get(root).promise;
+      }
+      return { gauge_custom_classpath: `${root}/target/test-classes` };
+    },
+  }));
+  const { saveListeners, vscode } = createVscode();
+  const service = new ProjectEnvironmentService({
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        return roots.find((root) => file === root || file.startsWith(`${root}/`));
+      },
+    },
+    vscode,
+  });
+
+  const firstPreparations = projects.map((project) => service.executionEnvironmentFor(project));
+  await Promise.all([...entered.values()].map((gate) => gate.promise));
+  saveListeners[0]({
+    uri: { fsPath: "/workspace/a/src/test/kotlin/Steps.kt" },
+  });
+  for (const gate of releases.values()) {
+    gate.resolve();
+  }
+  await Promise.all(firstPreparations);
+
+  assert.equal(service.preparedExecutionRoots.has("/workspace/a"), false);
+  assert.equal(service.preparedExecutionRoots.has("/workspace/b"), true);
+  await Promise.all(projects.map((project) => service.executionEnvironmentFor(project)));
+  assert.deepEqual(calls.get("/workspace/a"), [false, false]);
+  assert.deepEqual(calls.get("/workspace/b"), [false, true]);
+});
+
+test("ProjectEnvironmentService keeps a newer Maven preparation after a stale build fails", async () => {
+  const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
+  const firstBuildEntered = deferred();
+  const releaseFirstBuild = deferred();
+  const skipBuilds = [];
+  const environment = {
+    gauge_custom_classpath: "/workspace/gauge/target/test-classes",
+  };
+  const project = {
+    root() {
+      return "/workspace/gauge";
+    },
+    executionPreparationCacheable() {
+      return true;
+    },
+    async executionEnvsAsync(_cli, _cached, options) {
+      skipBuilds.push(Boolean(options && options.skipBuild));
+      if (skipBuilds.length === 1) {
+        firstBuildEntered.resolve();
+        return releaseFirstBuild.promise;
+      }
+      return environment;
+    },
+  };
+  const { saveListeners, vscode } = createVscode();
+  const service = new ProjectEnvironmentService({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode,
+  });
+
+  const stalePreparation = service.executionEnvironmentFor(project);
+  await firstBuildEntered.promise;
+  saveListeners[0]({
+    uri: { fsPath: "/workspace/gauge/src/test/kotlin/Steps.kt" },
+  });
+  assert.equal(await service.executionEnvironmentFor(project), environment);
+  releaseFirstBuild.resolve({});
+  assert.equal(await stalePreparation, undefined);
+
+  assert.equal(service.preparedExecutionRoots.has("/workspace/gauge"), true);
+  assert.equal(service.cachedEnvironment("/workspace/gauge"), environment);
+  assert.equal(await service.executionEnvironmentFor(project), environment);
+  assert.deepEqual(skipBuilds, [false, false, true]);
+});
+
 test("ProjectEnvironmentService shares in-flight work and invalidates by root", async () => {
   const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
   const first = deferred();

@@ -83,6 +83,8 @@ class ProjectEnvironmentService {
     this.pending = new Map();
     this.rootGenerations = new Map();
     this.globalGeneration = 0;
+    this.executionRootGenerations = new Map();
+    this.executionGlobalGeneration = 0;
     this.invalidationListeners = new Set();
     this.disposables = [];
     this.started = false;
@@ -208,8 +210,14 @@ class ProjectEnvironmentService {
       return;
     }
     if (root) {
+      this.executionRootGenerations.set(
+        root,
+        (this.executionRootGenerations.get(root) || 0) + 1,
+      );
       this.preparedExecutionRoots.delete(root);
     } else {
+      this.executionGlobalGeneration += 1;
+      this.executionRootGenerations.clear();
       this.preparedExecutionRoots.clear();
     }
   }
@@ -331,6 +339,8 @@ class ProjectEnvironmentService {
       && project.executionPreparationCacheable(),
     );
     const skipBuild = preparationCacheable && this.preparedExecutionRoots.has(root);
+    const executionGlobalGeneration = this.executionGlobalGeneration;
+    const executionRootGeneration = this.executionRootGenerations.get(root) || 0;
     try {
       const environment = await project.executionEnvsAsync(cli, cached, { skipBuild });
       if (this.disposed) {
@@ -342,7 +352,11 @@ class ProjectEnvironmentService {
           && (this.rootGenerations.get(root) || 0) === rootGeneration
         ) {
           this.environments.set(root, environment);
-          if (preparationCacheable) {
+          if (
+            preparationCacheable
+            && this.executionGlobalGeneration === executionGlobalGeneration
+            && (this.executionRootGenerations.get(root) || 0) === executionRootGeneration
+          ) {
             this.preparedExecutionRoots.add(root);
           }
         }
@@ -354,10 +368,12 @@ class ProjectEnvironmentService {
     if (
       this.globalGeneration === globalGeneration
       && (this.rootGenerations.get(root) || 0) === rootGeneration
+      && this.executionGlobalGeneration === executionGlobalGeneration
+      && (this.executionRootGenerations.get(root) || 0) === executionRootGeneration
     ) {
       this.environments.delete(root);
+      this.preparedExecutionRoots.delete(root);
     }
-    this.preparedExecutionRoots.delete(root);
     return undefined;
   }
 
@@ -367,6 +383,7 @@ class ProjectEnvironmentService {
     }
     this.disposed = true;
     this.globalGeneration += 1;
+    this.executionGlobalGeneration += 1;
     this.invalidationListeners.clear();
     for (const disposable of this.disposables) {
       if (disposable && typeof disposable.dispose === "function") {
@@ -378,6 +395,7 @@ class ProjectEnvironmentService {
     this.preparedExecutionRoots.clear();
     this.pending.clear();
     this.rootGenerations.clear();
+    this.executionRootGenerations.clear();
   }
 }
 
