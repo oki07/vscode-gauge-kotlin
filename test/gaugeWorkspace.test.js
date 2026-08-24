@@ -2236,6 +2236,215 @@ test("GaugeWorkspace starts and stops clients as workspace folders change", asyn
   ]);
 });
 
+test("GaugeWorkspace removes every nested client when one folder-removal stop fails", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new Map();
+  const firstStopEntered = deferred();
+  const firstStopResponse = deferred();
+  const stopError = new Error("first client stop failed");
+  const stopCalls = [];
+  const roots = [
+    "/workspace/gauge/one",
+    "/workspace/gauge/two",
+    "/workspace/other/three",
+  ];
+  const { contexts, vscode, workspaceFolderListeners } = createFakeVscode({
+    workspaceFolders: [],
+  });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem: createFakeFileSystem({}),
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+  contexts.length = 0;
+
+  clients.set(roots[0], {
+    client: {
+      stop() {
+        stopCalls.push(roots[0]);
+        firstStopEntered.resolve();
+        return firstStopResponse.promise;
+      },
+    },
+    project: { root: () => roots[0] },
+  });
+  clients.set(roots[1], {
+    client: {
+      stop() {
+        stopCalls.push(roots[1]);
+        return Promise.resolve(undefined);
+      },
+    },
+    project: { root: () => roots[1] },
+  });
+  clients.set(roots[2], {
+    client: {
+      stop() {
+        stopCalls.push(roots[2]);
+        return Promise.resolve(undefined);
+      },
+    },
+    project: { root: () => roots[2] },
+  });
+  for (const root of roots) {
+    workspace.clientLanguageMap.set(root, "kotlin");
+    workspace.projectEnvironmentCache.set(root, { root });
+  }
+  const notifications = [];
+  workspace.onDidChangeProjects((projectRoot) => {
+    notifications.push(projectRoot);
+  });
+
+  const folderChange = workspaceFolderListeners[0]({
+    added: [],
+    removed: [
+      { uri: { fsPath: "/workspace/gauge" } },
+      { uri: { fsPath: "/workspace/other" } },
+    ],
+  });
+  let folderChangeSettled = false;
+  folderChange.then(
+    () => { folderChangeSettled = true; },
+    () => { folderChangeSettled = true; },
+  );
+  await firstStopEntered.promise;
+  await Promise.resolve();
+  const beforeStopSettles = {
+    clients: clients.size,
+    contexts: [...contexts],
+    environments: workspace.projectEnvironmentCache.size,
+    languages: workspace.clientLanguageMap.size,
+    notifications: [...notifications],
+    settled: folderChangeSettled,
+    stopCalls: [...stopCalls],
+  };
+  firstStopResponse.reject(stopError);
+  const [outcome] = await Promise.allSettled([folderChange]);
+
+  assert.deepEqual(beforeStopSettles, {
+    clients: 0,
+    contexts: [
+      { command: "setContext", key: "gauge:multipleProjects?", value: false },
+    ],
+    environments: 0,
+    languages: 0,
+    notifications: [undefined],
+    settled: false,
+    stopCalls: roots,
+  });
+  assert.equal(outcome.status, "fulfilled");
+  assert.deepEqual(stopCalls, roots);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.clientLanguageMap.size, 0);
+  assert.equal(workspace.projectEnvironmentCache.size, 0);
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
+  ]);
+  assert.deepEqual(notifications, [undefined]);
+  await workspace.dispose();
+});
+
+test("GaugeWorkspace reports a nested stop failure after draining folder cleanup", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new Map();
+  const stopError = new Error("nested client stop failed");
+  const stopCalls = [];
+  const roots = [
+    "/workspace/gauge/one",
+    "/workspace/gauge/two",
+  ];
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    fileSystem: createFakeFileSystem({}),
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+
+  for (const [index, root] of roots.entries()) {
+    clients.set(root, {
+      client: {
+        stop() {
+          stopCalls.push(root);
+          if (index === 0) {
+            throw stopError;
+          }
+          return Promise.resolve(undefined);
+        },
+      },
+      project: { root: () => root },
+    });
+    workspace.clientLanguageMap.set(root, "kotlin");
+  }
+
+  await assert.rejects(
+    workspace.stopServersForWorkspaceFolder("/workspace/gauge"),
+    (error) => error === stopError,
+  );
+  assert.deepEqual(stopCalls, roots);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.clientLanguageMap.size, 0);
+  await workspace.dispose();
+});
+
+test("GaugeWorkspace observes removal stops before publishing workspace state", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const contextEntered = deferred();
+  const contextResponse = deferred();
+  const stopResponse = deferred();
+  const contextError = new Error("context publication failed");
+  const stopError = new Error("client stop failed");
+  let stopObservers = 0;
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: new Map(),
+    fileSystem: createFakeFileSystem({}),
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+  workspace.stopServersForWorkspaceFolder = () => ({
+    then(resolve, reject) {
+      stopObservers += 1;
+      stopResponse.promise.then(resolve, reject);
+    },
+  });
+  workspace.setMultiProjectContext = () => {
+    contextEntered.resolve();
+    return contextResponse.promise;
+  };
+
+  const change = workspace.onWorkspaceFoldersChanged({
+    added: [],
+    removed: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const outcomePromise = Promise.allSettled([change]);
+  await contextEntered.promise;
+  await Promise.resolve();
+  const observersBeforePublicationSettles = stopObservers;
+  stopResponse.reject(stopError);
+  contextResponse.reject(contextError);
+  const [outcome] = await outcomePromise;
+
+  assert.equal(observersBeforePublicationSettles, 1);
+  assert.equal(stopObservers, 1);
+  assert.equal(outcome.status, "rejected");
+  assert.equal(outcome.reason, contextError);
+  await workspace.dispose();
+});
+
 test("GaugeWorkspace notifies project listeners after workspace folder removal", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");

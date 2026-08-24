@@ -686,13 +686,15 @@ class GaugeWorkspace {
     for (const folder of added) {
       await this.startServersForWorkspaceFolder(folder.uri.fsPath);
     }
-    for (const folder of removed) {
-      await this.stopServersForWorkspaceFolder(folder.uri.fsPath, false);
-    }
+    const removedFolderStops = removed.map((folder) => (
+      this.stopServersForWorkspaceFolder(folder.uri.fsPath, false)
+    ));
+    const removedFolderStopsSettled = Promise.allSettled(removedFolderStops);
     await this.setMultiProjectContext();
     if (this.projectRootsKey() !== beforeProjectRoots) {
       await this.notifyProjectsChanged();
     }
+    await removedFolderStopsSettled;
   }
 
   isDirectory(filename) {
@@ -808,10 +810,14 @@ class GaugeWorkspace {
       ...this.clientsMap.keys(),
       ...this.pendingServerStarts.keys(),
     ]);
-    for (const projectRoot of projectRoots) {
-      if (isInside(workspaceRoot, projectRoot, this.pathModule)) {
-        await this.stopServerFor(projectRoot);
-      }
+    const stopResults = await Promise.allSettled(
+      [...projectRoots]
+        .filter((projectRoot) => isInside(workspaceRoot, projectRoot, this.pathModule))
+        .map((projectRoot) => this.stopServerFor(projectRoot)),
+    );
+    const stopFailure = stopResults.find((result) => result.status === "rejected");
+    if (stopFailure) {
+      throw stopFailure.reason;
     }
   }
 
