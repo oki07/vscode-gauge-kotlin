@@ -2106,6 +2106,11 @@ test("ReferenceProvider includes indexed step declarations only when requested",
   const definitionCalls = [];
   const { vscode } = createFakeVscode();
   const provider = new ReferenceProvider(new GaugeClients(), {
+    dependencyStepIndex: {
+      findDefinitions() {
+        throw new Error("dependency lookup must not replace workspace declarations");
+      },
+    },
     vscode,
     workspaceStepIndex: {
       definitionEntries(sourceDocument, templates) {
@@ -2160,11 +2165,124 @@ test("ReferenceProvider includes indexed step declarations only when requested",
   ]);
 });
 
+test("ReferenceProvider includes dependency Step declarations only when requested", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const document = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/gauge/specs/request.spec",
+      toString() {
+        return "file:///workspace/gauge/specs/request.spec";
+      },
+    },
+    getText() {
+      return "* Send the \"request\"";
+    },
+  };
+  const dependencyRange = {
+    start: { line: 7, character: 2 },
+    end: { line: 7, character: 17 },
+  };
+  const dependencyUri = {
+    fsPath: "/steps/RequestSteps.send.java",
+    scheme: "gauge-dependency",
+    toString() {
+      return "gauge-dependency:/RequestSteps.send.java?entry";
+    },
+  };
+  const usage = {
+    uri: "file:///workspace/gauge/specs/request.spec",
+    range: {
+      start: { line: 0, character: 0 },
+      end: { line: 0, character: 20 },
+    },
+  };
+  const dependencyCalls = [];
+  const convertedLocations = [];
+  const { vscode } = createFakeVscode();
+  const client = {
+    protocol2CodeConverter: {
+      asLocation(location) {
+        assert.equal(typeof location.uri, "string");
+        convertedLocations.push(location);
+        return {
+          range: location.range,
+          uri: { uri: location.uri },
+        };
+      },
+    },
+    sendRequest(method) {
+      return Promise.resolve(method === "gauge/stepValueAt"
+        ? "Send the \"request\""
+        : [usage]);
+    },
+  };
+  const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+    dependencyStepIndex: {
+      dispose() {
+        throw new Error("borrowed dependency index must not be disposed");
+      },
+      findDefinitions(projectRoot, templates) {
+        dependencyCalls.push({ projectRoot, templates });
+        return [{ range: dependencyRange, uri: dependencyUri }];
+      },
+    },
+    diagnosticsProvider: {
+      gaugeProjectRoot() {
+        return "/workspace/gauge";
+      },
+    },
+    vscode,
+    workspaceStepIndex: {
+      definitionEntries() {
+        return [];
+      },
+    },
+  });
+
+  const withoutDeclarations = await provider.provideReferences(
+    document,
+    { line: 0, character: 8 },
+    { includeDeclaration: false },
+  );
+  const withDeclarations = await provider.provideReferences(
+    document,
+    { line: 0, character: 8 },
+    { includeDeclaration: true },
+  );
+
+  assert.deepEqual(plainLocations(withoutDeclarations), [usage]);
+  assert.deepEqual(plainLocations(withDeclarations), [
+    {
+      uri: "gauge-dependency:/RequestSteps.send.java?entry",
+      range: dependencyRange,
+    },
+    usage,
+  ]);
+  assert.deepEqual(dependencyCalls, [{
+    projectRoot: "/workspace/gauge",
+    templates: ["Send the {}"],
+  }]);
+  assert.deepEqual(convertedLocations.map((location) => location.uri), [
+    usage.uri,
+    dependencyUri.toString(),
+    usage.uri,
+  ]);
+  provider.dispose();
+});
+
 test("ReferenceProvider cancels pending declaration lookups", async () => {
   const { ReferenceProvider } = require("../src/gaugeReference");
   const lateError = new Error("late reference declaration lookup failed");
-  for (const trigger of ["hostCancel", "providerDispose"]) {
-    for (const settlement of ["resolve", "reject"]) {
+  const scenarios = [];
+  for (const lookupSource of ["workspace", "dependency"]) {
+    for (const trigger of ["hostCancel", "providerDispose"]) {
+      for (const settlement of ["resolve", "reject"]) {
+        scenarios.push({ lookupSource, settlement, trigger });
+      }
+    }
+  }
+  for (const { lookupSource, settlement, trigger } of scenarios) {
       const definitionGate = deferred();
       const cancellation = createCancellation();
       const sources = [];
@@ -2182,7 +2300,7 @@ test("ReferenceProvider cancels pending declaration lookups", async () => {
       };
       const { vscode } = createFakeVscode();
       trackCancellationSources(vscode, sources);
-      let definitionCalls = 0;
+      let pendingLookupCalls = 0;
       let converterCalls = 0;
       const client = {
         protocol2CodeConverter: {
@@ -2205,11 +2323,25 @@ test("ReferenceProvider cancels pending declaration lookups", async () => {
         },
       };
       const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+        dependencyStepIndex: {
+          findDefinitions() {
+            pendingLookupCalls += 1;
+            return definitionGate.promise;
+          },
+        },
+        diagnosticsProvider: {
+          gaugeProjectRoot() {
+            return "/workspace";
+          },
+        },
         vscode,
         workspaceStepIndex: {
           definitionEntries() {
-            definitionCalls += 1;
-            return definitionGate.promise;
+            if (lookupSource === "workspace") {
+              pendingLookupCalls += 1;
+              return definitionGate.promise;
+            }
+            return [];
           },
         },
       });
@@ -2244,7 +2376,7 @@ test("ReferenceProvider cancels pending declaration lookups", async () => {
       }
       await Promise.allSettled([invocation]);
 
-      assert.equal(definitionCalls, 1);
+      assert.equal(pendingLookupCalls, 1);
       assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
       assert.equal(converterCalls, 0);
       assert.equal(provider.activeOperations.size, 0);
@@ -2252,14 +2384,12 @@ test("ReferenceProvider cancels pending declaration lookups", async () => {
       assert.equal(cancellation.registrations(), 1);
       assert.equal(cancellation.listenerDisposals(), 1);
       assert.equal(cancellation.listenerCount(), 0);
-    }
   }
 });
 
 test("ReferenceProvider preserves live declaration lookup failures", async () => {
   const { ReferenceProvider } = require("../src/gaugeReference");
   const expectedError = new Error("reference declaration lookup failed");
-  const cancellation = createCancellation();
   const document = {
     languageId: "gauge",
     uri: {
@@ -2281,32 +2411,45 @@ test("ReferenceProvider preserves live declaration lookup failures", async () =>
       return Promise.resolve([]);
     },
   };
-  const provider = new ReferenceProvider({ get: () => ({ client }) }, {
-    vscode,
-    workspaceStepIndex: {
-      definitionEntries() {
-        return Promise.reject(expectedError);
+  for (const lookupSource of ["workspace", "dependency"]) {
+    const cancellation = createCancellation();
+    const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+      dependencyStepIndex: {
+        findDefinitions() {
+          return Promise.reject(expectedError);
+        },
       },
-      referenceLocations() {
-        return [];
+      diagnosticsProvider: {
+        gaugeProjectRoot() {
+          return "/workspace";
+        },
       },
-    },
-  });
+      vscode,
+      workspaceStepIndex: {
+        definitionEntries() {
+          return lookupSource === "workspace" ? Promise.reject(expectedError) : [];
+        },
+        referenceLocations() {
+          return [];
+        },
+      },
+    });
 
-  await assert.rejects(
-    provider.provideReferences(
-      document,
-      { line: 0, character: 4 },
-      { includeDeclaration: true },
-      cancellation.token,
-    ),
-    (error) => error === expectedError,
-  );
+    await assert.rejects(
+      provider.provideReferences(
+        document,
+        { line: 0, character: 4 },
+        { includeDeclaration: true },
+        cancellation.token,
+      ),
+      (error) => error === expectedError,
+    );
 
-  assert.equal(provider.activeOperations.size, 0);
-  assert.equal(cancellation.registrations(), 1);
-  assert.equal(cancellation.listenerDisposals(), 1);
-  assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
 });
 
 test("ReferenceProvider accepts plaintext .cpt concept headings for local references", async () => {

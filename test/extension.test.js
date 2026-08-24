@@ -2988,6 +2988,10 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
   assert.equal(created.referenceProvider.clients, created.clientsMap);
   assert.equal(created.referenceProvider.options.vscode, fakeVscode);
   assert.equal(created.referenceProvider.options.projectFactory, created.workspace.options.projectFactory);
+  assert.equal(
+    created.referenceProvider.options.dependencyStepIndex,
+    created.dependencyStepIndex,
+  );
   assert.equal(created.workspaceStepIndex.startCalls, 1);
   assert.equal(created.workspaceStepIndex.diagnosticsProvider, created.stepDiagnosticsProvider);
   assert.equal(

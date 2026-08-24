@@ -540,6 +540,27 @@ function locationsOverlap(left, right) {
     && comparePositions(rightRange.start, leftRange.end) <= 0;
 }
 
+function protocolLocation(location) {
+  const uri = locationUriText(location);
+  const range = location && location.range;
+  if (!uri || !range || !range.start || !range.end) {
+    return undefined;
+  }
+  return {
+    uri,
+    range: {
+      start: {
+        line: range.start.line,
+        character: range.start.character,
+      },
+      end: {
+        line: range.end.line,
+        character: range.end.character,
+      },
+    },
+  };
+}
+
 function uniqueLocations(locations) {
   const result = [];
   const seen = new Set();
@@ -910,6 +931,7 @@ function localGaugeStepReferences(document, targetTemplate, options = {}) {
 class ReferenceProvider {
   constructor(clients, options = {}) {
     this.clients = clients;
+    this.dependencyStepIndex = options.dependencyStepIndex;
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.vscode = getVscode(options.vscode);
@@ -1631,7 +1653,13 @@ class ReferenceProvider {
     );
   }
 
-  async definitionLocationsForOperation(operation, document, position, stepValues) {
+  async definitionLocationsForOperation(
+    operation,
+    document,
+    position,
+    stepValues,
+    includeDependencies,
+  ) {
     const sourceDeclaration = this.callSyncForOperation(
       operation,
       () => conceptDeclarationLocationAt(document, position),
@@ -1642,37 +1670,81 @@ class ReferenceProvider {
     if (sourceDeclaration) {
       return [sourceDeclaration];
     }
-    if (
-      !this.workspaceStepIndex
-      || typeof this.workspaceStepIndex.definitionEntries !== "function"
-    ) {
-      return [];
-    }
     const templates = valuesForStep(stepValues);
     if (templates.length === 0) {
       return [];
     }
-    const indexedEntries = await this.callForOperation(
+    const locations = [];
+    if (
+      this.workspaceStepIndex
+      && typeof this.workspaceStepIndex.definitionEntries === "function"
+    ) {
+      const indexedEntries = await this.callForOperation(
+        operation,
+        () => this.workspaceStepIndex.definitionEntries(document, templates),
+      );
+      if (indexedEntries === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      for (const indexedEntry of indexedEntries || []) {
+        const location = this.callSyncForOperation(
+          operation,
+          () => indexedDefinitionLocation(indexedEntry),
+        );
+        if (location === CANCELLED_REFERENCE_OPERATION) {
+          return CANCELLED_REFERENCE_OPERATION;
+        }
+        if (location) {
+          locations.push(location);
+        }
+      }
+    }
+    const workspaceLocations = uniqueLocations(locations);
+    if (
+      workspaceLocations.length > 0
+      || !includeDependencies
+      || !this.dependencyStepIndex
+      || typeof this.dependencyStepIndex.findDefinitions !== "function"
+    ) {
+      return workspaceLocations;
+    }
+    const sourceRoot = this.callSyncForOperation(
       operation,
-      () => this.workspaceStepIndex.definitionEntries(document, templates),
+      () => this.sourceGaugeProjectRoot({ sourceDocument: document }),
     );
-    if (indexedEntries === CANCELLED_REFERENCE_OPERATION) {
+    if (sourceRoot === CANCELLED_REFERENCE_OPERATION) {
       return CANCELLED_REFERENCE_OPERATION;
     }
-    const locations = [];
-    for (const indexedEntry of indexedEntries || []) {
+    if (!sourceRoot) {
+      return workspaceLocations;
+    }
+    const normalizedTemplates = uniqueValues(
+      templates.map((template) => normalizeReferenceStepValue(template)).filter(Boolean),
+    );
+    if (normalizedTemplates.length === 0) {
+      return workspaceLocations;
+    }
+    const dependencyDefinitions = await this.callForOperation(
+      operation,
+      () => this.dependencyStepIndex.findDefinitions(sourceRoot, normalizedTemplates),
+    );
+    if (dependencyDefinitions === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const dependencyLocations = [];
+    for (const definition of dependencyDefinitions || []) {
       const location = this.callSyncForOperation(
         operation,
-        () => indexedDefinitionLocation(indexedEntry),
+        () => protocolLocation(definition),
       );
       if (location === CANCELLED_REFERENCE_OPERATION) {
         return CANCELLED_REFERENCE_OPERATION;
       }
       if (location) {
-        locations.push(location);
+        dependencyLocations.push(location);
       }
     }
-    return uniqueLocations(locations);
+    return uniqueLocations(dependencyLocations);
   }
 
   referenceLocationsWithDeclaration(locations, declarations, includeDeclaration) {
@@ -1717,6 +1789,7 @@ class ReferenceProvider {
         document,
         position,
         stepValues,
+        includeDeclaration === true,
       );
     if (declarations === CANCELLED_REFERENCE_OPERATION) {
       return CANCELLED_REFERENCE_OPERATION;

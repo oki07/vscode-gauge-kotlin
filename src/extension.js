@@ -1092,6 +1092,7 @@ function startGaugeServices(context, vscode, options = {}) {
     return undefined;
   }
   const referenceProvider = new ReferenceProviderCtor(clientsMap, {
+    dependencyStepIndex,
     documentStore,
     projectFactory,
     vscode,
