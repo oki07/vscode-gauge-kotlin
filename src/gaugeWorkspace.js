@@ -73,6 +73,21 @@ function isActiveGaugeWorkspaceDocument(document) {
     && MARKDOWN_SPEC_FILE_PATTERN.test(file);
 }
 
+function isLocalGaugeCompletionDocument(document) {
+  if (!document) {
+    return false;
+  }
+  if (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE) {
+    return true;
+  }
+  const file = documentPath(document);
+  if (SPEC_FILE_PATTERN.test(file) || CONCEPT_FILE_PATTERN.test(file)) {
+    return true;
+  }
+  return document.languageId === MARKDOWN_LANGUAGE
+    && MARKDOWN_SPEC_FILE_PATTERN.test(file);
+}
+
 function getLanguageClientModule(options) {
   if (options.LanguageClient) {
     return {
@@ -273,6 +288,12 @@ function clientMiddleware(options = {}) {
   return {
     provideCodeLenses() {
       return [];
+    },
+    provideCompletionItem(document, position, context, token, next) {
+      if (isLocalGaugeCompletionDocument(document)) {
+        return [];
+      }
+      return next(document, position, context, token);
     },
     provideCodeActions(document, range, context, token, next) {
       const diagnostics = context && Array.isArray(context.diagnostics)

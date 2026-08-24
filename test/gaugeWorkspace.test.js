@@ -1332,6 +1332,85 @@ test("clientMiddleware suppresses LSP code lenses owned by the local provider", 
   assert.equal(remoteCalls, 0);
 });
 
+test("clientMiddleware suppresses LSP completions owned by the composite local provider", async () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const position = { line: 2, character: 5 };
+  const context = { triggerCharacter: " ", triggerKind: 2 };
+  const token = { marker: "completion-token" };
+  let remoteCalls = 0;
+  const middleware = clientMiddleware({
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+  });
+
+  for (const document of [
+    { languageId: "gauge", uri: { fsPath: "/workspace/gauge/specs/example" } },
+    { languageId: "gauge-concept", uri: { fsPath: "/workspace/gauge/concepts/example" } },
+    { languageId: "plaintext", uri: { fsPath: "/workspace/gauge/specs/example.spec" } },
+    { languageId: "plaintext", uri: { fsPath: "/workspace/gauge/concepts/example.cpt" } },
+    { languageId: "markdown", uri: { fsPath: "/workspace/gauge/specs/example.md" } },
+  ]) {
+    const result = middleware.provideCompletionItem(
+      document,
+      position,
+      context,
+      token,
+      () => {
+        remoteCalls += 1;
+        return Promise.resolve([{ label: "Remote completion" }]);
+      },
+    );
+
+    assert.deepEqual(result, []);
+  }
+  assert.equal(remoteCalls, 0);
+});
+
+test("clientMiddleware forwards LSP completions outside local Gauge ownership", async () => {
+  const { clientMiddleware } = require("../src/gaugeWorkspace");
+  const position = { line: 2, character: 5 };
+  const context = { triggerCharacter: ".", triggerKind: 2 };
+  const token = { marker: "completion-token" };
+  const remote = {
+    isIncomplete: true,
+    items: [{ label: "Runner completion" }],
+  };
+  const forwarded = [];
+  const middleware = clientMiddleware({
+    stepDefinitionProvider: {
+      provideDefinition() {
+        return Promise.resolve([]);
+      },
+    },
+  });
+
+  for (const document of [
+    { languageId: "kotlin", uri: { fsPath: "/workspace/gauge/src/Steps.kt" } },
+    { languageId: "java", uri: { fsPath: "/workspace/gauge/src/Steps.java" } },
+  ]) {
+    const result = await middleware.provideCompletionItem(
+      document,
+      position,
+      context,
+      token,
+      (...args) => {
+        forwarded.push(args);
+        return remote;
+      },
+    );
+
+    assert.equal(result, remote);
+  }
+
+  assert.deepEqual(forwarded, [
+    [{ languageId: "kotlin", uri: { fsPath: "/workspace/gauge/src/Steps.kt" } }, position, context, token],
+    [{ languageId: "java", uri: { fsPath: "/workspace/gauge/src/Steps.java" } }, position, context, token],
+  ]);
+});
+
 test("clientMiddleware separates local and runner step code action ownership", async () => {
   const { clientMiddleware } = require("../src/gaugeWorkspace");
   const forwarded = [];
