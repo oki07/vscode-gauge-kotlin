@@ -263,6 +263,89 @@ test("CLI preserves the version manifest when installation or refresh fails", as
   }
 });
 
+test("CLI settles plugin installation when the Gauge process emits an error", async () => {
+  const { CLI } = require("../src/cli");
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const outputLines = [];
+  let probeCalls = 0;
+  const cli = new CLI({
+    spawn() {
+      return child;
+    },
+    spawnSync() {
+      probeCalls += 1;
+      return {
+        status: 0,
+        stdout: Buffer.from(JSON.stringify({ version: "1.3.0", plugins: [] })),
+      };
+    },
+  }, {
+    version: "1.2.3",
+    plugins: [{ name: "kotlin", version: "0.9.0" }],
+  });
+  const installation = cli.installGaugeRunner("spectacle", {
+    vscode: {
+      window: {
+        createOutputChannel() {
+          return {
+            appendLine(line) {
+              outputLines.push(line);
+            },
+            clear() {},
+            show() {},
+          };
+        },
+      },
+    },
+  });
+  const processError = new Error("gauge install spawn failed");
+
+  assert.equal(child.listenerCount("error"), 1);
+  assert.doesNotThrow(() => child.emit("error", processError));
+  assert.equal(await installation, false);
+  assert.equal(probeCalls, 0);
+  assert.ok(outputLines.includes(processError.message));
+  assert.equal(child.listenerCount("error"), 0);
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(child.stdout.listenerCount("data"), 0);
+  assert.equal(child.stderr.listenerCount("data"), 0);
+
+  child.emit("exit", 0);
+  await Promise.resolve();
+  assert.equal(probeCalls, 0);
+});
+
+test("CLI preserves synchronous plugin installation spawn errors", async () => {
+  const { CLI } = require("../src/cli");
+  const spawnError = new Error("gauge install did not start");
+  let probeCalls = 0;
+  const cli = new CLI({
+    spawn() {
+      throw spawnError;
+    },
+    spawnSync() {
+      probeCalls += 1;
+      return { status: 0, stdout: Buffer.from("") };
+    },
+  }, {});
+
+  await assert.rejects(
+    cli.installGaugeRunner("spectacle", {
+      vscode: {
+        window: {
+          createOutputChannel() {
+            return { appendLine() {}, clear() {}, show() {} };
+          },
+        },
+      },
+    }),
+    (error) => error === spawnError,
+  );
+  assert.equal(probeCalls, 0);
+});
+
 test("CLI parses Gauge machine-readable version output with deprecated warnings", () => {
   const { CLI, Command } = require("../src/cli");
   const errors = [];

@@ -160,9 +160,24 @@ class CLI {
 
     return new Promise((resolve) => {
       const child = this.command.spawn([GAUGE_INSTALL_ARG, language], { env });
-      child.stdout.on("data", (chunk) => output.appendOutBuf(chunk.toString()));
-      child.stderr.on("data", (chunk) => output.appendErrBuf(chunk.toString()));
-      child.on("exit", (code) => {
+      const onStdout = (chunk) => output.appendOutBuf(chunk.toString());
+      const onStderr = (chunk) => output.appendErrBuf(chunk.toString());
+      let finished = false;
+      const cleanup = () => {
+        child.stdout.removeListener("data", onStdout);
+        child.stderr.removeListener("data", onStderr);
+        child.removeListener("error", onError);
+        child.removeListener("exit", onExit);
+      };
+      const finish = (code, error) => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        cleanup();
+        if (error) {
+          output.appendErrBuf(error.message || String(error));
+        }
         if (code === 0) {
           this.refreshGaugeVersionManifest(env);
         }
@@ -173,7 +188,13 @@ class CLI {
           "\nRefer to https://docs.gauge.org/plugin.html to install manually",
           false,
         );
-      });
+      };
+      const onError = (error) => finish(1, error);
+      const onExit = (code) => finish(code);
+      child.stdout.on("data", onStdout);
+      child.stderr.on("data", onStderr);
+      child.on("error", onError);
+      child.on("exit", onExit);
     });
   }
 
