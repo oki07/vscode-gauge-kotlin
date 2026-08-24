@@ -27,6 +27,7 @@ const TEST_UI_RUN_FLAGS = {
   testUi: true,
 };
 const NON_GAUGE_PROJECT_ROOT = Symbol("nonGaugeProjectRoot");
+const CANCELLED_EXECUTION = Symbol("cancelledExecution");
 const DISPOSED_EXECUTION = Symbol("disposedExecution");
 const DEFAULT_SCENARIO_REQUEST_CONCURRENCY = 8;
 
@@ -1114,25 +1115,117 @@ class GaugeTestController {
 
   createRunContext(request) {
     const context = {
+      activeCommand: undefined,
       cancelled: false,
       cancellationDisposable: undefined,
       ended: false,
+      hostCancellationRequested: false,
       request,
       run: undefined,
     };
-    context.metadata = {
+    this.executionRunContexts.add(context);
+    return context;
+  }
+
+  createExecutionCommand(context) {
+    let resolveCancellation;
+    const command = {
+      cancellationPromise: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      resolveCancellation,
+      settled: false,
+      started: false,
+      stopRequested: false,
+    };
+    command.metadata = {
+      isCancellationRequested: () => (
+        this.disposed
+        || !context
+        || context.ended
+        || context.hostCancellationRequested
+      ),
       onCancelled: () => {
         context.cancelled = true;
+        this.cancelExecutionCommand(context, command);
       },
       onStart: () => {
-        this.activateRunContext(context);
+        this.startExecutionCommand(context, command);
       },
       onSuperseded: () => {
         context.cancelled = true;
+        this.cancelExecutionCommand(context, command);
       },
     };
-    this.executionRunContexts.add(context);
-    return context;
+    context.activeCommand = command;
+    return command;
+  }
+
+  resolveExecutionCommand(command, value = CANCELLED_EXECUTION) {
+    if (!command || !command.resolveCancellation) {
+      return;
+    }
+    const resolveCancellation = command.resolveCancellation;
+    command.resolveCancellation = undefined;
+    resolveCancellation(value);
+  }
+
+  cancelExecutionCommand(context, command) {
+    if (!command || command.settled || context.activeCommand !== command) {
+      return;
+    }
+    if (command.started) {
+      command.stopRequested = true;
+      return;
+    }
+    this.resolveExecutionCommand(command);
+  }
+
+  stopExecutionCommand(context, command) {
+    if (
+      this.disposed
+      || !context
+      || context.ended
+      || context.activeCommand !== command
+      || !command.started
+      || !context.hostCancellationRequested
+      || command.stopRequested
+    ) {
+      return;
+    }
+    command.stopRequested = true;
+    this.stopExecution();
+  }
+
+  startExecutionCommand(context, command) {
+    if (
+      this.disposed
+      || !context
+      || context.ended
+      || context.activeCommand !== command
+      || command.settled
+      || command.started
+    ) {
+      return;
+    }
+    command.started = true;
+    if (context.hostCancellationRequested) {
+      this.stopExecutionCommand(context, command);
+      return;
+    }
+    this.activateRunContext(context);
+  }
+
+  finishExecutionCommand(context, command) {
+    if (!command || command.settled) {
+      return;
+    }
+    command.settled = true;
+    command.started = false;
+    this.resolveExecutionCommand(command);
+    if (context && context.activeCommand === command) {
+      context.activeCommand = undefined;
+    }
   }
 
   releaseRunCancellation(context) {
@@ -1171,6 +1264,7 @@ class GaugeTestController {
     const run = context.run;
     const wasActive = this.activeRunContext === context;
     context.ended = true;
+    this.finishExecutionCommand(context, context.activeCommand);
     context.request = undefined;
     context.run = undefined;
     if (wasActive) {
@@ -1186,39 +1280,58 @@ class GaugeTestController {
   }
 
   handleExecutionCommand(context, command, ...args) {
-    if (this.disposed || !context || context.ended || !this.executionController) {
+    if (
+      this.disposed
+      || !context
+      || context.ended
+      || context.hostCancellationRequested
+      || !this.executionController
+    ) {
       return DISPOSED_EXECUTION;
     }
+    const executionCommand = this.createExecutionCommand(context);
     let commandResult;
     try {
       if (typeof this.executionController.handleCommandWithMetadata === "function") {
         commandResult = this.executionController.handleCommandWithMetadata(
           command,
-          context.metadata,
+          executionCommand.metadata,
           ...args,
         );
       } else {
         this.activateRunContext(context);
+        if (this.disposed || context.ended || context.cancelled) {
+          this.finishExecutionCommand(context, executionCommand);
+          return DISPOSED_EXECUTION;
+        }
         commandResult = this.executionController.handleCommand(command, ...args);
+        this.startExecutionCommand(context, executionCommand);
       }
     } catch (error) {
-      if (this.disposed || context.ended) {
+      this.finishExecutionCommand(context, executionCommand);
+      if (this.disposed || context.ended || context.hostCancellationRequested) {
         return DISPOSED_EXECUTION;
       }
       throw error;
     }
-    const observedResult = Promise.resolve(commandResult);
+    const observedResult = Promise.resolve(commandResult).catch((error) => {
+      if (this.disposed || context.ended || context.cancelled) {
+        return CANCELLED_EXECUTION;
+      }
+      throw error;
+    });
     if (this.disposed || context.ended) {
       observedResult.catch(() => {});
+      this.finishExecutionCommand(context, executionCommand);
       return DISPOSED_EXECUTION;
     }
-    if (!this.executionDisposalPromise) {
-      return observedResult;
+    const outcomes = [observedResult, executionCommand.cancellationPromise];
+    if (this.executionDisposalPromise) {
+      outcomes.push(this.executionDisposalPromise);
     }
-    return Promise.race([
-      observedResult,
-      this.executionDisposalPromise,
-    ]);
+    return Promise.race(outcomes).finally(() => {
+      this.finishExecutionCommand(context, executionCommand);
+    });
   }
 
   runContextCancelled(context, token) {
@@ -1355,8 +1468,14 @@ class GaugeTestController {
       cancelled = true;
       if (context) {
         context.cancelled = true;
+        context.hostCancellationRequested = true;
+        const executionCommand = context.activeCommand;
+        if (executionCommand && executionCommand.started) {
+          this.stopExecutionCommand(context, executionCommand);
+        } else {
+          this.resolveExecutionCommand(executionCommand);
+        }
       }
-      this.stopExecution();
     };
     const disposable = token.onCancellationRequested(cancel);
     if (context) {

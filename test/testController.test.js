@@ -2015,7 +2015,312 @@ test("GaugeTestController releases run cancellation synchronously and only once"
   assert.equal(cancellation.disposalCalls, 1);
   assert.equal(preCancelledRegistrations, 1);
   assert.equal(preCancelledDisposals, 1);
-  assert.deepEqual(secondExecutionCalls, ["gauge.stopExecution"]);
+  assert.deepEqual(secondExecutionCalls, []);
+  assert.equal(secondController.executionRunContexts.size, 0);
+});
+
+test("GaugeTestController defers prestart cancellation until the Test UI execution starts", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const cancellation = createCancellationToken();
+  const { calls, vscode } = createFakeVscode();
+  const stopCalls = [];
+  let retainedMetadata;
+  const gaugeTests = new GaugeTestController({
+    executionController: {
+      handleCommand(command) {
+        stopCalls.push(command);
+        return Promise.resolve(undefined);
+      },
+      handleCommandWithMetadata(_command, metadata) {
+        retainedMetadata = metadata;
+        executionEntered.resolve();
+        return executionResponse.promise;
+      },
+    },
+    vscode,
+  });
+  gaugeTests.register();
+
+  const pendingRun = gaugeTests.run({}, cancellation.token);
+  await executionEntered.promise;
+  cancellation.cancel();
+  const stopCallsBeforeStart = [...stopCalls];
+  retainedMetadata.onStart();
+  retainedMetadata.onStart();
+  cancellation.cancel();
+  const stopCallsAfterStart = [...stopCalls];
+  executionResponse.resolve(undefined);
+  await pendingRun;
+
+  assert.deepEqual(stopCallsBeforeStart, []);
+  assert.deepEqual(stopCallsAfterStart, ["gauge.stopExecution"]);
+  assert.equal(cancellation.registrationCalls, 1);
+  assert.equal(cancellation.disposalCalls, 1);
+  assert.equal(cancellation.listenerCount, 0);
+  assert.equal(gaugeTests.executionRunContexts.size, 0);
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 0);
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 0);
+});
+
+test("GaugeTestController detaches cancelled prestart commands from borrowed work", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const cancellation = createCancellationToken();
+  const lateError = new Error("late prestart execution failure");
+  const outcomes = [];
+  const stopCalls = [];
+  let retainedMetadata;
+  const gaugeTests = new GaugeTestController({
+    executionController: {
+      handleCommand(command) {
+        stopCalls.push(command);
+        return Promise.resolve(undefined);
+      },
+      handleCommandWithMetadata(_command, metadata) {
+        retainedMetadata = metadata;
+        executionEntered.resolve();
+        return executionResponse.promise;
+      },
+    },
+    vscode: createFakeVscode().vscode,
+  });
+  gaugeTests.register();
+
+  const pendingRun = gaugeTests.run({}, cancellation.token);
+  pendingRun.then(
+    (value) => outcomes.push({ status: "fulfilled", value }),
+    (reason) => outcomes.push({ reason, status: "rejected" }),
+  );
+  await executionEntered.promise;
+  cancellation.cancel();
+  await drainMicrotasks();
+  const stateBeforeLateWork = {
+    activeContexts: gaugeTests.executionRunContexts.size,
+    cancellationDisposals: cancellation.disposalCalls,
+    cancellationListeners: cancellation.listenerCount,
+    metadataCancelled: retainedMetadata.isCancellationRequested(),
+    outcomes: [...outcomes],
+    stopCalls: [...stopCalls],
+  };
+
+  retainedMetadata.onStart();
+  executionResponse.reject(lateError);
+  await drainMicrotasks();
+
+  assert.deepEqual(stateBeforeLateWork, {
+    activeContexts: 0,
+    cancellationDisposals: 1,
+    cancellationListeners: 0,
+    metadataCancelled: true,
+    outcomes: [{ status: "fulfilled", value: undefined }],
+    stopCalls: [],
+  });
+  assert.deepEqual(outcomes, [{ status: "fulfilled", value: undefined }]);
+  assert.deepEqual(stopCalls, []);
+});
+
+test("GaugeTestController scopes prestart cancellation to the current project command", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const secondCommandEntered = deferred();
+  const secondCommandResponse = deferred();
+  const cancellation = createCancellationToken();
+  const stopCalls = [];
+  let commandCalls = 0;
+  let secondMetadata;
+  const gaugeTests = new GaugeTestController({
+    clientsMap: new Map([
+      ["/workspace/one", { client: {} }],
+      ["/workspace/two", { client: {} }],
+    ]),
+    executionController: {
+      handleCommand(command) {
+        stopCalls.push(command);
+        return Promise.resolve(undefined);
+      },
+      handleCommandWithMetadata(_command, metadata) {
+        commandCalls += 1;
+        if (commandCalls === 1) {
+          metadata.onStart();
+          return Promise.resolve(undefined);
+        }
+        secondMetadata = metadata;
+        secondCommandEntered.resolve();
+        return secondCommandResponse.promise;
+      },
+    },
+    vscode: createFakeVscode().vscode,
+  });
+  gaugeTests.register();
+
+  const pendingRun = gaugeTests.run({}, cancellation.token);
+  await secondCommandEntered.promise;
+  cancellation.cancel();
+  const stopCallsBeforeSecondStart = [...stopCalls];
+  secondMetadata.onStart();
+  const stopCallsAfterSecondStart = [...stopCalls];
+  secondCommandResponse.resolve(undefined);
+  await pendingRun;
+
+  assert.deepEqual(stopCallsBeforeSecondStart, []);
+  assert.deepEqual(stopCallsAfterSecondStart, ["gauge.stopExecution"]);
+  assert.equal(commandCalls, 2);
+  assert.equal(cancellation.disposalCalls, 1);
+  assert.equal(gaugeTests.executionRunContexts.size, 0);
+});
+
+test("GaugeTestController releases execution ownership after scheduler cancellation", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  for (const callback of ["onCancelled", "onSuperseded"]) {
+    const executionEntered = deferred();
+    const executionResponse = deferred();
+    const cancellation = createCancellationToken();
+    const stopCalls = [];
+    let retainedMetadata;
+    const gaugeTests = new GaugeTestController({
+      executionController: {
+        handleCommand(command) {
+          stopCalls.push(command);
+          return Promise.resolve(undefined);
+        },
+        handleCommandWithMetadata(_command, metadata) {
+          retainedMetadata = metadata;
+          executionEntered.resolve();
+          return executionResponse.promise;
+        },
+      },
+      vscode: createFakeVscode().vscode,
+    });
+    gaugeTests.register();
+
+    const pendingRun = gaugeTests.run({}, cancellation.token);
+    await executionEntered.promise;
+    retainedMetadata.onStart();
+    retainedMetadata[callback]();
+    cancellation.cancel();
+    executionResponse.resolve(undefined);
+    await pendingRun;
+
+    assert.deepEqual(stopCalls, []);
+    assert.equal(cancellation.disposalCalls, 1);
+    assert.equal(cancellation.listenerCount, 0);
+    assert.equal(gaugeTests.executionRunContexts.size, 0);
+  }
+});
+
+test("GaugeTestController waits for active execution cancellation to settle", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const cancellation = createCancellationToken();
+  const outcomes = [];
+  const stopCalls = [];
+  const { calls, vscode } = createFakeVscode();
+  let gaugeTests;
+  let retainedMetadata;
+  gaugeTests = new GaugeTestController({
+    executionController: {
+      handleCommand(command) {
+        stopCalls.push(command);
+        retainedMetadata.onCancelled();
+        return Promise.resolve(undefined);
+      },
+      handleCommandWithMetadata(_command, metadata) {
+        retainedMetadata = metadata;
+        metadata.onStart();
+        gaugeTests.handleExecutionEvent({ type: "processStarted" });
+        executionEntered.resolve();
+        return executionResponse.promise;
+      },
+    },
+    vscode,
+  });
+  gaugeTests.register();
+
+  const pendingRun = gaugeTests.run({}, cancellation.token);
+  pendingRun.then(
+    (value) => outcomes.push({ status: "fulfilled", value }),
+    (reason) => outcomes.push({ reason, status: "rejected" }),
+  );
+  await executionEntered.promise;
+  cancellation.cancel();
+  await drainMicrotasks();
+  const stateBeforeExecutionSettles = {
+    activeContexts: gaugeTests.executionRunContexts.size,
+    cancellationDisposals: cancellation.disposalCalls,
+    cancellationListeners: cancellation.listenerCount,
+    endCalls: calls.filter((entry) => entry[0] === "end").length,
+    outcomes: [...outcomes],
+  };
+
+  executionResponse.resolve(undefined);
+  await pendingRun;
+
+  assert.deepEqual(stateBeforeExecutionSettles, {
+    activeContexts: 1,
+    cancellationDisposals: 0,
+    cancellationListeners: 1,
+    endCalls: 0,
+    outcomes: [],
+  });
+  assert.deepEqual(outcomes, [{ status: "fulfilled", value: undefined }]);
+  assert.deepEqual(stopCalls, ["gauge.stopExecution"]);
+  assert.equal(cancellation.disposalCalls, 1);
+  assert.equal(cancellation.listenerCount, 0);
+  assert.equal(gaugeTests.executionRunContexts.size, 0);
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+});
+
+test("GaugeTestController normalizes active execution cancellation failures", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const cancellation = createCancellationToken();
+  const executionError = new Error("cancelled execution failed");
+  const outcomes = [];
+  const { calls, vscode } = createFakeVscode();
+  let gaugeTests;
+  let retainedMetadata;
+  gaugeTests = new GaugeTestController({
+    executionController: {
+      handleCommand() {
+        retainedMetadata.onCancelled();
+        return Promise.resolve(undefined);
+      },
+      handleCommandWithMetadata(_command, metadata) {
+        retainedMetadata = metadata;
+        metadata.onStart();
+        gaugeTests.handleExecutionEvent({ type: "processStarted" });
+        executionEntered.resolve();
+        return executionResponse.promise;
+      },
+    },
+    vscode,
+  });
+  gaugeTests.register();
+
+  const pendingRun = gaugeTests.run({}, cancellation.token);
+  pendingRun.then(
+    (value) => outcomes.push({ status: "fulfilled", value }),
+    (reason) => outcomes.push({ reason, status: "rejected" }),
+  );
+  await executionEntered.promise;
+  cancellation.cancel();
+  await drainMicrotasks();
+  const endCallsBeforeExecutionSettles = calls.filter((entry) => entry[0] === "end").length;
+  executionResponse.reject(executionError);
+  await pendingRun;
+
+  assert.equal(endCallsBeforeExecutionSettles, 0);
+  assert.deepEqual(outcomes, [{ status: "fulfilled", value: undefined }]);
+  assert.equal(cancellation.disposalCalls, 1);
+  assert.equal(cancellation.listenerCount, 0);
+  assert.equal(gaugeTests.executionRunContexts.size, 0);
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
 });
 
 test("GaugeTestController preserves live execution failures and releases run ownership", async () => {

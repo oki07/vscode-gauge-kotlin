@@ -983,6 +983,17 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
+  function executionRequestCancelled(metadata) {
+    if (!metadata || typeof metadata.isCancellationRequested !== "function") {
+      return false;
+    }
+    try {
+      return Boolean(metadata.isCancellationRequested());
+    } catch (_error) {
+      return true;
+    }
+  }
+
   function replacePendingExecution(request) {
     if (pendingExecutionRequest) {
       notifyExecutionRequest(pendingExecutionRequest, "onSuperseded");
@@ -995,6 +1006,12 @@ function createGaugeExecutionController(options = {}) {
     while (pendingExecutionRequest) {
       const request = pendingExecutionRequest;
       pendingExecutionRequest = undefined;
+      if (executionRequestCancelled(request.metadata)) {
+        notifyExecutionRequest(request, "onCancelled");
+        settleExecutionRequest(request, "resolve", undefined);
+        await Promise.resolve();
+        continue;
+      }
       activeExecutionRequest = request;
       try {
         notifyExecutionRequest(request, "onStart");
@@ -1017,8 +1034,13 @@ function createGaugeExecutionController(options = {}) {
   }
 
   function executeInProject(projectRoot, spec, flags = {}) {
+    const metadata = flags[EXECUTION_METADATA];
+    if (executionRequestCancelled(metadata)) {
+      notifyExecutionRequest({ metadata }, "onCancelled");
+      return Promise.resolve(undefined);
+    }
     if (disposed) {
-      notifyExecutionRequest({ metadata: flags[EXECUTION_METADATA] }, "onCancelled");
+      notifyExecutionRequest({ metadata }, "onCancelled");
       return Promise.resolve(undefined);
     }
     const sequence = Number.isSafeInteger(flags[EXECUTION_SEQUENCE])
@@ -1349,7 +1371,7 @@ function createGaugeExecutionController(options = {}) {
         }),
       );
     } catch (_error) {
-      if (disposed) {
+      if (disposed || executionRequestCancelled(flags[EXECUTION_METADATA])) {
         return cancelUnstartedExecution(flags);
       }
       return vscode.window.showErrorMessage(
