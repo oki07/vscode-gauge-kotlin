@@ -560,7 +560,19 @@ class GaugeWorkspace {
 
   async notifyProjectsChanged() {
     const defaultFolder = this.getDefaultFolder();
-    await Promise.all([...this.projectChangeListeners].map((listener) => listener(defaultFolder)));
+    const notifications = [];
+    for (const listener of [...this.projectChangeListeners]) {
+      try {
+        notifications.push(Promise.resolve(listener(defaultFolder)));
+      } catch (error) {
+        notifications.push(Promise.reject(error));
+      }
+    }
+    const outcomes = await Promise.allSettled(notifications);
+    const failure = outcomes.find((outcome) => outcome.status === "rejected");
+    if (failure) {
+      throw failure.reason;
+    }
   }
 
   async showProjectOptions(onChange) {
@@ -723,7 +735,11 @@ class GaugeWorkspace {
     ]);
     await this.setMultiProjectContext();
     if (this.projectRootsKey() !== beforeProjectRoots) {
-      await this.notifyProjectsChanged();
+      try {
+        await this.notifyProjectsChanged();
+      } catch (_error) {
+        // Project observers cannot roll back a completed workspace change.
+      }
     }
     await removedProjectStopsSettled;
   }

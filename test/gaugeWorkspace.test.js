@@ -3199,6 +3199,121 @@ test("GaugeWorkspace observes removal stops before publishing workspace state", 
   await workspace.dispose();
 });
 
+test("GaugeWorkspace drains project listeners before reporting a listener failure", async () => {
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  for (const failureMode of ["synchronous", "asynchronous"]) {
+    const listenerError = new Error(`${failureMode} project listener failed`);
+    const releaseHealthyListener = deferred();
+    const calls = [];
+    const workspace = Object.create(GaugeWorkspace.prototype);
+    workspace.clientsMap = new Map([["/workspace/remaining", {}]]);
+    workspace.projectChangeListeners = new Set();
+    workspace.onDidChangeProjects((projectRoot) => {
+      calls.push(["failing", projectRoot]);
+      if (failureMode === "synchronous") {
+        throw listenerError;
+      }
+      return Promise.reject(listenerError);
+    });
+    workspace.onDidChangeProjects(async (projectRoot) => {
+      calls.push(["healthy", projectRoot]);
+      await releaseHealthyListener.promise;
+      calls.push(["healthy-complete", projectRoot]);
+    });
+
+    let outcome;
+    const notification = workspace.notifyProjectsChanged();
+    notification.then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (reason) => {
+        outcome = { reason, status: "rejected" };
+      },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    const beforeHealthyListenerCompletes = {
+      calls: [...calls],
+      outcome,
+    };
+    releaseHealthyListener.resolve();
+    const [settlement] = await Promise.allSettled([notification]);
+
+    assert.deepEqual(beforeHealthyListenerCompletes, {
+      calls: [
+        ["failing", "/workspace/remaining"],
+        ["healthy", "/workspace/remaining"],
+      ],
+      outcome: undefined,
+    });
+    assert.deepEqual(calls, [
+      ["failing", "/workspace/remaining"],
+      ["healthy", "/workspace/remaining"],
+      ["healthy-complete", "/workspace/remaining"],
+    ]);
+    assert.equal(settlement.status, "rejected");
+    assert.equal(settlement.reason, listenerError);
+  }
+});
+
+test("GaugeWorkspace isolates project listener failures from folder events", async () => {
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const listenerError = new Error("project listener failed during folder event");
+  const stopError = new Error("removed project stop failed");
+  const stopResponse = deferred();
+  const calls = [];
+  let eventOutcome;
+  let projectRootsKeyCalls = 0;
+  const workspace = Object.create(GaugeWorkspace.prototype);
+  workspace.clientsMap = new Map([["/workspace/remaining", {}]]);
+  workspace.pathModule = path.posix;
+  workspace.pendingServerStarts = new Map();
+  workspace.projectChangeListeners = new Set();
+  workspace.workspaceFolderProjectRoots = new Map();
+  workspace.projectRootsKey = () => {
+    projectRootsKeyCalls += 1;
+    return projectRootsKeyCalls === 1 ? "before" : "after";
+  };
+  workspace.setMultiProjectContext = async () => {
+    calls.push("context");
+  };
+  workspace.stopProjectRoots = () => {
+    calls.push("stops");
+    return stopResponse.promise;
+  };
+  workspace.onDidChangeProjects(() => {
+    calls.push("failing");
+    throw listenerError;
+  });
+  workspace.onDidChangeProjects(() => {
+    calls.push("healthy");
+  });
+
+  const eventResult = workspace.onWorkspaceFoldersChanged({ added: [], removed: [] });
+  eventResult.then(
+    (value) => {
+      eventOutcome = { status: "fulfilled", value };
+    },
+    (reason) => {
+      eventOutcome = { reason, status: "rejected" };
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeStopSettles = {
+    calls: [...calls],
+    eventOutcome,
+  };
+  stopResponse.reject(stopError);
+  const result = await eventResult;
+
+  assert.equal(result, undefined);
+  assert.deepEqual(beforeStopSettles, {
+    calls: ["stops", "context", "failing", "healthy"],
+    eventOutcome: undefined,
+  });
+  assert.deepEqual(calls, ["stops", "context", "failing", "healthy"]);
+});
+
 test("GaugeWorkspace notifies project listeners after workspace folder removal", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
