@@ -525,22 +525,24 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
     vscode,
     workspaceStepIndex: options.workspaceStepIndex,
   });
-  const disposable = vscode.languages.registerCompletionItemProvider(
-    [
-      { language: GAUGE_LANGUAGE },
-      { language: GAUGE_CONCEPT_LANGUAGE },
-      SPEC_FILE_SELECTOR,
-      MARKDOWN_GAUGE_SPEC_SELECTOR,
-      CONCEPT_FILE_SELECTOR,
-    ],
-    provider,
-    "*",
-    " ",
-    "<",
-    "\"",
-    ":",
-    ",",
-  );
+  const disposable = typeof provider.register === "function"
+    ? provider.register()
+    : vscode.languages.registerCompletionItemProvider(
+      [
+        { language: GAUGE_LANGUAGE },
+        { language: GAUGE_CONCEPT_LANGUAGE },
+        SPEC_FILE_SELECTOR,
+        MARKDOWN_GAUGE_SPEC_SELECTOR,
+        CONCEPT_FILE_SELECTOR,
+      ],
+      provider,
+      "*",
+      " ",
+      "<",
+      "\"",
+      ":",
+      ",",
+    );
   if (disposable) {
     context.subscriptions.push(disposable);
   }

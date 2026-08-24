@@ -1326,17 +1326,25 @@ class GaugeDynamicArgumentCompletionProvider {
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
     this.workspaceStepIndex = options.workspaceStepIndex;
+    this.ownedDiagnosticsProvider = undefined;
     this.diagnosticsProvider = options.diagnosticsProvider
-      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
-      || new GaugeStepDiagnosticsProvider({
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider);
+    if (!this.diagnosticsProvider) {
+      this.ownedDiagnosticsProvider = new GaugeStepDiagnosticsProvider({
         documentStore: this.documentStore,
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       });
+      this.diagnosticsProvider = this.ownedDiagnosticsProvider;
+    }
+    this.disposed = false;
+    this.activeOperations = new Set();
+    this.registrationAttempted = false;
+    this.registrationDisposable = undefined;
   }
 
   isCompletionOperationActive(operation) {
-    return !operation || operation.active;
+    return !this.disposed && (!operation || operation.active);
   }
 
   disposeCompletionListener(operation) {
@@ -1359,6 +1367,7 @@ class GaugeDynamicArgumentCompletionProvider {
       return;
     }
     operation.active = false;
+    this.activeOperations.delete(operation);
     operation.resolveCancellation(CANCELLED_COMPLETION);
     this.disposeCompletionListener(operation);
   }
@@ -1368,10 +1377,14 @@ class GaugeDynamicArgumentCompletionProvider {
       return;
     }
     operation.active = false;
+    this.activeOperations.delete(operation);
     this.disposeCompletionListener(operation);
   }
 
   createCompletionOperation(token) {
+    if (this.disposed) {
+      return undefined;
+    }
     let resolveCancellation;
     const operation = {
       active: true,
@@ -1382,6 +1395,7 @@ class GaugeDynamicArgumentCompletionProvider {
       resolveCancellation,
       token,
     };
+    this.activeOperations.add(operation);
     if (!token || typeof token.onCancellationRequested !== "function") {
       return operation;
     }
@@ -1411,9 +1425,7 @@ class GaugeDynamicArgumentCompletionProvider {
   }
 
   observeCompletionValue(value) {
-    if (isThenable(value)) {
-      Promise.resolve(value).catch(() => {});
-    }
+    Promise.resolve(value).catch(() => {});
   }
 
   completeForOperation(operation, callback, onFulfilled = (value) => value, onRejected) {
@@ -1497,14 +1509,11 @@ class GaugeDynamicArgumentCompletionProvider {
   }
 
   runCompletionOperation(token, callback) {
-    if (token && token.isCancellationRequested) {
+    if (this.disposed || (token && token.isCancellationRequested)) {
       return [];
     }
-    if (!token) {
-      return callback(undefined);
-    }
     const operation = this.createCompletionOperation(token);
-    if (!operation.active) {
+    if (!operation || !operation.active) {
       return [];
     }
     let result;
@@ -1588,10 +1597,16 @@ class GaugeDynamicArgumentCompletionProvider {
     );
   }
 
-  stepCompletionEntries(document, workspaceDocuments, position) {
+  stepCompletionEntries(document, workspaceDocuments, position, operation) {
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const entries = [];
     const seen = new Set();
     const sourceRoot = this.gaugeProjectRoot(document);
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const addEntry = (label, detail) => {
       const key = stepCompletionKey(label);
       if (!label || seen.has(key)) {
@@ -1601,24 +1616,39 @@ class GaugeDynamicArgumentCompletionProvider {
       entries.push({ detail, label });
     };
     for (const candidate of workspaceDocuments || []) {
-      if (
-        !candidate
-        || !isConceptDocument(candidate)
-        || typeof candidate.getText !== "function"
-        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
-      ) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!candidate || !isConceptDocument(candidate) || typeof candidate.getText !== "function") {
         continue;
       }
-      for (const heading of findConceptHeadings(candidate.getText())) {
+      const belongsToProject = this.belongsToSourceGaugeProject(candidate, sourceRoot);
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!belongsToProject) {
+        continue;
+      }
+      const candidateText = candidate.getText();
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      for (const heading of findConceptHeadings(candidateText)) {
         addEntry(heading.text, "concept");
       }
     }
     for (const candidate of workspaceDocuments || []) {
-      if (
-        !candidate
-        || typeof candidate.getText !== "function"
-        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
-      ) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!candidate || typeof candidate.getText !== "function") {
+        continue;
+      }
+      const belongsToProject = this.belongsToSourceGaugeProject(candidate, sourceRoot);
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!belongsToProject) {
         continue;
       }
       if (!isStepImplementationDocument(candidate)) {
@@ -1628,7 +1658,13 @@ class GaugeDynamicArgumentCompletionProvider {
         candidate,
         workspaceDocuments,
       );
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
       for (const entry of findStepFunctionsForDocument(candidate, externalConstants)) {
+        if (!this.isCompletionOperationActive(operation)) {
+          return CANCELLED_COMPLETION;
+        }
         for (const alias of entry.aliases) {
           addEntry(alias, "step");
         }
@@ -1667,23 +1703,40 @@ class GaugeDynamicArgumentCompletionProvider {
       pathModule: this.pathModule,
       projectRoot: sourceRoot,
     });
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     for (const candidate of documents) {
-      if (!this.belongsToSourceGaugeProject(candidate, sourceRoot)) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      const belongsToProject = this.belongsToSourceGaugeProject(candidate, sourceRoot);
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!belongsToProject) {
         continue;
       }
       const isCurrentDocument = documentPath(candidate) === sourcePath;
-      for (const label of usedStepEntriesFromDocument(candidate, {
+      const usedEntries = usedStepEntriesFromDocument(candidate, {
         allowMultilineStep: allowMultiline,
         currentLine: isCurrentDocument ? currentLine : undefined,
         includeCurrentLine,
-      })) {
+      });
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      for (const label of usedEntries) {
         addEntry(label, "step");
       }
     }
     return entries;
   }
 
-  tagCompletionEntries(document, workspaceDocuments) {
+  tagCompletionEntries(document, workspaceDocuments, operation) {
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const documents = [];
     const seenDocuments = new Set();
     const addDocument = (candidate) => {
@@ -1707,15 +1760,29 @@ class GaugeDynamicArgumentCompletionProvider {
     }
 
     const sourceRoot = this.gaugeProjectRoot(document);
+    if (!this.isCompletionOperationActive(operation)) {
+      return CANCELLED_COMPLETION;
+    }
     const values = [];
     for (const candidate of documents) {
-      if (
-        !isTagSourceDocument(candidate)
-        || !this.belongsToSourceGaugeProject(candidate, sourceRoot)
-      ) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!isTagSourceDocument(candidate)) {
         continue;
       }
-      values.push(...tagValues(candidate.getText()));
+      const belongsToProject = this.belongsToSourceGaugeProject(candidate, sourceRoot);
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      if (!belongsToProject) {
+        continue;
+      }
+      const candidateText = candidate.getText();
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      values.push(...tagValues(candidateText));
     }
     return unique(values);
   }
@@ -1750,7 +1817,7 @@ class GaugeDynamicArgumentCompletionProvider {
     };
     return this.completeForOperation(
       operation,
-      () => operation
+      () => operation && operation.token
         ? client.sendRequest(TEXT_DOCUMENT_COMPLETION_REQUEST, params, operation.token)
         : client.sendRequest(TEXT_DOCUMENT_COMPLETION_REQUEST, params),
       (response) => {
@@ -1800,19 +1867,27 @@ class GaugeDynamicArgumentCompletionProvider {
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Function;
     const insertPrefix = stepCompletionInsertPrefix(line, targetRange);
     const completionEntries = indexedEntries
-      || this.stepCompletionEntries(document, workspaceDocuments, position);
-    const localItems = completionEntries.map((entry) => completionItem(
-      this.vscode,
-      entry.label,
-      range,
-      {
+      || this.stepCompletionEntries(document, workspaceDocuments, position, operation);
+    if (completionEntries === CANCELLED_COMPLETION) {
+      return CANCELLED_COMPLETION;
+    }
+    const localItems = [];
+    for (const entry of completionEntries) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      const item = completionItem(this.vscode, entry.label, range, {
         detail: entry.detail,
         documentation: entry.label,
         filterText: `${insertPrefix}${stepFilterText(entry.label, prefix)}`,
         insertText: snippetString(this.vscode, `${insertPrefix}${stepSnippetText(entry.label, prefix)}`),
         kind,
-      },
-    ));
+      });
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      localItems.push(item);
+    }
     return this.completeForOperation(
       operation,
       () => this.serverStepCompletionItems(document, position, range, operation),
@@ -1838,20 +1913,28 @@ class GaugeDynamicArgumentCompletionProvider {
     const range = createRange(this.vscode, position.line, targetRange.start, targetRange.end);
     const kind = this.vscode.CompletionItemKind && this.vscode.CompletionItemKind.Variable;
     const entries = indexedEntries === undefined
-      ? this.tagCompletionEntries(document, workspaceDocuments)
+      ? this.tagCompletionEntries(document, workspaceDocuments, operation)
       : indexedEntries;
-    const localItems = entries.map((label) => completionItem(
-      this.vscode,
-      label,
-      range,
-      {
+    if (entries === CANCELLED_COMPLETION) {
+      return CANCELLED_COMPLETION;
+    }
+    const localItems = [];
+    for (const label of entries) {
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      const item = completionItem(this.vscode, label, range, {
         detail: "Tag",
         filterText: `${label}${targetRange.suffix}`,
         insertText: `${targetRange.insertPrefix}${label}${targetRange.suffix}`,
         kind,
         sortText: `a${label}`,
-      },
-    ));
+      });
+      if (!this.isCompletionOperationActive(operation)) {
+        return CANCELLED_COMPLETION;
+      }
+      localItems.push(item);
+    }
     return this.completeForOperation(
       operation,
       () => this.serverCompletionItems(document, position, range, operation),
@@ -1931,12 +2014,22 @@ class GaugeDynamicArgumentCompletionProvider {
         if (!this.isCompletionOperationActive(operation)) {
           return CANCELLED_COMPLETION;
         }
-        const localItems = labels.map((label) => completionItem(
-          this.vscode,
-          label,
-          range,
-          argumentCompletionOptions(label, argumentType, line, targetRange),
-        ));
+        const localItems = [];
+        for (const label of labels) {
+          if (!this.isCompletionOperationActive(operation)) {
+            return CANCELLED_COMPLETION;
+          }
+          const item = completionItem(
+            this.vscode,
+            label,
+            range,
+            argumentCompletionOptions(label, argumentType, line, targetRange),
+          );
+          if (!this.isCompletionOperationActive(operation)) {
+            return CANCELLED_COMPLETION;
+          }
+          localItems.push(item);
+        }
         return this.completeForOperation(
           operation,
           () => this.serverCompletionItems(document, position, range, operation),
@@ -2026,6 +2119,90 @@ class GaugeDynamicArgumentCompletionProvider {
       token,
       (operation) => this.provideCompletionItemsForOperation(document, position, operation),
     );
+  }
+
+  disposeOwnedProvider(provider) {
+    if (!provider || typeof provider.dispose !== "function") {
+      return;
+    }
+    try {
+      provider.dispose();
+    } catch (_error) {
+      // Provider cleanup cannot reactivate a terminal completion request.
+    }
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      this.cancelCompletionOperation(operation);
+    }
+    const registration = this.registrationDisposable;
+    this.registrationDisposable = undefined;
+    if (registration && typeof registration.dispose === "function") {
+      try {
+        registration.dispose();
+      } catch (_error) {
+        // Continue releasing provider-owned diagnostics after unregistering fails.
+      }
+    }
+    const ownedDiagnosticsProvider = this.ownedDiagnosticsProvider;
+    this.ownedDiagnosticsProvider = undefined;
+    this.disposeOwnedProvider(ownedDiagnosticsProvider);
+  }
+
+  register() {
+    if (this.disposed || this.registrationAttempted) {
+      return this;
+    }
+    this.registrationAttempted = true;
+    if (
+      !this.vscode.languages
+      || typeof this.vscode.languages.registerCompletionItemProvider !== "function"
+    ) {
+      return this;
+    }
+    let registration;
+    try {
+      registration = this.vscode.languages.registerCompletionItemProvider(
+        [
+          { language: GAUGE_LANGUAGE },
+          { language: GAUGE_CONCEPT_LANGUAGE },
+          { scheme: "file", pattern: "**/*.spec" },
+          { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
+          { scheme: "file", pattern: "**/*.cpt" },
+        ],
+        this,
+        "*",
+        " ",
+        "<",
+        "\"",
+        ":",
+        ",",
+      );
+    } catch (error) {
+      if (!this.disposed) {
+        this.registrationAttempted = false;
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      if (registration && typeof registration.dispose === "function") {
+        try {
+          registration.dispose();
+        } catch (_error) {
+          // Synchronous disposal already terminalized the provider.
+        }
+      }
+    } else {
+      this.registrationDisposable = registration;
+    }
+    return this;
   }
 }
 
