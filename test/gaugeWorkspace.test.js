@@ -2106,7 +2106,10 @@ test("GaugeWorkspace generates Java config after installing a missing Java runne
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
-    setImmediate(() => child.emit("exit", 0));
+    setImmediate(() => {
+      child.emit("exit", 0);
+      child.emit("close", 0);
+    });
     return child;
   };
   gaugeCommand.spawnSync = (args) => {

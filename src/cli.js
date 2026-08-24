@@ -163,11 +163,15 @@ class CLI {
       const onStdout = (chunk) => output.appendOutBuf(chunk.toString());
       const onStderr = (chunk) => output.appendErrBuf(chunk.toString());
       let finished = false;
+      let exitCode;
+      let exitSignal;
+      let processError;
       const cleanup = () => {
         child.stdout.removeListener("data", onStdout);
         child.stderr.removeListener("data", onStderr);
         child.removeListener("error", onError);
         child.removeListener("exit", onExit);
+        child.removeListener("close", onClose);
       };
       const finish = (code, error) => {
         if (finished) {
@@ -189,12 +193,24 @@ class CLI {
           false,
         );
       };
-      const onError = (error) => finish(1, error);
-      const onExit = (code) => finish(code);
+      const onError = (error) => {
+        if (!processError) {
+          processError = error;
+        }
+      };
+      const onExit = (code, signal) => {
+        exitCode = code;
+        exitSignal = signal;
+      };
+      const onClose = (code, signal) => finish(
+        processError || signal || exitSignal ? 1 : (code ?? exitCode ?? 1),
+        processError,
+      );
       child.stdout.on("data", onStdout);
       child.stderr.on("data", onStderr);
       child.on("error", onError);
       child.on("exit", onExit);
+      child.on("close", onClose);
     });
   }
 

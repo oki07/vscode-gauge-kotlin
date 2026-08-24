@@ -154,6 +154,7 @@ test("CLI refreshes the version manifest after a successful plugin install", asy
   });
   assert.equal(cli.isPluginInstalled("spectacle"), false);
   child.emit("exit", 0);
+  child.emit("close", 0);
 
   assert.equal(await installation, true);
   assert.equal(cli.gaugeVersion, "1.3.0");
@@ -178,6 +179,70 @@ test("CLI refreshes the version manifest after a successful plugin install", asy
   ]);
 });
 
+test("CLI waits for plugin install close before refreshing and publishing completion", async () => {
+  const { CLI } = require("../src/cli");
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const outputLines = [];
+  let probeCalls = 0;
+  const cli = new CLI({
+    spawn() {
+      return child;
+    },
+    spawnSync() {
+      probeCalls += 1;
+      return {
+        status: 0,
+        stdout: Buffer.from(JSON.stringify({ version: "1.3.0", plugins: [] })),
+      };
+    },
+  }, {});
+  const installation = cli.installGaugeRunner("spectacle", {
+    vscode: {
+      window: {
+        createOutputChannel() {
+          return {
+            appendLine(line) {
+              outputLines.push(line);
+            },
+            clear() {},
+            show() {},
+          };
+        },
+      },
+    },
+  });
+  let settled = false;
+  installation.finally(() => {
+    settled = true;
+  });
+
+  child.stdout.emit("data", Buffer.from("plugin "));
+  child.stderr.emit("data", Buffer.from("warning "));
+  child.emit("exit", 0);
+  await Promise.resolve();
+
+  assert.equal(settled, false);
+  assert.equal(probeCalls, 0);
+  assert.equal(child.stdout.listenerCount("data"), 1);
+  assert.deepEqual(outputLines, ["Installing gauge spectacle plugin ...\n"]);
+
+  child.stdout.emit("data", Buffer.from("installed"));
+  child.stderr.emit("data", Buffer.from("tail"));
+  assert.deepEqual(outputLines, ["Installing gauge spectacle plugin ...\n"]);
+  child.emit("close", 0);
+
+  assert.equal(await installation, true);
+  assert.equal(probeCalls, 1);
+  assert.ok(outputLines.indexOf("plugin installed") > 0);
+  assert.ok(outputLines.indexOf("warning tail") > outputLines.indexOf("plugin installed"));
+  assert.ok(outputLines.indexOf("") > outputLines.indexOf("warning tail"));
+  assert.equal(child.listenerCount("close"), 0);
+  assert.equal(child.stdout.listenerCount("data"), 0);
+  assert.equal(child.stderr.listenerCount("data"), 0);
+});
+
 test("CLI preserves the version manifest when installation or refresh fails", async () => {
   const { CLI } = require("../src/cli");
   const originalManifest = {
@@ -187,7 +252,7 @@ test("CLI preserves the version manifest when installation or refresh fails", as
   };
 
   for (const scenario of [
-    { installCode: 1, probeOutput: undefined, result: false },
+    { closeCode: null, installCode: 1, probeOutput: undefined, result: false },
     { installCode: 0, probeOutput: "not json", result: true },
     {
       installCode: 0,
@@ -254,6 +319,10 @@ test("CLI preserves the version manifest when installation or refresh fails", as
     });
 
     child.emit("exit", scenario.installCode);
+    child.emit(
+      "close",
+      Object.hasOwn(scenario, "closeCode") ? scenario.closeCode : scenario.installCode,
+    );
 
     assert.equal(await installation, scenario.result);
     assert.equal(probeCalls, scenario.installCode === 0 ? 1 : 0);
@@ -301,20 +370,77 @@ test("CLI settles plugin installation when the Gauge process emits an error", as
     },
   });
   const processError = new Error("gauge install spawn failed");
+  let settled = false;
+  installation.finally(() => {
+    settled = true;
+  });
 
   assert.equal(child.listenerCount("error"), 1);
   assert.doesNotThrow(() => child.emit("error", processError));
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(child.listenerCount("close"), 1);
+  assert.equal(child.stdout.listenerCount("data"), 1);
+  assert.equal(child.stderr.listenerCount("data"), 1);
+  child.stderr.emit("data", Buffer.from("late install error output\n"));
+  child.emit("close", 0);
+
   assert.equal(await installation, false);
   assert.equal(probeCalls, 0);
+  assert.ok(outputLines.includes("late install error output"));
   assert.ok(outputLines.includes(processError.message));
   assert.equal(child.listenerCount("error"), 0);
   assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(child.listenerCount("close"), 0);
   assert.equal(child.stdout.listenerCount("data"), 0);
   assert.equal(child.stderr.listenerCount("data"), 0);
 
   child.emit("exit", 0);
+  child.emit("close", 0);
   await Promise.resolve();
   assert.equal(probeCalls, 0);
+});
+
+test("CLI treats signal-closed plugin installation as failure", async () => {
+  const { CLI } = require("../src/cli");
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  let probeCalls = 0;
+  const outputLines = [];
+  const cli = new CLI({
+    spawn() {
+      return child;
+    },
+    spawnSync() {
+      probeCalls += 1;
+      return { status: 0, stdout: Buffer.from("") };
+    },
+  }, {});
+  const installation = cli.installGaugeRunner("spectacle", {
+    vscode: {
+      window: {
+        createOutputChannel() {
+          return {
+            appendLine(line) {
+              outputLines.push(line);
+            },
+            clear() {},
+            show() {},
+          };
+        },
+      },
+    },
+  });
+
+  child.emit("exit", null, "SIGTERM");
+  child.emit("close", null, "SIGTERM");
+
+  assert.equal(await installation, false);
+  assert.equal(probeCalls, 0);
+  assert.ok(outputLines.includes(
+    "\nRefer to https://docs.gauge.org/plugin.html to install manually",
+  ));
 });
 
 test("CLI preserves synchronous plugin installation spawn errors", async () => {

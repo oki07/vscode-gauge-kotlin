@@ -727,7 +727,10 @@ test("previewGaugeDocument uses the post-install version manifest on the next pr
           return installChild;
         }
         const repeatedInstallChild = createDeferredChild();
-        setImmediate(() => repeatedInstallChild.emit("exit", 0));
+        setImmediate(() => {
+          repeatedInstallChild.emit("exit", 0);
+          repeatedInstallChild.emit("close", 0);
+        });
         return repeatedInstallChild;
       }
       setImmediate(() => {
@@ -794,6 +797,7 @@ test("previewGaugeDocument uses the post-install version manifest on the next pr
   const firstPreview = controller.preview();
   await installEntered.promise;
   installChild.emit("exit", 0);
+  installChild.emit("close", 0);
   assert.equal(await firstPreview, undefined);
 
   const secondPreview = controller.preview();
