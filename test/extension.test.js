@@ -3529,7 +3529,7 @@ test("activation leaves Gauge document formatting to the Gauge language client",
   assert.equal(gaugeWorkspaces, 1);
 });
 
-test("activation registers Gauge document symbols for Gauge documents", () => {
+test("activation leaves document symbols to Gauge LSP and registers concept workspace symbols", () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
@@ -3541,6 +3541,8 @@ test("activation registers Gauge document symbols for Gauge documents", () => {
     constructor(options) {
       this.options = options;
     }
+
+    dispose() {}
   }
 
   extension.activate(context, fakeVscode, {
@@ -3595,21 +3597,12 @@ test("activation registers Gauge document symbols for Gauge documents", () => {
     showWelcomeNotification() {},
   });
 
-  assert.equal(documentSymbolProviders.length, 1);
-  assert.deepEqual(documentSymbolProviders[0].selector, [
-    { language: "gauge" },
-    { language: "gauge-concept" },
-    { scheme: "file", pattern: "**/*.spec" },
-    { language: "markdown", scheme: "file", pattern: "**/*.md" },
-    { scheme: "file", pattern: "**/*.cpt" },
-  ]);
-  assert.equal(documentSymbolProviders[0].provider.options.vscode, fakeVscode);
-  assert.equal(typeof documentSymbolProviders[0].provider.options.projectFactory.isGaugeProject, "function");
-  assert.equal(context.subscriptions.includes(documentSymbolProviders[0].disposable), true);
+  assert.equal(documentSymbolProviders.length, 0);
   assert.equal(workspaceSymbolProviders.length, 1);
   assert.equal(workspaceSymbolProviders[0].provider.options.vscode, fakeVscode);
   assert.equal(typeof workspaceSymbolProviders[0].provider.options.projectFactory.isGaugeProject, "function");
   assert.equal(context.subscriptions.includes(workspaceSymbolProviders[0].disposable), true);
+  assert.equal(context.subscriptions.includes(workspaceSymbolProviders[0].provider), true);
 });
 
 test("activation keeps local Gauge definitions independent from the language client", () => {

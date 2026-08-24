@@ -230,7 +230,7 @@ test("GaugeDocumentSymbolProvider prefixes legacy underline symbols like Gauge L
   ]);
 });
 
-test("GaugeDocumentSymbolProvider lists matching workspace symbols", async () => {
+test("GaugeDocumentSymbolProvider leaves specification workspace symbols to Gauge LSP", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const documents = new Map();
   const specDocument = createDocument([
@@ -251,14 +251,10 @@ test("GaugeDocumentSymbolProvider lists matching workspace symbols", async () =>
   documents.set(otherSpecDocument.uri.fsPath, otherSpecDocument);
 
   const vscode = createFakeVscode();
+  const searchedPatterns = [];
   vscode.workspace = {
     async findFiles(pattern) {
-      if (pattern === "**/*.spec") {
-        return [specDocument.uri, otherSpecDocument.uri];
-      }
-      if (pattern === "**/*.md") {
-        return [];
-      }
+      searchedPatterns.push(pattern);
       if (pattern === "**/*.cpt") {
         return [];
       }
@@ -270,29 +266,18 @@ test("GaugeDocumentSymbolProvider lists matching workspace symbols", async () =>
   };
   const provider = new GaugeDocumentSymbolProvider({ vscode });
 
-  const symbols = await provider.provideWorkspaceSymbols("Spe");
+  const symbols = await provider.provideWorkspaceSymbols("Shared");
 
-  assert.deepEqual(symbols.map((symbol) => ({
-    name: symbol.name,
-    uri: symbol.location.uri,
-    range: {
-      start: { ...symbol.location.range.start },
-      end: { ...symbol.location.range.end },
-    },
-  })), [
-    {
-      name: "# Specification Heading",
-      uri: specDocument.uri,
-      range: {
-        start: { line: 0, character: 0 },
-        end: { line: 0, character: 23 },
-      },
-    },
-  ]);
+  assert.deepEqual(searchedPatterns, ["**/*.cpt"]);
+  assert.deepEqual(symbols, []);
 });
 
 test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const specDocument = createDocument([
+    "# Shared specification",
+    "* Use a shared concept",
+  ].join("\n"), "/workspace/gauge/specs/shared.spec", "gauge");
   const conceptDocument = createDocument([
     "# Shared checkout",
     "* Reuse checkout",
@@ -301,6 +286,7 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
     "* Reuse payment",
   ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "gauge");
   const documents = new Map([
+    [specDocument.uri.fsPath, specDocument],
     [conceptDocument.uri.fsPath, conceptDocument],
   ]);
   const vscode = createFakeVscode();
@@ -308,8 +294,8 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
   vscode.workspace = {
     async findFiles(pattern) {
       searchedPatterns.push(pattern);
-      if (pattern === "**/*.spec" || pattern === "**/*.md") {
-        return [];
+      if (pattern === "**/*.spec") {
+        return [specDocument.uri];
       }
       if (pattern === "**/*.cpt") {
         return [conceptDocument.uri];
@@ -324,7 +310,7 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
 
   const symbols = await provider.provideWorkspaceSymbols("Shared");
 
-  assert.deepEqual(searchedPatterns, ["**/*.spec", "**/*.md", "**/*.cpt"]);
+  assert.deepEqual(searchedPatterns, ["**/*.cpt"]);
   assert.deepEqual(symbols.map((symbol) => ({
     name: symbol.name,
     uri: symbol.location.uri,
@@ -352,32 +338,24 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
   ]);
 });
 
-test("GaugeDocumentSymbolProvider groups and sorts workspace spec and scenario symbols", async () => {
+test("GaugeDocumentSymbolProvider groups and sorts concept workspace symbols", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const leftDocument = createDocument([
-    "Sample 2",
-    "========",
-    "",
-    "Scenario Sample 5",
-    "-----------------",
+    "# Sample 2",
+    "## Scenario Sample 5",
     "* Pay",
     "",
-    "Sample Scenario 6",
-    "-----------------",
+    "## Sample Scenario 6",
     "* Pay",
-  ].join("\n"), "/workspace/gauge/specs/b.spec", "gauge");
+  ].join("\n"), "/workspace/gauge/specs/b.cpt", "gauge-concept");
   const rightDocument = createDocument([
-    "Sample 1",
-    "========",
-    "",
-    "Sample Scenario 1",
-    "-----------------",
+    "# Sample 1",
+    "## Sample Scenario 1",
     "* Pay",
     "",
-    "Scenario Sample 2",
-    "-----------------",
+    "## Scenario Sample 2",
     "* Pay",
-  ].join("\n"), "/workspace/gauge/specs/a.spec", "gauge");
+  ].join("\n"), "/workspace/gauge/specs/a.cpt", "gauge-concept");
   const documents = new Map([
     [leftDocument.uri.fsPath, leftDocument],
     [rightDocument.uri.fsPath, rightDocument],
@@ -385,14 +363,8 @@ test("GaugeDocumentSymbolProvider groups and sorts workspace spec and scenario s
   const vscode = createFakeVscode();
   vscode.workspace = {
     async findFiles(pattern) {
-      if (pattern === "**/*.spec") {
-        return [leftDocument.uri, rightDocument.uri];
-      }
-      if (pattern === "**/*.md") {
-        return [];
-      }
       if (pattern === "**/*.cpt") {
-        return [];
+        return [leftDocument.uri, rightDocument.uri];
       }
       throw new Error(`Unexpected workspace symbol pattern: ${pattern}`);
     },
@@ -462,7 +434,7 @@ test("GaugeDocumentSymbolProvider uses the shared document store without workspa
   await documentStore.whenReady();
   const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
 
-  const symbols = await provider.provideWorkspaceSymbols("Spe");
+  const symbols = await provider.provideWorkspaceSymbols("Shared");
 
   assert.deepEqual(symbols.map((symbol) => ({
     name: symbol.name,
@@ -473,11 +445,11 @@ test("GaugeDocumentSymbolProvider uses the shared document store without workspa
     },
   })), [
     {
-      name: "# Specification Heading",
-      fsPath: specPath,
+      name: "# Shared checkout",
+      fsPath: conceptPath,
       range: {
         start: { line: 0, character: 0 },
-        end: { line: 0, character: 23 },
+        end: { line: 0, character: 17 },
       },
     },
   ]);
@@ -487,15 +459,18 @@ test("GaugeDocumentSymbolProvider uses the shared document store without workspa
     `expected only the store scan, saw findFiles patterns: ${findFilesPatterns.join(", ")}`,
   );
   assert.deepEqual(openedFiles, []);
+  assert.deepEqual([...provider.workspaceSymbolRecords.keys()], [conceptPath]);
+  provider.dispose();
+  assert.equal(provider.workspaceSymbolRecords.size, 0);
 });
 
-test("GaugeDocumentSymbolProvider reparses only changed workspace symbol documents", async () => {
+test("GaugeDocumentSymbolProvider reparses only changed concept workspace documents", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
   const listeners = [];
   let documents = [
-    createDocument("# Spec Alpha\n## Scenario Alpha", "/workspace/gauge/specs/a.spec", "gauge"),
-    createDocument("# Spec Beta\n## Scenario Beta", "/workspace/gauge/specs/b.spec", "gauge"),
+    createDocument("# Spec Alpha\n## Scenario Alpha", "/workspace/gauge/specs/a.cpt", "gauge-concept"),
+    createDocument("# Spec Beta\n## Scenario Beta", "/workspace/gauge/specs/b.cpt", "gauge-concept"),
     createDocument("# Shared Concept\n* Reuse", "/workspace/gauge/specs/shared.cpt", "gauge-concept"),
   ];
   const documentStore = {
@@ -522,16 +497,20 @@ test("GaugeDocumentSymbolProvider reparses only changed workspace symbol documen
   await provider.provideWorkspaceSymbols("Scenario");
   assert.equal(analyses, 3, "an unchanged query must reuse parsed workspace symbols");
 
+  listeners[0]({ file: "/workspace/gauge/specs/ignored.spec" });
+  await provider.provideWorkspaceSymbols("Scenario");
+  assert.equal(analyses, 3, "a specification change must remain Gauge LSP-owned");
+
   documents = documents.map((document) => (
-    document.uri.fsPath === "/workspace/gauge/specs/b.spec"
+    document.uri.fsPath === "/workspace/gauge/specs/b.cpt"
       ? createDocument(
         "# Updated Beta\n## Updated Scenario",
-        "/workspace/gauge/specs/b.spec",
-        "gauge",
+        "/workspace/gauge/specs/b.cpt",
+        "gauge-concept",
       )
       : document
   ));
-  listeners[0]({ file: "/workspace/gauge/specs/b.spec" });
+  listeners[0]({ file: "/workspace/gauge/specs/b.cpt" });
   const updated = await provider.provideWorkspaceSymbols("Updated");
 
   assert.equal(analyses, 4, "a watcher update must reparse only the changed document");
@@ -544,10 +523,10 @@ test("GaugeDocumentSymbolProvider reparses only changed workspace symbol documen
 test("GaugeDocumentSymbolProvider waits for the latest pending workspace symbol refresh", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
-  const file = "/workspace/gauge/specs/example.spec";
-  const original = createDocument("# Original", file, "gauge");
-  const intermediate = createDocument("# Intermediate", file, "gauge");
-  const finalDocument = createDocument("# Final", file, "gauge");
+  const file = "/workspace/gauge/specs/example.cpt";
+  const original = createDocument("# Original", file, "gauge-concept");
+  const intermediate = createDocument("# Intermediate", file, "gauge-concept");
+  const finalDocument = createDocument("# Final", file, "gauge-concept");
   const listeners = [];
   let documents = [original];
   let replaceDuringNextRead = false;
@@ -608,9 +587,9 @@ test("GaugeDocumentSymbolProvider waits for the latest pending workspace symbol 
 test("GaugeDocumentSymbolProvider restores workspace symbol invalidations after refresh failure", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
-  const file = "/workspace/gauge/specs/example.spec";
+  const file = "/workspace/gauge/specs/example.cpt";
   const listeners = [];
-  let documents = [createDocument("# Original", file, "gauge")];
+  let documents = [createDocument("# Original", file, "gauge-concept")];
   let nextFailure;
   const documentStore = {
     documents() {
@@ -635,7 +614,7 @@ test("GaugeDocumentSymbolProvider restores workspace symbol invalidations after 
     ["# Original"],
   );
 
-  documents = [createDocument("# Full Refresh", file, "gauge")];
+  documents = [createDocument("# Full Refresh", file, "gauge-concept")];
   listeners[0]({});
   nextFailure = "full refresh failed";
   await assert.rejects(
@@ -647,7 +626,7 @@ test("GaugeDocumentSymbolProvider restores workspace symbol invalidations after 
     ["# Full Refresh"],
   );
 
-  documents = [createDocument("# File Refresh", file, "gauge")];
+  documents = [createDocument("# File Refresh", file, "gauge-concept")];
   listeners[0]({ file });
   nextFailure = "file refresh failed";
   await assert.rejects(
@@ -767,8 +746,8 @@ test("GaugeDocumentSymbolProvider stops fallback document reads after disposal",
   const vscode = createFakeVscode();
   const readEntered = deferred();
   const releaseRead = deferred();
-  const firstUri = { fsPath: "/workspace/gauge/specs/first.spec" };
-  const secondUri = { fsPath: "/workspace/gauge/specs/second.spec" };
+  const firstUri = { fsPath: "/workspace/gauge/specs/first.cpt" };
+  const secondUri = { fsPath: "/workspace/gauge/specs/second.cpt" };
   let findCalls = 0;
   let openCalls = 0;
   vscode.workspace = {
@@ -795,7 +774,7 @@ test("GaugeDocumentSymbolProvider stops fallback document reads after disposal",
 
   assert.deepEqual(await pendingSymbols, []);
   assert.deepEqual(await provider.provideWorkspaceSymbols("Second"), []);
-  assert.deepEqual({ findCalls, openCalls }, { findCalls: 3, openCalls: 1 });
+  assert.deepEqual({ findCalls, openCalls }, { findCalls: 1, openCalls: 1 });
 });
 
 test("GaugeDocumentSymbolProvider returns no workspace symbols for one-character queries", async () => {

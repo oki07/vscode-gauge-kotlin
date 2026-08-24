@@ -12,8 +12,6 @@ const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SYMBOL_KIND_NAMESPACE = 3;
-const SPEC_WORKSPACE_PATTERN = "**/*.spec";
-const MARKDOWN_WORKSPACE_PATTERN = "**/*.md";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
 
 function getVscode(vscode) {
@@ -30,9 +28,7 @@ function isSpecDocument(document) {
 }
 
 function isWorkspaceSymbolPath(file) {
-  return SPEC_FILE_PATTERN.test(file)
-    || MARKDOWN_SPEC_FILE_PATTERN.test(file)
-    || CONCEPT_FILE_PATTERN.test(file);
+  return CONCEPT_FILE_PATTERN.test(file);
 }
 
 function isConceptDocument(document) {
@@ -305,9 +301,7 @@ class GaugeDocumentSymbolProvider {
       }
       return this.documentStore.documents().filter((document) => {
         const file = documentPath(document);
-        return SPEC_FILE_PATTERN.test(file)
-          || MARKDOWN_SPEC_FILE_PATTERN.test(file)
-          || CONCEPT_FILE_PATTERN.test(file);
+        return CONCEPT_FILE_PATTERN.test(file);
       });
     }
     const workspace = this.vscode && this.vscode.workspace;
@@ -320,11 +314,7 @@ class GaugeDocumentSymbolProvider {
     }
 
     const urisByKey = new Map();
-    for (const pattern of [
-      SPEC_WORKSPACE_PATTERN,
-      MARKDOWN_WORKSPACE_PATTERN,
-      CONCEPT_WORKSPACE_PATTERN,
-    ]) {
+    for (const pattern of [CONCEPT_WORKSPACE_PATTERN]) {
       const uris = await workspace.findFiles(pattern);
       if (this.disposed) {
         return [];

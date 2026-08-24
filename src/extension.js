@@ -604,13 +604,11 @@ function registerFoldingRangeProvider(context, vscode, options) {
   }
 }
 
-function registerDocumentSymbolProvider(context, vscode, options) {
-  if (!vscode.languages) {
-    return;
-  }
-  const hasDocumentSymbols = typeof vscode.languages.registerDocumentSymbolProvider === "function";
-  const hasWorkspaceSymbols = typeof vscode.languages.registerWorkspaceSymbolProvider === "function";
-  if (!hasDocumentSymbols && !hasWorkspaceSymbols) {
+function registerWorkspaceSymbolProvider(context, vscode, options) {
+  if (
+    !vscode.languages
+    || typeof vscode.languages.registerWorkspaceSymbolProvider !== "function"
+  ) {
     return;
   }
   const DocumentSymbolProviderCtor = options.GaugeDocumentSymbolProvider || GaugeDocumentSymbolProvider;
@@ -619,26 +617,9 @@ function registerDocumentSymbolProvider(context, vscode, options) {
     projectFactory: options.projectFactory,
     vscode,
   });
-  if (hasDocumentSymbols) {
-    const disposable = vscode.languages.registerDocumentSymbolProvider(
-      [
-        { language: GAUGE_LANGUAGE },
-        { language: GAUGE_CONCEPT_LANGUAGE },
-        SPEC_FILE_SELECTOR,
-        MARKDOWN_GAUGE_SPEC_SELECTOR,
-        CONCEPT_FILE_SELECTOR,
-      ],
-      provider,
-    );
-    if (disposable) {
-      context.subscriptions.push(disposable);
-    }
-  }
-  if (hasWorkspaceSymbols) {
-    const disposable = vscode.languages.registerWorkspaceSymbolProvider(provider);
-    if (disposable) {
-      context.subscriptions.push(disposable);
-    }
+  const disposable = vscode.languages.registerWorkspaceSymbolProvider(provider);
+  if (disposable) {
+    context.subscriptions.push(disposable);
   }
   if (typeof provider.dispose === "function") {
     context.subscriptions.push(provider);
@@ -1039,7 +1020,7 @@ function startGaugeServices(context, vscode, options = {}) {
     ...options,
     projectFactory,
   });
-  registerDocumentSymbolProvider(context, vscode, {
+  registerWorkspaceSymbolProvider(context, vscode, {
     ...options,
     documentStore,
     projectFactory,
