@@ -57,21 +57,35 @@ function uniqueNonEmpty(values) {
   return [...new Set((values || []).filter((value) => String(value || "").trim().length > 0))];
 }
 
+function disposeSafely(disposable) {
+  if (!disposable || typeof disposable.dispose !== "function") {
+    return;
+  }
+  try {
+    disposable.dispose();
+  } catch (_error) {
+    // Continue disposing the remaining provider-owned resources.
+  }
+}
+
 class GaugeUnusedReferenceDiagnosticsProvider {
   constructor(options = {}) {
     this.documentStore = options.documentStore;
     this.refreshDelayMs = options.refreshDelayMs === undefined ? 150 : options.refreshDelayMs;
     this.vscode = getVscode(options.vscode);
     this.workspaceStepIndex = options.workspaceStepIndex;
+    this.activeRefreshes = new Set();
     this.disposed = false;
     this.pendingRefreshPromise = undefined;
-    this.pendingRefreshResolve = undefined;
+    this.registrationDisposables = undefined;
     this.refreshGeneration = 0;
     this.refreshTimer = undefined;
   }
 
   async conceptDiagnostics(document) {
     if (
+      this.disposed
+      ||
       !this.workspaceStepIndex
       || typeof this.workspaceStepIndex.referenceCount !== "function"
     ) {
@@ -79,27 +93,52 @@ class GaugeUnusedReferenceDiagnosticsProvider {
     }
     const headings = findConceptHeadings(document.getText())
       .filter((heading) => Boolean(heading.normalized));
-    const counts = await Promise.all(headings.map((heading) => (
-      this.workspaceStepIndex.referenceCount(document, heading.normalized)
-    )));
-    const diagnostics = [];
-    for (let index = 0; index < headings.length; index += 1) {
-      if (counts[index] !== 0) {
-        continue;
-      }
-      const heading = headings[index];
-      diagnostics.push(createUnusedDiagnostic(
-        this.vscode,
-        createRange(this.vscode, heading.start, heading.end),
-        UNUSED_CONCEPT_MESSAGE,
-        UNUSED_CONCEPT_CODE,
-      ));
+    if (this.disposed) {
+      return [];
     }
-    return diagnostics;
+    const countPromises = [];
+    try {
+      for (const heading of headings) {
+        if (this.disposed) {
+          break;
+        }
+        countPromises.push(Promise.resolve(
+          this.workspaceStepIndex.referenceCount(document, heading.normalized),
+        ));
+      }
+      const counts = await Promise.all(countPromises);
+      if (this.disposed || counts.length !== headings.length) {
+        return [];
+      }
+      const diagnostics = [];
+      for (let index = 0; index < headings.length; index += 1) {
+        if (this.disposed) {
+          return [];
+        }
+        if (counts[index] !== 0) {
+          continue;
+        }
+        const heading = headings[index];
+        diagnostics.push(createUnusedDiagnostic(
+          this.vscode,
+          createRange(this.vscode, heading.start, heading.end),
+          UNUSED_CONCEPT_MESSAGE,
+          UNUSED_CONCEPT_CODE,
+        ));
+      }
+      return this.disposed ? [] : diagnostics;
+    } catch (error) {
+      if (this.disposed) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async stepImplementationDiagnostics(document) {
     if (
+      this.disposed
+      ||
       !this.workspaceStepIndex
       || typeof this.workspaceStepIndex.stepEntriesForDocument !== "function"
       || typeof this.workspaceStepIndex.stepAliasesForEntry !== "function"
@@ -108,36 +147,72 @@ class GaugeUnusedReferenceDiagnosticsProvider {
       return [];
     }
     const text = document.getText();
-    const entries = await this.workspaceStepIndex.stepEntriesForDocument(document, document);
-    const diagnostics = [];
-    for (const entry of entries || []) {
-      const aliases = uniqueNonEmpty(
-        await this.workspaceStepIndex.stepAliasesForEntry(document, document, entry),
-      );
-      if (aliases.length === 0) {
-        continue;
-      }
-      const counts = await Promise.all(aliases.map((alias) => (
-        this.workspaceStepIndex.referenceCount(document, alias)
-      )));
-      if (!counts.every((count) => count === 0)) {
-        continue;
-      }
-      const start = positionAt(text, entry.declarationStart, document);
-      const end = positionAt(text, entry.declarationEnd, document);
-      diagnostics.push(createUnusedDiagnostic(
-        this.vscode,
-        createRange(this.vscode, start, end),
-        UNUSED_STEP_IMPLEMENTATION_MESSAGE,
-        UNUSED_STEP_IMPLEMENTATION_CODE,
-      ));
+    if (this.disposed) {
+      return [];
     }
-    return diagnostics;
+    try {
+      const entries = await this.workspaceStepIndex.stepEntriesForDocument(document, document);
+      if (this.disposed) {
+        return [];
+      }
+      const diagnostics = [];
+      for (const entry of entries || []) {
+        if (this.disposed) {
+          return [];
+        }
+        const aliases = uniqueNonEmpty(
+          await this.workspaceStepIndex.stepAliasesForEntry(document, document, entry),
+        );
+        if (this.disposed) {
+          return [];
+        }
+        if (aliases.length === 0) {
+          continue;
+        }
+        const countPromises = [];
+        for (const alias of aliases) {
+          if (this.disposed) {
+            break;
+          }
+          countPromises.push(Promise.resolve(
+            this.workspaceStepIndex.referenceCount(document, alias),
+          ));
+        }
+        const counts = await Promise.all(countPromises);
+        if (this.disposed) {
+          return [];
+        }
+        if (counts.length !== aliases.length || !counts.every((count) => count === 0)) {
+          continue;
+        }
+        const start = positionAt(text, entry.declarationStart, document);
+        if (this.disposed) {
+          return [];
+        }
+        const end = positionAt(text, entry.declarationEnd, document);
+        if (this.disposed) {
+          return [];
+        }
+        diagnostics.push(createUnusedDiagnostic(
+          this.vscode,
+          createRange(this.vscode, start, end),
+          UNUSED_STEP_IMPLEMENTATION_MESSAGE,
+          UNUSED_STEP_IMPLEMENTATION_CODE,
+        ));
+      }
+      return this.disposed ? [] : diagnostics;
+    } catch (error) {
+      if (this.disposed) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async provideDiagnostics(document) {
     if (
-      !document
+      this.disposed
+      || !document
       || !document.uri
       || typeof document.getText !== "function"
       || !isFileDocument(document)
@@ -169,6 +244,9 @@ class GaugeUnusedReferenceDiagnosticsProvider {
   }
 
   async performRefresh(collection, generation) {
+    if (this.disposed) {
+      return;
+    }
     const updates = await Promise.all(this.supportedOpenDocuments().map(async (document) => {
       try {
         return { diagnostics: await this.provideDiagnostics(document), document };
@@ -180,38 +258,76 @@ class GaugeUnusedReferenceDiagnosticsProvider {
       return;
     }
     for (const { diagnostics, document } of updates) {
+      if (this.disposed || generation !== this.refreshGeneration) {
+        return;
+      }
       if (this.isStillOpen(document)) {
+        if (this.disposed || generation !== this.refreshGeneration) {
+          return;
+        }
         collection.set(document.uri, diagnostics);
       }
     }
   }
 
   scheduleRefresh(collection) {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
     this.refreshGeneration += 1;
     if (this.refreshTimer !== undefined) {
       return this.pendingRefreshPromise;
     }
-    const pending = new Promise((resolve) => {
-      this.pendingRefreshResolve = resolve;
-      this.refreshTimer = setTimeout(async () => {
-        this.refreshTimer = undefined;
-        const generation = this.refreshGeneration;
-        try {
-          await this.performRefresh(collection, generation);
-        } finally {
-          if (this.pendingRefreshPromise === pending) {
-            this.pendingRefreshPromise = undefined;
-            this.pendingRefreshResolve = undefined;
-          }
-          resolve();
-        }
-      }, this.refreshDelayMs);
-      if (this.refreshTimer && typeof this.refreshTimer.unref === "function") {
-        this.refreshTimer.unref();
-      }
+    const refresh = {
+      promise: undefined,
+      resolve: undefined,
+      settled: false,
+      started: false,
+      timer: undefined,
+    };
+    refresh.promise = new Promise((resolve) => {
+      refresh.resolve = resolve;
     });
-    this.pendingRefreshPromise = pending;
-    return pending;
+    this.activeRefreshes.add(refresh);
+    this.pendingRefreshPromise = refresh.promise;
+    const run = async () => {
+      refresh.started = true;
+      if (this.refreshTimer === refresh.timer || refresh.timer === undefined) {
+        this.refreshTimer = undefined;
+      }
+      const generation = this.refreshGeneration;
+      try {
+        if (!this.disposed) {
+          await this.performRefresh(collection, generation);
+        }
+      } finally {
+        this.settleRefresh(refresh);
+      }
+    };
+    const timer = setTimeout(run, this.refreshDelayMs);
+    refresh.timer = timer;
+    if (!refresh.started && !this.disposed) {
+      this.refreshTimer = timer;
+      if (timer && typeof timer.unref === "function") {
+        timer.unref();
+      }
+    } else if (!refresh.started) {
+      clearTimeout(timer);
+      this.settleRefresh(refresh);
+    }
+    return refresh.promise;
+  }
+
+  settleRefresh(refresh) {
+    if (!refresh || refresh.settled) {
+      return;
+    }
+    refresh.settled = true;
+    this.activeRefreshes.delete(refresh);
+    if (this.pendingRefreshPromise === refresh.promise) {
+      this.pendingRefreshPromise = undefined;
+    }
+    refresh.resolve();
   }
 
   waitForPendingRefresh() {
@@ -219,62 +335,109 @@ class GaugeUnusedReferenceDiagnosticsProvider {
   }
 
   register() {
+    if (this.disposed || this.registrationDisposables !== undefined) {
+      return this;
+    }
     const languages = this.vscode.languages || {};
     if (typeof languages.createDiagnosticCollection !== "function") {
-      return { dispose() {} };
+      this.registrationDisposables = [];
+      return this;
     }
-    const collection = languages.createDiagnosticCollection(COLLECTION_NAME);
-    const workspace = this.vscode.workspace || {};
-    const disposables = [collection];
-    const schedule = () => this.scheduleRefresh(collection);
+    this.registrationDisposables = [];
+    try {
+      const collection = languages.createDiagnosticCollection(COLLECTION_NAME);
+      if (this.disposed) {
+        disposeSafely(collection);
+        return this;
+      }
+      this.registrationDisposables.push(collection);
+      const workspace = this.vscode.workspace || {};
+      const schedule = () => this.scheduleRefresh(collection);
 
-    if (
-      this.documentStore
-      && typeof this.documentStore.onDidChangeDocuments === "function"
-    ) {
-      disposables.push(this.documentStore.onDidChangeDocuments(schedule));
-      if (typeof this.documentStore.start === "function") {
-        this.documentStore.start();
-      }
-    } else {
-      if (typeof workspace.onDidOpenTextDocument === "function") {
-        disposables.push(workspace.onDidOpenTextDocument(schedule));
-      }
-      if (typeof workspace.onDidChangeTextDocument === "function") {
-        disposables.push(workspace.onDidChangeTextDocument(schedule));
-      }
-    }
-    if (typeof workspace.onDidCloseTextDocument === "function") {
-      disposables.push(workspace.onDidCloseTextDocument((document) => {
-        if (document && document.uri && typeof collection.delete === "function") {
-          collection.delete(document.uri);
+      if (
+        this.documentStore
+        && typeof this.documentStore.onDidChangeDocuments === "function"
+      ) {
+        const subscription = this.documentStore.onDidChangeDocuments(schedule);
+        if (this.disposed) {
+          disposeSafely(subscription);
+          return this;
         }
-        schedule();
-      }));
-    }
-
-    schedule();
-    const provider = this;
-    return {
-      dispose() {
-        provider.disposed = true;
-        provider.refreshGeneration += 1;
-        if (provider.refreshTimer !== undefined) {
-          clearTimeout(provider.refreshTimer);
-          provider.refreshTimer = undefined;
-        }
-        if (provider.pendingRefreshResolve) {
-          provider.pendingRefreshResolve();
-          provider.pendingRefreshResolve = undefined;
-          provider.pendingRefreshPromise = undefined;
-        }
-        for (const disposable of disposables) {
-          if (disposable && typeof disposable.dispose === "function") {
-            disposable.dispose();
+        this.registrationDisposables.push(subscription);
+        if (typeof this.documentStore.start === "function") {
+          this.documentStore.start();
+          if (this.disposed) {
+            return this;
           }
         }
-      },
-    };
+      } else {
+        if (typeof workspace.onDidOpenTextDocument === "function") {
+          const subscription = workspace.onDidOpenTextDocument(schedule);
+          if (this.disposed) {
+            disposeSafely(subscription);
+            return this;
+          }
+          this.registrationDisposables.push(subscription);
+        }
+        if (typeof workspace.onDidChangeTextDocument === "function") {
+          const subscription = workspace.onDidChangeTextDocument(schedule);
+          if (this.disposed) {
+            disposeSafely(subscription);
+            return this;
+          }
+          this.registrationDisposables.push(subscription);
+        }
+      }
+      if (typeof workspace.onDidCloseTextDocument === "function") {
+        const subscription = workspace.onDidCloseTextDocument((document) => {
+          if (this.disposed) {
+            return;
+          }
+          if (document && document.uri && typeof collection.delete === "function") {
+            collection.delete(document.uri);
+          }
+          if (this.disposed) {
+            return;
+          }
+          schedule();
+        });
+        if (this.disposed) {
+          disposeSafely(subscription);
+          return this;
+        }
+        this.registrationDisposables.push(subscription);
+      }
+
+      schedule();
+      return this;
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.refreshGeneration += 1;
+    const timer = this.refreshTimer;
+    this.refreshTimer = undefined;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    this.pendingRefreshPromise = undefined;
+    const refreshes = [...this.activeRefreshes];
+    this.activeRefreshes.clear();
+    for (const refresh of refreshes) {
+      this.settleRefresh(refresh);
+    }
+    const disposables = this.registrationDisposables || [];
+    this.registrationDisposables = undefined;
+    for (const disposable of disposables) {
+      disposeSafely(disposable);
+    }
   }
 }
 
