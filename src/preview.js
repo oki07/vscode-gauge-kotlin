@@ -392,77 +392,6 @@ function htmlPathFor(pathModule, projectRoot, docsDir, filePath) {
   return pathModule.join(htmlDir, htmlName);
 }
 
-function escapeHtml(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function formatGaugePreviewText(text) {
-  const lines = String(text || "").split(/\r?\n/);
-  const formatted = [];
-  let index = 0;
-  while (index < lines.length) {
-    if (/^\s*\|/.test(lines[index])) {
-      while (formatted.length > 0 && formatted[formatted.length - 1] === "") {
-        formatted.pop();
-      }
-      if (formatted.length > 0) {
-        formatted.push("");
-      }
-      while (index < lines.length && /^\s*\|/.test(lines[index])) {
-        formatted.push(`\t${lines[index].trimStart()}`);
-        index += 1;
-      }
-      continue;
-    }
-    formatted.push(lines[index]);
-    index += 1;
-  }
-  return escapeHtml(formatted.join("\n"));
-}
-
-function activeDocumentText(vscode, filePath) {
-  const editor = vscode.window && vscode.window.activeTextEditor;
-  const document = editor && editor.document;
-  const activePath = document && ((document.uri && document.uri.fsPath) || document.fileName);
-  if (activePath === filePath && typeof document.getText === "function") {
-    return document.getText();
-  }
-  return undefined;
-}
-
-function readGaugeText(vscode, fileSystem, filePath) {
-  const text = activeDocumentText(vscode, filePath);
-  if (text !== undefined) {
-    return text;
-  }
-  return fileSystem.readFileSync(filePath, "utf8");
-}
-
-function fallbackHtml(pathModule, filePath, text) {
-  const title = escapeHtml(pathModule.basename(filePath));
-  const body = formatGaugePreviewText(text);
-  return [
-    "<!doctype html>",
-    "<html>",
-    "<head>",
-    "<meta charset=\"utf-8\">",
-    `<title>${title}</title>`,
-    "<style>",
-    "body { font-family: system-ui, sans-serif; margin: 24px; color: #1f2328; }",
-    "pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.5; }",
-    "</style>",
-    "</head>",
-    "<body>",
-    `<pre>${body}</pre>`,
-    "</body>",
-    "</html>",
-    "",
-  ].join("\n");
-}
-
 function openHtml(vscode, filename) {
   const uri = vscode.Uri && typeof vscode.Uri.file === "function"
     ? vscode.Uri.file(filename)
@@ -563,16 +492,6 @@ class GaugePreviewController {
     if (cli === DISPOSED_PREVIEW) {
       return DISPOSED_PREVIEW;
     }
-    const previewRoot = this.callSyncForOperation(
-      operation,
-      () => (this.options.tempDirProvider
-        ? this.options.tempDirProvider(projectRoot, filePath)
-        : defaultTempDir(this.pathModule, this.osModule, projectRoot)),
-    );
-    if (previewRoot === DISPOSED_PREVIEW) {
-      return DISPOSED_PREVIEW;
-    }
-    const docsDir = this.pathModule.join(previewRoot, "docs");
     const spectacleInstalled = this.callSyncForOperation(
       operation,
       () => isSpectacleInstalled(cli),
@@ -584,12 +503,19 @@ class GaugePreviewController {
       return this.previewWithoutSpectacle(
         operation,
         cli,
-        projectRoot,
-        previewRoot,
-        docsDir,
         filePath,
       );
     }
+    const previewRoot = this.callSyncForOperation(
+      operation,
+      () => (this.options.tempDirProvider
+        ? this.options.tempDirProvider(projectRoot, filePath)
+        : defaultTempDir(this.pathModule, this.osModule, projectRoot)),
+    );
+    if (previewRoot === DISPOSED_PREVIEW) {
+      return DISPOSED_PREVIEW;
+    }
+    const docsDir = this.pathModule.join(previewRoot, "docs");
 
     const command = this.callSyncForOperation(
       operation,
@@ -670,9 +596,6 @@ class GaugePreviewController {
   async previewWithoutSpectacle(
     operation,
     cli,
-    projectRoot,
-    previewRoot,
-    docsDir,
     filePath,
   ) {
     try {
@@ -695,16 +618,7 @@ class GaugePreviewController {
           return DISPOSED_PREVIEW;
         }
       }
-      if (!this.ensureDirectoryForOperation(operation, previewRoot)
-        || !this.ensureDirectoryForOperation(operation, docsDir)) {
-        return DISPOSED_PREVIEW;
-      }
-      return this.writeFallbackPreviewForOperation(
-        operation,
-        projectRoot,
-        docsDir,
-        filePath,
-      );
+      return undefined;
     } catch (error) {
       if (this.operationStopped(operation)) {
         return DISPOSED_PREVIEW;
@@ -714,29 +628,6 @@ class GaugePreviewController {
         previewFailureMessage(this.pathModule, filePath, { error }),
       );
     }
-  }
-
-  async writeFallbackPreviewForOperation(operation, projectRoot, docsDir, filePath) {
-    const htmlPath = htmlPathFor(this.pathModule, projectRoot, docsDir, filePath);
-    if (!this.ensureDirectoryForOperation(operation, this.pathModule.dirname(htmlPath))) {
-      return DISPOSED_PREVIEW;
-    }
-    const text = this.callSyncForOperation(
-      operation,
-      () => readGaugeText(this.vscode, this.fileSystem, filePath),
-    );
-    if (text === DISPOSED_PREVIEW) {
-      return DISPOSED_PREVIEW;
-    }
-    const html = fallbackHtml(this.pathModule, filePath, text);
-    const written = this.callSyncForOperation(
-      operation,
-      () => this.fileSystem.writeFileSync(htmlPath, html, "utf8"),
-    );
-    if (written === DISPOSED_PREVIEW) {
-      return DISPOSED_PREVIEW;
-    }
-    return this.openHtmlForOperation(operation, htmlPath);
   }
 
   ensureDirectoryForOperation(operation, directory) {

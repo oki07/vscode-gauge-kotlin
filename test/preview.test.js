@@ -527,7 +527,7 @@ test("previewGaugeDocument removes deprecated Gauge lines from Spectacle failure
   ]);
 });
 
-test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is missing", async () => {
+test("previewGaugeDocument does not create output when Spectacle is missing", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const {
     errorPrompts,
@@ -548,6 +548,7 @@ test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is 
   const madeDirectories = [];
   const installs = [];
   const spawns = [];
+  let tempDirectoryCalls = 0;
   const writes = [];
   const cli = {
     isPluginInstalled(pluginName) {
@@ -585,6 +586,7 @@ test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is 
       },
     },
     tempDirProvider() {
+      tempDirectoryCalls += 1;
       return "/tmp/gauge-preview";
     },
     vscode,
@@ -599,121 +601,13 @@ test("previewGaugeDocument falls back to formatted Gauge HTML when Spectacle is 
   ]);
   assert.deepEqual(installs, []);
   assert.deepEqual(spawns, []);
-  assert.deepEqual(madeDirectories, [
-    { directory: "/tmp/gauge-preview", options: { recursive: true } },
-    { directory: "/tmp/gauge-preview/docs", options: { recursive: true } },
-    {
-      directory: "/tmp/gauge-preview/docs/html/specs",
-      options: { recursive: true },
-    },
-  ]);
-  assert.equal(writes.length, 1);
-  assert.equal(writes[0].filename, "/tmp/gauge-preview/docs/html/specs/example.html");
-  assert.equal(writes[0].options, "utf8");
-  assert.match(writes[0].content, /# Checkout &lt;item&gt;/);
-  assert.match(writes[0].content, /\n\t\|alice\|/);
-  assert.deepEqual(opened, [
-    {
-      fsPath: "/tmp/gauge-preview/docs/html/specs/example.html",
-      scheme: "file",
-    },
-  ]);
+  assert.equal(tempDirectoryCalls, 0);
+  assert.deepEqual(madeDirectories, []);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(opened, []);
 });
 
-test("previewGaugeDocument formats fallback table blocks like IntelliJ preview", async () => {
-  const { previewGaugeDocument } = require("../src/preview");
-  const source = [
-    "Steps Collection",
-    "================",
-    "",
-    "tags: api",
-    "",
-    "* In an empty directory initialize a project with the <current> language",
-    "* Create a specification \"Specification 1\" with the following contexts",
-    "    |step text|implementation         |",
-    "    |---------|-----------------------|",
-    "    |context 1|\"inside first context\" |",
-    "    |context 2|\"inside second context\"|",
-    "* Create a specification \"Specification 1\" with the following contexts",
-    "        |step text|implementation         |",
-    "    |---------|-----------------------|",
-    "       |context 1|\"inside first context\" |",
-    "* Create a specification \"Specification 1\" with the following contexts",
-    "",
-    "",
-    "    |step text|implementation         |",
-    "    |---------|-----------------------|",
-    "    |context 1|\"inside first context\" |",
-    "",
-  ].join("\n");
-  const expectedBody = [
-    "Steps Collection",
-    "================",
-    "",
-    "tags: api",
-    "",
-    "* In an empty directory initialize a project with the &lt;current&gt; language",
-    "* Create a specification \"Specification 1\" with the following contexts",
-    "",
-    "\t|step text|implementation         |",
-    "\t|---------|-----------------------|",
-    "\t|context 1|\"inside first context\" |",
-    "\t|context 2|\"inside second context\"|",
-    "* Create a specification \"Specification 1\" with the following contexts",
-    "",
-    "\t|step text|implementation         |",
-    "\t|---------|-----------------------|",
-    "\t|context 1|\"inside first context\" |",
-    "* Create a specification \"Specification 1\" with the following contexts",
-    "",
-    "\t|step text|implementation         |",
-    "\t|---------|-----------------------|",
-    "\t|context 1|\"inside first context\" |",
-    "",
-  ].join("\n");
-  const { vscode } = createFakeVscode({
-    document: {
-      languageId: "gauge",
-      uri: { fsPath: "/workspace/gauge/specs/example.spec" },
-      fileName: "/workspace/gauge/specs/example.spec",
-      getText() {
-        return source;
-      },
-    },
-  });
-  const writes = [];
-  const cli = {
-    isPluginInstalled() {
-      return false;
-    },
-  };
-
-  await previewGaugeDocument({
-    cli,
-    fileSystem: {
-      mkdirSync() {},
-      writeFileSync(filename, content) {
-        writes.push({ filename, content });
-      },
-    },
-    pathModule: path.posix,
-    projectFactory: {
-      getGaugeRootFromFilePath() {
-        return "/workspace/gauge";
-      },
-    },
-    tempDirProvider() {
-      return "/tmp/gauge-preview";
-    },
-    vscode,
-  });
-
-  assert.equal(writes.length, 1);
-  const body = writes[0].content.match(/<pre>([\s\S]*)<\/pre>/)[1];
-  assert.equal(body, expectedBody);
-});
-
-test("previewGaugeDocument installs Spectacle when the missing plugin action is selected", async () => {
+test("previewGaugeDocument installs Spectacle without creating output for the current request", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errorPrompts, informationPrompts, opened, vscode } = createFakeVscode({
     document: {
@@ -739,7 +633,7 @@ test("previewGaugeDocument installs Spectacle when the missing plugin action is 
     },
   };
 
-  await previewGaugeDocument({
+  const outcome = await previewGaugeDocument({
     cli,
     fileSystem: {
       mkdirSync() {},
@@ -767,13 +661,54 @@ test("previewGaugeDocument installs Spectacle when the missing plugin action is 
     },
   ]);
   assert.deepEqual(installs, ["spectacle"]);
-  assert.equal(writes.length, 1);
-  assert.deepEqual(opened, [
-    {
-      fsPath: "/tmp/gauge-preview/docs/html/specs/example.html",
-      scheme: "file",
+  assert.equal(outcome, undefined);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(opened, []);
+});
+
+test("previewGaugeDocument does not create output when Spectacle installation fails", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode({
+    errorSelection: "Install Spectacle",
+  });
+  const installs = [];
+  const writes = [];
+
+  const outcome = await previewGaugeDocument({
+    cli: {
+      isPluginInstalled() {
+        return false;
+      },
+      installGaugeRunner(pluginName) {
+        installs.push(pluginName);
+        return Promise.resolve(false);
+      },
     },
-  ]);
+    fileSystem: {
+      mkdirSync() {
+        throw new Error("directories should not be created");
+      },
+      writeFileSync(filename) {
+        writes.push(filename);
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.equal(outcome, undefined);
+  assert.deepEqual(installs, ["spectacle"]);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(opened, []);
+  assert.equal(errors.length, 1);
 });
 
 test("previewGaugeDocument uses the post-install version manifest on the next preview", async () => {
@@ -859,18 +794,18 @@ test("previewGaugeDocument uses the post-install version manifest on the next pr
   const firstPreview = controller.preview();
   await installEntered.promise;
   installChild.emit("exit", 0);
-  await firstPreview;
+  assert.equal(await firstPreview, undefined);
 
   const secondPreview = controller.preview();
-  await secondPreview;
+  assert.equal(await secondPreview, true);
 
   assert.deepEqual(spawns.map((entry) => entry.args), [
     ["install", "spectacle"],
     ["docs", "spectacle", "/workspace/gauge/specs/example.spec"],
   ]);
   assert.equal(errorPrompts.length, 1);
-  assert.equal(writes.length, 1);
-  assert.equal(opened.length, 2);
+  assert.equal(writes.length, 0);
+  assert.equal(opened.length, 1);
 });
 
 test("GaugePreviewController does not block an install follower on the progress notification", async () => {
@@ -958,11 +893,11 @@ test("GaugePreviewController does not block an install follower on the progress 
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(installs, ["spectacle"]);
     assert.equal(information.includes("Installation in progress..."), true);
-    assert.deepEqual(secondOutcome, { status: "fulfilled", value: true });
+    assert.deepEqual(secondOutcome, { status: "fulfilled", value: undefined });
     assert.equal(controller.activeOperations.size, 0);
     assert.equal(errorPrompts.length, 2);
-    assert.equal(writes.length, 2);
-    assert.equal(opened.length, 2);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(opened, []);
   } catch (error) {
     assertionError = error;
   } finally {
@@ -1040,12 +975,12 @@ test("GaugePreviewController follows a shared install when the progress notifica
   await notificationEntered.promise;
   installResponse.resolve("installed");
 
-  assert.equal(await firstPreview, true);
-  assert.equal(await secondPreview, true);
+  assert.equal(await firstPreview, undefined);
+  assert.equal(await secondPreview, undefined);
   assert.deepEqual(installs, ["spectacle"]);
   assert.equal(errorPrompts.length, 2);
-  assert.equal(writes.length, 2);
-  assert.equal(opened.length, 2);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(opened, []);
   assert.equal(controller.activeOperations.size, 0);
 });
 
@@ -1251,61 +1186,8 @@ test("GaugePreviewController lifecycle separates prompt and install ownership", 
   }
 });
 
-test("GaugePreviewController lifecycle guards fallback and spawn reentrancy", async () => {
+test("GaugePreviewController lifecycle guards spawn reentrancy", async () => {
   const { GaugePreviewController } = require("../src/preview");
-  const fallbackBoundaries = [
-    "/tmp/gauge-preview",
-    "/tmp/gauge-preview/docs",
-    "/tmp/gauge-preview/docs/html/specs",
-    "read",
-    "write",
-  ];
-
-  for (const boundary of fallbackBoundaries) {
-    const { opened, vscode } = createFakeVscode({ errorSelection: undefined });
-    const calls = [];
-    let controller;
-    const stopAt = (value) => {
-      calls.push(value);
-      if (value === boundary) {
-        controller.dispose();
-      }
-    };
-    controller = new GaugePreviewController({
-      cli: {
-        isPluginInstalled() {
-          return false;
-        },
-      },
-      fileSystem: {
-        mkdirSync(directory) {
-          stopAt(directory);
-        },
-        readFileSync() {
-          stopAt("read");
-          return "# Checkout\n";
-        },
-        writeFileSync() {
-          stopAt("write");
-        },
-      },
-      pathModule: path.posix,
-      projectFactory: {
-        getGaugeRootFromFilePath() {
-          return "/workspace/gauge";
-        },
-      },
-      tempDirProvider() {
-        return "/tmp/gauge-preview";
-      },
-      vscode,
-    });
-
-    assert.equal(await controller.preview(), undefined);
-    assert.deepEqual(opened, []);
-    assert.equal(calls.includes(boundary), true);
-  }
-
   const { errors, opened, vscode } = createFakeVscode();
   const child = createDeferredChild();
   let controller;
