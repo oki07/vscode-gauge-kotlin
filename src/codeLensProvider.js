@@ -37,9 +37,14 @@ const GAUGE_REFERENCE_FILE_PATTERN = /\.(spec|cpt|md)$/i;
 const STEP_IMPLEMENTATION_FILE_PATTERN = /\.(kt|java)$/i;
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
+const CANCELLED_CODE_LENS_OPERATION = Symbol("cancelledCodeLensOperation");
 
 function getVscode(vscode) {
   return vscode || {};
+}
+
+function isThenable(value) {
+  return Boolean(value && typeof value.then === "function");
 }
 
 function documentPath(document) {
@@ -379,15 +384,253 @@ class GaugeCodeLensProvider {
     this.projectFactory = options.projectFactory;
     this.documentStore = options.documentStore;
     this.workspaceStepIndex = options.workspaceStepIndex;
+    this.ownedDiagnosticsProvider = undefined;
     this.diagnosticsProvider = options.diagnosticsProvider
-      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider)
-      || new GaugeStepDiagnosticsProvider({
+      || (this.workspaceStepIndex && this.workspaceStepIndex.diagnosticsProvider);
+    if (!this.diagnosticsProvider) {
+      this.ownedDiagnosticsProvider = new GaugeStepDiagnosticsProvider({
         documentStore: this.documentStore,
         fileSystem: this.fileSystem,
         pathModule: this.pathModule,
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       });
+      this.diagnosticsProvider = this.ownedDiagnosticsProvider;
+    }
+    this.disposed = false;
+    this.activeOperations = new Set();
+    this.registrationAttempted = false;
+    this.registrationDisposable = undefined;
+  }
+
+  disposeOwnedProvider(provider) {
+    if (!provider || typeof provider.dispose !== "function") {
+      return;
+    }
+    try {
+      provider.dispose();
+    } catch (_error) {
+      // Provider cleanup cannot reactivate a terminal CodeLens request.
+    }
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    const operations = [...this.activeOperations];
+    this.activeOperations.clear();
+    for (const operation of operations) {
+      this.cancelOperation(operation);
+    }
+    const registration = this.registrationDisposable;
+    this.registrationDisposable = undefined;
+    if (registration && typeof registration.dispose === "function") {
+      try {
+        registration.dispose();
+      } catch (_error) {
+        // Continue releasing provider-owned diagnostics after unregistering fails.
+      }
+    }
+    const ownedDiagnosticsProvider = this.ownedDiagnosticsProvider;
+    this.ownedDiagnosticsProvider = undefined;
+    this.disposeOwnedProvider(ownedDiagnosticsProvider);
+  }
+
+  createOperation() {
+    if (this.disposed) {
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      hostCancellationDisposable: undefined,
+      resolveCancellation,
+    };
+    this.activeOperations.add(operation);
+    return operation;
+  }
+
+  isOperationActive(operation) {
+    return !this.disposed && (!operation || operation.active);
+  }
+
+  disposeHostCancellation(operation) {
+    const disposable = operation && operation.hostCancellationDisposable;
+    if (!disposable) {
+      return;
+    }
+    operation.hostCancellationDisposable = undefined;
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Listener cleanup cannot reactivate a completed CodeLens request.
+      }
+    }
+  }
+
+  cancelOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    operation.resolveCancellation(CANCELLED_CODE_LENS_OPERATION);
+    this.disposeHostCancellation(operation);
+  }
+
+  finishOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeOperations.delete(operation);
+    this.disposeHostCancellation(operation);
+  }
+
+  linkOperationCancellation(operation, token) {
+    if (!token) {
+      return true;
+    }
+    if (token.isCancellationRequested) {
+      this.cancelOperation(operation);
+      return false;
+    }
+    if (typeof token.onCancellationRequested !== "function") {
+      return true;
+    }
+    let disposable;
+    try {
+      disposable = token.onCancellationRequested(() => this.cancelOperation(operation));
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return false;
+      }
+      throw error;
+    }
+    if (this.isOperationActive(operation)) {
+      operation.hostCancellationDisposable = disposable;
+    } else if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Synchronous cancellation already completed the request.
+      }
+    }
+    if (token.isCancellationRequested && this.isOperationActive(operation)) {
+      this.cancelOperation(operation);
+    }
+    return this.isOperationActive(operation);
+  }
+
+  observeValue(value) {
+    Promise.resolve(value).catch(() => undefined);
+  }
+
+  callSyncForOperation(operation, callback) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    let value;
+    try {
+      value = callback();
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      throw error;
+    }
+    if (!this.isOperationActive(operation)) {
+      this.observeValue(value);
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    return value;
+  }
+
+  async callForOperation(operation, callback) {
+    const value = this.callSyncForOperation(operation, callback);
+    if (value === CANCELLED_CODE_LENS_OPERATION) {
+      return value;
+    }
+    if (!isThenable(value)) {
+      return value;
+    }
+    const observed = Promise.resolve(value);
+    try {
+      const result = operation
+        ? await Promise.race([observed, operation.cancellation])
+        : await observed;
+      return this.isOperationActive(operation)
+        ? result
+        : CANCELLED_CODE_LENS_OPERATION;
+    } catch (error) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      throw error;
+    }
+  }
+
+  completeForOperation(operation, callback) {
+    const value = this.callSyncForOperation(operation, callback);
+    if (value === CANCELLED_CODE_LENS_OPERATION || !isThenable(value)) {
+      return value;
+    }
+    const observed = Promise.resolve(value);
+    const guarded = operation
+      ? Promise.race([observed, operation.cancellation])
+      : observed;
+    return guarded.then(
+      (result) => this.isOperationActive(operation)
+        ? result
+        : CANCELLED_CODE_LENS_OPERATION,
+      (error) => {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_CODE_LENS_OPERATION;
+        }
+        throw error;
+      },
+    );
+  }
+
+  runOperation(token, callback) {
+    if (this.disposed || (token && token.isCancellationRequested)) {
+      return [];
+    }
+    const operation = this.createOperation();
+    if (!operation) {
+      return [];
+    }
+    let result;
+    try {
+      result = this.linkOperationCancellation(operation, token)
+        ? this.completeForOperation(operation, () => callback(operation))
+        : CANCELLED_CODE_LENS_OPERATION;
+    } catch (error) {
+      this.finishOperation(operation);
+      throw error;
+    }
+    if (!isThenable(result)) {
+      const completed = result === CANCELLED_CODE_LENS_OPERATION ? [] : result;
+      this.finishOperation(operation);
+      return completed;
+    }
+    return Promise.resolve(result)
+      .then(
+        (value) => value === CANCELLED_CODE_LENS_OPERATION ? [] : value,
+        (error) => {
+          if (!this.isOperationActive(operation)) {
+            return [];
+          }
+          throw error;
+        },
+      )
+      .finally(() => this.finishOperation(operation));
   }
 
   isGaugeProjectFile(file) {
@@ -457,26 +700,49 @@ class GaugeCodeLensProvider {
     return config.get(EXECUTION_CONFIG) !== false;
   }
 
-  async storeDocumentsMatching(filePattern, sourceRoot) {
-    await this.documentStore.whenReady();
+  async storeDocumentsMatching(filePattern, sourceRoot, operation) {
+    const ready = await this.callForOperation(operation, () => this.documentStore.whenReady());
+    if (ready === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    const storedDocuments = this.callSyncForOperation(
+      operation,
+      () => this.documentStore.documents(),
+    );
+    if (storedDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const documents = [];
-    for (const candidate of this.documentStore.documents()) {
-      const file = documentPath(candidate);
-      if (
-        !file
-        || !filePattern.test(file)
-        || !this.belongsFileToSourceGaugeProject(file, sourceRoot)
-      ) {
+    for (const candidate of storedDocuments) {
+      const included = this.callSyncForOperation(operation, () => {
+        const file = documentPath(candidate);
+        return Boolean(
+          file
+          && filePattern.test(file)
+          && this.belongsFileToSourceGaugeProject(file, sourceRoot)
+        );
+      });
+      if (included === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      if (!included) {
         continue;
       }
       documents.push(candidate);
     }
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  async findWorkspaceStepImplementationDocuments(sourceRoot) {
+  async findWorkspaceStepImplementationDocuments(sourceRoot, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     if (this.documentStore) {
-      return this.storeDocumentsMatching(STEP_IMPLEMENTATION_FILE_PATTERN, sourceRoot);
+      return this.storeDocumentsMatching(
+        STEP_IMPLEMENTATION_FILE_PATTERN,
+        sourceRoot,
+        operation,
+      );
     }
     const workspace = this.vscode.workspace || {};
     if (
@@ -488,32 +754,54 @@ class GaugeCodeLensProvider {
 
     const documents = [];
     for (const pattern of STEP_IMPLEMENTATION_WORKSPACE_PATTERNS) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
       let uris;
       try {
-        uris = await workspace.findFiles(pattern);
+        uris = await this.callForOperation(operation, () => workspace.findFiles(pattern));
       } catch (_error) {
         continue;
       }
+      if (uris === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
 
       for (const uri of uris || []) {
-        const file = uriPath(uri);
-        if (!this.belongsFileToSourceGaugeProject(file, sourceRoot)) {
+        const belongs = this.callSyncForOperation(
+          operation,
+          () => this.belongsFileToSourceGaugeProject(uriPath(uri), sourceRoot),
+        );
+        if (belongs === CANCELLED_CODE_LENS_OPERATION) {
+          return CANCELLED_CODE_LENS_OPERATION;
+        }
+        if (!belongs) {
           continue;
         }
 
         try {
-          documents.push(await workspace.openTextDocument(uri));
+          const document = await this.callForOperation(
+            operation,
+            () => workspace.openTextDocument(uri),
+          );
+          if (document === CANCELLED_CODE_LENS_OPERATION) {
+            return CANCELLED_CODE_LENS_OPERATION;
+          }
+          documents.push(document);
         } catch (_error) {
           // Ignore stale workspace files so CodeLens still works for the active document.
         }
       }
     }
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  async findWorkspaceGaugeReferenceDocuments(sourceRoot) {
+  async findWorkspaceGaugeReferenceDocuments(sourceRoot, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     if (this.documentStore) {
-      return this.storeDocumentsMatching(GAUGE_REFERENCE_FILE_PATTERN, sourceRoot);
+      return this.storeDocumentsMatching(GAUGE_REFERENCE_FILE_PATTERN, sourceRoot, operation);
     }
     const workspace = this.vscode.workspace || {};
     if (
@@ -525,32 +813,60 @@ class GaugeCodeLensProvider {
 
     const documents = [];
     for (const pattern of GAUGE_REFERENCE_WORKSPACE_PATTERNS) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
       let uris;
       try {
-        uris = await workspace.findFiles(pattern);
+        uris = await this.callForOperation(operation, () => workspace.findFiles(pattern));
       } catch (_error) {
         continue;
       }
+      if (uris === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
 
       for (const uri of uris || []) {
-        const file = uriPath(uri);
-        if (!this.belongsFileToSourceGaugeProject(file, sourceRoot)) {
+        const belongs = this.callSyncForOperation(
+          operation,
+          () => this.belongsFileToSourceGaugeProject(uriPath(uri), sourceRoot),
+        );
+        if (belongs === CANCELLED_CODE_LENS_OPERATION) {
+          return CANCELLED_CODE_LENS_OPERATION;
+        }
+        if (!belongs) {
           continue;
         }
 
         try {
-          documents.push(await workspace.openTextDocument(uri));
+          const document = await this.callForOperation(
+            operation,
+            () => workspace.openTextDocument(uri),
+          );
+          if (document === CANCELLED_CODE_LENS_OPERATION) {
+            return CANCELLED_CODE_LENS_OPERATION;
+          }
+          documents.push(document);
         } catch (_error) {
           // Ignore stale workspace files so CodeLens still works for the active document.
         }
       }
     }
-    return documents;
+    return this.isOperationActive(operation) ? documents : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  async gaugeReferenceDocuments(sourceDocument) {
+  async gaugeReferenceDocuments(sourceDocument, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const workspace = this.vscode.workspace || {};
-    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
+    const sourceRoot = this.callSyncForOperation(
+      operation,
+      () => this.diagnosticsProvider.gaugeProjectRoot(sourceDocument),
+    );
+    if (sourceRoot === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -573,78 +889,162 @@ class GaugeCodeLensProvider {
       documents.push(candidate);
     };
 
-    addDocument(sourceDocument);
-    for (const candidate of workspace.textDocuments || []) {
-      addDocument(candidate);
+    let added = this.callSyncForOperation(operation, () => addDocument(sourceDocument));
+    if (added === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
     }
-    for (const candidate of await this.findWorkspaceGaugeReferenceDocuments(sourceRoot)) {
-      addDocument(candidate);
+    const openDocuments = this.callSyncForOperation(
+      operation,
+      () => workspace.textDocuments || [],
+    );
+    if (openDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
     }
-    return documents;
+    for (const candidate of openDocuments) {
+      added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+    }
+    const workspaceDocuments = await this.findWorkspaceGaugeReferenceDocuments(
+      sourceRoot,
+      operation,
+    );
+    if (workspaceDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    for (const candidate of workspaceDocuments) {
+      added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+    }
+    return this.isOperationActive(operation) ? documents : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  referenceCountInDocuments(referenceDocuments, normalizedStep) {
+  referenceCountInDocuments(referenceDocuments, normalizedStep, operation) {
     let count = 0;
     for (const candidate of referenceDocuments) {
-      count += countStepReferences(candidate, normalizedStep, {
-        allowMultilineStep: allowMultilineStep({
-          fileSystem: this.fileSystem,
-          pathModule: this.pathModule,
-          projectRoot: this.diagnosticsProvider.rootForFile(documentPath(candidate)),
+      const candidateCount = this.callSyncForOperation(
+        operation,
+        () => countStepReferences(candidate, normalizedStep, {
+          allowMultilineStep: allowMultilineStep({
+            fileSystem: this.fileSystem,
+            pathModule: this.pathModule,
+            projectRoot: this.diagnosticsProvider.rootForFile(documentPath(candidate)),
+          }),
         }),
-      });
+      );
+      if (candidateCount === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      count += candidateCount;
     }
-    return count;
+    return this.isOperationActive(operation) ? count : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  async provideConceptReferenceCodeLenses(document) {
-    if (
-      !this.referenceCodeLensesEnabled()
-      || !this.isGaugeProjectDocument(document)
-      || typeof document.getText !== "function"
-    ) {
+  async provideConceptReferenceCodeLenses(document, operation) {
+    const eligible = this.callSyncForOperation(operation, () => (
+      this.referenceCodeLensesEnabled()
+      && this.isGaugeProjectDocument(document)
+      && typeof document.getText === "function"
+    ));
+    if (eligible === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    if (!eligible) {
       return [];
     }
 
-    const uri = documentUri(document);
+    const uri = this.callSyncForOperation(operation, () => documentUri(document));
+    if (uri === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     if (!uri) {
       return [];
     }
 
     const lenses = [];
-    const lines = document.getText().split(/\r?\n/);
+    const text = this.callSyncForOperation(operation, () => document.getText());
+    if (text === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    const lines = text.split(/\r?\n/);
     const referenceDocuments = this.workspaceStepIndex
       ? undefined
-      : await this.gaugeReferenceDocuments(document);
-    for (const heading of findConceptHeadings(document.getText())) {
+      : await this.gaugeReferenceDocuments(document, operation);
+    if (referenceDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    const headings = this.callSyncForOperation(operation, () => findConceptHeadings(text));
+    if (headings === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    for (const heading of headings) {
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
       if (!heading.normalized) {
         continue;
       }
-      const line = lines[heading.start.line] || "";
-      const marker = firstNonWhitespace(line);
-      const range = createRange(
-        this.vscode,
-        heading.start.line,
-        marker,
-        Math.max(marker, heading.end.character),
-      );
-      const position = createPosition(this.vscode, heading.start.line, marker);
+      const location = this.callSyncForOperation(operation, () => {
+        const line = lines[heading.start.line] || "";
+        const marker = firstNonWhitespace(line);
+        return {
+          position: createPosition(this.vscode, heading.start.line, marker),
+          range: createRange(
+            this.vscode,
+            heading.start.line,
+            marker,
+            Math.max(marker, heading.end.character),
+          ),
+        };
+      });
+      if (location === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
       const count = this.workspaceStepIndex
         && typeof this.workspaceStepIndex.referenceCount === "function"
-        ? await this.workspaceStepIndex.referenceCount(document, heading.normalized)
-        : this.referenceCountInDocuments(referenceDocuments, heading.normalized);
-      lenses.push(createCodeLens(this.vscode, range, {
-        command: SHOW_REFERENCES_FOR_STEP,
-        title: referenceTitle(count),
-        arguments: [uri, position, heading.normalized],
-      }));
+        ? await this.callForOperation(
+          operation,
+          () => this.workspaceStepIndex.referenceCount(document, heading.normalized),
+        )
+        : this.referenceCountInDocuments(
+          referenceDocuments,
+          heading.normalized,
+          operation,
+        );
+      if (count === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      const lens = this.callSyncForOperation(
+        operation,
+        () => createCodeLens(this.vscode, location.range, {
+          command: SHOW_REFERENCES_FOR_STEP,
+          title: referenceTitle(count),
+          arguments: [uri, location.position, heading.normalized],
+        }),
+      );
+      if (lens === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      lenses.push(lens);
     }
-    return lenses;
+    return this.isOperationActive(operation) ? lenses : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  async stepImplementationDocuments(sourceDocument) {
+  async stepImplementationDocuments(sourceDocument, operation) {
+    if (!this.isOperationActive(operation)) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const workspace = this.vscode.workspace || {};
-    const sourceRoot = this.diagnosticsProvider.gaugeProjectRoot(sourceDocument);
+    const sourceRoot = this.callSyncForOperation(
+      operation,
+      () => this.diagnosticsProvider.gaugeProjectRoot(sourceDocument),
+    );
+    if (sourceRoot === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const documents = [];
     const seenPaths = new Set();
     const addDocument = (candidate) => {
@@ -669,53 +1069,121 @@ class GaugeCodeLensProvider {
       documents.push(candidate);
     };
 
-    for (const candidate of workspace.textDocuments || []) {
-      addDocument(candidate);
+    const openDocuments = this.callSyncForOperation(
+      operation,
+      () => workspace.textDocuments || [],
+    );
+    if (openDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
     }
-    for (const candidate of await this.findWorkspaceStepImplementationDocuments(sourceRoot)) {
-      addDocument(candidate);
+    for (const candidate of openDocuments) {
+      const added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
     }
-    return documents;
+    const workspaceDocuments = await this.findWorkspaceStepImplementationDocuments(
+      sourceRoot,
+      operation,
+    );
+    if (workspaceDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    for (const candidate of workspaceDocuments) {
+      const added = this.callSyncForOperation(operation, () => addDocument(candidate));
+      if (added === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+    }
+    return this.isOperationActive(operation) ? documents : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  async provideStepReferenceCodeLenses(document) {
-    if (
-      !this.referenceCodeLensesEnabled()
-      || !this.isGaugeProjectDocument(document)
-      || typeof document.getText !== "function"
-    ) {
+  async provideStepReferenceCodeLenses(document, operation) {
+    const eligible = this.callSyncForOperation(operation, () => (
+      this.referenceCodeLensesEnabled()
+      && this.isGaugeProjectDocument(document)
+      && typeof document.getText === "function"
+    ));
+    if (eligible === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    if (!eligible) {
       return [];
     }
 
-    const uri = documentUri(document);
+    const uri = this.callSyncForOperation(operation, () => documentUri(document));
+    if (uri === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     if (!uri) {
       return [];
     }
 
-    const text = document.getText();
+    const text = this.callSyncForOperation(operation, () => document.getText());
+    if (text === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const indexed = this.workspaceStepIndex
       && typeof this.workspaceStepIndex.stepEntriesForDocument === "function";
     const implementationDocuments = indexed
       ? []
-      : await this.stepImplementationDocuments(document);
+      : await this.stepImplementationDocuments(document, operation);
+    if (implementationDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const externalConstants = !indexed && isStepImplementationDocument(document)
-      ? this.diagnosticsProvider.collectWorkspaceConstants(document, implementationDocuments)
+      ? this.callSyncForOperation(
+        operation,
+        () => this.diagnosticsProvider.collectWorkspaceConstants(
+          document,
+          implementationDocuments,
+        ),
+      )
       : undefined;
+    if (externalConstants === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const lenses = [];
     const referenceDocuments = indexed
       ? undefined
-      : await this.gaugeReferenceDocuments(document);
+      : await this.gaugeReferenceDocuments(document, operation);
+    if (referenceDocuments === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     const entries = indexed
-      ? await this.workspaceStepIndex.stepEntriesForDocument(document, document)
-      : findStepFunctionsForDocument(document, externalConstants);
+      ? await this.callForOperation(
+        operation,
+        () => this.workspaceStepIndex.stepEntriesForDocument(document, document),
+      )
+      : this.callSyncForOperation(
+        operation,
+        () => findStepFunctionsForDocument(document, externalConstants),
+      );
+    if (entries === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     for (const entry of entries) {
-      const start = positionAt(text, entry.declarationStart, document);
-      const end = positionAt(text, entry.declarationEnd, document);
-      const range = createRangeFromPositions(this.vscode, start, end);
+      if (!this.isOperationActive(operation)) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      const location = this.callSyncForOperation(operation, () => {
+        const start = positionAt(text, entry.declarationStart, document);
+        const end = positionAt(text, entry.declarationEnd, document);
+        return {
+          range: createRangeFromPositions(this.vscode, start, end),
+          start,
+        };
+      });
+      if (location === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
       const aliases = indexed
         && typeof this.workspaceStepIndex.stepAliasesForEntry === "function"
-        ? await this.workspaceStepIndex.stepAliasesForEntry(document, document, entry)
-        : [
+        ? await this.callForOperation(
+        operation,
+        () => this.workspaceStepIndex.stepAliasesForEntry(document, document, entry),
+      )
+      : this.callSyncForOperation(operation, () => [
           ...entry.aliases,
           ...superStepAliasesForEntry(
             document,
@@ -723,71 +1191,197 @@ class GaugeCodeLensProvider {
             [document, ...implementationDocuments],
             this.diagnosticsProvider,
           ),
-        ];
-      for (const stepValue of normalizedStepValues(aliases)) {
+        ]);
+      if (aliases === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      const stepValues = this.callSyncForOperation(
+        operation,
+        () => normalizedStepValues(aliases),
+      );
+      if (stepValues === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      for (const stepValue of stepValues) {
+        if (!this.isOperationActive(operation)) {
+          return CANCELLED_CODE_LENS_OPERATION;
+        }
         const count = indexed
           && typeof this.workspaceStepIndex.referenceCount === "function"
-          ? await this.workspaceStepIndex.referenceCount(document, stepValue)
-          : this.referenceCountInDocuments(referenceDocuments, stepValue);
-        lenses.push(createCodeLens(this.vscode, range, {
-          command: SHOW_REFERENCES_FOR_STEP,
-          title: referenceTitle(count),
-          arguments: [uri, start, stepValue],
-        }));
+          ? await this.callForOperation(
+            operation,
+            () => this.workspaceStepIndex.referenceCount(document, stepValue),
+          )
+          : this.referenceCountInDocuments(referenceDocuments, stepValue, operation);
+        if (count === CANCELLED_CODE_LENS_OPERATION) {
+          return CANCELLED_CODE_LENS_OPERATION;
+        }
+        const lens = this.callSyncForOperation(
+          operation,
+          () => createCodeLens(this.vscode, location.range, {
+            command: SHOW_REFERENCES_FOR_STEP,
+            title: referenceTitle(count),
+            arguments: [uri, location.start, stepValue],
+          }),
+        );
+        if (lens === CANCELLED_CODE_LENS_OPERATION) {
+          return CANCELLED_CODE_LENS_OPERATION;
+        }
+        lenses.push(lens);
       }
     }
-    return lenses;
+    return this.isOperationActive(operation) ? lenses : CANCELLED_CODE_LENS_OPERATION;
   }
 
-  provideCodeLenses(document) {
-    if (!document) {
-      return [];
+  provideCodeLensesForOperation(document, operation) {
+    const file = this.callSyncForOperation(operation, () => documentPath(document));
+    if (file === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
     }
-    const file = documentPath(document);
     if (!file) {
       return [];
     }
-    if (isConceptDocument(document)) {
-      return this.provideConceptReferenceCodeLenses(document);
+    const conceptDocument = this.callSyncForOperation(
+      operation,
+      () => isConceptDocument(document),
+    );
+    if (conceptDocument === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
     }
-    if (isStepImplementationDocument(document)) {
-      return this.provideStepReferenceCodeLenses(document);
+    if (conceptDocument) {
+      return this.provideConceptReferenceCodeLenses(document, operation);
     }
-    const supportedDocument = document.languageId === GAUGE_LANGUAGE
+    const stepDocument = this.callSyncForOperation(
+      operation,
+      () => isStepImplementationDocument(document),
+    );
+    if (stepDocument === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    if (stepDocument) {
+      return this.provideStepReferenceCodeLenses(document, operation);
+    }
+    const supportedDocument = this.callSyncForOperation(operation, () => (
+      document.languageId === GAUGE_LANGUAGE
       || isSpecDocument(document, file)
-      || isMarkdownSpecDocument(document, file);
+      || isMarkdownSpecDocument(document, file)
+    ));
+    if (supportedDocument === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
+    if (!supportedDocument) {
+      return [];
+    }
+    const executionEnabled = this.callSyncForOperation(operation, () => (
+      this.executionCodeLensesEnabled() && this.isGaugeProjectDocument(document)
+    ));
+    if (executionEnabled === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
+    }
     if (
-      !supportedDocument
-      || !this.executionCodeLensesEnabled()
-      || !this.isGaugeProjectDocument(document)
+      !executionEnabled
     ) {
       return [];
     }
 
     const lenses = [];
-    for (const marker of orderedExecutionMarkers(document)) {
-      const target = targetForMarker(file, marker);
-      const [runTitle, debugTitle] = titlesForMarker(marker);
-      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, runTitle), {
-        command: RUN_COMMAND,
-        title: runTitle,
-        arguments: [target],
-      }));
-      lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, debugTitle), {
-        command: DEBUG_COMMAND,
-        title: debugTitle,
-        arguments: [target],
-      }));
-      if (marker.kind === "specification" && hasSpecificationDataTable(document, marker.line)) {
-        const parallelTitle = "Run in parallel";
-        lenses.push(createCodeLens(this.vscode, runLinkRange(this.vscode, marker, parallelTitle), {
-          command: IN_PARALLEL_COMMAND,
-          title: parallelTitle,
-          arguments: [target],
-        }));
-      }
+    const markers = this.callSyncForOperation(
+      operation,
+      () => orderedExecutionMarkers(document),
+    );
+    if (markers === CANCELLED_CODE_LENS_OPERATION) {
+      return CANCELLED_CODE_LENS_OPERATION;
     }
-    return lenses;
+    for (const marker of markers) {
+      const markerLenses = this.callSyncForOperation(operation, () => {
+        const target = targetForMarker(file, marker);
+        const [runTitle, debugTitle] = titlesForMarker(marker);
+        const result = [
+          createCodeLens(this.vscode, runLinkRange(this.vscode, marker, runTitle), {
+            command: RUN_COMMAND,
+            title: runTitle,
+            arguments: [target],
+          }),
+          createCodeLens(this.vscode, runLinkRange(this.vscode, marker, debugTitle), {
+            command: DEBUG_COMMAND,
+            title: debugTitle,
+            arguments: [target],
+          }),
+        ];
+        if (marker.kind === "specification" && hasSpecificationDataTable(document, marker.line)) {
+          const parallelTitle = "Run in parallel";
+          result.push(createCodeLens(
+            this.vscode,
+            runLinkRange(this.vscode, marker, parallelTitle),
+            {
+              command: IN_PARALLEL_COMMAND,
+              title: parallelTitle,
+              arguments: [target],
+            },
+          ));
+        }
+        return result;
+      });
+      if (markerLenses === CANCELLED_CODE_LENS_OPERATION) {
+        return CANCELLED_CODE_LENS_OPERATION;
+      }
+      lenses.push(...markerLenses);
+    }
+    return this.isOperationActive(operation) ? lenses : CANCELLED_CODE_LENS_OPERATION;
+  }
+
+  provideCodeLenses(document, token) {
+    if (!document) {
+      return [];
+    }
+    return this.runOperation(
+      token,
+      (operation) => this.provideCodeLensesForOperation(document, operation),
+    );
+  }
+
+  register() {
+    if (this.disposed || this.registrationAttempted) {
+      return this;
+    }
+    this.registrationAttempted = true;
+    if (!this.vscode.languages || typeof this.vscode.languages.registerCodeLensProvider !== "function") {
+      return this;
+    }
+    let registration;
+    try {
+      registration = this.vscode.languages.registerCodeLensProvider(
+        [
+          { language: GAUGE_LANGUAGE },
+          { language: GAUGE_CONCEPT_LANGUAGE },
+          { scheme: "file", pattern: "**/*.spec" },
+          { scheme: "file", pattern: "**/*.cpt" },
+          { language: MARKDOWN_LANGUAGE, scheme: "file", pattern: "**/*.md" },
+          { language: "kotlin" },
+          { scheme: "file", pattern: "**/*.kt" },
+          { language: "java" },
+          { scheme: "file", pattern: "**/*.java" },
+        ],
+        this,
+      );
+    } catch (error) {
+      if (!this.disposed) {
+        this.registrationAttempted = false;
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      if (registration && typeof registration.dispose === "function") {
+        try {
+          registration.dispose();
+        } catch (_error) {
+          // Synchronous disposal already terminalized the provider.
+        }
+      }
+    } else {
+      this.registrationDisposable = registration;
+    }
+    return this;
   }
 }
 

@@ -1,6 +1,68 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function deferred() {
+  let reject;
+  let resolve;
+  const promise = new Promise((receivedResolve, receivedReject) => {
+    resolve = receivedResolve;
+    reject = receivedReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createCancellation() {
+  let cancellationRequested = false;
+  let listenerDisposals = 0;
+  let registrations = 0;
+  const listeners = new Set();
+  const token = {
+    get isCancellationRequested() {
+      return cancellationRequested;
+    },
+    onCancellationRequested(listener) {
+      registrations += 1;
+      listeners.add(listener);
+      let disposed = false;
+      return {
+        dispose() {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          listenerDisposals += 1;
+          listeners.delete(listener);
+        },
+      };
+    },
+  };
+  return {
+    cancel() {
+      if (cancellationRequested) {
+        return;
+      }
+      cancellationRequested = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    listenerDisposals() {
+      return listenerDisposals;
+    },
+    registrations() {
+      return registrations;
+    },
+    token,
+  };
+}
+
 function createDocument(text, fsPath = "/workspace/specs/example.spec", languageId = "gauge") {
   const lines = text.split("\n");
   return {
@@ -1049,4 +1111,716 @@ test("GaugeCodeLensProvider suppresses Kotlin reference lenses when disabled", a
   ].join("\n"), "/workspace/tests/LoginSteps.kt", "kotlin");
 
   assert.deepEqual(await provider.provideCodeLenses(document), []);
+});
+
+test("GaugeCodeLensProvider stops pending concept reference counts on host cancellation", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+
+  {
+    const cancellation = createCancellation();
+    cancellation.cancel();
+    let referenceQueries = 0;
+    const provider = new GaugeCodeLensProvider({
+      vscode: createFakeVscode(),
+      workspaceStepIndex: {
+        referenceCount() {
+          referenceQueries += 1;
+          return 0;
+        },
+      },
+    });
+    const document = createDocument(
+      "# Cancelled concept\n* Continue",
+      "/workspace/concepts/cancelled.cpt",
+      "gauge-concept",
+    );
+
+    assert.deepEqual(provider.provideCodeLenses(document, cancellation.token), []);
+    assert.equal(referenceQueries, 0);
+    assert.equal(cancellation.registrations(), 0);
+  }
+
+  for (const settlement of ["resolve", "reject"]) {
+    const document = createDocument([
+      "# First concept",
+      "* First step",
+      "",
+      "# Second concept",
+      "* Second step",
+    ].join("\n"), "/workspace/concepts/shared.cpt", "gauge-concept");
+    const cancellation = createCancellation();
+    const referenceEntered = deferred();
+    const referenceGate = deferred();
+    const referenceQueries = [];
+    const provider = new GaugeCodeLensProvider({
+      vscode: createFakeVscode(),
+      workspaceStepIndex: {
+        referenceCount(_sourceDocument, stepValue) {
+          referenceQueries.push(stepValue);
+          if (referenceQueries.length === 1) {
+            referenceEntered.resolve();
+            return referenceGate.promise;
+          }
+          return 2;
+        },
+      },
+    });
+
+    let outcome = { status: "pending" };
+    const invocation = Promise.resolve(provider.provideCodeLenses(document, cancellation.token));
+    invocation.then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { status: "rejected", error };
+      },
+    );
+    await referenceEntered.promise;
+    cancellation.cancel();
+    await nextTurn();
+    const outcomeAfterCancellation = outcome;
+    if (settlement === "resolve") {
+      referenceGate.resolve(1);
+    } else {
+      referenceGate.reject(new Error("Late reference count failure."));
+    }
+    const finalOutcome = await invocation.then(
+      (value) => ({ status: "fulfilled", value }),
+      (error) => ({ status: "rejected", error }),
+    );
+    await nextTurn();
+
+    assert.deepEqual(outcomeAfterCancellation, { status: "fulfilled", value: [] });
+    assert.deepEqual(finalOutcome, { status: "fulfilled", value: [] });
+    assert.deepEqual(referenceQueries, ["First concept"]);
+    assert.equal(cancellation.registrations(), 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+  }
+});
+
+test("GaugeCodeLensProvider disposal settles indexed requests and owns registration", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument([
+    "@Step(\"Open cart\")",
+    "fun openCart() {}",
+  ].join("\n"), "/workspace/tests/CartSteps.kt", "kotlin");
+  document.positionAt = (offset) => (
+    offset === 0 ? { line: 0, character: 0 } : { line: 1, character: 17 }
+  );
+  const entriesEntered = deferred();
+  const entriesGate = deferred();
+  let indexCalls = 0;
+  let registrationCalls = 0;
+  let registrationDisposeCalls = 0;
+  let registeredSelector;
+  const borrowedDiagnostics = {
+    disposeCalls: 0,
+    dispose() {
+      this.disposeCalls += 1;
+    },
+  };
+  const vscode = createFakeVscode();
+  let registeredProvider;
+  vscode.languages = {
+    registerCodeLensProvider(selector, provider) {
+      registrationCalls += 1;
+      registeredSelector = selector;
+      registeredProvider = provider;
+      return {
+        dispose() {
+          registrationDisposeCalls += 1;
+        },
+      };
+    },
+  };
+  const provider = new GaugeCodeLensProvider({
+    diagnosticsProvider: borrowedDiagnostics,
+    vscode,
+    workspaceStepIndex: {
+      stepEntriesForDocument() {
+        indexCalls += 1;
+        entriesEntered.resolve();
+        return entriesGate.promise;
+      },
+    },
+  });
+  const hasRegistrationOwner = typeof provider.register === "function";
+  const firstRegistration = hasRegistrationOwner ? provider.register() : undefined;
+  const secondRegistration = hasRegistrationOwner ? provider.register() : undefined;
+  let outcome = { status: "pending" };
+  const invocation = Promise.resolve(provider.provideCodeLenses(document));
+  invocation.then((value) => {
+    outcome = { status: "fulfilled", value };
+  });
+  await entriesEntered.promise;
+  if (typeof provider.dispose === "function") {
+    provider.dispose();
+    provider.dispose();
+  }
+  await nextTurn();
+  const outcomeAfterDisposal = outcome;
+  entriesGate.resolve([]);
+  const finalOutcome = await invocation;
+  const retainedOutcome = registeredProvider
+    ? await registeredProvider.provideCodeLenses(document)
+    : undefined;
+
+  assert.equal(hasRegistrationOwner, true);
+  assert.equal(firstRegistration, provider);
+  assert.equal(secondRegistration, provider);
+  assert.equal(registrationCalls, 1);
+  assert.equal(registrationDisposeCalls, 1);
+  assert.deepEqual(registeredSelector, [
+    { language: "gauge" },
+    { language: "gauge-concept" },
+    { scheme: "file", pattern: "**/*.spec" },
+    { scheme: "file", pattern: "**/*.cpt" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
+    { language: "kotlin" },
+    { scheme: "file", pattern: "**/*.kt" },
+    { language: "java" },
+    { scheme: "file", pattern: "**/*.java" },
+  ]);
+  assert.deepEqual(outcomeAfterDisposal, { status: "fulfilled", value: [] });
+  assert.deepEqual(finalOutcome, []);
+  assert.deepEqual(retainedOutcome, []);
+  assert.equal(indexCalls, 1);
+  assert.equal(provider.activeOperations.size, 0);
+  assert.equal(borrowedDiagnostics.disposeCalls, 0);
+});
+
+test("GaugeCodeLensProvider disposal detaches borrowed document-store readiness", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument(
+    "# Shared concept\n* Continue",
+    "/workspace/concepts/shared.cpt",
+    "gauge-concept",
+  );
+  const readyEntered = deferred();
+  const readyGate = deferred();
+  let documentsCalls = 0;
+  const documentStore = {
+    disposeCalls: 0,
+    dispose() {
+      this.disposeCalls += 1;
+    },
+    documents() {
+      documentsCalls += 1;
+      return [];
+    },
+    whenReady() {
+      readyEntered.resolve();
+      return readyGate.promise;
+    },
+  };
+  const provider = new GaugeCodeLensProvider({
+    diagnosticsProvider: {
+      belongsToSourceGaugeProject() {
+        return true;
+      },
+      gaugeProjectRoot() {
+        return "/workspace";
+      },
+      rootForFile() {
+        return "/workspace";
+      },
+    },
+    documentStore,
+    vscode: createFakeVscode(),
+  });
+  let outcome = { status: "pending" };
+  const invocation = Promise.resolve(provider.provideCodeLenses(document));
+  invocation.then((value) => {
+    outcome = { status: "fulfilled", value };
+  });
+  await readyEntered.promise;
+  if (typeof provider.dispose === "function") {
+    provider.dispose();
+  }
+  await nextTurn();
+  const outcomeAfterDisposal = outcome;
+  readyGate.reject(new Error("Late document store failure."));
+  const finalOutcome = await invocation.then(
+    (value) => ({ status: "fulfilled", value }),
+    (error) => ({ status: "rejected", error }),
+  );
+  await nextTurn();
+
+  assert.deepEqual(outcomeAfterDisposal, { status: "fulfilled", value: [] });
+  assert.deepEqual(finalOutcome, { status: "fulfilled", value: [] });
+  assert.equal(documentsCalls, 0);
+  assert.equal(documentStore.disposeCalls, 0);
+  assert.equal(provider.activeOperations.size, 0);
+});
+
+test("GaugeCodeLensProvider preserves live failures and disposes owned diagnostics", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument(
+    "# Shared concept\n* Continue",
+    "/workspace/concepts/shared.cpt",
+    "gauge-concept",
+  );
+  const cancellation = createCancellation();
+  const requestError = new Error("Reference index failed.");
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode(),
+    workspaceStepIndex: {
+      referenceCount() {
+        return Promise.reject(requestError);
+      },
+    },
+  });
+
+  await assert.rejects(
+    provider.provideCodeLenses(document, cancellation.token),
+    (error) => error === requestError,
+  );
+  assert.equal(cancellation.registrations(), 1);
+  assert.equal(cancellation.listenerDisposals(), 1);
+  assert.equal(cancellation.listenerCount(), 0);
+  assert.equal(provider.activeOperations.size, 0);
+
+  const ownedProvider = new GaugeCodeLensProvider({ vscode: createFakeVscode() });
+  const ownedDiagnostics = ownedProvider.ownedDiagnosticsProvider;
+  let ownedDisposeCalls = 0;
+  const ownedDispose = ownedDiagnostics.dispose.bind(ownedDiagnostics);
+  ownedDiagnostics.dispose = () => {
+    ownedDisposeCalls += 1;
+    ownedDispose();
+  };
+  ownedProvider.dispose();
+  ownedProvider.dispose();
+
+  assert.equal(ownedDisposeCalls, 1);
+  assert.equal(ownedProvider.ownedDiagnosticsProvider, undefined);
+});
+
+test("GaugeCodeLensProvider stops fallback workspace scans on host cancellation", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const sourceDocument = createDocument([
+    "@Step(\"Open cart\")",
+    "fun openCart() {}",
+  ].join("\n"), "/workspace/tests/CartSteps.kt", "kotlin");
+
+  for (const boundary of ["find", "open"]) {
+    const cancellation = createCancellation();
+    const operationEntered = deferred();
+    const operationGate = deferred();
+    const findCalls = [];
+    const openCalls = [];
+    const firstUri = { fsPath: "/workspace/tests/FirstSteps.kt" };
+    const secondUri = { fsPath: "/workspace/tests/SecondSteps.kt" };
+    const provider = new GaugeCodeLensProvider({
+      diagnosticsProvider: {
+        belongsToSourceGaugeProject() {
+          return true;
+        },
+        collectWorkspaceConstants() {
+          return {};
+        },
+        gaugeProjectRoot() {
+          return "/workspace";
+        },
+        rootForFile() {
+          return "/workspace";
+        },
+      },
+      vscode: createFakeVscode({
+        workspace: {
+          findFiles(pattern) {
+            findCalls.push(pattern);
+            if (boundary === "find") {
+              operationEntered.resolve();
+              return operationGate.promise;
+            }
+            return Promise.resolve([firstUri, secondUri]);
+          },
+          openTextDocument(uri) {
+            openCalls.push(uri.fsPath);
+            operationEntered.resolve();
+            return operationGate.promise;
+          },
+          textDocuments: [],
+        },
+      }),
+    });
+    let outcome = { status: "pending" };
+    const invocation = Promise.resolve(provider.provideCodeLenses(
+      sourceDocument,
+      cancellation.token,
+    ));
+    invocation.then((value) => {
+      outcome = { status: "fulfilled", value };
+    });
+    await operationEntered.promise;
+    cancellation.cancel();
+    await nextTurn();
+    const outcomeAfterCancellation = outcome;
+    if (boundary === "find") {
+      operationGate.reject(new Error("Late workspace scan failure."));
+    } else {
+      operationGate.resolve(createDocument(
+        "@Step(\"First\")\nfun first() {}",
+        firstUri.fsPath,
+        "kotlin",
+      ));
+    }
+    assert.deepEqual(await invocation, []);
+    await nextTurn();
+
+    assert.deepEqual(outcomeAfterCancellation, { status: "fulfilled", value: [] });
+    assert.equal(findCalls.length, 1);
+    assert.equal(openCalls.length, boundary === "find" ? 0 : 1);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+});
+
+test("GaugeCodeLensProvider cleans synchronous cancellation and registration reentrancy", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument("# Checkout\n* Continue");
+  let listenerDisposeCalls = 0;
+  const provider = new GaugeCodeLensProvider({ vscode: createFakeVscode() });
+  const result = provider.provideCodeLenses(document, {
+    isCancellationRequested: false,
+    onCancellationRequested(listener) {
+      listener();
+      return {
+        dispose() {
+          listenerDisposeCalls += 1;
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(result, []);
+  assert.equal(listenerDisposeCalls, 1);
+  assert.equal(provider.activeOperations.size, 0);
+
+  let rawDisposeCalls = 0;
+  const registrationVscode = createFakeVscode();
+  registrationVscode.languages = {
+    registerCodeLensProvider(_selector, registeredProvider) {
+      registeredProvider.dispose();
+      return {
+        dispose() {
+          rawDisposeCalls += 1;
+        },
+      };
+    },
+  };
+  const registrationProvider = new GaugeCodeLensProvider({ vscode: registrationVscode });
+
+  assert.equal(registrationProvider.register(), registrationProvider);
+  assert.equal(registrationProvider.register(), registrationProvider);
+  assert.equal(rawDisposeCalls, 1);
+  assert.deepEqual(registrationProvider.provideCodeLenses(document), []);
+});
+
+test("GaugeCodeLensProvider skips execution checks for unsupported documents", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  let configurationCalls = 0;
+  let projectRootCalls = 0;
+  const vscode = createFakeVscode({
+    workspace: {
+      getConfiguration() {
+        configurationCalls += 1;
+        return {
+          get() {
+            return true;
+          },
+        };
+      },
+    },
+  });
+  const provider = new GaugeCodeLensProvider({
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        projectRootCalls += 1;
+        return "/workspace";
+      },
+    },
+    vscode,
+  });
+  const document = createDocument(
+    "Not a Gauge document.",
+    "/workspace/notes.txt",
+    "plaintext",
+  );
+
+  assert.deepEqual(provider.provideCodeLenses(document), []);
+  assert.equal(configurationCalls, 0);
+  assert.equal(projectRootCalls, 0);
+});
+
+test("GaugeCodeLensProvider neutralizes a throwing then getter after synchronous disposal", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider({ vscode: createFakeVscode() });
+  const document = createDocument("# Checkout\n* Continue");
+  const thenError = new Error("Detached then getter failed.");
+  let thenGetterCalls = 0;
+  provider.provideCodeLensesForOperation = () => {
+    provider.dispose();
+    return {
+      get then() {
+        thenGetterCalls += 1;
+        throw thenError;
+      },
+    };
+  };
+
+  assert.doesNotThrow(() => {
+    assert.deepEqual(provider.provideCodeLenses(document), []);
+  });
+  assert.equal(thenGetterCalls, 1);
+  assert.equal(provider.activeOperations.size, 0);
+});
+
+test("GaugeCodeLensProvider isolates cancellation while step aliases are pending", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const firstDocument = createDocument(
+    "@Step(\"First alias\")\nfun first() {}",
+    "/workspace/tests/FirstSteps.kt",
+    "kotlin",
+  );
+  const secondDocument = createDocument(
+    "@Step(\"Second alias\")\nfun second() {}",
+    "/workspace/tests/SecondSteps.kt",
+    "kotlin",
+  );
+  for (const document of [firstDocument, secondDocument]) {
+    document.positionAt = (offset) => (
+      offset === 0 ? { line: 0, character: 0 } : { line: 1, character: 14 }
+    );
+  }
+  const firstCancellation = createCancellation();
+  const secondCancellation = createCancellation();
+  const firstAliases = deferred();
+  const secondAliases = deferred();
+  const aliasesEntered = deferred();
+  const aliasCalls = [];
+  const referenceCalls = [];
+  const provider = new GaugeCodeLensProvider({
+    vscode: createFakeVscode(),
+    workspaceStepIndex: {
+      referenceCount(document, value) {
+        referenceCalls.push({ file: document.fileName, value });
+        return 1;
+      },
+      stepAliasesForEntry(document) {
+        aliasCalls.push(document.fileName);
+        if (aliasCalls.length === 2) {
+          aliasesEntered.resolve();
+        }
+        return document === firstDocument ? firstAliases.promise : secondAliases.promise;
+      },
+      stepEntriesForDocument(_sourceDocument, document) {
+        return [{
+          aliases: [],
+          declarationEnd: document.getText().length,
+          declarationStart: 0,
+        }];
+      },
+    },
+  });
+
+  let firstOutcome = { status: "pending" };
+  let secondOutcome = { status: "pending" };
+  const firstInvocation = Promise.resolve(provider.provideCodeLenses(
+    firstDocument,
+    firstCancellation.token,
+  ));
+  const secondInvocation = Promise.resolve(provider.provideCodeLenses(
+    secondDocument,
+    secondCancellation.token,
+  ));
+  firstInvocation.then((value) => {
+    firstOutcome = { status: "fulfilled", value };
+  });
+  secondInvocation.then((value) => {
+    secondOutcome = { status: "fulfilled", value };
+  });
+  await aliasesEntered.promise;
+
+  firstCancellation.cancel();
+  await nextTurn();
+
+  assert.deepEqual(firstOutcome, { status: "fulfilled", value: [] });
+  assert.deepEqual(secondOutcome, { status: "pending" });
+  assert.equal(provider.activeOperations.size, 1);
+
+  secondAliases.resolve(["Second alias"]);
+  const secondLenses = await secondInvocation;
+  firstAliases.reject(new Error("Late first alias failure."));
+  assert.deepEqual(await firstInvocation, []);
+  await nextTurn();
+
+  assert.deepEqual(secondLenses.map((lens) => ({
+    argument: lens.command.arguments[2],
+    title: lens.command.title,
+  })), [{ argument: "Second alias", title: "1 reference(s)" }]);
+  assert.deepEqual(referenceCalls, [{
+    file: secondDocument.fileName,
+    value: "Second alias",
+  }]);
+  assert.equal(firstCancellation.listenerDisposals(), 1);
+  assert.equal(secondCancellation.listenerDisposals(), 1);
+  assert.equal(firstCancellation.listenerCount(), 0);
+  assert.equal(secondCancellation.listenerCount(), 0);
+  assert.equal(provider.activeOperations.size, 0);
+});
+
+test("GaugeCodeLensProvider stops later indexed aliases when a step count is cancelled", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const document = createDocument(
+    "@Step(\"First alias\")\nfun first() {}",
+    "/workspace/tests/FirstSteps.kt",
+    "kotlin",
+  );
+  document.positionAt = (offset) => (
+    offset === 0 ? { line: 0, character: 0 } : { line: 1, character: 14 }
+  );
+
+  for (const settlement of ["resolve", "reject"]) {
+    const cancellation = createCancellation();
+    const countEntered = deferred();
+    const countGate = deferred();
+    const countCalls = [];
+    const provider = new GaugeCodeLensProvider({
+      vscode: createFakeVscode(),
+      workspaceStepIndex: {
+        referenceCount(_document, value) {
+          countCalls.push(value);
+          countEntered.resolve();
+          return countGate.promise;
+        },
+        stepAliasesForEntry() {
+          return ["First alias", "Second alias"];
+        },
+        stepEntriesForDocument() {
+          return [{
+            aliases: [],
+            declarationEnd: document.getText().length,
+            declarationStart: 0,
+          }];
+        },
+      },
+    });
+    let outcome = { status: "pending" };
+    const invocation = Promise.resolve(provider.provideCodeLenses(document, cancellation.token));
+    invocation.then((value) => {
+      outcome = { status: "fulfilled", value };
+    });
+    await countEntered.promise;
+
+    cancellation.cancel();
+    await nextTurn();
+    const outcomeAfterCancellation = outcome;
+    if (settlement === "resolve") {
+      countGate.resolve(1);
+    } else {
+      countGate.reject(new Error("Late indexed count failure."));
+    }
+    assert.deepEqual(await invocation, []);
+    await nextTurn();
+
+    assert.deepEqual(outcomeAfterCancellation, { status: "fulfilled", value: [] });
+    assert.deepEqual(countCalls, ["First alias"]);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+});
+
+test("GaugeCodeLensProvider preserves live fallback scan error topology", async () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const sourceDocument = createDocument(
+    "# Shared concept\n* Continue",
+    "/workspace/concepts/shared.cpt",
+    "gauge-concept",
+  );
+  const diagnosticsProvider = {
+    belongsToSourceGaugeProject() {
+      return true;
+    },
+    gaugeProjectRoot() {
+      return "/workspace";
+    },
+    rootForFile() {
+      return "/workspace";
+    },
+  };
+
+  {
+    const readyError = new Error("Document store readiness failed.");
+    const cancellation = createCancellation();
+    const provider = new GaugeCodeLensProvider({
+      diagnosticsProvider,
+      documentStore: {
+        documents() {
+          throw new Error("documents should not be read");
+        },
+        whenReady() {
+          return Promise.reject(readyError);
+        },
+      },
+      vscode: createFakeVscode(),
+    });
+
+    await assert.rejects(
+      provider.provideCodeLenses(sourceDocument, cancellation.token),
+      (error) => error === readyError,
+    );
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
+
+  {
+    const cancellation = createCancellation();
+    const findCalls = [];
+    const openCalls = [];
+    const staleUri = { fsPath: "/workspace/specs/stale.spec" };
+    const liveUri = { fsPath: "/workspace/specs/live.spec" };
+    const provider = new GaugeCodeLensProvider({
+      diagnosticsProvider,
+      vscode: createFakeVscode({
+        workspace: {
+          findFiles(pattern) {
+            findCalls.push(pattern);
+            if (findCalls.length === 1) {
+              return Promise.reject(new Error("Workspace search failed."));
+            }
+            if (findCalls.length === 2) {
+              return Promise.resolve([staleUri, liveUri]);
+            }
+            return Promise.resolve([]);
+          },
+          openTextDocument(uri) {
+            openCalls.push(uri.fsPath);
+            if (uri === staleUri) {
+              return Promise.reject(new Error("Stale document failed."));
+            }
+            return Promise.resolve(createDocument(
+              "# Checkout\n* Shared concept",
+              uri.fsPath,
+              "gauge",
+            ));
+          },
+          textDocuments: [],
+        },
+      }),
+    });
+
+    const lenses = await provider.provideCodeLenses(sourceDocument, cancellation.token);
+
+    assert.deepEqual(lenses.map((lens) => lens.command.title), ["1 reference(s)"]);
+    assert.deepEqual(findCalls, ["**/*.spec", "**/*.cpt", "**/*.md"]);
+    assert.deepEqual(openCalls, [staleUri.fsPath, liveUri.fsPath]);
+    assert.equal(cancellation.listenerDisposals(), 1);
+    assert.equal(cancellation.listenerCount(), 0);
+    assert.equal(provider.activeOperations.size, 0);
+  }
 });

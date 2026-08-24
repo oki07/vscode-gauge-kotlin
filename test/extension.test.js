@@ -3278,17 +3278,30 @@ test("activation registers dynamic argument completions for Gauge documents", ()
   assert.equal(context.subscriptions.includes(completionProviders[0].disposable), true);
 });
 
-test("activation registers one local CodeLens provider for execution and references", () => {
+test("activation owns one lifecycle-aware local CodeLens provider", () => {
   const extension = require("../src/extension");
 
   const context = { subscriptions: [] };
   const { codeLensProviders, fakeVscode } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
+  let codeLensProvider;
 
   class FakeCodeLensProvider {
     constructor(options) {
       this.options = options;
+      this.disposeCalls = 0;
+      this.registerCalls = 0;
+      codeLensProvider = this;
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+    }
+
+    register() {
+      this.registerCalls += 1;
+      return this;
     }
   }
 
@@ -3344,21 +3357,13 @@ test("activation registers one local CodeLens provider for execution and referen
     showWelcomeNotification() {},
   });
 
-  assert.equal(codeLensProviders.length, 1);
-  assert.deepEqual(codeLensProviders[0].selector, [
-    { language: "gauge" },
-    { language: "gauge-concept" },
-    { scheme: "file", pattern: "**/*.spec" },
-    { scheme: "file", pattern: "**/*.cpt" },
-    { language: "markdown", scheme: "file", pattern: "**/*.md" },
-    { language: "kotlin" },
-    { scheme: "file", pattern: "**/*.kt" },
-    { language: "java" },
-    { scheme: "file", pattern: "**/*.java" },
-  ]);
-  assert.equal(codeLensProviders[0].provider.options.vscode, fakeVscode);
-  assert.equal(typeof codeLensProviders[0].provider.options.projectFactory.isGaugeProject, "function");
-  assert.equal(context.subscriptions.includes(codeLensProviders[0].disposable), true);
+  assert.equal(codeLensProviders.length, 0);
+  assert.equal(codeLensProvider.registerCalls, 1);
+  assert.equal(codeLensProvider.options.vscode, fakeVscode);
+  assert.equal(typeof codeLensProvider.options.projectFactory.isGaugeProject, "function");
+  assert.equal(context.subscriptions.includes(codeLensProvider), true);
+  codeLensProvider.dispose();
+  assert.equal(codeLensProvider.disposeCalls, 1);
 });
 
 test("activation leaves Gauge document formatting to the Gauge language client", () => {
