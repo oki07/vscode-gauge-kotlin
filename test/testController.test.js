@@ -3,10 +3,18 @@ const test = require("node:test");
 
 function deferred() {
   let resolve;
-  const promise = new Promise((nextResolve) => {
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
     resolve = nextResolve;
+    reject = nextReject;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
+}
+
+async function drainMicrotasks() {
+  for (let index = 0; index < 6; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 function collectionItems(collection) {
@@ -218,16 +226,24 @@ function createFakeVscode(options = {}) {
 }
 
 function createCancellationToken() {
-  const listeners = [];
-  let disposed = false;
+  const listeners = new Set();
+  let disposalCalls = 0;
+  let registrationCalls = 0;
   return {
     token: {
       isCancellationRequested: false,
       onCancellationRequested(listener) {
-        listeners.push(listener);
+        registrationCalls += 1;
+        listeners.add(listener);
+        let disposed = false;
         return {
           dispose() {
+            if (disposed) {
+              return;
+            }
             disposed = true;
+            disposalCalls += 1;
+            listeners.delete(listener);
           },
         };
       },
@@ -238,8 +254,17 @@ function createCancellationToken() {
         listener();
       }
     },
+    get disposalCalls() {
+      return disposalCalls;
+    },
     get disposed() {
-      return disposed;
+      return disposalCalls > 0;
+    },
+    get listenerCount() {
+      return listeners.size;
+    },
+    get registrationCalls() {
+      return registrationCalls;
     },
   };
 }
@@ -294,6 +319,7 @@ test("GaugeTestController maps execution events into VS Code TestRun calls", () 
     ["run", { include: [] }],
     ["started", "/workspace/specs/example.spec:12"],
     ["passed", "/workspace/specs/example.spec:12", 42],
+    ["end"],
     ["dispose"],
   ]);
 });
@@ -1626,6 +1652,577 @@ test("GaugeTestController creates and opens native Test Output only after Gauge 
   finishExecution();
   await run;
   assert.deepEqual(calls.filter((entry) => entry[0] === "end"), [["end"]]);
+});
+
+test("GaugeTestController closes active execution surfaces when disposed", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const executionError = new Error("late Test UI execution failed");
+  const { calls, commandCalls, controller, vscode } = createFakeVscode();
+  const cancellation = createCancellationToken();
+  let executionCalls = 0;
+  let executionControllerDisposals = 0;
+  let executionControllerStops = 0;
+  let retainedMetadata;
+  const stopCommands = [];
+  const executionController = {
+    dispose() {
+      executionControllerDisposals += 1;
+    },
+    handleCommand(command) {
+      stopCommands.push(command);
+      return Promise.resolve(undefined);
+    },
+    handleCommandWithMetadata(_command, metadata) {
+      executionCalls += 1;
+      retainedMetadata = metadata;
+      metadata.onStart();
+      if (executionCalls === 1) {
+        executionEntered.resolve();
+        return executionResponse.promise;
+      }
+      return Promise.resolve(undefined);
+    },
+    stop() {
+      executionControllerStops += 1;
+    },
+  };
+  const gaugeTests = new GaugeTestController({ executionController, vscode });
+  const registration = gaugeTests.register();
+  const runProfile = calls.find((entry) => entry[0] === "profile" && entry[1] === "Run");
+  const scenario = controller.createTestItem(
+    "/workspace/specs/example.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  const sink = gaugeTests.createExecutionEventSink();
+
+  const pendingRun = gaugeTests.run({ include: [scenario] }, cancellation.token);
+  await executionEntered.promise;
+  sink({
+    type: "testStarted",
+    id: scenario.id,
+    name: scenario.label,
+  });
+  sink({
+    type: "testFailed",
+    id: scenario.id,
+    message: "Expected success",
+    name: scenario.label,
+  });
+  sink({ type: "output", message: "before disposal\n" });
+  const retainedContext = [...gaugeTests.executionRunContexts][0];
+  const publicOutcomes = [];
+  pendingRun.then(
+    (value) => publicOutcomes.push({ status: "fulfilled", value }),
+    (reason) => publicOutcomes.push({ reason, status: "rejected" }),
+  );
+
+  registration.dispose();
+  registration.dispose();
+  await drainMicrotasks();
+  const disposalCallIndex = calls.findIndex((entry) => entry[0] === "dispose");
+  const endCallIndex = calls.findIndex((entry) => entry[0] === "end");
+  const afterDispose = {
+    activeContexts: gaugeTests.executionRunContexts
+      ? gaugeTests.executionRunContexts.size
+      : undefined,
+    activeRunContext: gaugeTests.activeRunContext,
+    activeAttempts: gaugeTests.activeAttemptIds.size,
+    attemptCounts: gaugeTests.attemptCounts.size,
+    cancellationDisposed: cancellation.disposed,
+    currentRequest: gaugeTests.currentRequest,
+    currentRun: gaugeTests.currentRun,
+    endBeforeControllerDispose: endCallIndex !== -1 && endCallIndex < disposalCallIndex,
+    endCalls: calls.filter((entry) => entry[0] === "end").length,
+    executionControllerReleased: gaugeTests.executionController === undefined,
+    forwardedOutput: gaugeTests.forwardedOutput,
+    pendingResults: gaugeTests.pendingResults.size,
+    publicOutcomes: [...publicOutcomes],
+    resultOnlyItems: gaugeTests.resultOnlyItemIds.size,
+    retainedContextRequest: retainedContext && retainedContext.request,
+    retainedContextRun: retainedContext && retainedContext.run,
+  };
+
+  const callsBeforeLateEvents = calls.length;
+  const commandsBeforeLateEvents = commandCalls.length;
+  retainedMetadata.onStart();
+  sink({ type: "processStarted" });
+  sink({ type: "output", message: "after disposal\n" });
+  sink({ type: "notification", message: "after disposal", severity: "info" });
+  sink({
+    type: "testFailed",
+    id: scenario.id,
+    message: "after disposal",
+    name: scenario.label,
+  });
+  const retainedProfile = runProfile[3]({ include: [scenario] });
+  const retainedCodeLens = gaugeTests.runCodeLensTarget(
+    "gauge.execute",
+    scenario.id,
+  );
+  const retainedOutcomes = await Promise.allSettled([retainedProfile, retainedCodeLens]);
+  const afterRetainedCalls = {
+    calls: calls.length,
+    commands: commandCalls.length,
+    executionCalls,
+    pendingResults: gaugeTests.pendingResults.size,
+  };
+
+  executionResponse.reject(executionError);
+  const [lateOutcome] = await Promise.allSettled([pendingRun]);
+
+  assert.deepEqual(afterDispose, {
+    activeContexts: 0,
+    activeRunContext: undefined,
+    activeAttempts: 0,
+    attemptCounts: 0,
+    cancellationDisposed: true,
+    currentRequest: undefined,
+    currentRun: undefined,
+    endBeforeControllerDispose: true,
+    endCalls: 1,
+    executionControllerReleased: true,
+    forwardedOutput: undefined,
+    pendingResults: 0,
+    publicOutcomes: [{ status: "fulfilled", value: undefined }],
+    resultOnlyItems: 0,
+    retainedContextRequest: undefined,
+    retainedContextRun: undefined,
+  });
+  assert.deepEqual(afterRetainedCalls, {
+    calls: callsBeforeLateEvents,
+    commands: commandsBeforeLateEvents,
+    executionCalls: 1,
+    pendingResults: 0,
+  });
+  assert.deepEqual(retainedOutcomes, [
+    { status: "fulfilled", value: undefined },
+    { status: "fulfilled", value: undefined },
+  ]);
+  assert.deepEqual(lateOutcome, { status: "fulfilled", value: undefined });
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "dispose").length, 1);
+  assert.equal(executionControllerDisposals, 0);
+  assert.equal(executionControllerStops, 0);
+  assert.deepEqual(stopCommands, []);
+});
+
+test("GaugeTestController suppresses late execution start and later project runs after disposal", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const { calls, commandCalls, vscode } = createFakeVscode();
+  const executionCommands = [];
+  let retainedMetadata;
+  const gaugeTests = new GaugeTestController({
+    clientsMap: new Map([
+      ["/workspace/one", { client: {} }],
+      ["/workspace/two", { client: {} }],
+    ]),
+    executionController: {
+      handleCommandWithMetadata(command, metadata, ...args) {
+        executionCommands.push([command, ...args]);
+        retainedMetadata = metadata;
+        if (executionCommands.length === 1) {
+          executionEntered.resolve();
+          return executionResponse.promise;
+        }
+        return Promise.resolve(undefined);
+      },
+    },
+    vscode,
+  });
+  const registration = gaugeTests.register();
+  const sink = gaugeTests.createExecutionEventSink();
+  const pendingRun = gaugeTests.run({});
+  const publicOutcomes = [];
+  pendingRun.then(
+    (value) => publicOutcomes.push({ status: "fulfilled", value }),
+    (reason) => publicOutcomes.push({ reason, status: "rejected" }),
+  );
+  await executionEntered.promise;
+
+  registration.dispose();
+  await drainMicrotasks();
+  const beforeLateStart = {
+    activeContexts: gaugeTests.executionRunContexts.size,
+    endCalls: calls.filter((entry) => entry[0] === "end").length,
+    publicOutcomes: [...publicOutcomes],
+    runCalls: calls.filter((entry) => entry[0] === "run").length,
+  };
+
+  retainedMetadata.onStart();
+  sink({ type: "processStarted" });
+  sink({ type: "output", message: "late output\n" });
+  sink({ type: "notification", message: "late notification", severity: "warning" });
+  executionResponse.resolve("late result");
+  await pendingRun;
+  await drainMicrotasks();
+
+  const retainedProfiles = calls
+    .filter((entry) => entry[0] === "profile")
+    .map((entry) => entry[3]({}));
+  const retainedCodeLens = gaugeTests.runCodeLensTarget(
+    "gauge.execute",
+    "/workspace/one/specs/example.spec:3",
+  );
+  const retainedOutcomes = await Promise.allSettled([
+    ...retainedProfiles,
+    retainedCodeLens,
+  ]);
+
+  assert.deepEqual(beforeLateStart, {
+    activeContexts: 0,
+    endCalls: 0,
+    publicOutcomes: [{ status: "fulfilled", value: undefined }],
+    runCalls: 0,
+  });
+  assert.deepEqual(executionCommands, [
+    [
+      "gauge.specexplorer.runAllActiveProjectSpecs",
+      { projectRoot: "/workspace/one" },
+      {
+        "hide-suggestion": true,
+        "simple-console": false,
+        testUi: true,
+      },
+    ],
+  ]);
+  assert.deepEqual(commandCalls, []);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "run"), []);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "end"), []);
+  assert.deepEqual(retainedOutcomes, Array.from(
+    { length: 5 },
+    () => ({ status: "fulfilled", value: undefined }),
+  ));
+});
+
+test("GaugeTestController ends a TestRun returned during synchronous disposal", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+  const registration = gaugeTests.register();
+  const createTestRun = controller.createTestRun.bind(controller);
+  controller.createTestRun = (request) => {
+    const run = createTestRun(request);
+    registration.dispose();
+    return run;
+  };
+
+  const result = gaugeTests.startTestRun({});
+
+  assert.equal(result, undefined);
+  assert.equal(gaugeTests.currentRun, undefined);
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "dispose").length, 1);
+});
+
+test("GaugeTestController drops TestItems created during synchronous disposal", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, controller, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+  const registration = gaugeTests.register();
+  const createTestItem = controller.createTestItem.bind(controller);
+  gaugeTests.startTestRun({});
+  controller.createTestItem = (...args) => {
+    const item = createTestItem(...args);
+    registration.dispose();
+    return item;
+  };
+
+  assert.doesNotThrow(() => gaugeTests.handleExecutionEvent({
+    id: "/workspace/specs/example.spec:3",
+    name: "Successful checkout",
+    type: "testStarted",
+  }));
+
+  assert.equal(gaugeTests.items.size, 0);
+  assert.equal(calls.filter((entry) => entry[0] === "started").length, 0);
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "dispose").length, 1);
+});
+
+test("GaugeTestController releases run cancellation synchronously and only once", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const { vscode } = createFakeVscode();
+  const cancellation = createCancellationToken();
+  const executionCalls = [];
+  const gaugeTests = new GaugeTestController({
+    executionController: {
+      handleCommand(command) {
+        executionCalls.push(command);
+        if (command === "gauge.execute.specification.all") {
+          executionEntered.resolve();
+          return executionResponse.promise;
+        }
+        return Promise.resolve(undefined);
+      },
+    },
+    vscode,
+  });
+  const registration = gaugeTests.register();
+  const pendingRun = gaugeTests.run({}, cancellation.token);
+  await executionEntered.promise;
+
+  registration.dispose();
+  const immediateCancellationState = {
+    disposalCalls: cancellation.disposalCalls,
+    listenerCount: cancellation.listenerCount,
+    registrationCalls: cancellation.registrationCalls,
+  };
+  executionResponse.resolve(undefined);
+  await pendingRun;
+
+  let preCancelledRegistrations = 0;
+  let preCancelledDisposals = 0;
+  const preCancelledToken = {
+    isCancellationRequested: true,
+    onCancellationRequested(listener) {
+      preCancelledRegistrations += 1;
+      listener();
+      return {
+        dispose() {
+          preCancelledDisposals += 1;
+        },
+      };
+    },
+  };
+  const secondExecutionCalls = [];
+  const secondController = new GaugeTestController({
+    executionController: {
+      handleCommand(command) {
+        secondExecutionCalls.push(command);
+        return Promise.resolve(undefined);
+      },
+    },
+    vscode: createFakeVscode().vscode,
+  });
+  secondController.register();
+
+  await secondController.run({}, preCancelledToken);
+
+  assert.deepEqual(immediateCancellationState, {
+    disposalCalls: 1,
+    listenerCount: 0,
+    registrationCalls: 1,
+  });
+  assert.deepEqual(executionCalls, ["gauge.execute.specification.all"]);
+  assert.equal(cancellation.disposalCalls, 1);
+  assert.equal(preCancelledRegistrations, 1);
+  assert.equal(preCancelledDisposals, 1);
+  assert.deepEqual(secondExecutionCalls, ["gauge.stopExecution"]);
+});
+
+test("GaugeTestController preserves live execution failures and releases run ownership", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionError = new Error("Test UI execution failed");
+  const { calls, vscode } = createFakeVscode();
+  const cancellation = createCancellationToken();
+  let gaugeTests;
+  gaugeTests = new GaugeTestController({
+    executionController: {
+      handleCommandWithMetadata(_command, metadata) {
+        metadata.onStart();
+        gaugeTests.handleExecutionEvent({ type: "processStarted" });
+        return Promise.reject(executionError);
+      },
+    },
+    vscode,
+  });
+  gaugeTests.register();
+
+  await assert.rejects(
+    gaugeTests.run({}, cancellation.token),
+    (error) => error === executionError,
+  );
+
+  assert.equal(cancellation.disposed, true);
+  assert.equal(gaugeTests.executionRunContexts.size, 0);
+  assert.equal(gaugeTests.activeRunContext, undefined);
+  assert.equal(gaugeTests.currentRequest, undefined);
+  assert.equal(gaugeTests.currentRun, undefined);
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+  assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+});
+
+test("GaugeTestController normalizes synchronous execution failures only after disposal", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  for (const scenario of ["live throw", "disposed throw", "disposed rejection"]) {
+    const executionError = new Error(scenario);
+    const { calls, vscode } = createFakeVscode();
+    const cancellation = createCancellationToken();
+    let gaugeTests;
+    let registration;
+    gaugeTests = new GaugeTestController({
+      executionController: {
+        handleCommandWithMetadata(_command, metadata) {
+          if (scenario === "live throw") {
+            metadata.onStart();
+            gaugeTests.handleExecutionEvent({ type: "processStarted" });
+          } else {
+            registration.dispose();
+          }
+          if (scenario === "disposed rejection") {
+            return Promise.reject(executionError);
+          }
+          throw executionError;
+        },
+      },
+      vscode,
+    });
+    registration = gaugeTests.register();
+
+    const [outcome] = await Promise.allSettled([
+      gaugeTests.run({}, cancellation.token),
+    ]);
+
+    if (scenario === "live throw") {
+      assert.deepEqual(outcome, { reason: executionError, status: "rejected" });
+      assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+      assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+    } else {
+      assert.deepEqual(outcome, { status: "fulfilled", value: undefined });
+      assert.equal(calls.filter((entry) => entry[0] === "run").length, 0);
+      assert.equal(calls.filter((entry) => entry[0] === "end").length, 0);
+    }
+    assert.equal(cancellation.registrationCalls, 1);
+    assert.equal(cancellation.disposalCalls, 1);
+    assert.equal(cancellation.listenerCount, 0);
+    assert.equal(gaugeTests.executionRunContexts.size, 0);
+    assert.equal(gaugeTests.activeRunContext, undefined);
+    assert.equal(gaugeTests.currentRun, undefined);
+  }
+});
+
+test("GaugeTestController finalizes run contexts before cancellation cleanup", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  {
+    const { calls, vscode } = createFakeVscode();
+    let retainedMetadata;
+    let cancellationDisposals = 0;
+    const gaugeTests = new GaugeTestController({
+      executionController: {
+        handleCommandWithMetadata(_command, metadata) {
+          retainedMetadata = metadata;
+          return Promise.resolve(undefined);
+        },
+      },
+      vscode,
+    });
+    gaugeTests.register();
+    const token = {
+      isCancellationRequested: false,
+      onCancellationRequested() {
+        return {
+          dispose() {
+            cancellationDisposals += 1;
+            retainedMetadata.onStart();
+          },
+        };
+      },
+    };
+
+    await gaugeTests.run({}, token);
+
+    assert.equal(cancellationDisposals, 1);
+    assert.equal(gaugeTests.executionRunContexts.size, 0);
+    assert.equal(gaugeTests.activeRunContext, undefined);
+    assert.equal(gaugeTests.currentRun, undefined);
+    assert.equal(calls.filter((entry) => entry[0] === "run").length, 0);
+    assert.equal(calls.filter((entry) => entry[0] === "end").length, 0);
+  }
+
+  {
+    const executionError = new Error("live execution failed");
+    const cleanupError = new Error("cancellation cleanup failed");
+    const { calls, vscode } = createFakeVscode();
+    let cancellationDisposals = 0;
+    let gaugeTests;
+    gaugeTests = new GaugeTestController({
+      executionController: {
+        handleCommandWithMetadata(_command, metadata) {
+          metadata.onStart();
+          gaugeTests.handleExecutionEvent({ type: "processStarted" });
+          return Promise.reject(executionError);
+        },
+      },
+      vscode,
+    });
+    gaugeTests.register();
+    const token = {
+      isCancellationRequested: false,
+      onCancellationRequested() {
+        return {
+          dispose() {
+            cancellationDisposals += 1;
+            throw cleanupError;
+          },
+        };
+      },
+    };
+
+    await assert.rejects(gaugeTests.run({}, token), (error) => error === executionError);
+
+    assert.equal(cancellationDisposals, 1);
+    assert.equal(gaugeTests.executionRunContexts.size, 0);
+    assert.equal(gaugeTests.activeRunContext, undefined);
+    assert.equal(gaugeTests.currentRun, undefined);
+    assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+    assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+  }
+
+  {
+    const executionEntered = deferred();
+    const executionResponse = deferred();
+    const cleanupError = new Error("terminal cancellation cleanup failed");
+    const { calls, vscode } = createFakeVscode();
+    let cancellationDisposals = 0;
+    let gaugeTests;
+    gaugeTests = new GaugeTestController({
+      executionController: {
+        handleCommandWithMetadata(_command, metadata) {
+          metadata.onStart();
+          gaugeTests.handleExecutionEvent({ type: "processStarted" });
+          executionEntered.resolve();
+          return executionResponse.promise;
+        },
+      },
+      vscode,
+    });
+    const registration = gaugeTests.register();
+    const token = {
+      isCancellationRequested: false,
+      onCancellationRequested() {
+        return {
+          dispose() {
+            cancellationDisposals += 1;
+            throw cleanupError;
+          },
+        };
+      },
+    };
+    const pendingRun = gaugeTests.run({}, token);
+    await executionEntered.promise;
+
+    assert.doesNotThrow(() => registration.dispose());
+    const [outcome] = await Promise.allSettled([pendingRun]);
+    executionResponse.reject(new Error("late execution failure"));
+    await drainMicrotasks();
+
+    assert.deepEqual(outcome, { status: "fulfilled", value: undefined });
+    assert.equal(cancellationDisposals, 1);
+    assert.equal(gaugeTests.executionRunContexts.size, 0);
+    assert.equal(gaugeTests.activeRunContext, undefined);
+    assert.equal(gaugeTests.currentRun, undefined);
+    assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+    assert.equal(calls.filter((entry) => entry[0] === "end").length, 1);
+    assert.equal(calls.filter((entry) => entry[0] === "dispose").length, 1);
+  }
 });
 
 test("GaugeTestController does not create an empty TestRun before Gauge starts", async () => {
