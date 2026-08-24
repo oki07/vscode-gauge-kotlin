@@ -150,6 +150,69 @@ const EXECUTION_FLAG_KEYS = new Set([
 let activeClientsMap;
 let activeGaugeWorkspace;
 let activeGaugeWorkspaceDisposal;
+let activeExtensionActivation;
+const STOPPED_EXTENSION_ACTIVATION = Symbol("stoppedExtensionActivation");
+
+function createExtensionActivation() {
+  let resolveStopped;
+  const stoppedSignal = new Promise((resolve) => {
+    resolveStopped = resolve;
+  });
+  return {
+    stopped: false,
+    stoppedSignal,
+    stop() {
+      if (this.stopped) {
+        return;
+      }
+      this.stopped = true;
+      resolveStopped(STOPPED_EXTENSION_ACTIVATION);
+    },
+  };
+}
+
+function isExtensionActivationCurrent(extensionActivation) {
+  return !extensionActivation || (
+    !extensionActivation.stopped
+    && activeExtensionActivation === extensionActivation
+  );
+}
+
+function waitForExtensionActivation(extensionActivation, value) {
+  const pending = Promise.resolve(value);
+  if (!extensionActivation) {
+    return pending;
+  }
+  if (!isExtensionActivationCurrent(extensionActivation)) {
+    pending.catch(() => undefined);
+    return Promise.resolve(STOPPED_EXTENSION_ACTIVATION);
+  }
+  return Promise.race([pending, extensionActivation.stoppedSignal]);
+}
+
+function disposeDetachedService(disposable) {
+  if (!disposable || typeof disposable.dispose !== "function") {
+    return;
+  }
+  try {
+    const disposal = disposable.dispose();
+    if (disposal && typeof disposal.then === "function") {
+      Promise.resolve(disposal).catch(() => undefined);
+    }
+  } catch (_error) {
+    // Continue disposing the remaining detached services.
+  }
+}
+
+function stopDetachedServices(extensionActivation, services) {
+  if (isExtensionActivationCurrent(extensionActivation)) {
+    return false;
+  }
+  for (const service of [...services].reverse()) {
+    disposeDetachedService(service);
+  }
+  return true;
+}
 
 function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");
@@ -313,20 +376,32 @@ function hasGaugeProject(vscode, projectFactory) {
   });
 }
 
-async function hasGaugeProjectAsync(vscode, projectFactory) {
+async function hasGaugeProjectAsync(vscode, projectFactory, extensionActivation) {
   for (const folder of workspaceFolders(vscode)) {
+    if (!isExtensionActivationCurrent(extensionActivation)) {
+      return false;
+    }
     const folderPath = folder.uri.fsPath;
     try {
       if (projectFactory.isGaugeProject(folderPath)) {
         return true;
       }
+      if (!isExtensionActivationCurrent(extensionActivation)) {
+        return false;
+      }
       if (typeof projectFactory.findGaugeProjectRootsAsync === "function") {
         const roots = await projectFactory.findGaugeProjectRootsAsync(folderPath);
+        if (!isExtensionActivationCurrent(extensionActivation)) {
+          return false;
+        }
         if (roots.length > 0) {
           return true;
         }
       }
     } catch (_error) {
+      if (!isExtensionActivationCurrent(extensionActivation)) {
+        return false;
+      }
       // Continue checking the remaining workspace folders.
     }
   }
@@ -339,9 +414,13 @@ function shouldStartGaugeServices(vscode, projectFactory) {
     || hasGaugeProject(vscode, projectFactory);
 }
 
-async function shouldStartGaugeServicesAsync(vscode, projectFactory) {
-  return shouldStartGaugeServices(vscode, projectFactory)
-    || hasGaugeProjectAsync(vscode, projectFactory);
+async function shouldStartGaugeServicesAsync(vscode, projectFactory, extensionActivation) {
+  const shouldStart = shouldStartGaugeServices(vscode, projectFactory);
+  if (!isExtensionActivationCurrent(extensionActivation)) {
+    return false;
+  }
+  return shouldStart
+    || hasGaugeProjectAsync(vscode, projectFactory, extensionActivation);
 }
 
 function registerGaugeLanguageConfiguration(context, vscode) {
@@ -838,24 +917,38 @@ function createGaugeState(context, options) {
 }
 
 function startGaugeServices(context, vscode, options = {}) {
+  if (!isExtensionActivationCurrent(options.extensionActivation)) {
+    return undefined;
+  }
   const projectFactory = options.projectFactory || createProjectFactory({
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     vscode,
   });
-  if (!options.gaugeServiceGateResolved && !shouldStartGaugeServices(vscode, projectFactory)) {
-    if (typeof projectFactory.findGaugeProjectRootsAsync !== "function") {
+  if (!options.gaugeServiceGateResolved) {
+    const shouldStart = shouldStartGaugeServices(vscode, projectFactory);
+    if (!isExtensionActivationCurrent(options.extensionActivation)) {
       return undefined;
     }
-    return shouldStartGaugeServicesAsync(vscode, projectFactory).then((shouldStart) => (
-      shouldStart
-        ? startGaugeServices(context, vscode, {
-          ...options,
-          gaugeServiceGateResolved: true,
-          projectFactory,
-        })
-        : undefined
-    ));
+    if (!shouldStart) {
+      if (typeof projectFactory.findGaugeProjectRootsAsync !== "function") {
+        return undefined;
+      }
+      return waitForExtensionActivation(
+        options.extensionActivation,
+        shouldStartGaugeServicesAsync(vscode, projectFactory, options.extensionActivation),
+      ).then((shouldStartAsync) => (
+        shouldStartAsync !== STOPPED_EXTENSION_ACTIVATION
+          && isExtensionActivationCurrent(options.extensionActivation)
+          && shouldStartAsync
+          ? startGaugeServices(context, vscode, {
+            ...options,
+            gaugeServiceGateResolved: true,
+            projectFactory,
+          })
+          : undefined
+      ));
+    }
   }
 
   const cli = createCli(vscode, options);
@@ -989,6 +1082,7 @@ function startGaugeServices(context, vscode, options = {}) {
   const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
   const SpecNodeProviderCtor = options.SpecNodeProvider || SpecNodeProvider;
   const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
+  const detachedServices = [];
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
     clientsMap,
@@ -1008,23 +1102,47 @@ function startGaugeServices(context, vscode, options = {}) {
     stepDiagnosticsProvider,
     vscode,
   });
+  detachedServices.push(gaugeWorkspace);
+  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
+    return undefined;
+  }
   const referenceProvider = new ReferenceProviderCtor(clientsMap, {
     documentStore,
     projectFactory,
     vscode,
     workspaceStepIndex,
   });
+  detachedServices.push(referenceProvider);
+  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
+    return undefined;
+  }
   const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
     pathModule: options.pathModule,
     vscode,
   });
+  detachedServices.push(extractConceptProvider);
+  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
+    return undefined;
+  }
   const generateStubProvider = new GenerateStubCommandProviderCtor(clientsMap, { vscode });
+  detachedServices.push(generateStubProvider);
+  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
+    return undefined;
+  }
   const specNodeProvider = new SpecNodeProviderCtor(gaugeWorkspace, {
     executionController: options.executionController,
     pathModule: options.pathModule,
     vscode,
   });
+  detachedServices.push(specNodeProvider);
+  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
+    return undefined;
+  }
   const configProvider = new ConfigProviderCtor(context, { vscode });
+  detachedServices.push(configProvider);
+  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
+    return undefined;
+  }
   activeClientsMap = clientsMap;
   activeGaugeWorkspace = gaugeWorkspace;
   activeGaugeWorkspaceDisposal = undefined;
@@ -1040,6 +1158,11 @@ function startGaugeServices(context, vscode, options = {}) {
 }
 
 function activate(context, vscodeApi, options = {}) {
+  if (activeExtensionActivation) {
+    activeExtensionActivation.stop();
+  }
+  const extensionActivation = createExtensionActivation();
+  activeExtensionActivation = extensionActivation;
   const vscode = getVscode(vscodeApi);
   const baseCreateCli = options.createCli || ((cliOptions) => CLI.instance(cliOptions));
   let sharedCli = options.cli;
@@ -1089,6 +1212,7 @@ function activate(context, vscodeApi, options = {}) {
   const serviceOptions = {
     ...options,
     clientsMap,
+    extensionActivation,
     previewController,
     projectFactory,
     projectEnvironmentService,
@@ -1196,22 +1320,37 @@ function activate(context, vscodeApi, options = {}) {
     state,
   });
   const connectGaugeWorkspace = (resolvedWorkspace) => {
+    if (!isExtensionActivationCurrent(extensionActivation)) {
+      return undefined;
+    }
     if (
       resolvedWorkspace
       && typeof testController.registerProjectChangeListener === "function"
     ) {
       const disposable = testController.registerProjectChangeListener(resolvedWorkspace);
       if (disposable) {
+        if (!isExtensionActivationCurrent(extensionActivation)) {
+          disposeDetachedService(disposable);
+          return undefined;
+        }
         context.subscriptions.push(disposable);
       }
+    }
+    if (!isExtensionActivationCurrent(extensionActivation)) {
+      return undefined;
     }
     if (
       resolvedWorkspace
       && typeof resolvedWorkspace.ready === "function"
       && typeof testController.discoverWorkspaceTests === "function"
     ) {
-      Promise.resolve(resolvedWorkspace.ready())
-        .then(() => testController.discoverWorkspaceTests())
+      waitForExtensionActivation(extensionActivation, resolvedWorkspace.ready())
+        .then((readyResult) => (
+          readyResult !== STOPPED_EXTENSION_ACTIVATION
+            && isExtensionActivationCurrent(extensionActivation)
+            ? testController.discoverWorkspaceTests()
+            : undefined
+        ))
         .catch(() => undefined);
     }
   };
@@ -1223,6 +1362,11 @@ function activate(context, vscodeApi, options = {}) {
 }
 
 function deactivate() {
+  const extensionActivation = activeExtensionActivation;
+  activeExtensionActivation = undefined;
+  if (extensionActivation) {
+    extensionActivation.stop();
+  }
   if (activeGaugeWorkspaceDisposal) {
     return activeGaugeWorkspaceDisposal;
   }

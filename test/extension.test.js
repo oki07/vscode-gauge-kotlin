@@ -914,6 +914,795 @@ test("activation uses asynchronous nested project discovery", async () => {
   assert.equal(cliCreations, 1);
 });
 
+test("activation continues live project discovery after one workspace folder fails", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [
+      { uri: { fsPath: "/workspace/first" } },
+      { uri: { fsPath: "/workspace/second" } },
+    ],
+  });
+  const discoveries = [];
+  let cliCreations = 0;
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      cliCreations += 1;
+      return {
+        isGaugeInstalled() {
+          return false;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      async findGaugeProjectRootsAsync(root) {
+        discoveries.push(root);
+        if (root === "/workspace/first") {
+          throw new Error("Project discovery failed.");
+        }
+        return [`${root}/gauge`];
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showInstallGaugeNotification() {},
+    showWelcomeNotification() {},
+  });
+
+  await activation;
+  await extension.deactivate();
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.deepEqual(discoveries, ["/workspace/first", "/workspace/second"]);
+  assert.equal(cliCreations, 1);
+});
+
+test("activation does not resume Gauge services after deactivation during project discovery", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const discoveryEntered = deferred();
+  const discoveryGate = deferred();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let cliCreations = 0;
+  let installPrompts = 0;
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      cliCreations += 1;
+      return {
+        isGaugeInstalled() {
+          return false;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      findGaugeProjectRootsAsync(root) {
+        assert.equal(root, "/workspace");
+        discoveryEntered.resolve();
+        return discoveryGate.promise;
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showInstallGaugeNotification() {
+      installPrompts += 1;
+    },
+    showWelcomeNotification() {},
+  });
+  let activationOutcome = { status: "pending" };
+  Promise.resolve(activation).then(
+    (value) => {
+      activationOutcome = { status: "fulfilled", value };
+    },
+    (error) => {
+      activationOutcome = { status: "rejected", error };
+    },
+  );
+
+  await discoveryEntered.promise;
+  const subscriptionsBeforeDeactivation = context.subscriptions.length;
+  const deactivation = extension.deactivate();
+  const repeatedDeactivation = extension.deactivate();
+  await deactivation;
+  await new Promise((resolve) => setImmediate(resolve));
+  const outcomeBeforeDiscovery = activationOutcome;
+  discoveryGate.resolve(["/workspace/gauge"]);
+  await Promise.resolve(activation);
+  await new Promise((resolve) => setImmediate(resolve));
+  const finalState = {
+    cliCreations,
+    installPrompts,
+    subscriptions: context.subscriptions.length,
+  };
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.equal(repeatedDeactivation, deactivation);
+  assert.deepEqual(outcomeBeforeDiscovery, { status: "fulfilled", value: undefined });
+  assert.deepEqual(finalState, {
+    cliCreations: 0,
+    installPrompts: 0,
+    subscriptions: subscriptionsBeforeDeactivation,
+  });
+});
+
+test("activation observes rejected project discovery after deactivation", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const discoveryEntered = deferred();
+  const discoveryGate = deferred();
+  const discoveryError = new Error("Project discovery failed.");
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let cliCreations = 0;
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      cliCreations += 1;
+      return undefined;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      findGaugeProjectRootsAsync() {
+        discoveryEntered.resolve();
+        return discoveryGate.promise;
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+  let activationOutcome = { status: "pending" };
+  Promise.resolve(activation).then(
+    (value) => {
+      activationOutcome = { status: "fulfilled", value };
+    },
+    (error) => {
+      activationOutcome = { status: "rejected", error };
+    },
+  );
+
+  await discoveryEntered.promise;
+  await extension.deactivate();
+  await new Promise((resolve) => setImmediate(resolve));
+  const outcomeBeforeDiscovery = activationOutcome;
+  discoveryGate.reject(discoveryError);
+  assert.equal(await Promise.resolve(activation), undefined);
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.deepEqual(outcomeBeforeDiscovery, { status: "fulfilled", value: undefined });
+  assert.equal(cliCreations, 0);
+});
+
+test("activation stops checking later workspace folders after deactivation", async () => {
+  const extension = require("../src/extension");
+
+  for (const settlement of ["resolve", "reject"]) {
+    await extension.deactivate();
+    const discoveryEntered = deferred();
+    const discoveryGate = deferred();
+    const context = { subscriptions: [] };
+    const { fakeVscode } = createFakeVscode({
+      workspaceFolders: [
+        { uri: { fsPath: "/workspace/first" } },
+        { uri: { fsPath: "/workspace/second" } },
+      ],
+    });
+    const discoveries = [];
+    let cliCreations = 0;
+
+    const activation = extension.activate(context, fakeVscode, {
+      createCli() {
+        cliCreations += 1;
+        return undefined;
+      },
+      createExecutionController() {
+        return { handleCommand() {} };
+      },
+      projectFactory: {
+        findGaugeProjectRootsAsync(root) {
+          discoveries.push(root);
+          if (root === "/workspace/first") {
+            discoveryEntered.resolve();
+            return discoveryGate.promise;
+          }
+          return Promise.resolve([`${root}/gauge`]);
+        },
+        isGaugeProject() {
+          return false;
+        },
+      },
+      showWelcomeNotification() {},
+    });
+
+    await discoveryEntered.promise;
+    const deactivation = extension.deactivate();
+    assert.equal(await Promise.resolve(activation), undefined);
+    if (settlement === "resolve") {
+      discoveryGate.resolve([]);
+    } else {
+      discoveryGate.reject(new Error("Project discovery failed."));
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    await deactivation;
+    for (const subscription of context.subscriptions) {
+      if (subscription && typeof subscription.dispose === "function") {
+        subscription.dispose();
+      }
+    }
+
+    assert.deepEqual(discoveries, ["/workspace/first"]);
+    assert.equal(cliCreations, 0);
+  }
+});
+
+test("new activation supersedes pending asynchronous Gauge service discovery", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const firstDiscoveryEntered = deferred();
+  const firstDiscoveryGate = deferred();
+  const firstContext = { subscriptions: [] };
+  const secondContext = { subscriptions: [] };
+  const { fakeVscode: firstVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  const { fakeVscode: secondVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/second" } }],
+  });
+  let firstCliCreations = 0;
+  let secondWorkspaceDisposeCalls = 0;
+
+  class DisposableOnly {
+    dispose() {}
+  }
+
+  class RegisteringDisposable extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  class SecondGaugeWorkspace {
+    dispose() {
+      secondWorkspaceDisposeCalls += 1;
+    }
+  }
+
+  class SecondGaugeTestController extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+
+    setExecutionController() {}
+  }
+
+  const firstActivation = extension.activate(firstContext, firstVscode, {
+    createCli() {
+      firstCliCreations += 1;
+      return {
+        isGaugeInstalled() {
+          return false;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      findGaugeProjectRootsAsync() {
+        firstDiscoveryEntered.resolve();
+        return firstDiscoveryGate.promise;
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showInstallGaugeNotification() {},
+    showWelcomeNotification() {},
+  });
+  let firstOutcome = { status: "pending" };
+  Promise.resolve(firstActivation).then((value) => {
+    firstOutcome = { status: "fulfilled", value };
+  });
+  await firstDiscoveryEntered.promise;
+
+  extension.activate(secondContext, secondVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeClients: Map,
+    GaugeState: DisposableOnly,
+    GaugeWorkspace: SecondGaugeWorkspace,
+    GaugeTestController: SecondGaugeTestController,
+    GaugeStepDiagnosticsProvider: RegisteringDisposable,
+    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
+    ProjectInitializer: DisposableOnly,
+    TerminalProvider: DisposableOnly,
+    ReferenceProvider: DisposableOnly,
+    ConfigProvider: DisposableOnly,
+    ExtractConceptCommandProvider: DisposableOnly,
+    GenerateStubCommandProvider: DisposableOnly,
+    SpecNodeProvider: DisposableOnly,
+    semanticTokensLegend: {},
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const outcomeBeforeFirstDiscovery = firstOutcome;
+  firstDiscoveryGate.resolve(["/workspace/gauge"]);
+  await Promise.resolve(firstActivation);
+  await new Promise((resolve) => setImmediate(resolve));
+  const finalCliCreations = firstCliCreations;
+  assert.equal(secondContext.subscriptions.some(
+    (subscription) => subscription instanceof SecondGaugeWorkspace,
+  ), true);
+  await extension.deactivate();
+  const committedWorkspaceDisposals = secondWorkspaceDisposeCalls;
+  for (const subscription of [...firstContext.subscriptions, ...secondContext.subscriptions]) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.deepEqual(outcomeBeforeFirstDiscovery, { status: "fulfilled", value: undefined });
+  assert.equal(finalCliCreations, 0);
+  assert.equal(committedWorkspaceDisposals, 1);
+});
+
+test("activation remains stopped when project discovery deactivates synchronously", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let cliCreations = 0;
+  let installPrompts = 0;
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      cliCreations += 1;
+      return {
+        isGaugeInstalled() {
+          return false;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      findGaugeProjectRootsAsync() {
+        extension.deactivate();
+        return Promise.resolve(["/workspace/gauge"]);
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showInstallGaugeNotification() {
+      installPrompts += 1;
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(await Promise.resolve(activation), undefined);
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+  assert.equal(cliCreations, 0);
+  assert.equal(installPrompts, 0);
+});
+
+test("activation remains stopped when synchronous project eligibility deactivates", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let cliCreations = 0;
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      cliCreations += 1;
+      return undefined;
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    projectFactory: {
+      isGaugeProject() {
+        extension.deactivate();
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(await Promise.resolve(activation), undefined);
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+  assert.equal(cliCreations, 0);
+});
+
+test("activation does not discover tests after pending workspace readiness is deactivated", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const readyGate = deferred();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let discoveries = 0;
+  let workspaceDisposeCalls = 0;
+
+  class DisposableOnly {
+    dispose() {}
+  }
+
+  class RegisteringDisposable extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  class FakeGaugeWorkspace {
+    ready() {
+      return readyGate.promise;
+    }
+
+    dispose() {
+      workspaceDisposeCalls += 1;
+    }
+  }
+
+  class FakeGaugeTestController extends DisposableOnly {
+    discoverWorkspaceTests() {
+      discoveries += 1;
+      return Promise.resolve([]);
+    }
+
+    register() {
+      return { dispose() {} };
+    }
+
+    setExecutionController() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeClients: Map,
+    GaugeState: DisposableOnly,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    GaugeTestController: FakeGaugeTestController,
+    GaugeStepDiagnosticsProvider: RegisteringDisposable,
+    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
+    ProjectInitializer: DisposableOnly,
+    TerminalProvider: DisposableOnly,
+    ReferenceProvider: DisposableOnly,
+    ConfigProvider: DisposableOnly,
+    ExtractConceptCommandProvider: DisposableOnly,
+    GenerateStubCommandProvider: DisposableOnly,
+    SpecNodeProvider: DisposableOnly,
+    semanticTokensLegend: {},
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  await extension.deactivate();
+  readyGate.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.equal(workspaceDisposeCalls > 0, true);
+  assert.equal(discoveries, 0);
+});
+
+test("activation does not connect a workspace handed off after deactivation", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const discoveryGate = deferred();
+  const workspaceConstructed = deferred();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  let projectListenerRegistrations = 0;
+  let readyCalls = 0;
+  let discoveries = 0;
+  let workspaceDisposeCalls = 0;
+
+  class DisposableOnly {
+    dispose() {}
+  }
+
+  class RegisteringDisposable extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  class FakeGaugeWorkspace {
+    constructor() {
+      workspaceConstructed.resolve();
+    }
+
+    dispose() {
+      workspaceDisposeCalls += 1;
+    }
+
+    ready() {
+      readyCalls += 1;
+      return Promise.resolve();
+    }
+  }
+
+  class FakeGaugeTestController extends DisposableOnly {
+    discoverWorkspaceTests() {
+      discoveries += 1;
+      return Promise.resolve([]);
+    }
+
+    register() {
+      return { dispose() {} };
+    }
+
+    registerProjectChangeListener() {
+      projectListenerRegistrations += 1;
+      return { dispose() {} };
+    }
+
+    setExecutionController() {}
+  }
+
+  const activation = extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeClients: Map,
+    GaugeState: DisposableOnly,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    GaugeTestController: FakeGaugeTestController,
+    GaugeStepDiagnosticsProvider: RegisteringDisposable,
+    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
+    ProjectInitializer: DisposableOnly,
+    TerminalProvider: DisposableOnly,
+    ReferenceProvider: DisposableOnly,
+    ConfigProvider: DisposableOnly,
+    ExtractConceptCommandProvider: DisposableOnly,
+    GenerateStubCommandProvider: DisposableOnly,
+    SpecNodeProvider: DisposableOnly,
+    semanticTokensLegend: {},
+    projectFactory: {
+      findGaugeProjectRootsAsync() {
+        return discoveryGate.promise;
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+
+  discoveryGate.resolve(["/workspace/gauge"]);
+  await workspaceConstructed.promise;
+  await extension.deactivate();
+  assert.equal(await Promise.resolve(activation), undefined);
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.equal(workspaceDisposeCalls > 0, true);
+  assert.equal(projectListenerRegistrations, 0);
+  assert.equal(readyCalls, 0);
+  assert.equal(discoveries, 0);
+});
+
+test("activation disposes unpublished services after synchronous deactivation", async () => {
+  const extension = require("../src/extension");
+  await extension.deactivate();
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  const constructions = [];
+  const finalProviders = [];
+  let workspace;
+  let workspaceDisposeCalls = 0;
+  let finalProviderDisposeCalls = 0;
+  let lateProviderConstructions = 0;
+
+  class DisposableOnly {
+    dispose() {}
+  }
+
+  class RegisteringDisposable extends DisposableOnly {
+    register() {
+      return { dispose() {} };
+    }
+  }
+
+  class FakeGaugeWorkspace {
+    constructor() {
+      constructions.push("workspace");
+      workspace = this;
+    }
+
+    dispose() {
+      workspaceDisposeCalls += 1;
+    }
+  }
+
+  class CountedReferenceProvider {
+    constructor() {
+      constructions.push("reference");
+      finalProviders.push(this);
+    }
+
+    dispose() {
+      finalProviderDisposeCalls += 1;
+    }
+  }
+
+  class LateProvider extends DisposableOnly {
+    constructor() {
+      super();
+      constructions.push("late");
+      finalProviders.push(this);
+      lateProviderConstructions += 1;
+      if (lateProviderConstructions === 4) {
+        extension.deactivate();
+      }
+    }
+
+    dispose() {
+      finalProviderDisposeCalls += 1;
+    }
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    GaugeClients: Map,
+    GaugeState: DisposableOnly,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    GaugeTestController: RegisteringDisposable,
+    GaugeStepDiagnosticsProvider: RegisteringDisposable,
+    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
+    ProjectInitializer: DisposableOnly,
+    TerminalProvider: DisposableOnly,
+    ReferenceProvider: CountedReferenceProvider,
+    ConfigProvider: LateProvider,
+    ExtractConceptCommandProvider: LateProvider,
+    GenerateStubCommandProvider: LateProvider,
+    SpecNodeProvider: LateProvider,
+    semanticTokensLegend: {},
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+    },
+    showWelcomeNotification() {},
+  });
+  const subscriptionsAfterActivation = context.subscriptions.length;
+  await extension.deactivate();
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.deepEqual(constructions, [
+    "workspace",
+    "reference",
+    "late",
+    "late",
+    "late",
+    "late",
+  ]);
+  assert.equal(workspaceDisposeCalls, 1);
+  assert.equal(finalProviderDisposeCalls, 5);
+  assert.equal(context.subscriptions.includes(workspace), false);
+  assert.equal(finalProviders.every(
+    (provider) => !context.subscriptions.includes(provider),
+  ), true);
+  assert.equal(context.subscriptions.length, subscriptionsAfterActivation);
+});
+
 test("create specification command delegates to the specification creator", async () => {
   const extension = require("../src/extension");
 
@@ -1882,6 +2671,10 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
       return this.projectListenerDisposable;
     }
 
+    ready() {
+      return Promise.resolve();
+    }
+
     dispose() {
       if (!this.disposalPromise) {
         this.disposeCalls += 1;
@@ -1896,12 +2689,18 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
     constructor(options) {
       this.options = options;
       this.disposable = { dispose() {} };
+      this.discoveries = 0;
       this.refreshes = 0;
       created.testController = this;
     }
 
     refreshWorkspaceTests() {
       this.refreshes += 1;
+      return Promise.resolve([]);
+    }
+
+    discoverWorkspaceTests() {
+      this.discoveries += 1;
       return Promise.resolve([]);
     }
 
@@ -2144,6 +2943,8 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
     },
   });
 
+  await new Promise((resolve) => setImmediate(resolve));
+
   assert.deepEqual(checkedProjects, [
     ["is", "/workspace"],
     ["find", "/workspace"],
@@ -2219,6 +3020,7 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
   assert.equal(created.testController.options.vscode, fakeVscode);
   assert.equal(created.testController.options.clientsMap, created.clientsMap);
   assert.equal(created.testController.executionController, executionController);
+  assert.equal(created.testController.discoveries, 1);
   assert.equal(typeof created.workspace.projectListener, "function");
   assert.equal(context.subscriptions.includes(created.workspace.projectListenerDisposable), true);
   created.workspace.projectListener();
