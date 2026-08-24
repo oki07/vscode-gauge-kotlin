@@ -817,22 +817,16 @@ test("GaugeWorkspace stops a client-start boundary once during disposal", async 
   assert.equal(workspace.getClientLanguageMap().size, 0);
 });
 
-test("GaugeWorkspace rejects runner language after disposal", async () => {
-  let markLanguageRequestEntered;
-  const languageRequestEntered = new Promise((resolve) => {
-    markLanguageRequestEntered = resolve;
-  });
-  let releaseLanguageRequest;
-  const languageRequestGate = new Promise((resolve) => {
-    releaseLanguageRequest = resolve;
-  });
+test("GaugeWorkspace does not block client startup on a pending runner language lookup", async () => {
+  const languageRequestEntered = deferred();
+  const languageRequestGate = deferred();
   let stopCalls = 0;
 
   class PendingLanguageClient extends FakeLanguageClient {
     sendRequest(method) {
       assert.equal(method, "gauge/getRunnerLanguage");
-      markLanguageRequestEntered();
-      return languageRequestGate.then(() => "kotlin");
+      languageRequestEntered.resolve();
+      return languageRequestGate.promise;
     }
 
     stop() {
@@ -845,16 +839,111 @@ test("GaugeWorkspace rejects runner language after disposal", async () => {
   await workspace.ready();
 
   const start = workspace.startServerFor("/workspace/gauge");
-  await languageRequestEntered;
+  let startResult;
+  let startSettled = false;
+  start.then((result) => {
+    startResult = result;
+    startSettled = true;
+  });
+  await languageRequestEntered.promise;
+  await new Promise((resolve) => setImmediate(resolve));
   const client = clients.get("/workspace/gauge").client;
-  await workspace.dispose();
-  releaseLanguageRequest();
+  const liveSnapshot = {
+    clientCount: clients.size,
+    languageCount: workspace.getClientLanguageMap().size,
+    pendingStartCount: workspace.pendingServerStarts.size,
+    startResult,
+    startSettled,
+  };
 
-  assert.equal(await start, undefined);
-  assert.equal(stopCalls, 1);
-  assert.equal(client.stopped, true);
+  await workspace.dispose();
+  const disposedSnapshot = {
+    clientCount: clients.size,
+    clientStopped: client.stopped,
+    languageCount: workspace.getClientLanguageMap().size,
+    stopCalls,
+  };
+  languageRequestGate.resolve("kotlin");
+  await start;
+  await Promise.resolve();
+
+  assert.equal(liveSnapshot.startSettled, true);
+  assert.equal(liveSnapshot.pendingStartCount, 0);
+  assert.equal(liveSnapshot.startResult === client, true);
+  assert.equal(liveSnapshot.clientCount, 1);
+  assert.equal(liveSnapshot.languageCount, 0);
+  assert.deepEqual(disposedSnapshot, {
+    clientCount: 0,
+    clientStopped: true,
+    languageCount: 0,
+    stopCalls: 1,
+  });
   assert.equal(clients.size, 0);
   assert.equal(workspace.getClientLanguageMap().size, 0);
+});
+
+test("GaugeWorkspace removes a client without waiting for runner language lookup", async () => {
+  const languageRequestEntered = deferred();
+  const languageRequestGate = deferred();
+  const languageError = new Error("runner language lookup failed after removal");
+  let stopCalls = 0;
+
+  class PendingLanguageClient extends FakeLanguageClient {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getRunnerLanguage");
+      languageRequestEntered.resolve();
+      return languageRequestGate.promise;
+    }
+
+    stop() {
+      stopCalls += 1;
+      return super.stop();
+    }
+  }
+
+  const { clients, errors, workspace } = createEmptyKotlinWorkspace(PendingLanguageClient);
+  await workspace.ready();
+
+  const start = workspace.startServerFor("/workspace/gauge");
+  let startSettled = false;
+  start.then(() => {
+    startSettled = true;
+  });
+  await languageRequestEntered.promise;
+  await new Promise((resolve) => setImmediate(resolve));
+  const client = clients.get("/workspace/gauge").client;
+  const removal = workspace.stopServerFor("/workspace/gauge");
+  let removalSettled = false;
+  removal.then(() => {
+    removalSettled = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const removalSnapshot = {
+    clientCount: clients.size,
+    clientStopped: client.stopped,
+    languageCount: workspace.getClientLanguageMap().size,
+    removalSettled,
+    startSettled,
+    stopCalls,
+  };
+
+  languageRequestGate.reject(languageError);
+  await Promise.all([start, removal]);
+  await new Promise((resolve) => setImmediate(resolve));
+  await workspace.dispose();
+
+  assert.deepEqual(removalSnapshot, {
+    clientCount: 0,
+    clientStopped: true,
+    languageCount: 0,
+    removalSettled: true,
+    startSettled: true,
+    stopCalls: 1,
+  });
+  assert.equal(errors.length, 0);
+  assert.equal(clients.size, 0);
+  assert.equal(workspace.getClientLanguageMap().size, 0);
+  assert.equal(stopCalls, 1);
 });
 
 test("GaugeWorkspace retries a failed stop after pending client startup settles", async () => {

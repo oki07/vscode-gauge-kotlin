@@ -1051,7 +1051,7 @@ class GaugeWorkspace {
       return undefined;
     }
     this.registerServerMessageFilter(languageClient);
-    await this.setLanguageId(languageClient, projectRoot, startGeneration);
+    this.setLanguageId(languageClient, projectRoot, startGeneration);
     if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
       return this.cleanupLanguageClient(projectRoot, languageClient);
     }
