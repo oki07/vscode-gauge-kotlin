@@ -57,10 +57,57 @@ function createDocument(text, fsPath = "/workspace/gauge/specs/example.spec", la
 
 function deferred() {
   let resolve;
-  const promise = new Promise((nextResolve) => {
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
     resolve = nextResolve;
+    reject = nextReject;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
+}
+
+function createCancellationToken(initiallyCancelled = false) {
+  const listeners = new Set();
+  const state = {
+    cancelled: initiallyCancelled,
+    disposals: 0,
+    registrations: 0,
+  };
+  const token = {
+    get isCancellationRequested() {
+      return state.cancelled;
+    },
+    onCancellationRequested(listener) {
+      state.registrations += 1;
+      listeners.add(listener);
+      let disposed = false;
+      return {
+        dispose() {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          state.disposals += 1;
+          listeners.delete(listener);
+        },
+      };
+    },
+  };
+  return {
+    cancel() {
+      if (state.cancelled) {
+        return;
+      }
+      state.cancelled = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    listenerCount() {
+      return listeners.size;
+    },
+    state,
+    token,
+  };
 }
 
 test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () => {
@@ -584,6 +631,367 @@ test("GaugeDocumentSymbolProvider waits for the latest pending workspace symbol 
   assert.equal(readyCalls, 3);
 });
 
+test("GaugeDocumentSymbolProvider detaches a cancelled workspace symbol query from a shared refresh", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const refreshEntered = deferred();
+  const releaseRefresh = deferred();
+  const cancellation = createCancellationToken();
+  const conceptDocument = createDocument(
+    "# Shared checkout",
+    "/workspace/gauge/specs/concepts/shared.cpt",
+    "gauge-concept",
+  );
+  let documentReads = 0;
+  let readyCalls = 0;
+  const documentStore = {
+    documents() {
+      documentReads += 1;
+      return [conceptDocument];
+    },
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    async whenReady() {
+      readyCalls += 1;
+      refreshEntered.resolve();
+      await releaseRefresh.promise;
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const cancelledQuery = provider.provideWorkspaceSymbols("Shared", cancellation.token);
+  const liveQuery = provider.provideWorkspaceSymbols("Shared");
+  const cancelledOutcome = { settled: false };
+  cancelledQuery.then(
+    (value) => {
+      cancelledOutcome.settled = true;
+      cancelledOutcome.value = value;
+    },
+    (error) => {
+      cancelledOutcome.error = error;
+      cancelledOutcome.settled = true;
+    },
+  );
+
+  await refreshEntered.promise;
+  assert.equal(provider.activeWorkspaceSymbolOperations.size, 2);
+  cancellation.cancel();
+  await new Promise((resolve) => setImmediate(resolve));
+  const outcomeBeforeRefresh = { ...cancelledOutcome };
+  const listenersBeforeRefresh = cancellation.listenerCount();
+  const activeBeforeRefresh = provider.activeWorkspaceSymbolOperations.size;
+
+  releaseRefresh.resolve();
+  const [cancelledSymbols, liveSymbols] = await Promise.all([cancelledQuery, liveQuery]);
+  const activeFinished = provider.activeWorkspaceSymbolOperations.size;
+  provider.dispose();
+
+  assert.deepEqual(outcomeBeforeRefresh, { settled: true, value: [] });
+  assert.deepEqual(cancelledSymbols, []);
+  assert.deepEqual(liveSymbols.map((symbol) => symbol.name), ["# Shared checkout"]);
+  assert.deepEqual({
+    activeBeforeRefresh,
+    activeFinished,
+    disposals: cancellation.state.disposals,
+    documentReads,
+    listenersBeforeRefresh,
+    readyCalls,
+    registrations: cancellation.state.registrations,
+  }, {
+    activeBeforeRefresh: 1,
+    activeFinished: 0,
+    disposals: 1,
+    documentReads: 1,
+    listenersBeforeRefresh: 0,
+    readyCalls: 1,
+    registrations: 1,
+  });
+});
+
+test("GaugeDocumentSymbolProvider skips pre-cancelled and synchronously cancelled workspace symbol queries", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  let readyCalls = 0;
+  const documentStore = {
+    documents() {
+      throw new Error("cancelled queries must not read documents");
+    },
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    async whenReady() {
+      readyCalls += 1;
+    },
+  };
+
+  const preCancelled = createCancellationToken(true);
+  const preCancelledProvider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const preCancelledResult = preCancelledProvider.provideWorkspaceSymbols(
+    "Shared",
+    preCancelled.token,
+  );
+  assert.deepEqual(preCancelledResult, []);
+  assert.deepEqual({
+    active: preCancelledProvider.activeWorkspaceSymbolOperations.size,
+    disposals: preCancelled.state.disposals,
+    listeners: preCancelled.listenerCount(),
+    registrations: preCancelled.state.registrations,
+  }, {
+    active: 0,
+    disposals: 0,
+    listeners: 0,
+    registrations: 0,
+  });
+  preCancelledProvider.dispose();
+
+  let synchronousDisposals = 0;
+  let synchronousRegistrations = 0;
+  const synchronousToken = {
+    isCancellationRequested: false,
+    onCancellationRequested(listener) {
+      synchronousRegistrations += 1;
+      listener();
+      return {
+        dispose() {
+          synchronousDisposals += 1;
+        },
+      };
+    },
+  };
+  const synchronousProvider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const synchronousResult = synchronousProvider.provideWorkspaceSymbols(
+    "Shared",
+    synchronousToken,
+  );
+
+  assert.deepEqual(synchronousResult, []);
+  assert.deepEqual({
+    active: synchronousProvider.activeWorkspaceSymbolOperations.size,
+    disposals: synchronousDisposals,
+    readyCalls,
+    registrations: synchronousRegistrations,
+  }, {
+    active: 0,
+    disposals: 1,
+    readyCalls: 0,
+    registrations: 1,
+  });
+  synchronousProvider.dispose();
+});
+
+test("GaugeDocumentSymbolProvider detaches terminal fallback queries from a pending document read", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+
+  for (const terminal of ["host cancellation", "provider disposal"]) {
+    const vscode = createFakeVscode();
+    const readEntered = deferred();
+    const releaseRead = deferred();
+    const cancellation = createCancellationToken();
+    const firstUri = { fsPath: `/workspace/gauge/specs/${terminal}-first.cpt` };
+    const secondUri = { fsPath: `/workspace/gauge/specs/${terminal}-second.cpt` };
+    const opened = [];
+    vscode.workspace = {
+      async findFiles() {
+        return [firstUri, secondUri];
+      },
+      async openTextDocument(uri) {
+        opened.push(uri);
+        if (uri === firstUri) {
+          readEntered.resolve();
+          return releaseRead.promise;
+        }
+        return createDocument("# Shared second", uri.fsPath, "gauge-concept");
+      },
+    };
+    const provider = new GaugeDocumentSymbolProvider({ vscode });
+    const symbolsPromise = provider.provideWorkspaceSymbols("Shared", cancellation.token);
+    const outcome = { settled: false };
+    Promise.resolve(symbolsPromise).then(
+      (value) => {
+        outcome.settled = true;
+        outcome.value = value;
+      },
+      (error) => {
+        outcome.error = error;
+        outcome.settled = true;
+      },
+    );
+
+    await readEntered.promise;
+    if (terminal === "host cancellation") {
+      cancellation.cancel();
+    } else {
+      provider.dispose();
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    const outcomeBeforeRead = { ...outcome };
+    const activeBeforeRead = provider.activeWorkspaceSymbolOperations.size;
+
+    if (terminal === "host cancellation") {
+      releaseRead.resolve(createDocument("# Shared first", firstUri.fsPath, "gauge-concept"));
+    } else {
+      releaseRead.reject(new Error("disposed fallback read failed"));
+    }
+    assert.deepEqual(await symbolsPromise, []);
+    await new Promise((resolve) => setImmediate(resolve));
+    provider.dispose();
+
+    assert.deepEqual(outcomeBeforeRead, { settled: true, value: [] }, terminal);
+    assert.equal(activeBeforeRead, 0, terminal);
+    assert.deepEqual(opened, [firstUri], terminal);
+    assert.deepEqual({
+      disposals: cancellation.state.disposals,
+      listeners: cancellation.listenerCount(),
+      registrations: cancellation.state.registrations,
+    }, {
+      disposals: 1,
+      listeners: 0,
+      registrations: 1,
+    }, terminal);
+  }
+});
+
+test("GaugeDocumentSymbolProvider preserves live workspace symbol failures", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const cancellation = createCancellationToken();
+  const requestError = new Error("workspace symbol refresh failed");
+  const documentStore = {
+    documents() {
+      throw new Error("failed refreshes must not read documents");
+    },
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    async whenReady() {
+      throw requestError;
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+
+  await assert.rejects(
+    provider.provideWorkspaceSymbols("Shared", cancellation.token),
+    (error) => error === requestError,
+  );
+
+  assert.deepEqual({
+    active: provider.activeWorkspaceSymbolOperations.size,
+    disposals: cancellation.state.disposals,
+    listeners: cancellation.listenerCount(),
+    registrations: cancellation.state.registrations,
+  }, {
+    active: 0,
+    disposals: 1,
+    listeners: 0,
+    registrations: 1,
+  });
+  provider.dispose();
+});
+
+test("GaugeDocumentSymbolProvider does not republish cache state after synchronous disposal", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const documents = [
+    createDocument("# Shared first", "/workspace/gauge/specs/first.cpt", "gauge-concept"),
+    createDocument("# Shared second", "/workspace/gauge/specs/second.cpt", "gauge-concept"),
+  ];
+  const documentStore = {
+    documents() {
+      return documents;
+    },
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    async whenReady() {},
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const provideDocumentSymbols = provider.provideDocumentSymbols.bind(provider);
+  let analyses = 0;
+  provider.provideDocumentSymbols = (document) => {
+    analyses += 1;
+    if (analyses === 1) {
+      provider.dispose();
+    }
+    return provideDocumentSymbols(document);
+  };
+
+  assert.deepEqual(await provider.provideWorkspaceSymbols("Shared"), []);
+  assert.deepEqual({
+    analyses,
+    entries: provider.workspaceSymbolEntries,
+    ready: provider.workspaceSymbolReady,
+    records: provider.workspaceSymbolRecords.size,
+  }, {
+    analyses: 1,
+    entries: [],
+    ready: false,
+    records: 0,
+  });
+});
+
+test("GaugeDocumentSymbolProvider completes disposal when its store subscription throws", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const conceptDocument = createDocument(
+    "# Shared checkout",
+    "/workspace/gauge/specs/shared.cpt",
+    "gauge-concept",
+  );
+  let changeListener;
+  let subscriptionDisposals = 0;
+  const documentStore = {
+    documents() {
+      return [conceptDocument];
+    },
+    onDidChangeDocuments(listener) {
+      changeListener = listener;
+      return {
+        dispose() {
+          subscriptionDisposals += 1;
+          throw new Error("store subscription cleanup failed");
+        },
+      };
+    },
+    async whenReady() {},
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  assert.deepEqual(
+    (await provider.provideWorkspaceSymbols("Shared")).map((symbol) => symbol.name),
+    ["# Shared checkout"],
+  );
+
+  let disposalError;
+  try {
+    provider.dispose();
+  } catch (error) {
+    disposalError = error;
+  }
+  changeListener({ file: conceptDocument.uri.fsPath });
+  provider.dispose();
+
+  assert.deepEqual({
+    active: provider.activeWorkspaceSymbolOperations.size,
+    dirty: provider.workspaceSymbolDirtyFiles.size,
+    disposalError,
+    entries: provider.workspaceSymbolEntries,
+    fullDirty: provider.workspaceSymbolFullDirty,
+    ready: provider.workspaceSymbolReady,
+    records: provider.workspaceSymbolRecords.size,
+    subscription: provider.documentStoreSubscription,
+    subscriptionDisposals,
+  }, {
+    active: 0,
+    dirty: 0,
+    disposalError: undefined,
+    entries: [],
+    fullDirty: false,
+    ready: false,
+    records: 0,
+    subscription: undefined,
+    subscriptionDisposals: 1,
+  });
+});
+
 test("GaugeDocumentSymbolProvider restores workspace symbol invalidations after refresh failure", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
@@ -671,16 +1079,25 @@ test("GaugeDocumentSymbolProvider returns no workspace symbols after disposal du
   };
 
   const pendingSymbols = provider.provideWorkspaceSymbols("Disposed");
+  const outcome = { settled: false };
+  Promise.resolve(pendingSymbols).then((value) => {
+    outcome.settled = true;
+    outcome.value = value;
+  });
   await refreshEntered.promise;
 
   assert.equal(listeners.size, 1);
   provider.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+  const outcomeBeforeRefresh = { ...outcome };
   assert.equal(listeners.size, 0);
+  assert.equal(provider.activeWorkspaceSymbolOperations.size, 0);
   assert.equal(provider.workspaceSymbolRecords.size, 0);
   assert.deepEqual(provider.workspaceSymbolEntries, []);
 
   releaseRefresh.resolve();
   assert.deepEqual(await pendingSymbols, []);
+  assert.deepEqual(outcomeBeforeRefresh, { settled: true, value: [] });
   assert.deepEqual(await provider.provideWorkspaceSymbols("Disposed"), []);
   assert.deepEqual({
     analyses,
@@ -722,11 +1139,25 @@ test("GaugeDocumentSymbolProvider suppresses refresh failures after disposal", a
   const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
 
   const pendingSymbols = provider.provideWorkspaceSymbols("Disposed");
+  const outcome = { settled: false };
+  Promise.resolve(pendingSymbols).then(
+    (value) => {
+      outcome.settled = true;
+      outcome.value = value;
+    },
+    (error) => {
+      outcome.error = error;
+      outcome.settled = true;
+    },
+  );
   await refreshEntered.promise;
   provider.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+  const outcomeBeforeRefresh = { ...outcome };
   releaseRefresh.resolve();
 
   assert.deepEqual(await pendingSymbols, []);
+  assert.deepEqual(outcomeBeforeRefresh, { settled: true, value: [] });
   assert.deepEqual(await provider.provideWorkspaceSymbols("Disposed"), []);
   assert.deepEqual({
     entries: provider.workspaceSymbolEntries,

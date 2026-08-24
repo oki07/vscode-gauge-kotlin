@@ -13,6 +13,7 @@ const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const SYMBOL_KIND_NAMESPACE = 3;
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
+const CANCELLED_WORKSPACE_SYMBOL_OPERATION = Symbol("cancelled workspace symbol operation");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -219,11 +220,15 @@ class GaugeDocumentSymbolProvider {
     this.workspaceSymbolPending = undefined;
     this.documentStoreSubscription = undefined;
     this.disposed = false;
+    this.activeWorkspaceSymbolOperations = new Set();
     if (
       this.documentStore
       && typeof this.documentStore.onDidChangeDocuments === "function"
     ) {
       this.documentStoreSubscription = this.documentStore.onDidChangeDocuments((change) => {
+        if (this.disposed) {
+          return;
+        }
         const file = change && change.file;
         if (file && isWorkspaceSymbolPath(file)) {
           this.workspaceSymbolDirtyFiles.add(file);
@@ -235,19 +240,149 @@ class GaugeDocumentSymbolProvider {
   }
 
   dispose() {
-    this.disposed = true;
-    if (
-      this.documentStoreSubscription
-      && typeof this.documentStoreSubscription.dispose === "function"
-    ) {
-      this.documentStoreSubscription.dispose();
+    if (this.disposed) {
+      return;
     }
+    this.disposed = true;
+    const operations = [...this.activeWorkspaceSymbolOperations];
+    this.activeWorkspaceSymbolOperations.clear();
+    for (const operation of operations) {
+      this.cancelWorkspaceSymbolOperation(operation);
+    }
+    const documentStoreSubscription = this.documentStoreSubscription;
     this.documentStoreSubscription = undefined;
+    if (
+      documentStoreSubscription
+      && typeof documentStoreSubscription.dispose === "function"
+    ) {
+      try {
+        documentStoreSubscription.dispose();
+      } catch (_error) {
+        // Continue clearing provider-owned cache state after listener cleanup fails.
+      }
+    }
     this.workspaceSymbolRecords.clear();
     this.workspaceSymbolEntries = [];
     this.workspaceSymbolDirtyFiles.clear();
     this.workspaceSymbolFullDirty = false;
     this.workspaceSymbolReady = false;
+  }
+
+  createWorkspaceSymbolOperation(token) {
+    if (this.disposed) {
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      cancellationDisposable: undefined,
+      resolveCancellation,
+    };
+    this.activeWorkspaceSymbolOperations.add(operation);
+    if (!token || typeof token.onCancellationRequested !== "function") {
+      return operation;
+    }
+    let disposable;
+    try {
+      disposable = token.onCancellationRequested(
+        () => this.cancelWorkspaceSymbolOperation(operation),
+      );
+    } catch (error) {
+      if (!operation.active) {
+        return operation;
+      }
+      this.finishWorkspaceSymbolOperation(operation);
+      throw error;
+    }
+    if (operation.active) {
+      operation.cancellationDisposable = disposable;
+    } else if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Synchronous cancellation already completed the request.
+      }
+    }
+    if (token.isCancellationRequested && operation.active) {
+      this.cancelWorkspaceSymbolOperation(operation);
+    }
+    return operation;
+  }
+
+  workspaceSymbolOperationActive(operation) {
+    return !this.disposed && (!operation || operation.active);
+  }
+
+  disposeWorkspaceSymbolCancellation(operation) {
+    const disposable = operation && operation.cancellationDisposable;
+    if (!disposable) {
+      return;
+    }
+    operation.cancellationDisposable = undefined;
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Listener cleanup cannot reactivate a completed workspace symbol request.
+      }
+    }
+  }
+
+  cancelWorkspaceSymbolOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeWorkspaceSymbolOperations.delete(operation);
+    operation.resolveCancellation(CANCELLED_WORKSPACE_SYMBOL_OPERATION);
+    this.disposeWorkspaceSymbolCancellation(operation);
+  }
+
+  finishWorkspaceSymbolOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.activeWorkspaceSymbolOperations.delete(operation);
+    this.disposeWorkspaceSymbolCancellation(operation);
+  }
+
+  runWorkspaceSymbolOperation(token, callback) {
+    const operation = this.createWorkspaceSymbolOperation(token);
+    if (!operation || !operation.active) {
+      return [];
+    }
+    let value;
+    try {
+      value = callback(operation);
+    } catch (error) {
+      this.finishWorkspaceSymbolOperation(operation);
+      throw error;
+    }
+    if (!operation.active) {
+      Promise.resolve(value).catch(() => undefined);
+      return [];
+    }
+    const observed = Promise.resolve(value);
+    return Promise.race([observed, operation.cancellation])
+      .then(
+        (result) => (
+          result === CANCELLED_WORKSPACE_SYMBOL_OPERATION
+          || !this.workspaceSymbolOperationActive(operation)
+            ? []
+            : result
+        ),
+        (error) => {
+          if (!this.workspaceSymbolOperationActive(operation)) {
+            return [];
+          }
+          throw error;
+        },
+      )
+      .finally(() => this.finishWorkspaceSymbolOperation(operation));
   }
 
   provideDocumentSymbols(document) {
@@ -290,16 +425,35 @@ class GaugeDocumentSymbolProvider {
     return symbols;
   }
 
-  async workspaceDocuments() {
-    if (this.disposed) {
+  async workspaceDocuments(operation) {
+    if (!this.workspaceSymbolOperationActive(operation)) {
       return [];
     }
     if (this.documentStore) {
-      await this.documentStore.whenReady();
-      if (this.disposed) {
+      try {
+        await this.documentStore.whenReady();
+      } catch (error) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        throw error;
+      }
+      if (!this.workspaceSymbolOperationActive(operation)) {
         return [];
       }
-      return this.documentStore.documents().filter((document) => {
+      let documents;
+      try {
+        documents = this.documentStore.documents();
+      } catch (error) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        throw error;
+      }
+      if (!this.workspaceSymbolOperationActive(operation)) {
+        return [];
+      }
+      return documents.filter((document) => {
         const file = documentPath(document);
         return CONCEPT_FILE_PATTERN.test(file);
       });
@@ -315,8 +469,16 @@ class GaugeDocumentSymbolProvider {
 
     const urisByKey = new Map();
     for (const pattern of [CONCEPT_WORKSPACE_PATTERN]) {
-      const uris = await workspace.findFiles(pattern);
-      if (this.disposed) {
+      let uris;
+      try {
+        uris = await workspace.findFiles(pattern);
+      } catch (error) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        throw error;
+      }
+      if (!this.workspaceSymbolOperationActive(operation)) {
         return [];
       }
       for (const uri of uris || []) {
@@ -328,14 +490,14 @@ class GaugeDocumentSymbolProvider {
     for (const uri of urisByKey.values()) {
       try {
         const document = await workspace.openTextDocument(uri);
-        if (this.disposed) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
           return [];
         }
         if (document) {
           documents.push(document);
         }
       } catch (_error) {
-        if (this.disposed) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
           return [];
         }
         // Ignore unreadable files so one stale workspace entry does not hide
@@ -367,22 +529,33 @@ class GaugeDocumentSymbolProvider {
         }
       }
       for (const document of documents) {
+        if (this.disposed) {
+          return [];
+        }
         const file = documentPath(document);
         if (
           refreshAll
           || dirtyFiles.has(file)
           || !this.workspaceSymbolRecords.has(file)
         ) {
+          const symbols = this.provideDocumentSymbols(document);
+          if (this.disposed) {
+            return [];
+          }
           this.workspaceSymbolRecords.set(file, {
             document,
-            symbols: this.provideDocumentSymbols(document),
+            symbols,
           });
         }
       }
-      this.workspaceSymbolEntries = documents.flatMap((document) => {
+      const workspaceSymbolEntries = documents.flatMap((document) => {
         const record = this.workspaceSymbolRecords.get(documentPath(document));
         return record ? record.symbols : [];
       });
+      if (this.disposed) {
+        return [];
+      }
+      this.workspaceSymbolEntries = workspaceSymbolEntries;
       this.workspaceSymbolReady = true;
       return this.workspaceSymbolEntries;
     } catch (error) {
@@ -440,35 +613,39 @@ class GaugeDocumentSymbolProvider {
     return this.workspaceSymbolEntries;
   }
 
-  async provideWorkspaceSymbols(query) {
-    if (this.disposed) {
-      return [];
-    }
-    const normalizedQuery = workspaceSymbolQuery(query);
-    if (normalizedQuery.length < 2) {
-      return [];
-    }
-
+  async provideWorkspaceSymbolsForOperation(normalizedQuery, operation) {
     const queryText = normalizedQuery.toLowerCase();
     const specSymbols = [];
     const scenarioSymbols = [];
     let symbols = await this.cachedWorkspaceSymbols();
+    if (!this.workspaceSymbolOperationActive(operation)) {
+      return [];
+    }
     if (!symbols) {
       let documents;
       try {
-        documents = await this.workspaceDocuments();
+        documents = await this.workspaceDocuments(operation);
       } catch (error) {
-        if (this.disposed) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
           return [];
         }
         throw error;
       }
-      symbols = documents.flatMap((document) => this.provideDocumentSymbols(document));
+      symbols = [];
+      for (const document of documents) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        symbols.push(...this.provideDocumentSymbols(document));
+      }
     }
-    if (this.disposed) {
+    if (!this.workspaceSymbolOperationActive(operation)) {
       return [];
     }
     for (const symbol of symbols) {
+      if (!this.workspaceSymbolOperationActive(operation)) {
+        return [];
+      }
       if (!symbol.name.toLowerCase().includes(queryText)) {
         continue;
       }
@@ -482,6 +659,20 @@ class GaugeDocumentSymbolProvider {
     specSymbols.sort(symbolNameCompare);
     scenarioSymbols.sort(symbolNameCompare);
     return [...specSymbols, ...scenarioSymbols];
+  }
+
+  provideWorkspaceSymbols(query, token) {
+    if (this.disposed || (token && token.isCancellationRequested)) {
+      return [];
+    }
+    const normalizedQuery = workspaceSymbolQuery(query);
+    if (normalizedQuery.length < 2) {
+      return [];
+    }
+    return this.runWorkspaceSymbolOperation(
+      token,
+      (operation) => this.provideWorkspaceSymbolsForOperation(normalizedQuery, operation),
+    );
   }
 }
 
