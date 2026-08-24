@@ -2,7 +2,10 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
-const { offsetAt: indexedOffsetAt } = require("./documentPosition");
+const {
+  offsetAt: indexedOffsetAt,
+  positionAt: indexedPositionAt,
+} = require("./documentPosition");
 
 const SHOW_REFERENCES = "editor.action.showReferences";
 const SHOW_REFERENCES_AT_CURSOR = "gauge.showReferences.atCursor";
@@ -487,13 +490,17 @@ function superStepAliasesForEntry(document, entry, implementationDocuments, diag
   return aliases;
 }
 
-function locationKey(location) {
+function locationUriText(location) {
   const uri = location && location.uri;
-  const uriText = typeof uri === "string"
+  return typeof uri === "string"
     ? uri
     : uri && typeof uri.toString === "function"
       ? uri.toString()
       : uri && uri.fsPath;
+}
+
+function locationKey(location) {
+  const uriText = locationUriText(location);
   const range = (location && location.range) || {};
   const start = range.start || {};
   const end = range.end || {};
@@ -504,6 +511,33 @@ function locationKey(location) {
     end.line,
     end.character,
   ].join(":");
+}
+
+function comparePositions(left, right) {
+  if (left.line !== right.line) {
+    return left.line - right.line;
+  }
+  return left.character - right.character;
+}
+
+function locationsOverlap(left, right) {
+  if (locationUriText(left) !== locationUriText(right)) {
+    return false;
+  }
+  const leftRange = left && left.range;
+  const rightRange = right && right.range;
+  if (
+    !leftRange
+    || !leftRange.start
+    || !leftRange.end
+    || !rightRange
+    || !rightRange.start
+    || !rightRange.end
+  ) {
+    return locationKey(left) === locationKey(right);
+  }
+  return comparePositions(leftRange.start, rightRange.end) <= 0
+    && comparePositions(rightRange.start, leftRange.end) <= 0;
 }
 
 function uniqueLocations(locations) {
@@ -737,14 +771,72 @@ function positionInRange(position, range) {
   return true;
 }
 
-function conceptHeadingTextAt(document, position) {
+function conceptHeadingAt(document, position) {
   if (!isConceptReferenceDocument(document) || typeof document.getText !== "function") {
     return undefined;
   }
-  const heading = findConceptHeadings(document.getText()).find((entry) => (
+  return findConceptHeadings(document.getText()).find((entry) => (
     positionInRange(position, entry)
   ));
+}
+
+function conceptHeadingTextAt(document, position) {
+  const heading = conceptHeadingAt(document, position);
   return heading && heading.text;
+}
+
+function conceptDeclarationLocationAt(document, position) {
+  const heading = conceptHeadingAt(document, position);
+  const uri = documentUri(document);
+  if (!heading || !uri) {
+    return undefined;
+  }
+  return {
+    uri,
+    range: {
+      start: heading.start,
+      end: heading.end,
+    },
+  };
+}
+
+function indexedDefinitionLocation(indexedEntry) {
+  const document = indexedEntry && indexedEntry.document;
+  const uri = documentUri(document);
+  if (!document || !uri) {
+    return undefined;
+  }
+  if (indexedEntry.kind === "concept") {
+    const heading = indexedEntry.heading;
+    return heading && {
+      uri,
+      range: {
+        start: heading.start,
+        end: heading.end,
+      },
+    };
+  }
+  const entry = indexedEntry.entry;
+  if (!entry || typeof document.getText !== "function") {
+    return undefined;
+  }
+  const text = document.getText();
+  const startOffset = entry.declarationStart !== undefined
+    ? entry.declarationStart
+    : entry.parameterStart;
+  const endOffset = entry.declarationEnd !== undefined
+    ? entry.declarationEnd
+    : entry.parameterEnd;
+  if (startOffset === undefined || endOffset === undefined) {
+    return undefined;
+  }
+  return {
+    uri,
+    range: {
+      start: indexedPositionAt(document, text, startOffset),
+      end: indexedPositionAt(document, text, endOffset),
+    },
+  };
 }
 
 function localGaugeStepReferenceEntries(document, options = {}) {
@@ -1513,15 +1605,94 @@ class ReferenceProvider {
     return undefined;
   }
 
+  referenceContext(contextOrToken, token) {
+    if (token) {
+      return contextOrToken;
+    }
+    return this.referenceCancellationToken(contextOrToken, undefined)
+      ? undefined
+      : contextOrToken;
+  }
+
   provideReferences(document, position, contextOrToken, token) {
     const cancellationToken = this.referenceCancellationToken(contextOrToken, token);
+    const context = this.referenceContext(contextOrToken, token);
+    const includeDeclaration = context && typeof context.includeDeclaration === "boolean"
+      ? context.includeDeclaration
+      : undefined;
     return this.runReferenceOperation(
       cancellationToken,
-      (operation) => this.provideReferencesForOperation(operation, document, position),
+      (operation) => this.provideReferencesForOperation(
+        operation,
+        document,
+        position,
+        includeDeclaration,
+      ),
     );
   }
 
-  async provideReferencesForOperation(operation, document, position) {
+  async definitionLocationsForOperation(operation, document, position, stepValues) {
+    const sourceDeclaration = this.callSyncForOperation(
+      operation,
+      () => conceptDeclarationLocationAt(document, position),
+    );
+    if (sourceDeclaration === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    if (sourceDeclaration) {
+      return [sourceDeclaration];
+    }
+    if (
+      !this.workspaceStepIndex
+      || typeof this.workspaceStepIndex.definitionEntries !== "function"
+    ) {
+      return [];
+    }
+    const templates = valuesForStep(stepValues);
+    if (templates.length === 0) {
+      return [];
+    }
+    const indexedEntries = await this.callForOperation(
+      operation,
+      () => this.workspaceStepIndex.definitionEntries(document, templates),
+    );
+    if (indexedEntries === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const locations = [];
+    for (const indexedEntry of indexedEntries || []) {
+      const location = this.callSyncForOperation(
+        operation,
+        () => indexedDefinitionLocation(indexedEntry),
+      );
+      if (location === CANCELLED_REFERENCE_OPERATION) {
+        return CANCELLED_REFERENCE_OPERATION;
+      }
+      if (location) {
+        locations.push(location);
+      }
+    }
+    return uniqueLocations(locations);
+  }
+
+  referenceLocationsWithDeclaration(locations, declarations, includeDeclaration) {
+    const referenceLocations = Array.isArray(locations)
+      ? locations
+      : locations
+        ? [locations]
+        : [];
+    if (includeDeclaration === undefined || declarations.length === 0) {
+      return referenceLocations;
+    }
+    const usages = referenceLocations.filter((location) => (
+      !declarations.some((declaration) => locationsOverlap(location, declaration))
+    ));
+    return includeDeclaration
+      ? uniqueLocations([...declarations, ...usages])
+      : usages;
+  }
+
+  async provideReferencesForOperation(operation, document, position, includeDeclaration) {
     const languageClient = this.callSyncForOperation(
       operation,
       () => this.languageClientForUri(document && document.uri),
@@ -1539,7 +1710,29 @@ class ReferenceProvider {
     if (locations === CANCELLED_REFERENCE_OPERATION) {
       return CANCELLED_REFERENCE_OPERATION;
     }
-    return this.convertLocationsForOperation(operation, locations, languageClient);
+    const declarations = includeDeclaration === undefined
+      ? []
+      : await this.definitionLocationsForOperation(
+        operation,
+        document,
+        position,
+        stepValues,
+      );
+    if (declarations === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    const requestedLocations = this.callSyncForOperation(
+      operation,
+      () => this.referenceLocationsWithDeclaration(
+        locations,
+        declarations,
+        includeDeclaration,
+      ),
+    );
+    if (requestedLocations === CANCELLED_REFERENCE_OPERATION) {
+      return CANCELLED_REFERENCE_OPERATION;
+    }
+    return this.convertLocationsForOperation(operation, requestedLocations, languageClient);
   }
 
   sourceGaugeProjectRoot(options = {}) {

@@ -1833,12 +1833,34 @@ test("ReferenceProvider provides local references from concept heading cursor wi
   });
   const provider = new ReferenceProvider(new GaugeClients(), { vscode });
 
-  const references = await provider.provideReferences(
+  const withoutDeclarations = await provider.provideReferences(
     conceptDocument,
     { line: 0, character: 14 },
+    { includeDeclaration: false },
+  );
+  const withDeclarations = await provider.provideReferences(
+    conceptDocument,
+    { line: 0, character: 14 },
+    { includeDeclaration: true },
   );
 
-  assert.deepEqual(plainLocations(references), [
+  assert.deepEqual(plainLocations(withoutDeclarations), [
+    {
+      uri: "file:///workspace/specs/checkout.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 24 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/concepts/reuse.cpt",
+      range: {
+        start: { line: 1, character: 0 },
+        end: { line: 1, character: 23 },
+      },
+    },
+  ]);
+  assert.deepEqual(plainLocations(withDeclarations), [
     {
       uri: "file:///workspace/specs/concepts/shared.cpt",
       range: {
@@ -1957,6 +1979,334 @@ test("ReferenceProvider provides local references from gauge-concept heading cur
       },
     },
   ]);
+});
+
+test("ReferenceProvider supplements Gauge references with the requested concept declaration", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const requestCalls = [];
+  const conceptDocument = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/concepts/shared.cpt",
+      toString() {
+        return "file:///workspace/specs/concepts/shared.cpt";
+      },
+    },
+    getText() {
+      return "  # Shared checkout <item>\n* Prepare cart";
+    },
+  };
+  const { vscode } = createFakeVscode({
+    workspace: { textDocuments: [conceptDocument] },
+  });
+  const clients = new GaugeClients();
+  clients.set("/workspace", {
+    project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
+    client: createClient({
+      "gauge/stepValueAt": "Shared checkout <item>",
+      "gauge/stepReferences": [
+        {
+          uri: "file:///workspace/specs/concepts/shared.cpt",
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 28 },
+          },
+        },
+        {
+          uri: "file:///workspace/specs/checkout.spec",
+          range: {
+            start: { line: 3, character: 0 },
+            end: { line: 3, character: 24 },
+          },
+        },
+      ],
+    }, requestCalls),
+  });
+  const provider = new ReferenceProvider(clients, { vscode });
+
+  const withoutDeclarations = await provider.provideReferences(
+    conceptDocument,
+    { line: 0, character: 14 },
+    { includeDeclaration: false },
+  );
+  const withDeclarations = await provider.provideReferences(
+    conceptDocument,
+    { line: 0, character: 14 },
+    { includeDeclaration: true },
+  );
+
+  assert.deepEqual(plainLocations(withoutDeclarations), [
+    {
+      uri: "file:///workspace/specs/checkout.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 24 },
+      },
+    },
+  ]);
+  assert.deepEqual(plainLocations(withDeclarations), [
+    {
+      uri: "file:///workspace/specs/concepts/shared.cpt",
+      range: {
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 26 },
+      },
+    },
+    {
+      uri: "file:///workspace/specs/checkout.spec",
+      range: {
+        start: { line: 3, character: 0 },
+        end: { line: 3, character: 24 },
+      },
+    },
+  ]);
+  assert.deepEqual(requestCalls.map((entry) => entry.method), [
+    "gauge/stepValueAt",
+    "gauge/stepReferences",
+    "gauge/stepValueAt",
+    "gauge/stepReferences",
+  ]);
+});
+
+test("ReferenceProvider includes indexed step declarations only when requested", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const text = [
+    "@Step(\"Open cart\")",
+    "fun openCart() {}",
+  ].join("\n");
+  const document = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/tests/CartSteps.kt",
+      toString() {
+        return "file:///workspace/tests/CartSteps.kt";
+      },
+    },
+    getText() {
+      return text;
+    },
+  };
+  const entry = {
+    aliases: ["Open cart"],
+    annotationEnd: text.indexOf("\n"),
+    annotationStart: 0,
+    declarationEnd: text.length,
+    declarationStart: text.indexOf("fun"),
+  };
+  const usage = {
+    uri: "file:///workspace/specs/cart.spec",
+    range: {
+      start: { line: 2, character: 0 },
+      end: { line: 2, character: 11 },
+    },
+  };
+  const definitionCalls = [];
+  const { vscode } = createFakeVscode();
+  const provider = new ReferenceProvider(new GaugeClients(), {
+    vscode,
+    workspaceStepIndex: {
+      definitionEntries(sourceDocument, templates) {
+        definitionCalls.push({ sourceDocument, templates });
+        const definition = { document, entry, kind: "step" };
+        return [definition, definition];
+      },
+      referenceLocations() {
+        return [usage];
+      },
+      stepAliasesForEntry() {
+        return ["Open cart"];
+      },
+      stepEntriesForDocument() {
+        return [entry];
+      },
+    },
+  });
+
+  const withoutDeclarations = await provider.provideReferences(
+    document,
+    { line: 1, character: 5 },
+    { includeDeclaration: false },
+  );
+  const withDeclarations = await provider.provideReferences(
+    document,
+    { line: 1, character: 5 },
+    { includeDeclaration: true },
+  );
+  const legacyReferences = await provider.provideReferences(
+    document,
+    { line: 1, character: 5 },
+  );
+
+  assert.deepEqual(plainLocations(withoutDeclarations), [usage]);
+  assert.deepEqual(plainLocations(withDeclarations), [
+    {
+      uri: "file:///workspace/tests/CartSteps.kt",
+      range: {
+        start: { line: 1, character: 0 },
+        end: { line: 1, character: 17 },
+      },
+    },
+    usage,
+  ]);
+  assert.deepEqual(plainLocations(legacyReferences), [usage]);
+  assert.equal(definitionCalls.length, 2);
+  assert.equal(definitionCalls[0].sourceDocument, document);
+  assert.deepEqual(definitionCalls.map((call) => call.templates), [
+    ["Open cart"],
+    ["Open cart"],
+  ]);
+});
+
+test("ReferenceProvider cancels pending declaration lookups", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const lateError = new Error("late reference declaration lookup failed");
+  for (const trigger of ["hostCancel", "providerDispose"]) {
+    for (const settlement of ["resolve", "reject"]) {
+      const definitionGate = deferred();
+      const cancellation = createCancellation();
+      const sources = [];
+      const document = {
+        languageId: "gauge",
+        uri: {
+          fsPath: "/workspace/specs/cart.spec",
+          toString() {
+            return "file:///workspace/specs/cart.spec";
+          },
+        },
+        getText() {
+          return "* Open cart";
+        },
+      };
+      const { vscode } = createFakeVscode();
+      trackCancellationSources(vscode, sources);
+      let definitionCalls = 0;
+      let converterCalls = 0;
+      const client = {
+        protocol2CodeConverter: {
+          asLocation(location) {
+            converterCalls += 1;
+            return location;
+          },
+        },
+        sendRequest(method) {
+          if (method === "gauge/stepValueAt") {
+            return Promise.resolve("Open cart");
+          }
+          return Promise.resolve([{
+            uri: "file:///workspace/specs/cart.spec",
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 11 },
+            },
+          }]);
+        },
+      };
+      const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+        vscode,
+        workspaceStepIndex: {
+          definitionEntries() {
+            definitionCalls += 1;
+            return definitionGate.promise;
+          },
+        },
+      });
+      let outcome;
+      const invocation = provider.provideReferences(
+        document,
+        { line: 0, character: 4 },
+        { includeDeclaration: true },
+        cancellation.token,
+      );
+      invocation.then(
+        (value) => {
+          outcome = { status: "fulfilled", value };
+        },
+        (reason) => {
+          outcome = { status: "rejected", reason };
+        },
+      );
+      await nextTurn();
+
+      if (trigger === "hostCancel") {
+        cancellation.cancel();
+      } else {
+        provider.dispose();
+      }
+      await nextTurn();
+      const observedBeforeRelease = outcome;
+      if (settlement === "resolve") {
+        definitionGate.resolve([]);
+      } else {
+        definitionGate.reject(lateError);
+      }
+      await Promise.allSettled([invocation]);
+
+      assert.equal(definitionCalls, 1);
+      assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
+      assert.equal(converterCalls, 0);
+      assert.equal(provider.activeOperations.size, 0);
+      assert.deepEqual(sources.map((source) => source.disposeCalls), [1, 1]);
+      assert.equal(cancellation.registrations(), 1);
+      assert.equal(cancellation.listenerDisposals(), 1);
+      assert.equal(cancellation.listenerCount(), 0);
+    }
+  }
+});
+
+test("ReferenceProvider preserves live declaration lookup failures", async () => {
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const expectedError = new Error("reference declaration lookup failed");
+  const cancellation = createCancellation();
+  const document = {
+    languageId: "gauge",
+    uri: {
+      fsPath: "/workspace/specs/cart.spec",
+      toString() {
+        return "file:///workspace/specs/cart.spec";
+      },
+    },
+    getText() {
+      return "* Open cart";
+    },
+  };
+  const { vscode } = createFakeVscode();
+  const client = {
+    sendRequest(method) {
+      if (method === "gauge/stepValueAt") {
+        return Promise.resolve("Open cart");
+      }
+      return Promise.resolve([]);
+    },
+  };
+  const provider = new ReferenceProvider({ get: () => ({ client }) }, {
+    vscode,
+    workspaceStepIndex: {
+      definitionEntries() {
+        return Promise.reject(expectedError);
+      },
+      referenceLocations() {
+        return [];
+      },
+    },
+  });
+
+  await assert.rejects(
+    provider.provideReferences(
+      document,
+      { line: 0, character: 4 },
+      { includeDeclaration: true },
+      cancellation.token,
+    ),
+    (error) => error === expectedError,
+  );
+
+  assert.equal(provider.activeOperations.size, 0);
+  assert.equal(cancellation.registrations(), 1);
+  assert.equal(cancellation.listenerDisposals(), 1);
+  assert.equal(cancellation.listenerCount(), 0);
 });
 
 test("ReferenceProvider accepts plaintext .cpt concept headings for local references", async () => {
