@@ -17,6 +17,7 @@ const { UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
 const GAUGE_LAUNCH_CONFIG = "gauge.launch";
 const CODE_LENS_METHOD = "textDocument/codeLens";
+const RENAME_METHOD = "textDocument/rename";
 const DEBUG_LOG_LEVEL_CONFIG = "enableDebugLogs";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -48,6 +49,7 @@ const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
   "target",
 ]);
 const DEFAULT_CLIENT_START_CONCURRENCY = 4;
+const DEFAULT_LANGUAGE_CLIENT_RUNNING_STATE = 2;
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -92,6 +94,7 @@ function getLanguageClientModule(options) {
   if (options.LanguageClient) {
     return {
       LanguageClient: options.LanguageClient,
+      State: options.LanguageClientState,
       RevealOutputChannelOn: options.RevealOutputChannelOn,
       ShowMessageNotification: options.ShowMessageNotification,
       MessageType: options.MessageType,
@@ -339,13 +342,15 @@ function clientMiddleware(options = {}) {
   };
 }
 
-function clearLspCodeLensFeature(languageClient) {
+function clearLocallyOwnedLspFeatures(languageClient) {
   if (!languageClient || typeof languageClient.getFeature !== "function") {
     return;
   }
-  const feature = languageClient.getFeature(CODE_LENS_METHOD);
-  if (feature && typeof feature.clear === "function") {
-    feature.clear();
+  for (const method of [CODE_LENS_METHOD, RENAME_METHOD]) {
+    const feature = languageClient.getFeature(method);
+    if (feature && typeof feature.clear === "function") {
+      feature.clear();
+    }
   }
 }
 
@@ -388,6 +393,8 @@ class GaugeWorkspace {
     this.workspaceFolderDiscoveryGenerations = new Map();
     this.workspaceFolderProjectRoots = new Map();
     this.stoppedLanguageClients = new WeakSet();
+    this.localFeatureStateDisposables = new WeakMap();
+    this.localFeatureRefreshes = new WeakMap();
     this.disposed = false;
     this.disposalPromise = undefined;
     this.env = envWithGaugeHome(options.env || process.env, {
@@ -406,6 +413,9 @@ class GaugeWorkspace {
     );
     const languageClientModule = getLanguageClientModule(options);
     this.LanguageClient = languageClientModule.LanguageClient;
+    this.languageClientRunningState = languageClientModule.State
+      ? languageClientModule.State.Running
+      : DEFAULT_LANGUAGE_CLIENT_RUNNING_STATE;
     this.revealOutputChannelOnNever = languageClientModule.RevealOutputChannelOn
       ? languageClientModule.RevealOutputChannelOn.Never
       : "never";
@@ -1032,7 +1042,7 @@ class GaugeWorkspace {
       if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
         return this.cleanupLanguageClient(projectRoot, languageClient);
       }
-      clearLspCodeLensFeature(languageClient);
+      this.maintainLocallyOwnedLspFeatures(languageClient, projectRoot);
     } catch (error) {
       await this.cleanupLanguageClient(projectRoot, languageClient);
       if (this.isServerStartCurrent(projectRoot, startGeneration)) {
@@ -1061,6 +1071,7 @@ class GaugeWorkspace {
   }
 
   async stopLanguageClient(languageClient, suppressStopError) {
+    this.releaseLocallyOwnedLspFeatures(languageClient);
     if (
       !languageClient
       || typeof languageClient.stop !== "function"
@@ -1077,6 +1088,91 @@ class GaugeWorkspace {
       }
     }
     return undefined;
+  }
+
+  maintainLocallyOwnedLspFeatures(languageClient, projectRoot) {
+    clearLocallyOwnedLspFeatures(languageClient);
+    if (
+      !languageClient
+      || typeof languageClient.onDidChangeState !== "function"
+      || this.localFeatureStateDisposables.has(languageClient)
+    ) {
+      return;
+    }
+    const disposable = languageClient.onDidChangeState((event) => {
+      const current = this.clientsMap.get(projectRoot);
+      if (
+        this.disposed
+        || !event
+        || event.newState !== this.languageClientRunningState
+        || !current
+        || current.client !== languageClient
+      ) {
+        return;
+      }
+      this.refreshLocallyOwnedLspFeatures(languageClient, projectRoot);
+    });
+    if (
+      this.disposed
+      || !this.clientsMap.has(projectRoot)
+      || this.clientsMap.get(projectRoot).client !== languageClient
+    ) {
+      if (disposable && typeof disposable.dispose === "function") {
+        disposable.dispose();
+      }
+      return;
+    }
+    this.localFeatureStateDisposables.set(languageClient, disposable);
+  }
+
+  refreshLocallyOwnedLspFeatures(languageClient, projectRoot) {
+    if (
+      !languageClient
+      || typeof languageClient.start !== "function"
+      || this.localFeatureRefreshes.has(languageClient)
+    ) {
+      return;
+    }
+    let start;
+    try {
+      start = languageClient.start();
+    } catch (_error) {
+      return;
+    }
+    const refresh = Promise.resolve(start).then(() => {
+      if (this.localFeatureRefreshes.get(languageClient) === refresh) {
+        this.localFeatureRefreshes.delete(languageClient);
+      }
+      const current = this.clientsMap.get(projectRoot);
+      if (!this.disposed && current && current.client === languageClient) {
+        try {
+          clearLocallyOwnedLspFeatures(languageClient);
+        } catch (_error) {
+          // A feature cleanup failure must not escape the language client's restart lifecycle.
+        }
+      }
+    }, () => {
+      if (this.localFeatureRefreshes.get(languageClient) === refresh) {
+        this.localFeatureRefreshes.delete(languageClient);
+      }
+    });
+    this.localFeatureRefreshes.set(languageClient, refresh);
+  }
+
+  releaseLocallyOwnedLspFeatures(languageClient) {
+    if (!languageClient) {
+      return;
+    }
+    const disposable = this.localFeatureStateDisposables.get(languageClient);
+    this.localFeatureStateDisposables.delete(languageClient);
+    this.localFeatureRefreshes.delete(languageClient);
+    if (disposable && typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Language client shutdown remains authoritative when listener cleanup fails.
+      }
+    }
   }
 
   async showLanguageServerStartupError(project, error) {

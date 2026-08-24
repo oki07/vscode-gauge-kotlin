@@ -204,6 +204,7 @@ class FakeLanguageClient {
     this.stopped = false;
     this.features = [];
     this.codeLensFeatureCleared = false;
+    this.renameFeatureCleared = false;
     this.notificationHandlers = new Map();
   }
 
@@ -228,14 +229,21 @@ class FakeLanguageClient {
   }
 
   getFeature(method) {
-    if (method !== "textDocument/codeLens") {
-      return undefined;
+    if (method === "textDocument/codeLens") {
+      return {
+        clear: () => {
+          this.codeLensFeatureCleared = true;
+        },
+      };
     }
-    return {
-      clear: () => {
-        this.codeLensFeatureCleared = true;
-      },
-    };
+    if (method === "textDocument/rename") {
+      return {
+        clear: () => {
+          this.renameFeatureCleared = true;
+        },
+      };
+    }
+    return undefined;
   }
 
   sendRequest(method) {
@@ -369,6 +377,179 @@ test("GaugeWorkspace removes the LSP CodeLens feature after startup", async () =
   await workspace.ready();
 
   assert.equal(clients.get("/workspace/gauge").client.codeLensFeatureCleared, true);
+});
+
+test("GaugeWorkspace clears locally-owned LSP features after startup", async () => {
+  const startEntered = deferred();
+  const startResponse = deferred();
+  const restartEntered = [deferred(), deferred()];
+  const restartResponse = [deferred(), deferred()];
+  const restartSettled = [deferred(), deferred()];
+  const restartFeatureError = new Error("rename feature cleanup failed");
+  const featureRequests = [];
+  const clearedFeatures = [];
+  const events = [];
+  class PendingFeatureLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      this.featureAvailable = false;
+      this.startCalls = 0;
+      this.stateListenerDisposals = 0;
+      this.stateListeners = new Set();
+    }
+
+    start() {
+      const startCall = this.startCalls;
+      this.startCalls += 1;
+      if (startCall === 0) {
+        events.push("start:entered");
+        startEntered.resolve();
+        return startResponse.promise.then(() => {
+          this.featureAvailable = true;
+          this.started = true;
+          events.push("start:settled");
+        });
+      }
+      const restartIndex = startCall - 1;
+      events.push(`restart:${restartIndex}:entered`);
+      restartEntered[restartIndex].resolve();
+      return restartResponse[restartIndex].promise.then(() => {
+        this.featureAvailable = true;
+        events.push(`restart:${restartIndex}:settled`);
+        restartSettled[restartIndex].resolve();
+      });
+    }
+
+    getFeature(method) {
+      featureRequests.push(method);
+      if (!this.featureAvailable) {
+        return undefined;
+      }
+      if (method !== "textDocument/codeLens" && method !== "textDocument/rename") {
+        return undefined;
+      }
+      return {
+        clear: () => {
+          clearedFeatures.push(method);
+          events.push(`clear:${method}`);
+          if (method === "textDocument/rename" && this.startCalls === 2) {
+            throw restartFeatureError;
+          }
+        },
+      };
+    }
+
+    onDidChangeState(listener) {
+      this.stateListeners.add(listener);
+      let disposed = false;
+      return {
+        dispose: () => {
+          if (disposed) {
+            return;
+          }
+          disposed = true;
+          this.stateListenerDisposals += 1;
+          this.stateListeners.delete(listener);
+        },
+      };
+    }
+
+    emitState(newState) {
+      if (newState === 2) {
+        this.featureAvailable = false;
+      }
+      for (const listener of [...this.stateListeners]) {
+        listener({ newState });
+      }
+    }
+  }
+  const { clients, workspace } = createEmptyKotlinWorkspace(PendingFeatureLanguageClient);
+  await workspace.ready();
+  const start = workspace.startServerFor("/workspace/gauge");
+  let disposed = false;
+  try {
+    await startEntered.promise;
+    const client = clients.get("/workspace/gauge").client;
+    assert.deepEqual(featureRequests, []);
+    assert.deepEqual(clearedFeatures, []);
+
+    startResponse.resolve();
+    await start;
+
+    assert.deepEqual([...featureRequests].sort(), [
+      "textDocument/codeLens",
+      "textDocument/rename",
+    ]);
+    assert.deepEqual([...clearedFeatures].sort(), [
+      "textDocument/codeLens",
+      "textDocument/rename",
+    ]);
+    assert.ok(events.indexOf("clear:textDocument/codeLens") > events.indexOf("start:settled"));
+    assert.ok(events.indexOf("clear:textDocument/rename") > events.indexOf("start:settled"));
+    assert.equal(client.started, true);
+    assert.equal(client.stopped, false);
+    assert.equal(typeof client.sendRequest, "function");
+
+    client.emitState(1);
+    client.emitState(3);
+
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/codeLens",
+    ).length, 1);
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/rename",
+    ).length, 1);
+
+    client.emitState(2);
+
+    assert.equal(client.startCalls, 2);
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/codeLens",
+    ).length, 1);
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/rename",
+    ).length, 1);
+
+    restartResponse[0].resolve();
+    await restartSettled[0].promise;
+    await Promise.resolve();
+
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/codeLens",
+    ).length, 2);
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/rename",
+    ).length, 2);
+    assert.equal(client.stateListeners.size, 1);
+
+    client.emitState(2);
+    assert.equal(client.startCalls, 3);
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/rename",
+    ).length, 2);
+
+    await workspace.dispose();
+    disposed = true;
+    assert.equal(client.stateListenerDisposals, 1);
+    assert.equal(client.stateListeners.size, 0);
+    assert.equal(client.stopped, true);
+
+    restartResponse[1].resolve();
+    await restartSettled[1].promise;
+    await Promise.resolve();
+    assert.equal(clearedFeatures.filter(
+      (method) => method === "textDocument/rename",
+    ).length, 2);
+  } finally {
+    startResponse.resolve();
+    for (const response of restartResponse) {
+      response.resolve();
+    }
+    await Promise.allSettled([start]);
+    if (!disposed) {
+      await workspace.dispose();
+    }
+  }
 });
 
 test("GaugeWorkspace disposes active clients when the workspace is disposed", async () => {
