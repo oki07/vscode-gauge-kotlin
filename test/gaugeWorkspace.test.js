@@ -1091,6 +1091,7 @@ test("GaugeWorkspace starts clients concurrently within an explicit bound", asyn
   workspace.clientStartConcurrency = DEFAULT_CLIENT_START_CONCURRENCY;
   workspace.disposed = false;
   workspace.workspaceFolderDiscoveryGenerations = new Map();
+  workspace.workspaceFolderProjectRoots = new Map();
   workspace.discoverGaugeProjectRoots = () => roots;
   workspace.startServerFor = async () => {
     activeStarts += 1;
@@ -2236,6 +2237,484 @@ test("GaugeWorkspace starts and stops clients as workspace folders change", asyn
   ]);
 });
 
+test("GaugeWorkspace preserves clients owned by a retained nested workspace folder", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const outerFolder = { uri: { fsPath: "/workspace" } };
+  const nestedFolder = { uri: { fsPath: "/workspace/shared" } };
+  const workspaceFolders = [outerFolder, nestedFolder];
+  const clients = new Map();
+  const stopCalls = [];
+  const sharedRoot = "/workspace/shared/gauge";
+  const removedRoot = "/workspace/removed/gauge";
+  const sharedPendingRoot = "/workspace/shared/pending";
+  const pendingStart = Promise.resolve(undefined);
+  const { contexts, vscode, workspaceFolderListeners } = createFakeVscode({ workspaceFolders });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    projectFactory: {
+      findGaugeProjectRootsAsync() {
+        return [];
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    vscode,
+  });
+  await workspace.ready();
+  contexts.length = 0;
+
+  for (const root of [sharedRoot, removedRoot]) {
+    clients.set(root, {
+      client: {
+        stop() {
+          stopCalls.push(root);
+          return Promise.resolve(undefined);
+        },
+      },
+      project: { root: () => root },
+    });
+    workspace.clientLanguageMap.set(root, "kotlin");
+    workspace.projectEnvironmentCache.set(root, { root });
+  }
+  workspace.pendingServerStarts.set(sharedPendingRoot, pendingStart);
+  workspace.serverStartGenerations.set(sharedPendingRoot, 4);
+  workspace.workspaceFolderProjectRoots.set(outerFolder.uri.fsPath, new Set([
+    sharedRoot,
+    removedRoot,
+    sharedPendingRoot,
+  ]));
+  workspace.workspaceFolderProjectRoots.set(nestedFolder.uri.fsPath, new Set([
+    sharedRoot,
+    sharedPendingRoot,
+  ]));
+  const notifications = [];
+  workspace.onDidChangeProjects((projectRoot) => {
+    notifications.push(projectRoot);
+  });
+
+  workspaceFolders.splice(0, workspaceFolders.length, nestedFolder);
+  await workspaceFolderListeners[0]({
+    added: [],
+    removed: [outerFolder],
+  });
+  const afterOuterRemoval = {
+    clients: [...clients.keys()],
+    contexts: [...contexts],
+    environments: [...workspace.projectEnvironmentCache.keys()],
+    languages: [...workspace.clientLanguageMap.keys()],
+    notifications: [...notifications],
+    pendingGeneration: workspace.serverStartGeneration(sharedPendingRoot),
+    pendingStart: workspace.pendingServerStarts.get(sharedPendingRoot),
+    stopCalls: [...stopCalls],
+  };
+
+  workspaceFolders.splice(0, workspaceFolders.length);
+  await workspaceFolderListeners[0]({
+    added: [],
+    removed: [nestedFolder],
+  });
+  const afterNestedRemoval = {
+    clients: clients.size,
+    environments: workspace.projectEnvironmentCache.size,
+    languages: workspace.clientLanguageMap.size,
+    notifications: [...notifications],
+    pendingGeneration: workspace.serverStartGeneration(sharedPendingRoot),
+    pendingStarts: workspace.pendingServerStarts.size,
+    stopCalls: [...stopCalls],
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(afterOuterRemoval, {
+    clients: [sharedRoot],
+    contexts: [
+      { command: "setContext", key: "gauge:multipleProjects?", value: false },
+    ],
+    environments: [sharedRoot],
+    languages: [sharedRoot],
+    notifications: [sharedRoot],
+    pendingGeneration: 4,
+    pendingStart,
+    stopCalls: [removedRoot],
+  });
+  assert.deepEqual(afterNestedRemoval, {
+    clients: 0,
+    environments: 0,
+    languages: 0,
+    notifications: [sharedRoot, undefined],
+    pendingGeneration: 5,
+    pendingStarts: 0,
+    stopCalls: [removedRoot, sharedRoot],
+  });
+});
+
+test("GaugeWorkspace removes ownerless clients started while added folders are discovered", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const removedFolder = { uri: { fsPath: "/workspace/removed" } };
+  const addedFolder = { uri: { fsPath: "/workspace/added" } };
+  const lateProjectRoot = "/workspace/removed/late";
+  const addedDiscoveryEntered = deferred();
+  const addedDiscoveryResponse = deferred();
+  const pendingStart = Promise.resolve(undefined);
+  const { vscode } = createFakeVscode({ workspaceFolders: [] });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: new Map(),
+    fileSystem: createFakeFileSystem({}),
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+  workspace.startServersForWorkspaceFolder = async (workspaceRoot) => {
+    assert.equal(workspaceRoot, addedFolder.uri.fsPath);
+    addedDiscoveryEntered.resolve();
+    return addedDiscoveryResponse.promise;
+  };
+
+  const change = workspace.onWorkspaceFoldersChanged({
+    added: [addedFolder],
+    removed: [removedFolder],
+  });
+  await addedDiscoveryEntered.promise;
+  workspace.pendingServerStarts.set(lateProjectRoot, pendingStart);
+  workspace.serverStartGenerations.set(lateProjectRoot, 7);
+  addedDiscoveryResponse.resolve();
+  await change;
+  const observed = {
+    generation: workspace.serverStartGeneration(lateProjectRoot),
+    pendingStart: workspace.pendingServerStarts.get(lateProjectRoot),
+    pendingStarts: workspace.pendingServerStarts.size,
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(observed, {
+    generation: 8,
+    pendingStart: undefined,
+    pendingStarts: 0,
+  });
+});
+
+test("GaugeWorkspace transfers project ownership within one folder change", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const removedFolder = { uri: { fsPath: "/workspace" } };
+  const addedFolder = { uri: { fsPath: "/workspace/shared" } };
+  const projectRoot = "/workspace/shared/gauge";
+  const clients = new Map();
+  let stopCalls = 0;
+  const client = {
+    stop() {
+      stopCalls += 1;
+      return Promise.resolve(undefined);
+    },
+  };
+  const workspaceFolders = [removedFolder];
+  const { vscode } = createFakeVscode({ workspaceFolders });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [{ name: "kotlin", version: "0.9.0" }] }),
+    clientsMap: clients,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    projectFactory: {
+      findGaugeProjectRootsAsync(workspaceRoot) {
+        return workspaceRoot === addedFolder.uri.fsPath ? [projectRoot] : [];
+      },
+      isGaugeProject() {
+        return false;
+      },
+    },
+    vscode,
+  });
+  await workspace.ready();
+  clients.set(projectRoot, {
+    client,
+    project: { root: () => projectRoot },
+  });
+  workspace.clientLanguageMap.set(projectRoot, "kotlin");
+  workspace.projectEnvironmentCache.set(projectRoot, { root: projectRoot });
+  workspace.workspaceFolderProjectRoots.set(removedFolder.uri.fsPath, new Set([projectRoot]));
+  workspace.startServerFor = async (root) => {
+    assert.equal(root, projectRoot);
+    return client;
+  };
+
+  assert.deepEqual(
+    [...workspace.workspaceFolderProjectRoots.entries()].map(([root, projects]) => (
+      [root, [...projects]]
+    )),
+    [[removedFolder.uri.fsPath, [projectRoot]]],
+  );
+  workspaceFolders.splice(0, workspaceFolders.length, addedFolder);
+  await workspace.onWorkspaceFoldersChanged({
+    added: [addedFolder],
+    removed: [removedFolder],
+  });
+  const observed = {
+    client: clients.get(projectRoot).client,
+    environments: [...workspace.projectEnvironmentCache.keys()],
+    languages: [...workspace.clientLanguageMap.keys()],
+    owners: [...workspace.workspaceFolderProjectRoots.entries()].map(([root, projects]) => (
+      [root, [...projects]]
+    )),
+    stopCalls,
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(observed, {
+    client,
+    environments: [projectRoot],
+    languages: [projectRoot],
+    owners: [[addedFolder.uri.fsPath, [projectRoot]]],
+    stopCalls: 0,
+  });
+});
+
+test("GaugeWorkspace removes projects only after their last discovering workspace folder", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const outerFolder = { uri: { fsPath: "/workspace" } };
+  const sharedFolder = { uri: { fsPath: "/workspace/service" } };
+  const excludedFolder = { uri: { fsPath: "/workspace/build" } };
+  const workspaceFolders = [outerFolder, sharedFolder, excludedFolder];
+  const sharedRoot = "/workspace/service";
+  const excludedRoot = "/workspace/build/gauge";
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    [`${sharedRoot}/manifest.json`]: JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    [`${sharedRoot}/build.gradle.kts`]: "",
+    [`${excludedRoot}/manifest.json`]: JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    [`${excludedRoot}/build.gradle.kts`]: "",
+  });
+  const { contexts, vscode, workspaceFolderListeners } = createFakeVscode({ workspaceFolders });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    fileSystem,
+    LanguageClient: FakeLanguageClient,
+    pathModule: path.posix,
+    vscode,
+  });
+  await workspace.ready();
+  contexts.length = 0;
+  const sharedClient = clients.get(sharedRoot).client;
+  const excludedClient = clients.get(excludedRoot).client;
+  const notifications = [];
+  workspace.onDidChangeProjects((projectRoot) => {
+    notifications.push(projectRoot);
+  });
+
+  workspaceFolders.splice(0, workspaceFolders.length, outerFolder, sharedFolder);
+  await workspaceFolderListeners[0]({ added: [], removed: [excludedFolder] });
+  const afterExclusiveOwnerRemoval = {
+    clients: [...clients.keys()],
+    excludedStopped: excludedClient.stopped,
+    notifications: [...notifications],
+    sharedStopped: sharedClient.stopped,
+  };
+
+  workspaceFolders.splice(0, workspaceFolders.length, sharedFolder);
+  await workspaceFolderListeners[0]({ added: [], removed: [outerFolder] });
+  const afterSharedOwnerRemoval = {
+    clients: [...clients.keys()],
+    notifications: [...notifications],
+    sharedStopped: sharedClient.stopped,
+  };
+
+  workspaceFolders.splice(0, workspaceFolders.length);
+  await workspaceFolderListeners[0]({ added: [], removed: [sharedFolder] });
+  const afterLastOwnerRemoval = {
+    clients: clients.size,
+    notifications: [...notifications],
+    sharedStopped: sharedClient.stopped,
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(afterExclusiveOwnerRemoval, {
+    clients: [sharedRoot],
+    excludedStopped: true,
+    notifications: [sharedRoot],
+    sharedStopped: false,
+  });
+  assert.deepEqual(afterSharedOwnerRemoval, {
+    clients: [sharedRoot],
+    notifications: [sharedRoot],
+    sharedStopped: false,
+  });
+  assert.deepEqual(afterLastOwnerRemoval, {
+    clients: 0,
+    notifications: [sharedRoot, undefined],
+    sharedStopped: true,
+  });
+  assert.deepEqual(contexts, [
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
+    { command: "setContext", key: "gauge:multipleProjects?", value: false },
+  ]);
+});
+
+test("GaugeWorkspace keeps one pending client until its last discovering folder is removed", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const outerFolder = { uri: { fsPath: "/workspace" } };
+  const nestedFolder = { uri: { fsPath: "/workspace/gauge" } };
+  const workspaceFolders = [outerFolder, nestedFolder];
+  const projectRoot = nestedFolder.uri.fsPath;
+  const clients = new GaugeClients();
+  const startEntered = deferred();
+  const startResponse = deferred();
+  const discoveryRoots = [];
+  let constructedClients = 0;
+  let startCalls = 0;
+  let stopCalls = 0;
+  class PendingLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      constructedClients += 1;
+    }
+
+    start() {
+      this.started = true;
+      startCalls += 1;
+      startEntered.resolve();
+      return startResponse.promise;
+    }
+
+    stop() {
+      stopCalls += 1;
+      return super.stop();
+    }
+  }
+  const project = {
+    envs() {
+      return {};
+    },
+    hasFile(filename) {
+      return filename === projectRoot || filename.startsWith(`${projectRoot}/`);
+    },
+    isProjectLanguage() {
+      return false;
+    },
+    language() {
+      return "kotlin";
+    },
+    root() {
+      return projectRoot;
+    },
+  };
+  const { vscode, workspaceFolderListeners } = createFakeVscode({ workspaceFolders });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }),
+    clientsMap: clients,
+    LanguageClient: PendingLanguageClient,
+    pathModule: path.posix,
+    projectFactory: {
+      findGaugeProjectRootsAsync(workspaceRoot) {
+        discoveryRoots.push(workspaceRoot);
+        return [projectRoot];
+      },
+      get(root) {
+        assert.equal(root, projectRoot);
+        return project;
+      },
+      isGaugeProject(root) {
+        return root === projectRoot;
+      },
+    },
+    vscode,
+  });
+  const notifications = [];
+  workspace.onDidChangeProjects((root) => {
+    notifications.push(root);
+  });
+
+  await startEntered.promise;
+  workspaceFolders.splice(0, workspaceFolders.length, nestedFolder);
+  await workspaceFolderListeners[0]({ added: [], removed: [outerFolder] });
+  const afterOuterRemoval = {
+    clients: clients.size,
+    constructedClients,
+    discoveryRoots: [...discoveryRoots].sort(),
+    generation: workspace.serverStartGeneration(projectRoot),
+    notifications: [...notifications],
+    pendingStarts: workspace.pendingServerStarts.size,
+    startCalls,
+    stopCalls,
+  };
+
+  startResponse.resolve();
+  await workspace.ready();
+  const client = clients.get(projectRoot).client;
+  const afterStartSettles = {
+    clients: clients.size,
+    environments: [...workspace.projectEnvironmentCache.keys()],
+    languages: [...workspace.clientLanguageMap.keys()],
+    pendingStarts: workspace.pendingServerStarts.size,
+    stopped: client.stopped,
+  };
+
+  workspaceFolders.splice(0, workspaceFolders.length);
+  await workspaceFolderListeners[0]({ added: [], removed: [nestedFolder] });
+  const afterLastOwnerRemoval = {
+    clients: clients.size,
+    environments: workspace.projectEnvironmentCache.size,
+    generation: workspace.serverStartGeneration(projectRoot),
+    languages: workspace.clientLanguageMap.size,
+    notifications: [...notifications],
+    pendingStarts: workspace.pendingServerStarts.size,
+    stopCalls,
+    stopped: client.stopped,
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(afterOuterRemoval, {
+    clients: 1,
+    constructedClients: 1,
+    discoveryRoots: [outerFolder.uri.fsPath, nestedFolder.uri.fsPath],
+    generation: 0,
+    notifications: [],
+    pendingStarts: 1,
+    startCalls: 1,
+    stopCalls: 0,
+  });
+  assert.deepEqual(afterStartSettles, {
+    clients: 1,
+    environments: [projectRoot],
+    languages: [projectRoot],
+    pendingStarts: 0,
+    stopped: false,
+  });
+  assert.deepEqual(afterLastOwnerRemoval, {
+    clients: 0,
+    environments: 0,
+    generation: 1,
+    languages: 0,
+    notifications: [undefined],
+    pendingStarts: 0,
+    stopCalls: 1,
+    stopped: true,
+  });
+});
+
 test("GaugeWorkspace removes every nested client when one folder-removal stop fails", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
@@ -2385,6 +2864,8 @@ test("GaugeWorkspace reports a nested stop failure after draining folder cleanup
     });
     workspace.clientLanguageMap.set(root, "kotlin");
   }
+  workspace.workspaceFolderProjectRoots.set("/workspace/owner-one", new Set(roots));
+  workspace.workspaceFolderProjectRoots.set("/workspace/owner-two", new Set(roots));
 
   await assert.rejects(
     workspace.stopServersForWorkspaceFolder("/workspace/gauge"),
@@ -2415,7 +2896,7 @@ test("GaugeWorkspace observes removal stops before publishing workspace state", 
     vscode,
   });
   await workspace.ready();
-  workspace.stopServersForWorkspaceFolder = () => ({
+  workspace.stopProjectRoots = () => ({
     then(resolve, reject) {
       stopObservers += 1;
       stopResponse.promise.then(resolve, reject);

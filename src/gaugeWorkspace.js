@@ -386,6 +386,7 @@ class GaugeWorkspace {
     this.pendingServerStarts = new Map();
     this.serverStartGenerations = new Map();
     this.workspaceFolderDiscoveryGenerations = new Map();
+    this.workspaceFolderProjectRoots = new Map();
     this.stoppedLanguageClients = new WeakSet();
     this.disposed = false;
     this.disposalPromise = undefined;
@@ -457,6 +458,7 @@ class GaugeWorkspace {
       }
     }
     this.projectChangeListeners.clear();
+    this.workspaceFolderProjectRoots.clear();
     const stopPromises = [];
     for (const [projectRoot, projectClient] of [...this.clientsMap.entries()]) {
       stopPromises.push(this.cleanupLanguageClient(
@@ -680,21 +682,40 @@ class GaugeWorkspace {
     const added = event && event.added ? event.added : [];
     const removed = event && event.removed ? event.removed : [];
     const beforeProjectRoots = this.projectRootsKey();
+    const removedProjectRoots = new Set();
     for (const folder of removed) {
-      this.invalidateWorkspaceFolderDiscovery(folder.uri.fsPath);
+      const workspaceRoot = folder.uri.fsPath;
+      this.invalidateWorkspaceFolderDiscovery(workspaceRoot);
+      for (const projectRoot of this.workspaceFolderProjectRoots.get(workspaceRoot) || []) {
+        removedProjectRoots.add(projectRoot);
+      }
+      this.workspaceFolderProjectRoots.delete(workspaceRoot);
     }
     for (const folder of added) {
       await this.startServersForWorkspaceFolder(folder.uri.fsPath);
     }
-    const removedFolderStops = removed.map((folder) => (
-      this.stopServersForWorkspaceFolder(folder.uri.fsPath, false)
+    const currentProjectRoots = new Set([
+      ...this.clientsMap.keys(),
+      ...this.pendingServerStarts.keys(),
+    ]);
+    for (const folder of removed) {
+      for (const projectRoot of currentProjectRoots) {
+        if (isInside(folder.uri.fsPath, projectRoot, this.pathModule)) {
+          removedProjectRoots.add(projectRoot);
+        }
+      }
+    }
+    const orphanedProjectRoots = [...removedProjectRoots].filter((projectRoot) => (
+      !this.workspaceFolderOwnsProject(projectRoot)
     ));
-    const removedFolderStopsSettled = Promise.allSettled(removedFolderStops);
+    const removedProjectStopsSettled = Promise.allSettled([
+      this.stopProjectRoots(orphanedProjectRoots),
+    ]);
     await this.setMultiProjectContext();
     if (this.projectRootsKey() !== beforeProjectRoots) {
       await this.notifyProjectsChanged();
     }
-    await removedFolderStopsSettled;
+    await removedProjectStopsSettled;
   }
 
   isDirectory(filename) {
@@ -782,11 +803,22 @@ class GaugeWorkspace {
     if (!this.isWorkspaceFolderDiscoveryCurrent(workspaceRoot, generation)) {
       return [];
     }
-    return projectRoots.map((projectRoot) => ({
+    const currentProjectRoots = [...new Set(projectRoots)];
+    this.workspaceFolderProjectRoots.set(workspaceRoot, new Set(currentProjectRoots));
+    return currentProjectRoots.map((projectRoot) => ({
       generation,
       projectRoot,
       workspaceRoot,
     }));
+  }
+
+  workspaceFolderOwnsProject(projectRoot) {
+    for (const projectRoots of this.workspaceFolderProjectRoots.values()) {
+      if (projectRoots.has(projectRoot)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async startServersForWorkspaceFolder(workspaceRoot) {
@@ -802,6 +834,16 @@ class GaugeWorkspace {
     );
   }
 
+  async stopProjectRoots(projectRoots) {
+    const stopResults = await Promise.allSettled(
+      [...new Set(projectRoots)].map((projectRoot) => this.stopServerFor(projectRoot)),
+    );
+    const stopFailure = stopResults.find((result) => result.status === "rejected");
+    if (stopFailure) {
+      throw stopFailure.reason;
+    }
+  }
+
   async stopServersForWorkspaceFolder(workspaceRoot, invalidateDiscovery = true) {
     if (invalidateDiscovery) {
       this.invalidateWorkspaceFolderDiscovery(workspaceRoot);
@@ -810,15 +852,11 @@ class GaugeWorkspace {
       ...this.clientsMap.keys(),
       ...this.pendingServerStarts.keys(),
     ]);
-    const stopResults = await Promise.allSettled(
-      [...projectRoots]
-        .filter((projectRoot) => isInside(workspaceRoot, projectRoot, this.pathModule))
-        .map((projectRoot) => this.stopServerFor(projectRoot)),
+    await this.stopProjectRoots(
+      [...projectRoots].filter((projectRoot) => (
+        isInside(workspaceRoot, projectRoot, this.pathModule)
+      )),
     );
-    const stopFailure = stopResults.find((result) => result.status === "rejected");
-    if (stopFailure) {
-      throw stopFailure.reason;
-    }
   }
 
   async stopServerFor(folder) {
