@@ -1126,7 +1126,9 @@ function allowsStaticArgumentCompletion(line) {
 }
 
 function completionItem(vscode, label, range, options = {}) {
-  const kind = options.kind || (vscode.CompletionItemKind && vscode.CompletionItemKind.Variable);
+  const kind = Object.prototype.hasOwnProperty.call(options, "kind")
+    ? options.kind
+    : vscode.CompletionItemKind && vscode.CompletionItemKind.Variable;
   const item = typeof vscode.CompletionItem === "function"
     ? new vscode.CompletionItem(label, kind)
     : { label, kind };
@@ -1147,6 +1149,20 @@ function completionItem(vscode, label, range, options = {}) {
     item.sortText = options.sortText;
   }
   return item;
+}
+
+function lspCompletionItemKind(vscode, kind) {
+  const completionItemKind = vscode.CompletionItemKind;
+  if (!completionItemKind) {
+    return undefined;
+  }
+  if (!Number.isInteger(kind)) {
+    return undefined;
+  }
+  if (kind >= 1 && kind <= 25) {
+    return kind - 1;
+  }
+  return completionItemKind.Text;
 }
 
 function lspCompletionItems(response) {
@@ -1188,7 +1204,7 @@ function lspCompletionItem(vscode, item, fallbackRange) {
     documentation: item.documentation,
     filterText: item.filterText,
     insertText: lspCompletionInsertText(vscode, item),
-    kind: item.kind || (vscode.CompletionItemKind && vscode.CompletionItemKind.Function),
+    kind: lspCompletionItemKind(vscode, item.kind),
     sortText: item.sortText,
   };
   return completionItem(

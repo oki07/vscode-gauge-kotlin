@@ -73,8 +73,9 @@ function createFakeVscode() {
       }
     },
     CompletionItemKind: {
-      Function: "function",
-      Variable: "variable",
+      Function: 2,
+      Text: 0,
+      Variable: 5,
     },
     SnippetString: class SnippetString {
       constructor(value) {
@@ -160,7 +161,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   const items = provider.provideCompletionItems(document, new vscode.Position(6, 13));
 
   assert.deepEqual(labels(items), ["user", "role"]);
-  assert.equal(items[0].kind, "variable");
+  assert.equal(items[0].kind, vscode.CompletionItemKind.Variable);
   assert.deepEqual({ ...items[0].range.start }, { line: 6, character: 12 });
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
@@ -587,7 +588,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Gauge tags on tag lines", 
 
   assert.deepEqual(labels(items), ["smoke", "fast", "auth", "with space"]);
   assert.equal(items[0].detail, "Tag");
-  assert.equal(items[0].kind, "variable");
+  assert.equal(items[0].kind, vscode.CompletionItemKind.Variable);
   assert.equal(items[0].filterText, "smoke");
   assert.equal(items[0].insertText, " smoke");
   assert.equal(items[0].sortText, "asmoke");
@@ -1390,7 +1391,7 @@ test("GaugeDynamicArgumentCompletionProvider merges Gauge LSP dynamic argument c
                 {
                   detail: "dynamic",
                   filterText: "user",
-                  kind: "variable",
+                  kind: 6,
                   label: "user",
                   textEdit: {
                     newText: "user",
@@ -1403,7 +1404,7 @@ test("GaugeDynamicArgumentCompletionProvider merges Gauge LSP dynamic argument c
                 {
                   detail: "dynamic",
                   filterText: "account",
-                  kind: "variable",
+                  kind: 6,
                   label: "account",
                   textEdit: {
                     newText: "account",
@@ -1413,6 +1414,22 @@ test("GaugeDynamicArgumentCompletionProvider merges Gauge LSP dynamic argument c
                     },
                   },
                 },
+                {
+                  detail: "dynamic",
+                  filterText: "note",
+                  kind: 1,
+                  label: "note",
+                  textEdit: {
+                    newText: "note",
+                    range: {
+                      start: { line: 4, character: 11 },
+                      end: { line: 4, character: 12 },
+                    },
+                  },
+                },
+                { kind: 25, label: "typeParameter" },
+                { kind: 26, label: "unknown" },
+                { label: "untyped" },
               ],
             });
           },
@@ -1443,12 +1460,24 @@ test("GaugeDynamicArgumentCompletionProvider merges Gauge LSP dynamic argument c
       },
     },
   ]);
-  assert.deepEqual(labels(items), ["user", "account"]);
+  assert.deepEqual(labels(items), [
+    "user",
+    "account",
+    "note",
+    "typeParameter",
+    "unknown",
+    "untyped",
+  ]);
   assert.equal(items[1].detail, "dynamic");
+  assert.equal(items[1].kind, vscode.CompletionItemKind.Variable);
   assert.equal(items[1].insertText, "account");
   assert.equal(items[1].filterText, "account");
   assert.deepEqual({ ...items[1].range.start }, { line: 4, character: 11 });
   assert.deepEqual({ ...items[1].range.end }, { line: 4, character: 12 });
+  assert.equal(items[2].kind, vscode.CompletionItemKind.Text);
+  assert.equal(items[3].kind, 24);
+  assert.equal(items[4].kind, vscode.CompletionItemKind.Text);
+  assert.equal(items[5].kind, undefined);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments inside quotes", () => {
@@ -1466,7 +1495,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec static arguments insi
   const items = provider.provideCompletionItems(document, new vscode.Position(4, 12));
 
   assert.deepEqual(labels(items), ["admin", "a"]);
-  assert.equal(items[0].kind, "variable");
+  assert.equal(items[0].kind, vscode.CompletionItemKind.Variable);
   assert.deepEqual({ ...items[0].range.start }, { line: 4, character: 11 });
   assert.deepEqual({ ...items[0].range.end }, { line: 4, character: 12 });
 });
@@ -1687,7 +1716,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases on ste
   const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 5));
 
   assert.deepEqual(labels(items), ["Log in as <user>", "Sign in as <user>"]);
-  assert.equal(items[0].kind, "function");
+  assert.equal(items[0].kind, vscode.CompletionItemKind.Function);
   assert.equal(items[0].detail, "step");
   assert.equal(items[0].documentation, "Log in as <user>");
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
@@ -2033,7 +2062,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Gauge LSP step completions
                   detail: "Step",
                   filterText: "Log in as <user>",
                   insertTextFormat: 2,
-                  kind: "function",
+                  kind: 3,
                   label: "Log in as <user>",
                   textEdit: {
                     newText: "Log in as \"${0:user}\"",
@@ -2074,6 +2103,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Gauge LSP step completions
   ]);
   assert.deepEqual(labels(items), ["Log in as <user>"]);
   assert.equal(items[0].detail, "Step");
+  assert.equal(items[0].kind, vscode.CompletionItemKind.Function);
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
   assert.equal(items[0].filterText, "Log in as <user>");
   assert.deepEqual({ ...items[0].range.start }, { line: 2, character: 2 });
@@ -2107,7 +2137,7 @@ test("GaugeDynamicArgumentCompletionProvider deduplicates normalized Gauge LSP s
                   detail: "Step",
                   filterText: "Pay with <value>",
                   insertTextFormat: 2,
-                  kind: "function",
+                  kind: 3,
                   label: "Pay with <value>",
                   textEdit: {
                     newText: "Pay with \"${0:value}\"",
