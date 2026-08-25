@@ -438,8 +438,10 @@ class DependencyStepIndex {
     this.vscode = getVscode(options.vscode);
     this.classpathProvider = options.classpathProvider || ((root) => this.projectClasspath(root));
     this.contents = new Map();
+    this.globalInvalidationGeneration = 0;
     this.indices = new Map();
     this.pending = new Map();
+    this.rootInvalidationGenerations = new Map();
     this.generation = 0;
     this.disposed = false;
   }
@@ -530,10 +532,49 @@ class DependencyStepIndex {
     if (this.disposed) {
       return undefined;
     }
-    const index = { classpathKey, entriesByTemplate };
-    this.indices.set(root, index);
-    this.generation += 1;
-    return index;
+    return { classpathKey, entriesByTemplate };
+  }
+
+  invalidationSnapshot(root) {
+    return {
+      global: this.globalInvalidationGeneration,
+      root: this.rootInvalidationGenerations.get(root) || 0,
+    };
+  }
+
+  invalidationSnapshotCurrent(root, snapshot) {
+    return snapshot.global === this.globalInvalidationGeneration
+      && snapshot.root === (this.rootInvalidationGenerations.get(root) || 0);
+  }
+
+  async buildCurrentIndex(root) {
+    while (!this.disposed) {
+      const snapshot = this.invalidationSnapshot(root);
+      let index;
+      try {
+        index = await this.buildIndex(root);
+      } catch (error) {
+        if (this.disposed) {
+          return undefined;
+        }
+        if (!this.invalidationSnapshotCurrent(root, snapshot)) {
+          continue;
+        }
+        throw error;
+      }
+      if (this.disposed) {
+        return undefined;
+      }
+      if (!this.invalidationSnapshotCurrent(root, snapshot)) {
+        continue;
+      }
+      if (index && this.indices.get(root) !== index) {
+        this.indices.set(root, index);
+        this.generation += 1;
+      }
+      return index;
+    }
+    return undefined;
   }
 
   refresh(root, force = false) {
@@ -541,20 +582,25 @@ class DependencyStepIndex {
       return Promise.resolve(undefined);
     }
     if (!force && this.indices.has(root)) {
-      return Promise.resolve(this.indices.get(root)).then((index) => (
-        this.disposed ? undefined : index
-      ));
+      const snapshot = this.invalidationSnapshot(root);
+      const cached = this.indices.get(root);
+      return Promise.resolve(cached).then((index) => {
+        if (this.disposed) {
+          return undefined;
+        }
+        if (
+          !this.invalidationSnapshotCurrent(root, snapshot)
+          || this.indices.get(root) !== index
+        ) {
+          return this.refresh(root);
+        }
+        return index;
+      });
     }
     if (this.pending.has(root)) {
       return this.pending.get(root);
     }
-    const refresh = this.buildIndex(root)
-      .catch((error) => {
-        if (this.disposed) {
-          return undefined;
-        }
-        throw error;
-      })
+    const refresh = this.buildCurrentIndex(root)
       .finally(() => {
         if (this.pending.get(root) === refresh) {
           this.pending.delete(root);
@@ -568,7 +614,17 @@ class DependencyStepIndex {
     if (this.disposed) {
       return;
     }
-    this.indices.delete(root);
+    if (root) {
+      this.rootInvalidationGenerations.set(
+        root,
+        (this.rootInvalidationGenerations.get(root) || 0) + 1,
+      );
+      this.indices.delete(root);
+    } else {
+      this.globalInvalidationGeneration += 1;
+      this.rootInvalidationGenerations.clear();
+      this.indices.clear();
+    }
     this.generation += 1;
   }
 
@@ -610,7 +666,11 @@ class DependencyStepIndex {
     if (this.disposed || !index) {
       return [];
     }
+    if (this.indices.get(root) !== index) {
+      return this.findDefinitions(root, normalizedSteps);
+    }
     const definitions = [];
+    const pendingContents = [];
     const seen = new Set();
     for (const normalized of normalizedSteps || []) {
       for (const entry of index.entriesByTemplate.get(normalized) || []) {
@@ -621,8 +681,8 @@ class DependencyStepIndex {
         seen.add(identity);
         const uri = this.uriFor(entry, root);
         const declaration = declarationFor(entry);
-        this.contents.set(uri.toString(), declaration.content);
-        this.contents.set(uri.query, declaration.content);
+        pendingContents.push([uri.toString(), declaration.content]);
+        pendingContents.push([uri.query, declaration.content]);
         definitions.push({
           range: createRange(
             this.vscode,
@@ -633,6 +693,15 @@ class DependencyStepIndex {
           uri,
         });
       }
+    }
+    if (this.disposed) {
+      return [];
+    }
+    if (this.indices.get(root) !== index) {
+      return this.findDefinitions(root, normalizedSteps);
+    }
+    for (const [key, content] of pendingContents) {
+      this.contents.set(key, content);
     }
     return definitions;
   }
@@ -658,13 +727,7 @@ class DependencyStepIndex {
       && typeof this.projectEnvironmentService.onDidInvalidate === "function"
     ) {
       disposables.push(this.projectEnvironmentService.onDidInvalidate((root) => {
-        if (root) {
-          this.invalidate(root);
-          return;
-        }
-        for (const indexedRoot of [...this.indices.keys()]) {
-          this.invalidate(indexedRoot);
-        }
+        this.invalidate(root);
       }));
     }
     if (typeof workspace.registerTextDocumentContentProvider === "function") {
@@ -694,6 +757,8 @@ class DependencyStepIndex {
     }
     this.disposed = true;
     this.generation += 1;
+    this.globalInvalidationGeneration += 1;
+    this.rootInvalidationGenerations.clear();
     this.contents.clear();
     this.indices.clear();
     this.pending.clear();

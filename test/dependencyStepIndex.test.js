@@ -121,6 +121,64 @@ function createFakeVscode() {
   };
 }
 
+function createInFlightInvalidationFixture(options = {}) {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const targetRoot = "/workspace/target";
+  const otherRoot = "/workspace/other";
+  const oldScanEntered = deferred();
+  const releaseOldScan = deferred();
+  const classpathCalls = new Map();
+  const scans = [];
+  let invalidationListener;
+  const index = new DependencyStepIndex({
+    async classpathProvider(root) {
+      const call = (classpathCalls.get(root) || 0) + 1;
+      classpathCalls.set(root, call);
+      const name = root === targetRoot ? "target" : "other";
+      const version = call === 1 ? "old" : "fresh";
+      return [`/repo/${name}-${version}.jar`];
+    },
+    fileSystem: { existsSync: () => true },
+    projectEnvironmentService: {
+      onDidInvalidate(listener) {
+        invalidationListener = listener;
+        return { dispose() {} };
+      },
+    },
+    async scanArchive(archivePath, visit) {
+      scans.push(archivePath);
+      if (archivePath === "/repo/target-old.jar") {
+        oldScanEntered.resolve();
+        await releaseOldScan.promise;
+        if (options.oldScanError) {
+          throw options.oldScanError;
+        }
+      }
+      await visit("steps/RequestSteps.class", dependencyStepClass());
+    },
+    vscode: createFakeVscode(),
+  });
+  const registration = index.register();
+  return {
+    artifact(definitions) {
+      assert.equal(definitions.length, 1);
+      const match = index.content(definitions[0].uri).match(/Artifact: ([^\n]+)/);
+      return match && match[1];
+    },
+    classpathCalls,
+    index,
+    invalidate(root) {
+      invalidationListener(root);
+    },
+    oldScanEntered,
+    otherRoot,
+    registration,
+    releaseOldScan,
+    scans,
+    targetRoot,
+  };
+}
+
 test("parseDependencyClass indexes runtime Gauge Step annotations", () => {
   const { parseDependencyClass } = require("../src/dependencyStepIndex");
 
@@ -206,6 +264,243 @@ test("DependencyStepIndex gets classpath from the asynchronous environment servi
   await index.refresh("/workspace/gauge");
 
   assert.deepEqual(calls, [project]);
+});
+
+test("DependencyStepIndex preserves root invalidation received during an in-flight refresh", async () => {
+  const fixture = createInFlightInvalidationFixture();
+  const operations = [];
+  try {
+    await fixture.index.findDefinitions(fixture.otherRoot, ["Send the {}"]);
+    const otherIndex = fixture.index.indices.get(fixture.otherRoot);
+    const first = fixture.index.findDefinitions(fixture.targetRoot, ["Send the {}"]);
+    operations.push(first);
+    await fixture.oldScanEntered.promise;
+
+    fixture.invalidate(fixture.targetRoot);
+    const follower = fixture.index.findDefinitions(fixture.targetRoot, ["Send the {}"]);
+    operations.push(follower);
+    await Promise.resolve();
+    const targetCallsBeforeRelease = fixture.classpathCalls.get(fixture.targetRoot);
+
+    fixture.releaseOldScan.resolve();
+    const [firstDefinitions, followerDefinitions] = await Promise.all([first, follower]);
+    const laterDefinitions = await fixture.index.findDefinitions(
+      fixture.targetRoot,
+      ["Send the {}"],
+    );
+    const otherDefinitions = await fixture.index.findDefinitions(
+      fixture.otherRoot,
+      ["Send the {}"],
+    );
+
+    assert.deepEqual({
+      artifacts: [firstDefinitions, followerDefinitions, laterDefinitions].map(fixture.artifact),
+      otherArtifact: fixture.artifact(otherDefinitions),
+      otherCalls: fixture.classpathCalls.get(fixture.otherRoot),
+      otherIdentityRetained: fixture.index.indices.get(fixture.otherRoot) === otherIndex,
+      pending: fixture.index.pending.size,
+      scans: fixture.scans,
+      targetCalls: fixture.classpathCalls.get(fixture.targetRoot),
+      targetCallsBeforeRelease,
+    }, {
+      artifacts: [
+        "/repo/target-fresh.jar",
+        "/repo/target-fresh.jar",
+        "/repo/target-fresh.jar",
+      ],
+      otherArtifact: "/repo/other-old.jar",
+      otherCalls: 1,
+      otherIdentityRetained: true,
+      pending: 0,
+      scans: [
+        "/repo/other-old.jar",
+        "/repo/target-old.jar",
+        "/repo/target-fresh.jar",
+      ],
+      targetCalls: 2,
+      targetCallsBeforeRelease: 1,
+    });
+  } finally {
+    fixture.releaseOldScan.resolve();
+    await Promise.allSettled(operations);
+    fixture.registration.dispose();
+  }
+});
+
+test("DependencyStepIndex preserves global invalidation received during an in-flight refresh", async () => {
+  const fixture = createInFlightInvalidationFixture({
+    oldScanError: new Error("stale dependency scan failed"),
+  });
+  const operations = [];
+  try {
+    const firstOtherDefinitions = await fixture.index.findDefinitions(
+      fixture.otherRoot,
+      ["Send the {}"],
+    );
+    const first = fixture.index.findDefinitions(fixture.targetRoot, ["Send the {}"]);
+    operations.push(first);
+    await fixture.oldScanEntered.promise;
+
+    fixture.invalidate(undefined);
+    const follower = fixture.index.findDefinitions(fixture.targetRoot, ["Send the {}"]);
+    const refreshedOther = fixture.index.findDefinitions(fixture.otherRoot, ["Send the {}"]);
+    operations.push(follower, refreshedOther);
+    await Promise.resolve();
+    const targetCallsBeforeRelease = fixture.classpathCalls.get(fixture.targetRoot);
+
+    fixture.releaseOldScan.resolve();
+    const [firstDefinitions, followerDefinitions, otherDefinitions] = await Promise.all([
+      first,
+      follower,
+      refreshedOther,
+    ]);
+    const laterDefinitions = await fixture.index.findDefinitions(
+      fixture.targetRoot,
+      ["Send the {}"],
+    );
+
+    assert.deepEqual({
+      firstOtherArtifact: fixture.artifact(firstOtherDefinitions),
+      otherArtifact: fixture.artifact(otherDefinitions),
+      otherCalls: fixture.classpathCalls.get(fixture.otherRoot),
+      pending: fixture.index.pending.size,
+      scans: [...fixture.scans].sort(),
+      targetArtifacts: [firstDefinitions, followerDefinitions, laterDefinitions]
+        .map(fixture.artifact),
+      targetCalls: fixture.classpathCalls.get(fixture.targetRoot),
+      targetCallsBeforeRelease,
+    }, {
+      firstOtherArtifact: "/repo/other-old.jar",
+      otherArtifact: "/repo/other-fresh.jar",
+      otherCalls: 2,
+      pending: 0,
+      scans: [
+        "/repo/other-old.jar",
+        "/repo/other-fresh.jar",
+        "/repo/target-fresh.jar",
+        "/repo/target-old.jar",
+      ].sort(),
+      targetArtifacts: [
+        "/repo/target-fresh.jar",
+        "/repo/target-fresh.jar",
+        "/repo/target-fresh.jar",
+      ],
+      targetCalls: 2,
+      targetCallsBeforeRelease: 1,
+    });
+  } finally {
+    fixture.releaseOldScan.resolve();
+    await Promise.allSettled(operations);
+    fixture.registration.dispose();
+  }
+});
+
+test("DependencyStepIndex rejects cached and resolved indices invalidated before publication", async () => {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const root = "/workspace/gauge";
+  const archives = ["old", "fresh", "latest"];
+  const scans = [];
+  let classpathCalls = 0;
+  const index = new DependencyStepIndex({
+    async classpathProvider() {
+      const archive = archives[Math.min(classpathCalls, archives.length - 1)];
+      classpathCalls += 1;
+      return [`/repo/${archive}.jar`];
+    },
+    fileSystem: { existsSync: () => true },
+    async scanArchive(archivePath, visit) {
+      scans.push(archivePath);
+      await visit("steps/RequestSteps.class", dependencyStepClass());
+    },
+    vscode: createFakeVscode(),
+  });
+
+  const oldIndex = await index.refresh(root);
+  const cachedRefresh = index.refresh(root);
+  index.invalidate(root);
+  const freshIndex = await cachedRefresh;
+
+  const originalRefresh = index.refresh.bind(index);
+  index.refresh = () => ({
+    then(resolve) {
+      index.refresh = originalRefresh;
+      resolve(freshIndex);
+      index.invalidate(root);
+    },
+  });
+  const definitions = await index.findDefinitions(root, ["Send the {}"]);
+  const artifact = index.content(definitions[0].uri).match(/Artifact: ([^\n]+)/)[1];
+
+  assert.deepEqual({
+    artifact,
+    classpathCalls,
+    contents: index.contents.size,
+    freshClasspath: freshIndex.classpathKey,
+    oldClasspath: oldIndex.classpathKey,
+    pending: index.pending.size,
+    scans,
+  }, {
+    artifact: "/repo/latest.jar",
+    classpathCalls: 3,
+    contents: 2,
+    freshClasspath: "/repo/fresh.jar",
+    oldClasspath: "/repo/old.jar",
+    pending: 0,
+    scans: ["/repo/old.jar", "/repo/fresh.jar", "/repo/latest.jar"],
+  });
+});
+
+test("DependencyStepIndex retries synchronous invalidation during definition publication", async () => {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const root = "/workspace/gauge";
+  const archives = ["old", "fresh"];
+  const scans = [];
+  let classpathCalls = 0;
+  const index = new DependencyStepIndex({
+    async classpathProvider() {
+      const archive = archives[Math.min(classpathCalls, archives.length - 1)];
+      classpathCalls += 1;
+      return [`/repo/${archive}.jar`];
+    },
+    fileSystem: { existsSync: () => true },
+    async scanArchive(archivePath, visit) {
+      scans.push(archivePath);
+      await visit("steps/RequestSteps.class", dependencyStepClass());
+    },
+    vscode: createFakeVscode(),
+  });
+
+  const originalUriFor = index.uriFor.bind(index);
+  let oldUri;
+  index.uriFor = (entry, projectRoot) => {
+    const uri = originalUriFor(entry, projectRoot);
+    if (!oldUri) {
+      oldUri = uri;
+      index.invalidate(root);
+    }
+    return uri;
+  };
+
+  const definitions = await index.findDefinitions(root, ["Send the {}"]);
+  const artifact = index.content(definitions[0].uri).match(/Artifact: ([^\n]+)/)[1];
+
+  assert.deepEqual({
+    artifact,
+    classpathCalls,
+    contents: index.contents.size,
+    generation: index.generation,
+    oldContent: index.content(oldUri),
+    pending: index.pending.size,
+    scans,
+  }, {
+    artifact: "/repo/fresh.jar",
+    classpathCalls: 2,
+    contents: 2,
+    generation: 3,
+    oldContent: "Dependency step declaration is unavailable.",
+    pending: 0,
+    scans: ["/repo/old.jar", "/repo/fresh.jar"],
+  });
 });
 
 test("DependencyStepIndex returns no definitions after disposal during a scan", async () => {
