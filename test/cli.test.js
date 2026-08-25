@@ -446,30 +446,253 @@ test("CLI treats signal-closed plugin installation as failure", async () => {
 test("CLI preserves synchronous plugin installation spawn errors", async () => {
   const { CLI } = require("../src/cli");
   const spawnError = new Error("gauge install did not start");
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  let cli;
+  let follower;
   let probeCalls = 0;
-  const cli = new CLI({
+  let reentered = false;
+  let spawnCalls = 0;
+  const vscode = {
+    window: {
+      createOutputChannel() {
+        if (!reentered) {
+          reentered = true;
+          follower = cli.installGaugeRunner("SPECTACLE", { vscode });
+        }
+        return { appendLine() {}, clear() {}, show() {} };
+      },
+    },
+  };
+  cli = new CLI({
     spawn() {
-      throw spawnError;
+      spawnCalls += 1;
+      if (spawnCalls === 1) {
+        throw spawnError;
+      }
+      return child;
     },
     spawnSync() {
       probeCalls += 1;
-      return { status: 0, stdout: Buffer.from("") };
+      return {
+        status: 0,
+        stdout: Buffer.from(JSON.stringify({ version: "1.3.0", plugins: [] })),
+      };
     },
   }, {});
 
+  const leader = cli.installGaugeRunner("spectacle", { vscode });
+  assert.equal(follower, leader);
   await assert.rejects(
-    cli.installGaugeRunner("spectacle", {
-      vscode: {
-        window: {
-          createOutputChannel() {
-            return { appendLine() {}, clear() {}, show() {} };
-          },
-        },
-      },
-    }),
+    leader,
     (error) => error === spawnError,
   );
   assert.equal(probeCalls, 0);
+
+  const retry = cli.installGaugeRunner("spectacle", { vscode });
+  child.emit("exit", 0);
+  child.emit("close", 0);
+
+  assert.equal(await retry, true);
+  assert.equal(spawnCalls, 2);
+  assert.equal(probeCalls, 1);
+});
+
+test("CLI shares only an in-flight same-plugin installation", async () => {
+  const { CLI } = require("../src/cli");
+  const snapshots = [];
+
+  for (const installCode of [0, 1]) {
+    const spawned = [];
+    const channels = [];
+    let cli;
+    let reentrantFollower;
+    let reentered = false;
+    let probeCalls = 0;
+    const vscode = {
+      window: {
+        createOutputChannel() {
+          const channel = { appendLine() {}, clear() {}, show() {} };
+          channels.push(channel);
+          if (!reentered) {
+            reentered = true;
+            reentrantFollower = cli.installGaugeRunner("KOTLIN", { vscode });
+          }
+          return channel;
+        },
+      },
+    };
+    const command = {
+      spawn(args) {
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        const record = { args, child, exited: false };
+        spawned.push(record);
+        return child;
+      },
+      spawnSync() {
+        probeCalls += 1;
+        return {
+          status: 0,
+          stdout: Buffer.from(JSON.stringify({ version: "1.3.0", plugins: [] })),
+        };
+      },
+    };
+    cli = new CLI(command, { version: "1.2.3", plugins: [] });
+
+    const leader = cli.installGaugeRunner("kotlin", { vscode });
+    const java = cli.installGaugeRunner("java", { vscode });
+    for (const record of spawned.filter((entry) => entry.args[1].toLowerCase() === "kotlin")) {
+      record.exited = true;
+      record.child.emit("exit", installCode);
+    }
+    const afterExitFollower = cli.installGaugeRunner("KoTlIn", { vscode });
+    const beforeRetrySpawnArgs = spawned.map((entry) => entry.args);
+    const channelsBeforeRetry = channels.length;
+
+    for (const record of spawned) {
+      const code = record.args[1].toLowerCase() === "java" ? 0 : installCode;
+      if (!record.exited) {
+        record.exited = true;
+        record.child.emit("exit", code);
+      }
+      record.child.emit("close", code);
+    }
+    const outcomes = await Promise.all([
+      leader,
+      reentrantFollower,
+      afterExitFollower,
+      java,
+    ]);
+
+    const retry = cli.installGaugeRunner("kotlin", { vscode });
+    const retryRecord = spawned.at(-1);
+    retryRecord.child.emit("exit", installCode);
+    retryRecord.child.emit("close", installCode);
+    const retryOutcome = await retry;
+
+    snapshots.push({
+      afterExitShared: afterExitFollower === leader,
+      beforeRetrySpawnArgs,
+      channelsBeforeRetry,
+      installCode,
+      leaderShared: reentrantFollower === leader,
+      outcomes,
+      probeCalls,
+      retryOutcome,
+      totalChannels: channels.length,
+      totalSpawnArgs: spawned.map((entry) => entry.args),
+    });
+  }
+
+  assert.deepEqual(snapshots, [
+    {
+      afterExitShared: true,
+      beforeRetrySpawnArgs: [
+        ["install", "kotlin"],
+        ["install", "java"],
+      ],
+      channelsBeforeRetry: 2,
+      installCode: 0,
+      leaderShared: true,
+      outcomes: [true, true, true, true],
+      probeCalls: 3,
+      retryOutcome: true,
+      totalChannels: 3,
+      totalSpawnArgs: [
+        ["install", "kotlin"],
+        ["install", "java"],
+        ["install", "kotlin"],
+      ],
+    },
+    {
+      afterExitShared: true,
+      beforeRetrySpawnArgs: [
+        ["install", "kotlin"],
+        ["install", "java"],
+      ],
+      channelsBeforeRetry: 2,
+      installCode: 1,
+      leaderShared: true,
+      outcomes: [false, false, false, true],
+      probeCalls: 1,
+      retryOutcome: false,
+      totalChannels: 3,
+      totalSpawnArgs: [
+        ["install", "kotlin"],
+        ["install", "java"],
+        ["install", "kotlin"],
+      ],
+    },
+  ]);
+});
+
+test("CLI retains and releases a same-plugin install when output completion throws", async () => {
+  const { CLI } = require("../src/cli");
+  const finishError = new Error("install output completion failed");
+  const spawned = [];
+  let cli;
+  let finishFollower;
+  let throwOnFinish = true;
+  const vscode = {
+    window: {
+      createOutputChannel() {
+        return {
+          appendLine(line) {
+            if (line === "" && throwOnFinish) {
+              throwOnFinish = false;
+              finishFollower = cli.installGaugeRunner("KOTLIN", { vscode });
+              throw finishError;
+            }
+          },
+          clear() {},
+          show() {},
+        };
+      },
+    },
+  };
+  cli = new CLI({
+    spawn(args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      spawned.push({ args, child });
+      return child;
+    },
+    spawnSync() {
+      return {
+        status: 0,
+        stdout: Buffer.from(JSON.stringify({ version: "1.3.0", plugins: [] })),
+      };
+    },
+  }, {});
+
+  const leader = cli.installGaugeRunner("kotlin", { vscode });
+  spawned[0].child.emit("exit", 0);
+  assert.doesNotThrow(() => spawned[0].child.emit("close", 0));
+  await assert.rejects(leader, (error) => error === finishError);
+  for (const record of spawned.slice(1)) {
+    record.child.emit("exit", 0);
+    record.child.emit("close", 0);
+  }
+  await Promise.allSettled([finishFollower]);
+
+  assert.equal(finishFollower, leader);
+  assert.equal(spawned.length, 1);
+
+  const retry = cli.installGaugeRunner("kotlin", { vscode });
+  const retryRecord = spawned.at(-1);
+  retryRecord.child.emit("exit", 0);
+  retryRecord.child.emit("close", 0);
+
+  assert.equal(await retry, true);
+  assert.equal(spawned.length, 2);
+  assert.deepEqual(spawned.map((entry) => entry.args), [
+    ["install", "kotlin"],
+    ["install", "kotlin"],
+  ]);
 });
 
 test("CLI parses Gauge machine-readable version output with deprecated warnings", () => {

@@ -60,6 +60,7 @@ class CLI {
     this.gaugeVersion = manifest.version;
     this.gaugeCommitHash = manifest.commitHash;
     this.gaugePlugins = manifest.plugins || [];
+    this.pluginInstallOperations = new Map();
   }
 
   static instance(options = {}) {
@@ -151,14 +152,31 @@ class CLI {
   }
 
   installGaugeRunner(language, options = {}) {
-    const vscode = getVscode(options.vscode);
-    const channel = vscode.window.createOutputChannel("Gauge Install");
-    const output = new OutputChannel(channel, `Installing gauge ${language} plugin ...\n`, "", {
-      reveal: true,
+    const operationKey = String(language || "").toLowerCase();
+    const existingOperation = this.pluginInstallOperations.get(operationKey);
+    if (existingOperation) {
+      return existingOperation;
+    }
+    let resolveInstallation;
+    let rejectInstallation;
+    const installation = new Promise((resolve, reject) => {
+      resolveInstallation = resolve;
+      rejectInstallation = reject;
     });
-    const env = envWithGaugeHome(options.env || process.env, { vscode });
+    this.pluginInstallOperations.set(operationKey, installation);
+    const releaseOperation = () => {
+      if (this.pluginInstallOperations.get(operationKey) === installation) {
+        this.pluginInstallOperations.delete(operationKey);
+      }
+    };
 
-    return new Promise((resolve) => {
+    try {
+      const vscode = getVscode(options.vscode);
+      const channel = vscode.window.createOutputChannel("Gauge Install");
+      const output = new OutputChannel(channel, `Installing gauge ${language} plugin ...\n`, "", {
+        reveal: true,
+      });
+      const env = envWithGaugeHome(options.env || process.env, { vscode });
       const child = this.command.spawn([GAUGE_INSTALL_ARG, language], { env });
       const onStdout = (chunk) => output.appendOutBuf(chunk.toString());
       const onStderr = (chunk) => output.appendErrBuf(chunk.toString());
@@ -185,13 +203,21 @@ class CLI {
         if (code === 0) {
           this.refreshGaugeVersionManifest(env);
         }
-        output.onFinish(
-          resolve,
-          code,
-          "",
-          "\nRefer to https://docs.gauge.org/plugin.html to install manually",
-          false,
-        );
+        try {
+          output.onFinish(
+            (result) => {
+              releaseOperation();
+              resolveInstallation(result);
+            },
+            code,
+            "",
+            "\nRefer to https://docs.gauge.org/plugin.html to install manually",
+            false,
+          );
+        } catch (finishError) {
+          releaseOperation();
+          rejectInstallation(finishError);
+        }
       };
       const onError = (error) => {
         if (!processError) {
@@ -211,7 +237,11 @@ class CLI {
       child.on("error", onError);
       child.on("exit", onExit);
       child.on("close", onClose);
-    });
+    } catch (error) {
+      releaseOperation();
+      rejectInstallation(error);
+    }
+    return installation;
   }
 
   mavenCommand() {
