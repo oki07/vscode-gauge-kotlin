@@ -650,14 +650,28 @@ class GaugeWorkspace {
       return;
     }
     const disposable = this.vscode.workspace.onDidChangeConfiguration((event) => {
-      if (
-        event
-        && typeof event.affectsConfiguration === "function"
-        && !event.affectsConfiguration("gauge")
-      ) {
+      if (this.disposed) {
         return undefined;
       }
-      return this.onConfigurationChanged();
+      let affectsGauge = true;
+      try {
+        if (event && typeof event.affectsConfiguration === "function") {
+          affectsGauge = event.affectsConfiguration("gauge");
+        }
+      } catch (error) {
+        if (this.disposed) {
+          return undefined;
+        }
+        throw error;
+      }
+      if (!affectsGauge) {
+        return undefined;
+      }
+      const configurationChange = this.onConfigurationChanged();
+      if (configurationChange && typeof configurationChange.then === "function") {
+        Promise.resolve(configurationChange).catch(() => undefined);
+      }
+      return configurationChange;
     });
     if (disposable) {
       this.disposables.push(disposable);
@@ -665,20 +679,72 @@ class GaugeWorkspace {
   }
 
   onConfigurationChanged() {
-    const newLaunchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
-    const oldDebugLogs = this.launchConfig && this.launchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
-    const newDebugLogs = newLaunchConfig && newLaunchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
+    if (this.disposed) {
+      return undefined;
+    }
+    let newLaunchConfig;
+    let oldDebugLogs;
+    let newDebugLogs;
+    try {
+      newLaunchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
+      if (this.disposed) {
+        return undefined;
+      }
+      oldDebugLogs = this.launchConfig && this.launchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
+      if (this.disposed) {
+        return undefined;
+      }
+      newDebugLogs = newLaunchConfig && newLaunchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
+    } catch (error) {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
+    }
+    if (this.disposed) {
+      return undefined;
+    }
     this.launchConfig = newLaunchConfig;
     if (oldDebugLogs === newDebugLogs) {
       return undefined;
     }
-    return this.vscode.window.showWarningMessage(RESTART_MESSAGE, RESTART_ACTION)
-      .then((selection) => {
-        if (selection === RESTART_ACTION) {
-          return this.vscode.commands.executeCommand(RELOAD_WINDOW_COMMAND);
-        }
+    let prompt;
+    try {
+      prompt = this.vscode.window.showWarningMessage(RESTART_MESSAGE, RESTART_ACTION);
+    } catch (error) {
+      if (this.disposed) {
         return undefined;
-      });
+      }
+      throw error;
+    }
+    return Promise.resolve(prompt).then((selection) => {
+      if (this.disposed || selection !== RESTART_ACTION) {
+        return undefined;
+      }
+      let reload;
+      try {
+        reload = this.vscode.commands.executeCommand(RELOAD_WINDOW_COMMAND);
+      } catch (error) {
+        if (this.disposed) {
+          return undefined;
+        }
+        throw error;
+      }
+      return Promise.resolve(reload).then(
+        (result) => (this.disposed ? undefined : result),
+        (error) => {
+          if (this.disposed) {
+            return undefined;
+          }
+          throw error;
+        },
+      );
+    }, (error) => {
+      if (this.disposed) {
+        return undefined;
+      }
+      throw error;
+    });
   }
 
   async startServerForActiveGaugeDocument(editor) {

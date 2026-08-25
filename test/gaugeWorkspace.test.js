@@ -4415,6 +4415,461 @@ test("GaugeWorkspace asks users to restart when Gauge launch debug logs change",
   });
 });
 
+test("GaugeWorkspace does not reload when the restart prompt is dismissed", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    configurations,
+    contexts,
+    vscode,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    warningSelection: "Dismiss",
+    workspaceFolders: [],
+  });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+
+  configurations["gauge.launch"] = { enableDebugLogs: true };
+  const result = await configurationChangeListeners[0]({});
+
+  assert.equal(result, undefined);
+  assert.equal(contexts.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
+  await workspace.dispose();
+});
+
+test("GaugeWorkspace suppresses pending restart prompts after disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const cases = [
+    { name: "resolve", settle: (prompt) => prompt.resolve("Restart Now") },
+    { name: "reject", settle: (prompt, error) => prompt.reject(error) },
+  ];
+  const snapshots = [];
+
+  for (const scenario of cases) {
+    const prompt = deferred();
+    const promptEntered = deferred();
+    const promptError = new Error(`${scenario.name} prompt failure`);
+    const {
+      configurationChangeListeners,
+      configurations,
+      contexts,
+      vscode,
+    } = createFakeVscode({
+      configurations: {
+        "gauge.launch": { enableDebugLogs: false },
+      },
+      workspaceFolders: [],
+    });
+    vscode.window.showWarningMessage = () => {
+      promptEntered.resolve();
+      return prompt.promise;
+    };
+    const workspace = new GaugeWorkspace({
+      cli: new CLI(new Command("gauge"), { plugins: [] }),
+      clientsMap: new Map(),
+      LanguageClient: FakeLanguageClient,
+      vscode,
+    });
+    await workspace.ready();
+
+    configurations["gauge.launch"] = { enableDebugLogs: true };
+    const configurationChange = configurationChangeListeners[0]({});
+    await promptEntered.promise;
+    await workspace.dispose();
+    scenario.settle(prompt, promptError);
+    const [outcome] = await Promise.allSettled([configurationChange]);
+
+    snapshots.push({
+      name: scenario.name,
+      outcome,
+      reloads: contexts.filter((entry) => (
+        entry.command === "workbench.action.reloadWindow"
+      )).length,
+    });
+  }
+
+  assert.deepEqual(snapshots, [
+    {
+      name: "resolve",
+      outcome: { status: "fulfilled", value: undefined },
+      reloads: 0,
+    },
+    {
+      name: "reject",
+      outcome: { status: "fulfilled", value: undefined },
+      reloads: 0,
+    },
+  ]);
+});
+
+test("GaugeWorkspace ignores retained configuration callbacks after disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    contexts,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    workspaceFolders: [],
+  });
+  const getConfiguration = vscode.workspace.getConfiguration;
+  let configurationReads = 0;
+  vscode.workspace.getConfiguration = (...args) => {
+    configurationReads += 1;
+    return getConfiguration(...args);
+  };
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+  const readsBeforeDisposal = configurationReads;
+  const retainedListener = configurationChangeListeners[0];
+  let configurationChecks = 0;
+
+  await workspace.dispose();
+  const retainedResult = retainedListener({
+    affectsConfiguration() {
+      configurationChecks += 1;
+      return true;
+    },
+  });
+  const directResult = workspace.onConfigurationChanged();
+
+  assert.equal(retainedResult, undefined);
+  assert.equal(directResult, undefined);
+  assert.equal(configurationChecks, 0);
+  assert.equal(configurationReads, readsBeforeDisposal);
+  assert.deepEqual(warnings, []);
+  assert.equal(contexts.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
+});
+
+test("GaugeWorkspace stops restart prompting after synchronous configuration disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    configurations,
+    contexts,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    workspaceFolders: [],
+  });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+  let oldSettingReads = 0;
+  workspace.launchConfig = {
+    get() {
+      oldSettingReads += 1;
+      return false;
+    },
+  };
+  const getConfiguration = vscode.workspace.getConfiguration;
+  vscode.workspace.getConfiguration = (...args) => {
+    const configuration = getConfiguration(...args);
+    workspace.dispose();
+    return configuration;
+  };
+
+  configurations["gauge.launch"] = { enableDebugLogs: true };
+  const result = await configurationChangeListeners[0]({});
+
+  assert.equal(result, undefined);
+  assert.equal(oldSettingReads, 0);
+  assert.deepEqual(warnings, []);
+  assert.equal(contexts.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
+  await workspace.dispose();
+});
+
+test("GaugeWorkspace stops restart prompting after synchronous debug setting disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    configurations,
+    contexts,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    workspaceFolders: [],
+  });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+  const settingError = new Error("debug setting failure");
+  vscode.workspace.getConfiguration = () => ({
+    get(key) {
+      assert.equal(key, "enableDebugLogs");
+      workspace.dispose();
+      throw settingError;
+    },
+  });
+
+  configurations["gauge.launch"] = { enableDebugLogs: true };
+  const result = configurationChangeListeners[0]({});
+
+  assert.equal(result, undefined);
+  assert.deepEqual(warnings, []);
+  assert.equal(contexts.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
+  await workspace.dispose();
+});
+
+test("GaugeWorkspace neutralizes synchronous restart continuation disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const snapshots = [];
+
+  for (const boundary of [
+    "configurationEventThrow",
+    "promptThrow",
+    "promptReject",
+    "commandThrow",
+    "commandReject",
+    "commandResolve",
+  ]) {
+    const continuationError = new Error(`${boundary} continuation failure`);
+    const {
+      configurationChangeListeners,
+      configurations,
+      vscode,
+    } = createFakeVscode({
+      configurations: {
+        "gauge.launch": { enableDebugLogs: false },
+      },
+      workspaceFolders: [],
+    });
+    let workspace;
+    let commandCalls = 0;
+    if (boundary === "promptThrow") {
+      vscode.window.showWarningMessage = () => {
+        workspace.dispose();
+        throw continuationError;
+      };
+    } else if (boundary === "promptReject") {
+      vscode.window.showWarningMessage = () => {
+        workspace.dispose();
+        return Promise.reject(continuationError);
+      };
+    } else {
+      vscode.window.showWarningMessage = () => Promise.resolve("Restart Now");
+    }
+    workspace = new GaugeWorkspace({
+      cli: new CLI(new Command("gauge"), { plugins: [] }),
+      clientsMap: new Map(),
+      LanguageClient: FakeLanguageClient,
+      vscode,
+    });
+    await workspace.ready();
+    if (boundary === "commandThrow") {
+      vscode.commands.executeCommand = () => {
+        commandCalls += 1;
+        workspace.dispose();
+        throw continuationError;
+      };
+    } else if (boundary === "commandReject") {
+      vscode.commands.executeCommand = () => {
+        commandCalls += 1;
+        workspace.dispose();
+        return Promise.reject(continuationError);
+      };
+    } else if (boundary === "commandResolve") {
+      vscode.commands.executeCommand = () => {
+        commandCalls += 1;
+        workspace.dispose();
+        return Promise.resolve("reload result");
+      };
+    }
+
+    configurations["gauge.launch"] = { enableDebugLogs: true };
+    const event = boundary === "configurationEventThrow"
+      ? {
+        affectsConfiguration() {
+          workspace.dispose();
+          throw continuationError;
+        },
+      }
+      : {};
+    const [outcome] = await Promise.allSettled([
+      Promise.resolve().then(() => configurationChangeListeners[0](event)),
+    ]);
+    await workspace.dispose();
+
+    snapshots.push({ boundary, commandCalls, outcome });
+  }
+
+  assert.deepEqual(snapshots, [
+    {
+      boundary: "configurationEventThrow",
+      commandCalls: 0,
+      outcome: { status: "fulfilled", value: undefined },
+    },
+    {
+      boundary: "promptThrow",
+      commandCalls: 0,
+      outcome: { status: "fulfilled", value: undefined },
+    },
+    {
+      boundary: "promptReject",
+      commandCalls: 0,
+      outcome: { status: "fulfilled", value: undefined },
+    },
+    {
+      boundary: "commandThrow",
+      commandCalls: 1,
+      outcome: { status: "fulfilled", value: undefined },
+    },
+    {
+      boundary: "commandReject",
+      commandCalls: 1,
+      outcome: { status: "fulfilled", value: undefined },
+    },
+    {
+      boundary: "commandResolve",
+      commandCalls: 1,
+      outcome: { status: "fulfilled", value: undefined },
+    },
+  ]);
+});
+
+test("GaugeWorkspace preserves live restart continuation failures", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+
+  for (const boundary of [
+    "configurationEventThrow",
+    "configurationReadThrow",
+    "debugSettingThrow",
+    "promptThrow",
+    "promptReject",
+    "commandThrow",
+    "commandReject",
+  ]) {
+    const continuationError = new Error(`${boundary} continuation failure`);
+    const {
+      configurationChangeListeners,
+      configurations,
+      vscode,
+    } = createFakeVscode({
+      configurations: {
+        "gauge.launch": { enableDebugLogs: false },
+      },
+      workspaceFolders: [],
+    });
+    if (boundary === "promptThrow") {
+      vscode.window.showWarningMessage = () => {
+        throw continuationError;
+      };
+    } else if (boundary === "promptReject") {
+      vscode.window.showWarningMessage = () => Promise.reject(continuationError);
+    } else {
+      vscode.window.showWarningMessage = () => Promise.resolve("Restart Now");
+    }
+    const workspace = new GaugeWorkspace({
+      cli: new CLI(new Command("gauge"), { plugins: [] }),
+      clientsMap: new Map(),
+      LanguageClient: FakeLanguageClient,
+      vscode,
+    });
+    await workspace.ready();
+    if (boundary === "configurationReadThrow") {
+      workspace.getWorkspaceConfiguration = () => {
+        throw continuationError;
+      };
+    } else if (boundary === "debugSettingThrow") {
+      workspace.getWorkspaceConfiguration = () => ({
+        get() {
+          throw continuationError;
+        },
+      });
+    } else if (boundary === "commandThrow") {
+      vscode.commands.executeCommand = () => {
+        throw continuationError;
+      };
+    } else if (boundary === "commandReject") {
+      vscode.commands.executeCommand = () => Promise.reject(continuationError);
+    }
+
+    configurations["gauge.launch"] = { enableDebugLogs: true };
+    const event = boundary === "configurationEventThrow"
+      ? {
+        affectsConfiguration() {
+          throw continuationError;
+        },
+      }
+      : {};
+
+    await assert.rejects(
+      async () => configurationChangeListeners[0](event),
+      (error) => error === continuationError,
+    );
+    await workspace.dispose();
+  }
+});
+
+test("GaugeWorkspace observes configuration event failures without replacing the result", async () => {
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const listenerError = new Error("configuration listener failure");
+  const listenerResult = Promise.reject(listenerError);
+  const originalCatch = listenerResult.catch;
+  let catchCalls = 0;
+  listenerResult.catch = function catchListenerResult(onRejected) {
+    catchCalls += 1;
+    return originalCatch.call(this, onRejected);
+  };
+  let registeredListener;
+  const workspace = Object.create(GaugeWorkspace.prototype);
+  workspace.disposed = false;
+  workspace.disposables = [];
+  workspace.onConfigurationChanged = () => listenerResult;
+  workspace.vscode = {
+    workspace: {
+      onDidChangeConfiguration(listener) {
+        registeredListener = listener;
+        return { dispose() {} };
+      },
+    },
+  };
+  workspace.registerConfigurationChanges();
+
+  const result = registeredListener({});
+
+  assert.equal(result, listenerResult);
+  assert.equal(catchCalls, 1);
+  await assert.rejects(result, (error) => error === listenerError);
+});
+
 test("GaugeWorkspace stores the last html report path in state", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
