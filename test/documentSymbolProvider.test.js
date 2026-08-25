@@ -385,6 +385,62 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
   ]);
 });
 
+test("GaugeDocumentSymbolProvider matches raw queries against concept heading values", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Reuse checkout",
+    "",
+    "## Shared payment",
+    "* Reuse payment",
+    "",
+    "#Compact checkout",
+    "* Reuse compact checkout",
+    "",
+    "#   Spaced checkout",
+    "* Reuse spaced checkout",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "gauge-concept");
+  const documentStore = {
+    documents() {
+      return [conceptDocument];
+    },
+    async whenReady() {},
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+  const queries = [
+    "Shared",
+    " p",
+    "# S",
+    "## S",
+    "\"Shared\"",
+    " Shared",
+    "#C",
+    "  S",
+    "Compact",
+    "Spaced",
+  ];
+  const results = [];
+
+  for (const query of queries) {
+    results.push((await provider.provideWorkspaceSymbols(query))
+      .map((symbol) => symbol.name));
+  }
+
+  assert.deepEqual(results, [
+    ["# Shared checkout", "## Shared payment"],
+    ["## Shared payment"],
+    ["## Shared payment"],
+    [],
+    [],
+    ["## Shared payment"],
+    [],
+    [],
+    ["#Compact checkout"],
+    ["#   Spaced checkout"],
+  ]);
+});
+
 test("GaugeDocumentSymbolProvider groups and sorts concept workspace symbols", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const leftDocument = createDocument([

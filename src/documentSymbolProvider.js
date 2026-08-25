@@ -185,9 +185,15 @@ function hashHeadingAt(line, conceptDocument) {
 }
 
 function workspaceSymbolQuery(query) {
-  const text = String(query || "").trim();
-  const quoted = /^"(.*)"$/.exec(text);
-  return quoted ? quoted[1] : text;
+  return String(query || "");
+}
+
+function workspaceSymbolHeadingValue(name) {
+  const text = String(name || "");
+  if (!text.startsWith("#")) {
+    return text;
+  }
+  return text.slice(1).replace(/^[ \t\f]*/, "");
 }
 
 function symbolNameCompare(left, right) {
@@ -646,7 +652,7 @@ class GaugeDocumentSymbolProvider {
       if (!this.workspaceSymbolOperationActive(operation)) {
         return [];
       }
-      if (!symbol.name.toLowerCase().includes(queryText)) {
+      if (!workspaceSymbolHeadingValue(symbol.name).toLowerCase().includes(queryText)) {
         continue;
       }
       if (symbol.name.startsWith("##")) {
