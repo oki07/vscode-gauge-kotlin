@@ -50,6 +50,7 @@ const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
 ]);
 const DEFAULT_CLIENT_START_CONCURRENCY = 4;
 const DEFAULT_LANGUAGE_CLIENT_RUNNING_STATE = 2;
+const CANCELLED_PROJECT_SELECTION = Symbol("cancelled project selection");
 const CANCELLED_RUNNER_LANGUAGE_REQUEST = Symbol("cancelled runner language request");
 
 function getVscode(vscode) {
@@ -396,6 +397,7 @@ class GaugeWorkspace {
     this.stoppedLanguageClients = new WeakSet();
     this.localFeatureStateDisposables = new WeakMap();
     this.localFeatureRefreshes = new WeakMap();
+    this.projectSelectionOperations = new Set();
     this.runnerLanguageRequests = new Set();
     this.disposed = false;
     this.disposalPromise = undefined;
@@ -455,6 +457,7 @@ class GaugeWorkspace {
     });
     this.disposalPromise.catch(() => undefined);
     this.disposed = true;
+    this.cancelProjectSelectionOperations();
     this.cancelAllRunnerLanguageRequests();
     const pendingServerStartRoots = new Set(this.pendingServerStarts.keys());
     this.pendingServerStarts.clear();
@@ -579,28 +582,168 @@ class GaugeWorkspace {
   }
 
   async showProjectOptions(onChange) {
-    const projectItems = [...this.clientsMap.keys()]
-      .sort((left, right) => (left > right ? 1 : -1))
-      .map((projectRoot) => ({
-        label: this.pathModule.basename(projectRoot),
-        description: projectRoot,
-      }));
+    const operation = this.createProjectSelectionOperation();
+    if (!operation) {
+      return undefined;
+    }
     try {
-      const selected = await this.vscode.window.showQuickPick(projectItems, {
-        canPickMany: false,
-        placeHolder: "Choose a project",
-      });
+      const projectItems = [];
+      for (const projectRoot of [...this.clientsMap.keys()]
+        .sort((left, right) => (left > right ? 1 : -1))) {
+        if (!this.projectSelectionOperationActive(operation)) {
+          return undefined;
+        }
+        const label = this.pathModule.basename(projectRoot);
+        if (!this.projectSelectionOperationActive(operation)) {
+          return undefined;
+        }
+        projectItems.push({ label, description: projectRoot });
+      }
+      let picker;
+      try {
+        picker = this.vscode.window.showQuickPick(projectItems, {
+          canPickMany: false,
+          placeHolder: "Choose a project",
+        });
+      } catch (error) {
+        if (!this.projectSelectionOperationActive(operation)) {
+          return undefined;
+        }
+        return await this.showProjectSelectionError(operation, error);
+      }
+      const pickerOutcome = await this.projectSelectionOutcome(operation, picker);
+      if (pickerOutcome === CANCELLED_PROJECT_SELECTION) {
+        return undefined;
+      }
+      if (pickerOutcome.status === "rejected") {
+        return await this.showProjectSelectionError(operation, pickerOutcome.error);
+      }
+      const selected = pickerOutcome.value;
       if (!selected) {
         return undefined;
       }
-      return onChange(selected.description);
-    } catch (error) {
-      // showErrorMessage reads a second argument as options or an item, so an
-      // Error passed there is dropped: fold the cause into the message.
-      const detail = errorMessage(error);
-      return this.vscode.window.showErrorMessage(
+      if (!this.projectSelectionOperationActive(operation)) {
+        return undefined;
+      }
+      let projectRoot;
+      try {
+        projectRoot = selected.description;
+      } catch (error) {
+        if (!this.projectSelectionOperationActive(operation)) {
+          return undefined;
+        }
+        return await this.showProjectSelectionError(operation, error);
+      }
+      if (!this.projectSelectionOperationActive(operation)) {
+        return undefined;
+      }
+      let callback;
+      try {
+        callback = onChange(projectRoot);
+      } catch (error) {
+        if (!this.projectSelectionOperationActive(operation)) {
+          return undefined;
+        }
+        return await this.showProjectSelectionError(operation, error);
+      }
+      const callbackOutcome = await this.projectSelectionOutcome(operation, callback);
+      if (callbackOutcome === CANCELLED_PROJECT_SELECTION) {
+        return undefined;
+      }
+      if (callbackOutcome.status === "rejected") {
+        throw callbackOutcome.error;
+      }
+      return callbackOutcome.value;
+    } finally {
+      this.releaseProjectSelectionOperation(operation);
+    }
+  }
+
+  createProjectSelectionOperation() {
+    if (this.disposed) {
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      resolveCancellation,
+    };
+    this.projectSelectionOperations.add(operation);
+    return operation;
+  }
+
+  projectSelectionOperationActive(operation) {
+    return !this.disposed
+      && operation
+      && operation.active
+      && this.projectSelectionOperations.has(operation);
+  }
+
+  async projectSelectionOutcome(operation, value) {
+    const observed = Promise.resolve(value).then(
+      (result) => ({ status: "fulfilled", value: result }),
+      (error) => ({ error, status: "rejected" }),
+    );
+    const outcome = await Promise.race([observed, operation.cancellation]);
+    return this.projectSelectionOperationActive(operation)
+      ? outcome
+      : CANCELLED_PROJECT_SELECTION;
+  }
+
+  async showProjectSelectionError(operation, error) {
+    if (!this.projectSelectionOperationActive(operation)) {
+      return undefined;
+    }
+    // showErrorMessage reads a second argument as options or an item, so an
+    // Error passed there is dropped: fold the cause into the message.
+    let detail;
+    try {
+      detail = errorMessage(error);
+    } catch (detailError) {
+      if (!this.projectSelectionOperationActive(operation)) {
+        return undefined;
+      }
+      throw detailError;
+    }
+    if (!this.projectSelectionOperationActive(operation)) {
+      return undefined;
+    }
+    let notification;
+    try {
+      notification = this.vscode.window.showErrorMessage(
         `Unable to select project.${detail ? ` ${detail}` : ""}`,
       );
+    } catch (notificationError) {
+      if (!this.projectSelectionOperationActive(operation)) {
+        return undefined;
+      }
+      throw notificationError;
+    }
+    const notificationOutcome = await this.projectSelectionOutcome(operation, notification);
+    if (notificationOutcome === CANCELLED_PROJECT_SELECTION) {
+      return undefined;
+    }
+    if (notificationOutcome.status === "rejected") {
+      throw notificationOutcome.error;
+    }
+    return notificationOutcome.value;
+  }
+
+  releaseProjectSelectionOperation(operation) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.projectSelectionOperations.delete(operation);
+    operation.resolveCancellation(CANCELLED_PROJECT_SELECTION);
+  }
+
+  cancelProjectSelectionOperations() {
+    for (const operation of [...this.projectSelectionOperations]) {
+      this.releaseProjectSelectionOperation(operation);
     }
   }
 

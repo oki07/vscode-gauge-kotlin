@@ -13,6 +13,37 @@ function deferred() {
   return { promise, reject, resolve };
 }
 
+function controlledThenable() {
+  const entered = deferred();
+  let rejectionHandler;
+  let resolutionHandler;
+  const state = {
+    registrations: 0,
+    rejectionHandlers: 0,
+  };
+  return {
+    entered: entered.promise,
+    reject(error) {
+      rejectionHandler(error);
+    },
+    resolve(value) {
+      resolutionHandler(value);
+    },
+    state,
+    thenable: {
+      then(resolve, reject) {
+        state.registrations += 1;
+        if (typeof reject === "function") {
+          state.rejectionHandlers += 1;
+        }
+        resolutionHandler = resolve;
+        rejectionHandler = reject;
+        entered.resolve();
+      },
+    },
+  };
+}
+
 function installTrackingCancellationSources(vscode, events = []) {
   const sources = [];
   vscode.CancellationTokenSource = class TrackingCancellationTokenSource {
@@ -2902,6 +2933,7 @@ test("GaugeWorkspace lets users choose among known projects", async () => {
   const selected = await workspace.showProjectOptions((projectRoot) => projectRoot);
 
   assert.equal(selected, "/workspace/two");
+  assert.equal(workspace.projectSelectionOperations.size, 0);
   assert.deepEqual(quickPicks, [
     {
       items: [
@@ -2945,6 +2977,423 @@ test("GaugeWorkspace reports project selection failures", async () => {
       detail: undefined,
     },
   ]);
+});
+
+test("GaugeWorkspace settles pending project pickers when disposed", async () => {
+  for (const settlement of ["resolve", "reject"]) {
+    const { errors, vscode, workspace } = createEmptyKotlinWorkspace();
+    await workspace.ready();
+    const pickerEntered = deferred();
+    const pickerResponse = controlledThenable();
+    const pickerError = new Error(`late ${settlement} picker failure`);
+    let pickerCalls = 0;
+    let callbackCalls = 0;
+    vscode.window.showQuickPick = () => {
+      pickerCalls += 1;
+      if (pickerCalls === 1) {
+        pickerEntered.resolve();
+        return pickerResponse.thenable;
+      }
+      return Promise.resolve({ description: "/workspace/stale" });
+    };
+
+    let outcome = { status: "pending" };
+    const selection = workspace.showProjectOptions(() => {
+      callbackCalls += 1;
+      return "stale selection";
+    });
+    selection.then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { error, status: "rejected" };
+      },
+    );
+
+    try {
+      await pickerEntered.promise;
+      await pickerResponse.entered;
+      await workspace.dispose();
+      const retainedResult = await workspace.showProjectOptions(() => {
+        callbackCalls += 1;
+        return "retained selection";
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      const terminalSnapshot = {
+        callbackCalls,
+        errors: [...errors],
+        outcome,
+        pickerCalls,
+        retainedResult,
+      };
+
+      if (settlement === "resolve") {
+        pickerResponse.resolve({ description: "/workspace/late" });
+      } else {
+        pickerResponse.reject(pickerError);
+      }
+      await selection;
+      await new Promise((resolve) => setImmediate(resolve));
+
+      assert.deepEqual(terminalSnapshot, {
+        callbackCalls: 0,
+        errors: [],
+        outcome: { status: "fulfilled", value: undefined },
+        pickerCalls: 1,
+        retainedResult: undefined,
+      });
+      assert.deepEqual({
+        callbackCalls,
+        errors,
+        observation: pickerResponse.state,
+        outcome,
+        pickerCalls,
+      }, {
+        callbackCalls: 0,
+        errors: [],
+        observation: { registrations: 1, rejectionHandlers: 1 },
+        outcome: { status: "fulfilled", value: undefined },
+        pickerCalls: 1,
+      });
+    } finally {
+      pickerResponse.resolve(undefined);
+      await Promise.allSettled([selection, workspace.dispose()]);
+    }
+  }
+});
+
+test("GaugeWorkspace detaches pending project callbacks and notifications on disposal", async () => {
+  for (const boundary of ["callback", "notification"]) {
+    const { errors, vscode, workspace } = createEmptyKotlinWorkspace();
+    await workspace.ready();
+    const borrowedEntered = deferred();
+    const borrowedResponse = controlledThenable();
+    const lateError = new Error(`late ${boundary} failure`);
+    let callbackCalls = 0;
+
+    if (boundary === "callback") {
+      vscode.window.showQuickPick = () => Promise.resolve({
+        description: "/workspace/gauge",
+      });
+    } else {
+      vscode.window.showQuickPick = () => Promise.reject(new Error("picker failed"));
+      vscode.window.showErrorMessage = () => {
+        borrowedEntered.resolve();
+        return borrowedResponse.thenable;
+      };
+    }
+
+    let outcome = { status: "pending" };
+    const selection = workspace.showProjectOptions(() => {
+      callbackCalls += 1;
+      borrowedEntered.resolve();
+      return borrowedResponse.thenable;
+    });
+    selection.then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+      },
+      (error) => {
+        outcome = { error, status: "rejected" };
+      },
+    );
+
+    try {
+      await borrowedEntered.promise;
+      await borrowedResponse.entered;
+      await workspace.dispose();
+      await new Promise((resolve) => setImmediate(resolve));
+      const terminalSnapshot = {
+        callbackCalls,
+        errors: [...errors],
+        outcome,
+      };
+
+      borrowedResponse.reject(lateError);
+      await selection;
+      await new Promise((resolve) => setImmediate(resolve));
+
+      assert.deepEqual(terminalSnapshot, {
+        callbackCalls: boundary === "callback" ? 1 : 0,
+        errors: [],
+        outcome: { status: "fulfilled", value: undefined },
+      });
+      assert.deepEqual({
+        callbackCalls,
+        errors,
+        observation: borrowedResponse.state,
+        outcome,
+      }, {
+        callbackCalls: boundary === "callback" ? 1 : 0,
+        errors: [],
+        observation: { registrations: 1, rejectionHandlers: 1 },
+        outcome: { status: "fulfilled", value: undefined },
+      });
+    } finally {
+      borrowedResponse.resolve(undefined);
+      await Promise.allSettled([selection, workspace.dispose()]);
+    }
+  }
+});
+
+test("GaugeWorkspace closes every project selection before client disposal settles", async () => {
+  const { clients, vscode, workspace } = createEmptyKotlinWorkspace();
+  await workspace.ready();
+  const stopResponse = deferred();
+  const pickerResponse = deferred();
+  const callbackEntered = deferred();
+  const callbackResponse = deferred();
+  clients.set("/workspace/gauge", {
+    client: {
+      stop() {
+        return stopResponse.promise;
+      },
+    },
+  });
+  let pickerCalls = 0;
+  vscode.window.showQuickPick = () => {
+    pickerCalls += 1;
+    if (pickerCalls === 1) {
+      return pickerResponse.promise;
+    }
+    return Promise.resolve({ description: "/workspace/gauge" });
+  };
+
+  let pickerOutcome = { status: "pending" };
+  let callbackOutcome = { status: "pending" };
+  let disposalOutcome = { status: "pending" };
+  const pickerSelection = workspace.showProjectOptions(() => "stale picker");
+  pickerSelection.then((value) => {
+    pickerOutcome = { status: "fulfilled", value };
+  });
+  const callbackSelection = workspace.showProjectOptions(() => {
+    callbackEntered.resolve();
+    return callbackResponse.promise;
+  });
+  callbackSelection.then((value) => {
+    callbackOutcome = { status: "fulfilled", value };
+  });
+
+  try {
+    await callbackEntered.promise;
+    assert.equal(workspace.projectSelectionOperations.size, 2);
+    const disposal = workspace.dispose();
+    disposal.then((value) => {
+      disposalOutcome = { status: "fulfilled", value };
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const terminalSnapshot = {
+      callbackOutcome,
+      disposalOutcome,
+      operations: workspace.projectSelectionOperations.size,
+      pickerOutcome,
+    };
+
+    stopResponse.resolve(undefined);
+    pickerResponse.resolve({ description: "/workspace/late" });
+    callbackResponse.reject(new Error("late callback failure"));
+    await Promise.allSettled([disposal, pickerSelection, callbackSelection]);
+
+    assert.deepEqual(terminalSnapshot, {
+      callbackOutcome: { status: "fulfilled", value: undefined },
+      disposalOutcome: { status: "pending" },
+      operations: 0,
+      pickerOutcome: { status: "fulfilled", value: undefined },
+    });
+    assert.equal(workspace.projectSelectionOperations.size, 0);
+  } finally {
+    stopResponse.resolve(undefined);
+    pickerResponse.resolve(undefined);
+    callbackResponse.resolve(undefined);
+    await Promise.allSettled([
+      pickerSelection,
+      callbackSelection,
+      workspace.dispose(),
+    ]);
+  }
+});
+
+test("GaugeWorkspace neutralizes synchronous project selection disposal", async () => {
+  const cases = [
+    { boundary: "picker", settlement: "resolve" },
+    { boundary: "picker", settlement: "throw" },
+    { boundary: "description", settlement: "resolve" },
+    { boundary: "description", settlement: "throw" },
+    { boundary: "callback", settlement: "resolve" },
+    { boundary: "callback", settlement: "throw" },
+    { boundary: "notification", settlement: "reject" },
+    { boundary: "notification", settlement: "throw" },
+    { boundary: "error detail", settlement: "resolve" },
+    { boundary: "error detail", settlement: "throw" },
+  ];
+  const snapshots = [];
+
+  for (const scenario of cases) {
+    const { errors, vscode, workspace } = createEmptyKotlinWorkspace();
+    await workspace.ready();
+    const boundaryError = new Error(
+      `${scenario.boundary} ${scenario.settlement} failure`,
+    );
+    let callbackCalls = 0;
+    let disposal;
+
+    if (scenario.boundary === "picker") {
+      vscode.window.showQuickPick = () => {
+        disposal = workspace.dispose();
+        if (scenario.settlement === "throw") {
+          throw boundaryError;
+        }
+        return { description: "/workspace/stale" };
+      };
+    } else if (scenario.boundary === "description") {
+      vscode.window.showQuickPick = () => Promise.resolve({
+        get description() {
+          disposal = workspace.dispose();
+          if (scenario.settlement === "throw") {
+            throw boundaryError;
+          }
+          return "/workspace/stale";
+        },
+      });
+    } else if (scenario.boundary === "callback") {
+      vscode.window.showQuickPick = () => Promise.resolve({
+        description: "/workspace/gauge",
+      });
+    } else if (scenario.boundary === "notification") {
+      vscode.window.showQuickPick = () => Promise.reject(new Error("picker failed"));
+      vscode.window.showErrorMessage = () => {
+        disposal = workspace.dispose();
+        if (scenario.settlement === "throw") {
+          throw boundaryError;
+        }
+        return Promise.reject(boundaryError);
+      };
+    } else {
+      const pickerError = {};
+      Object.defineProperty(pickerError, "message", {
+        get() {
+          disposal = workspace.dispose();
+          if (scenario.settlement === "throw") {
+            throw boundaryError;
+          }
+          return "stale detail";
+        },
+      });
+      vscode.window.showQuickPick = () => Promise.reject(pickerError);
+    }
+
+    let rejection;
+    let result;
+    try {
+      result = await workspace.showProjectOptions(() => {
+        callbackCalls += 1;
+        disposal = workspace.dispose();
+        if (scenario.settlement === "throw") {
+          throw boundaryError;
+        }
+        return "stale result";
+      });
+    } catch (error) {
+      rejection = error;
+    }
+    await disposal;
+    snapshots.push({
+      callbackCalls,
+      errors: [...errors],
+      rejection,
+      result,
+      scenario,
+    });
+  }
+
+  assert.deepEqual(snapshots, cases.map((scenario) => ({
+    callbackCalls: scenario.boundary === "callback" ? 1 : 0,
+    errors: [],
+    rejection: undefined,
+    result: undefined,
+    scenario,
+  })));
+});
+
+test("GaugeWorkspace preserves live project selection failures", async () => {
+  for (const boundary of [
+    "callback async",
+    "callback sync",
+    "description sync",
+    "error detail sync",
+    "notification async",
+    "notification sync",
+    "picker sync",
+  ]) {
+    const { errors, vscode, workspace } = createEmptyKotlinWorkspace();
+    await workspace.ready();
+    const liveError = new Error(`live ${boundary} failure`);
+    let callbackCalls = 0;
+
+    if (boundary.startsWith("callback")) {
+      vscode.window.showQuickPick = () => Promise.resolve({
+        description: "/workspace/gauge",
+      });
+    } else if (boundary.startsWith("notification")) {
+      vscode.window.showQuickPick = () => Promise.reject(new Error("picker failed"));
+      vscode.window.showErrorMessage = () => {
+        if (boundary === "notification sync") {
+          throw liveError;
+        }
+        return Promise.reject(liveError);
+      };
+    } else if (boundary === "picker sync") {
+      vscode.window.showQuickPick = () => {
+        throw liveError;
+      };
+    } else if (boundary === "description sync") {
+      vscode.window.showQuickPick = () => Promise.resolve({
+        get description() {
+          throw liveError;
+        },
+      });
+    } else {
+      const pickerError = {};
+      Object.defineProperty(pickerError, "message", {
+        get() {
+          throw liveError;
+        },
+      });
+      vscode.window.showQuickPick = () => Promise.reject(pickerError);
+    }
+
+    try {
+      const selection = workspace.showProjectOptions(() => {
+        callbackCalls += 1;
+        if (boundary === "callback sync") {
+          throw liveError;
+        }
+        return Promise.reject(liveError);
+      });
+      if (
+        boundary === "callback async"
+        || boundary === "error detail sync"
+        || boundary.startsWith("notification")
+      ) {
+        await assert.rejects(selection, (error) => error === liveError);
+        assert.deepEqual(errors, []);
+      } else {
+        assert.equal(await selection, undefined);
+        assert.deepEqual(errors, [
+          {
+            actions: [],
+            detail: undefined,
+            message: `Unable to select project. ${liveError.message}`,
+          },
+        ]);
+      }
+      assert.equal(callbackCalls, boundary.startsWith("callback") ? 1 : 0);
+      assert.equal(workspace.projectSelectionOperations.size, 0);
+    } finally {
+      await workspace.dispose();
+    }
+  }
 });
 
 test("GaugeWorkspace does not resurrect clients when a workspace folder is removed during discovery", async () => {
