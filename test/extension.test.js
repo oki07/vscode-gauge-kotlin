@@ -4403,6 +4403,148 @@ test("activation shows unsupported Gauge version guidance when Gauge is too old"
   assert.equal(workspaceCreated, false);
 });
 
+test("activation does not wait for Gauge CLI gate notifications", async () => {
+  const extension = require("../src/extension");
+  const snapshots = [];
+
+  for (const { gate, settlement } of [
+    { gate: "missing", settlement: "resolve" },
+    { gate: "unsupported", settlement: "reject" },
+    { gate: "missing", settlement: "throw" },
+    { gate: "unsupported", settlement: "throw" },
+  ]) {
+    const notification = deferred();
+    const notificationError = new Error(`${gate} ${settlement} notification failed`);
+    const calls = [];
+    let workspaceCreated = false;
+    const context = { subscriptions: [] };
+    const { fakeVscode } = createFakeVscode({
+      workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+    });
+    const cli = {
+      isGaugeInstalled() {
+        return gate !== "missing";
+      },
+      isGaugeVersionGreaterOrEqual(version) {
+        assert.equal(version, "0.9.6");
+        return gate !== "unsupported";
+      },
+    };
+
+    let activation;
+    try {
+      activation = extension.activate(context, fakeVscode, {
+        createCli() {
+          return cli;
+        },
+        createExecutionController() {
+          return { handleCommand() {} };
+        },
+        GaugeWorkspace: class FakeGaugeWorkspace {
+          constructor() {
+            workspaceCreated = true;
+          }
+        },
+        ProjectInitializer: class FakeProjectInitializer {
+          dispose() {}
+        },
+        projectFactory: {
+          isGaugeProject() {
+            return true;
+          },
+        },
+        showInstallGaugeNotification(vscode) {
+          assert.equal(vscode, fakeVscode);
+          calls.push({ type: "missing" });
+          if (settlement === "throw") {
+            throw notificationError;
+          }
+          return notification.promise;
+        },
+        showUnsupportedGaugeVersionNotification(vscode, minimumVersion) {
+          assert.equal(vscode, fakeVscode);
+          calls.push({ minimumVersion, type: "unsupported" });
+          if (settlement === "throw") {
+            throw notificationError;
+          }
+          return notification.promise;
+        },
+      });
+    } catch (error) {
+      activation = Promise.reject(error);
+    }
+    let activationSettled = false;
+    const activationOutcome = Promise.resolve(activation).then(
+      () => {
+        activationSettled = true;
+        return "fulfilled";
+      },
+      () => {
+        activationSettled = true;
+        return "rejected";
+      },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    const snapshot = {
+      activationSettled,
+      calls: [...calls],
+      gate,
+      settlement,
+      workspaceCreated,
+    };
+
+    if (settlement === "reject") {
+      notification.reject(notificationError);
+    } else {
+      notification.resolve(undefined);
+    }
+    snapshot.activationOutcome = await activationOutcome;
+    snapshots.push(snapshot);
+    await extension.deactivate();
+  }
+
+  assert.deepEqual(snapshots, [
+    {
+      activationOutcome: "fulfilled",
+      activationSettled: true,
+      calls: [{ type: "missing" }],
+      gate: "missing",
+      settlement: "resolve",
+      workspaceCreated: false,
+    },
+    {
+      activationOutcome: "fulfilled",
+      activationSettled: true,
+      calls: [{
+        minimumVersion: "0.9.6",
+        type: "unsupported",
+      }],
+      gate: "unsupported",
+      settlement: "reject",
+      workspaceCreated: false,
+    },
+    {
+      activationOutcome: "fulfilled",
+      activationSettled: true,
+      calls: [{ type: "missing" }],
+      gate: "missing",
+      settlement: "throw",
+      workspaceCreated: false,
+    },
+    {
+      activationOutcome: "fulfilled",
+      activationSettled: true,
+      calls: [{
+        minimumVersion: "0.9.6",
+        type: "unsupported",
+      }],
+      gate: "unsupported",
+      settlement: "throw",
+      workspaceCreated: false,
+    },
+  ]);
+});
+
 test("activation shares a single CLI probe across services and execution", () => {
   const extension = require("../src/extension");
 

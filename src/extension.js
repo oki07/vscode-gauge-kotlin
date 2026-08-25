@@ -901,6 +901,14 @@ function createGaugeState(context, options) {
   return new GaugeStateCtor(context);
 }
 
+function observeDetachedNotification(showNotification) {
+  try {
+    Promise.resolve(showNotification()).catch(() => undefined);
+  } catch (_error) {
+    // Advisory notification failures do not own extension activation.
+  }
+}
+
 function startGaugeServices(context, vscode, options = {}) {
   if (!isExtensionActivationCurrent(options.extensionActivation)) {
     return undefined;
@@ -941,13 +949,17 @@ function startGaugeServices(context, vscode, options = {}) {
     return undefined;
   }
   if (!cli.isGaugeInstalled()) {
-    return (options.showInstallGaugeNotification || showInstallGaugeNotification)(vscode);
+    observeDetachedNotification(() => (
+      options.showInstallGaugeNotification || showInstallGaugeNotification
+    )(vscode));
+    return undefined;
   }
   if (!cli.isGaugeVersionGreaterOrEqual(MINIMUM_SUPPORTED_GAUGE_VERSION)) {
-    return (
+    observeDetachedNotification(() => (
       options.showUnsupportedGaugeVersionNotification
       || showUnsupportedGaugeVersionNotification
-    )(vscode, MINIMUM_SUPPORTED_GAUGE_VERSION);
+    )(vscode, MINIMUM_SUPPORTED_GAUGE_VERSION));
+    return undefined;
   }
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
