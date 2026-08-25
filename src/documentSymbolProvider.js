@@ -32,6 +32,30 @@ function isWorkspaceSymbolPath(file) {
   return CONCEPT_FILE_PATTERN.test(file);
 }
 
+function isWorkspaceSymbolProjectFile(file, projectFactory) {
+  if (!isWorkspaceSymbolPath(file)) {
+    return false;
+  }
+  if (
+    !projectFactory
+    || typeof projectFactory.getGaugeRootFromFilePath !== "function"
+  ) {
+    return true;
+  }
+  try {
+    const root = projectFactory.getGaugeRootFromFilePath(file);
+    if (!root) {
+      return false;
+    }
+    if (typeof projectFactory.isGaugeProject === "function") {
+      return projectFactory.isGaugeProject(root) !== false;
+    }
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function isConceptDocument(document) {
   return Boolean(document && document.languageId === GAUGE_CONCEPT_LANGUAGE)
     || CONCEPT_FILE_PATTERN.test(documentPath(document));
@@ -459,10 +483,23 @@ class GaugeDocumentSymbolProvider {
       if (!this.workspaceSymbolOperationActive(operation)) {
         return [];
       }
-      return documents.filter((document) => {
-        const file = documentPath(document);
-        return CONCEPT_FILE_PATTERN.test(file);
-      });
+      const scopedDocuments = [];
+      for (const document of documents) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        const included = isWorkspaceSymbolProjectFile(
+          documentPath(document),
+          this.projectFactory,
+        );
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        if (included) {
+          scopedDocuments.push(document);
+        }
+      }
+      return scopedDocuments;
     }
     const workspace = this.vscode && this.vscode.workspace;
     if (
@@ -488,18 +525,38 @@ class GaugeDocumentSymbolProvider {
         return [];
       }
       for (const uri of uris || []) {
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        const included = isWorkspaceSymbolProjectFile(uriKey(uri), this.projectFactory);
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        if (!included) {
+          continue;
+        }
         urisByKey.set(uriKey(uri), uri);
       }
     }
 
     const documents = [];
     for (const uri of urisByKey.values()) {
+      if (!this.workspaceSymbolOperationActive(operation)) {
+        return [];
+      }
       try {
         const document = await workspace.openTextDocument(uri);
         if (!this.workspaceSymbolOperationActive(operation)) {
           return [];
         }
-        if (document) {
+        const included = document && isWorkspaceSymbolProjectFile(
+          documentPath(document),
+          this.projectFactory,
+        );
+        if (!this.workspaceSymbolOperationActive(operation)) {
+          return [];
+        }
+        if (included) {
           documents.push(document);
         }
       } catch (_error) {

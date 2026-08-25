@@ -110,6 +110,66 @@ function createCancellationToken(initiallyCancelled = false) {
   };
 }
 
+function createWorkspaceSymbolProjectScopeFixture() {
+  const gaugeDocument = createDocument(
+    "# Shared Gauge concept",
+    "/workspace/gauge/specs/shared.cpt",
+    "gauge-concept",
+  );
+  const notesDocument = createDocument(
+    "# Shared notes concept",
+    "/workspace/notes/shared.cpt",
+    "gauge-concept",
+  );
+  const missingDocument = createDocument(
+    "# Shared missing concept",
+    "/workspace/missing/shared.cpt",
+    "gauge-concept",
+  );
+  const brokenDocument = createDocument(
+    "# Shared broken concept",
+    "/workspace/broken/shared.cpt",
+    "gauge-concept",
+  );
+  const checkDocument = createDocument(
+    "# Shared check concept",
+    "/workspace/check/shared.cpt",
+    "gauge-concept",
+  );
+  const lookups = [];
+  return {
+    brokenDocument,
+    checkDocument,
+    gaugeDocument,
+    lookups,
+    missingDocument,
+    notesDocument,
+    projectFactory: {
+      getGaugeRootFromFilePath(file) {
+        lookups.push(file);
+        if (file === brokenDocument.uri.fsPath) {
+          throw new Error("project lookup failed");
+        }
+        if (file === checkDocument.uri.fsPath) {
+          return "/workspace/check";
+        }
+        if (file === missingDocument.uri.fsPath) {
+          return undefined;
+        }
+        return file.startsWith("/workspace/gauge/")
+          ? "/workspace/gauge"
+          : "/workspace/notes";
+      },
+      isGaugeProject(root) {
+        if (root === "/workspace/check") {
+          throw new Error("project check failed");
+        }
+        return root === "/workspace/gauge";
+      },
+    },
+  };
+}
+
 test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
@@ -382,6 +442,162 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
         end: { line: 3, character: 17 },
       },
     },
+  ]);
+});
+
+test("GaugeDocumentSymbolProvider excludes non-Gauge open concepts from stored workspace symbols", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const fixture = createWorkspaceSymbolProjectScopeFixture();
+
+  const provider = new GaugeDocumentSymbolProvider({
+    documentStore: {
+      documents() {
+        return [
+          fixture.gaugeDocument,
+          fixture.notesDocument,
+          fixture.missingDocument,
+          fixture.brokenDocument,
+          fixture.checkDocument,
+        ];
+      },
+      async whenReady() {},
+    },
+    projectFactory: fixture.projectFactory,
+    vscode: createFakeVscode(),
+  });
+  const symbols = await provider.provideWorkspaceSymbols("Shared");
+
+  assert.deepEqual({
+    files: symbols.map((symbol) => symbol.location.uri.fsPath),
+    lookups: fixture.lookups,
+    records: [...provider.workspaceSymbolRecords.keys()],
+  }, {
+    files: [fixture.gaugeDocument.uri.fsPath],
+    lookups: [
+      fixture.gaugeDocument.uri.fsPath,
+      fixture.notesDocument.uri.fsPath,
+      fixture.missingDocument.uri.fsPath,
+      fixture.brokenDocument.uri.fsPath,
+      fixture.checkDocument.uri.fsPath,
+    ],
+    records: [fixture.gaugeDocument.uri.fsPath],
+  });
+});
+
+test("GaugeDocumentSymbolProvider skips non-Gauge fallback concepts before opening documents", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const fixture = createWorkspaceSymbolProjectScopeFixture();
+
+  const openedFiles = [];
+  const mismatchedUri = { fsPath: "/workspace/gauge/specs/mismatched.cpt" };
+  const fallbackVscode = createFakeVscode();
+  fallbackVscode.workspace = {
+    async findFiles(pattern) {
+      assert.equal(pattern, "**/*.cpt");
+      return [
+        fixture.gaugeDocument.uri,
+        mismatchedUri,
+        fixture.notesDocument.uri,
+        fixture.missingDocument.uri,
+        fixture.brokenDocument.uri,
+        fixture.checkDocument.uri,
+      ];
+    },
+    async openTextDocument(uri) {
+      openedFiles.push(uri.fsPath);
+      return uri.fsPath === fixture.gaugeDocument.uri.fsPath
+        ? fixture.gaugeDocument
+        : fixture.notesDocument;
+    },
+  };
+  const provider = new GaugeDocumentSymbolProvider({
+    projectFactory: fixture.projectFactory,
+    vscode: fallbackVscode,
+  });
+  const symbols = await provider.provideWorkspaceSymbols("Shared");
+
+  assert.deepEqual({
+    files: symbols.map((symbol) => symbol.location.uri.fsPath),
+    lookups: fixture.lookups,
+    openedFiles,
+  }, {
+    files: [fixture.gaugeDocument.uri.fsPath],
+    lookups: [
+      fixture.gaugeDocument.uri.fsPath,
+      mismatchedUri.fsPath,
+      fixture.notesDocument.uri.fsPath,
+      fixture.missingDocument.uri.fsPath,
+      fixture.brokenDocument.uri.fsPath,
+      fixture.checkDocument.uri.fsPath,
+      fixture.gaugeDocument.uri.fsPath,
+      fixture.notesDocument.uri.fsPath,
+    ],
+    openedFiles: [fixture.gaugeDocument.uri.fsPath, mismatchedUri.fsPath],
+  });
+});
+
+test("GaugeDocumentSymbolProvider stops project scope checks after synchronous disposal", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const first = createDocument(
+    "# Shared first",
+    "/workspace/gauge/specs/first.cpt",
+    "gauge-concept",
+  );
+  const second = createDocument(
+    "# Shared second",
+    "/workspace/gauge/specs/second.cpt",
+    "gauge-concept",
+  );
+  const snapshots = [];
+
+  for (const source of ["store", "fallback"]) {
+    let lookups = 0;
+    let opens = 0;
+    let provider;
+    const projectFactory = {
+      getGaugeRootFromFilePath() {
+        lookups += 1;
+        provider.dispose();
+        return "/workspace/gauge";
+      },
+      isGaugeProject() {
+        return true;
+      },
+    };
+    const vscode = createFakeVscode();
+    const options = { projectFactory, vscode };
+    if (source === "store") {
+      options.documentStore = {
+        documents() {
+          return [first, second];
+        },
+        async whenReady() {},
+      };
+    } else {
+      vscode.workspace = {
+        async findFiles() {
+          return [first.uri, second.uri];
+        },
+        async openTextDocument() {
+          opens += 1;
+          return first;
+        },
+      };
+    }
+    provider = new GaugeDocumentSymbolProvider(options);
+    const result = await provider.provideWorkspaceSymbols("Shared");
+    snapshots.push({
+      lookups,
+      opens,
+      records: provider.workspaceSymbolRecords.size,
+      result,
+      source,
+    });
+  }
+
+  assert.deepEqual(snapshots, [
+    { lookups: 1, opens: 0, records: 0, result: [], source: "store" },
+    { lookups: 1, opens: 0, records: 0, result: [], source: "fallback" },
   ]);
 });
 
