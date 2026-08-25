@@ -13,6 +13,35 @@ function deferred() {
   return { promise, reject, resolve };
 }
 
+function installTrackingCancellationSources(vscode, events = []) {
+  const sources = [];
+  vscode.CancellationTokenSource = class TrackingCancellationTokenSource {
+    constructor() {
+      this.cancelCalls = 0;
+      this.disposeCalls = 0;
+      const source = this;
+      this.token = {
+        get isCancellationRequested() {
+          return source.cancelCalls > 0;
+        },
+        source,
+      };
+      sources.push(this);
+    }
+
+    cancel() {
+      this.cancelCalls += 1;
+      events.push("cancel");
+    }
+
+    dispose() {
+      this.disposeCalls += 1;
+      events.push("dispose");
+    }
+  };
+  return sources;
+}
+
 function createFakeFileSystem(entries) {
   const files = new Map(Object.entries(entries));
   const directories = new Set();
@@ -820,22 +849,27 @@ test("GaugeWorkspace stops a client-start boundary once during disposal", async 
 test("GaugeWorkspace does not block client startup on a pending runner language lookup", async () => {
   const languageRequestEntered = deferred();
   const languageRequestGate = deferred();
+  const events = [];
+  let requestToken;
   let stopCalls = 0;
 
   class PendingLanguageClient extends FakeLanguageClient {
-    sendRequest(method) {
+    sendRequest(method, token) {
       assert.equal(method, "gauge/getRunnerLanguage");
+      requestToken = token;
       languageRequestEntered.resolve();
       return languageRequestGate.promise;
     }
 
     stop() {
       stopCalls += 1;
+      events.push("stop");
       return super.stop();
     }
   }
 
-  const { clients, workspace } = createEmptyKotlinWorkspace(PendingLanguageClient);
+  const { clients, vscode, workspace } = createEmptyKotlinWorkspace(PendingLanguageClient);
+  const requestSources = installTrackingCancellationSources(vscode, events);
   await workspace.ready();
 
   const start = workspace.startServerFor("/workspace/gauge");
@@ -857,10 +891,16 @@ test("GaugeWorkspace does not block client startup on a pending runner language 
   };
 
   await workspace.dispose();
+  const sourceAfterDisposal = requestSources[0];
   const disposedSnapshot = {
+    cancelCalls: sourceAfterDisposal.cancelCalls,
     clientCount: clients.size,
     clientStopped: client.stopped,
+    disposeCalls: sourceAfterDisposal.disposeCalls,
+    events: [...events],
     languageCount: workspace.getClientLanguageMap().size,
+    requestSourceCount: requestSources.length,
+    requestTokenMatches: requestToken === sourceAfterDisposal.token,
     stopCalls,
   };
   languageRequestGate.resolve("kotlin");
@@ -873,35 +913,104 @@ test("GaugeWorkspace does not block client startup on a pending runner language 
   assert.equal(liveSnapshot.clientCount, 1);
   assert.equal(liveSnapshot.languageCount, 0);
   assert.deepEqual(disposedSnapshot, {
+    cancelCalls: 1,
     clientCount: 0,
     clientStopped: true,
+    disposeCalls: 1,
+    events: ["cancel", "dispose", "stop"],
     languageCount: 0,
+    requestSourceCount: 1,
+    requestTokenMatches: true,
     stopCalls: 1,
   });
   assert.equal(clients.size, 0);
   assert.equal(workspace.getClientLanguageMap().size, 0);
 });
 
+test("GaugeWorkspace releases runner language request sources after live settlement", async () => {
+  for (const outcome of ["success", "failure"]) {
+    const languageRequestEntered = deferred();
+    const languageRequestGate = deferred();
+    const languageError = new Error(`runner language ${outcome}`);
+    let requestToken;
+
+    class SettlingLanguageClient extends FakeLanguageClient {
+      sendRequest(method, token) {
+        assert.equal(method, "gauge/getRunnerLanguage");
+        requestToken = token;
+        languageRequestEntered.resolve();
+        return languageRequestGate.promise;
+      }
+    }
+
+    const created = createEmptyKotlinWorkspace(SettlingLanguageClient);
+    const requestSources = installTrackingCancellationSources(created.vscode);
+    await created.workspace.ready();
+
+    const client = await created.workspace.startServerFor("/workspace/gauge");
+    await languageRequestEntered.promise;
+    const source = requestSources[0];
+    if (outcome === "success") {
+      languageRequestGate.resolve("kotlin");
+    } else {
+      languageRequestGate.reject(languageError);
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    const liveSnapshot = {
+      activeRequests: created.workspace.runnerLanguageRequests.size,
+      cancelCalls: source.cancelCalls,
+      clientLanguage: created.workspace.getClientLanguageMap().get("/workspace/gauge"),
+      disposeCalls: source.disposeCalls,
+      requestTokenMatches: requestToken === source.token,
+    };
+
+    await created.workspace.dispose();
+
+    assert.equal(client.started, true, outcome);
+    assert.deepEqual(liveSnapshot, {
+      activeRequests: 0,
+      cancelCalls: 0,
+      clientLanguage: outcome === "success" ? "kotlin" : undefined,
+      disposeCalls: 1,
+      requestTokenMatches: true,
+    }, outcome);
+    assert.deepEqual({
+      cancelCalls: source.cancelCalls,
+      disposeCalls: source.disposeCalls,
+      errors: created.errors,
+    }, {
+      cancelCalls: 0,
+      disposeCalls: 1,
+      errors: [],
+    }, outcome);
+  }
+});
+
 test("GaugeWorkspace removes a client without waiting for runner language lookup", async () => {
   const languageRequestEntered = deferred();
   const languageRequestGate = deferred();
   const languageError = new Error("runner language lookup failed after removal");
+  const events = [];
+  let requestToken;
   let stopCalls = 0;
 
   class PendingLanguageClient extends FakeLanguageClient {
-    sendRequest(method) {
+    sendRequest(method, token) {
       assert.equal(method, "gauge/getRunnerLanguage");
+      requestToken = token;
       languageRequestEntered.resolve();
       return languageRequestGate.promise;
     }
 
     stop() {
       stopCalls += 1;
+      events.push("stop");
       return super.stop();
     }
   }
 
-  const { clients, errors, workspace } = createEmptyKotlinWorkspace(PendingLanguageClient);
+  const { clients, errors, vscode, workspace } = createEmptyKotlinWorkspace(PendingLanguageClient);
+  const requestSources = installTrackingCancellationSources(vscode, events);
   await workspace.ready();
 
   const start = workspace.startServerFor("/workspace/gauge");
@@ -912,6 +1021,7 @@ test("GaugeWorkspace removes a client without waiting for runner language lookup
   await languageRequestEntered.promise;
   await new Promise((resolve) => setImmediate(resolve));
   const client = clients.get("/workspace/gauge").client;
+  const source = requestSources[0];
   const removal = workspace.stopServerFor("/workspace/gauge");
   let removalSettled = false;
   removal.then(() => {
@@ -919,10 +1029,15 @@ test("GaugeWorkspace removes a client without waiting for runner language lookup
   });
   await new Promise((resolve) => setImmediate(resolve));
   const removalSnapshot = {
+    activeRequests: workspace.runnerLanguageRequests.size,
+    cancelCalls: source.cancelCalls,
     clientCount: clients.size,
     clientStopped: client.stopped,
+    disposeCalls: source.disposeCalls,
+    events: [...events],
     languageCount: workspace.getClientLanguageMap().size,
     removalSettled,
+    requestTokenMatches: requestToken === source.token,
     startSettled,
     stopCalls,
   };
@@ -933,17 +1048,303 @@ test("GaugeWorkspace removes a client without waiting for runner language lookup
   await workspace.dispose();
 
   assert.deepEqual(removalSnapshot, {
+    activeRequests: 0,
+    cancelCalls: 1,
     clientCount: 0,
     clientStopped: true,
+    disposeCalls: 1,
+    events: ["cancel", "dispose", "stop"],
     languageCount: 0,
     removalSettled: true,
+    requestTokenMatches: true,
     startSettled: true,
     stopCalls: 1,
   });
   assert.equal(errors.length, 0);
   assert.equal(clients.size, 0);
   assert.equal(workspace.getClientLanguageMap().size, 0);
+  assert.deepEqual({ cancelCalls: source.cancelCalls, disposeCalls: source.disposeCalls }, {
+    cancelCalls: 1,
+    disposeCalls: 1,
+  });
   assert.equal(stopCalls, 1);
+});
+
+test("GaugeWorkspace leaves live runner language requests alone during undefined client cleanup", async () => {
+  const languageRequestEntered = deferred();
+  const languageRequestGate = deferred();
+
+  class PendingLanguageClient extends FakeLanguageClient {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getRunnerLanguage");
+      languageRequestEntered.resolve();
+      return languageRequestGate.promise;
+    }
+  }
+
+  const created = createEmptyKotlinWorkspace(PendingLanguageClient);
+  const requestSources = installTrackingCancellationSources(created.vscode);
+  await created.workspace.ready();
+
+  const client = await created.workspace.startServerFor("/workspace/gauge");
+  await languageRequestEntered.promise;
+  const source = requestSources[0];
+  await created.workspace.cleanupLanguageClient("/workspace/missing");
+  const cleanupSnapshot = {
+    activeRequests: created.workspace.runnerLanguageRequests.size,
+    cancelCalls: source.cancelCalls,
+    clientStopped: client.stopped,
+    disposeCalls: source.disposeCalls,
+  };
+
+  languageRequestGate.resolve("kotlin");
+  await new Promise((resolve) => setImmediate(resolve));
+  const liveSnapshot = {
+    activeRequests: created.workspace.runnerLanguageRequests.size,
+    cancelCalls: source.cancelCalls,
+    disposeCalls: source.disposeCalls,
+    language: created.workspace.getClientLanguageMap().get("/workspace/gauge"),
+  };
+  await created.workspace.dispose();
+
+  assert.deepEqual(cleanupSnapshot, {
+    activeRequests: 1,
+    cancelCalls: 0,
+    clientStopped: false,
+    disposeCalls: 0,
+  });
+  assert.deepEqual(liveSnapshot, {
+    activeRequests: 0,
+    cancelCalls: 0,
+    disposeCalls: 1,
+    language: "kotlin",
+  });
+});
+
+test("GaugeWorkspace keeps same-root runner language request ownership client-local", async () => {
+  const firstRequestEntered = deferred();
+  const firstRequestGate = deferred();
+  const secondRequestEntered = deferred();
+  const secondRequestGate = deferred();
+
+  class FirstLanguageClient extends FakeLanguageClient {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getRunnerLanguage");
+      firstRequestEntered.resolve();
+      return firstRequestGate.promise;
+    }
+  }
+
+  const created = createEmptyKotlinWorkspace(FirstLanguageClient);
+  const requestSources = installTrackingCancellationSources(created.vscode);
+  await created.workspace.ready();
+
+  const firstClient = await created.workspace.startServerFor("/workspace/gauge");
+  await firstRequestEntered.promise;
+  const firstEntry = Map.prototype.get.call(created.clients, "/workspace/gauge");
+  let secondStopCalls = 0;
+  const secondClient = {
+    sendRequest(method) {
+      assert.equal(method, "gauge/getRunnerLanguage");
+      secondRequestEntered.resolve();
+      return secondRequestGate.promise;
+    },
+    stop() {
+      secondStopCalls += 1;
+      return Promise.resolve();
+    },
+  };
+  created.clients.set("/workspace/gauge", {
+    client: secondClient,
+    project: firstEntry.project,
+  });
+  const secondRequest = created.workspace.setLanguageId(
+    secondClient,
+    "/workspace/gauge",
+    created.workspace.serverStartGeneration("/workspace/gauge"),
+  );
+  await secondRequestEntered.promise;
+
+  await created.workspace.stopLanguageClient(firstClient, true);
+  firstRequestGate.reject(new Error("old client runner language failed late"));
+  await new Promise((resolve) => setImmediate(resolve));
+  const firstSettlement = {
+    activeRequests: created.workspace.runnerLanguageRequests.size,
+    firstCancelCalls: requestSources[0].cancelCalls,
+    firstDisposeCalls: requestSources[0].disposeCalls,
+    language: created.workspace.getClientLanguageMap().get("/workspace/gauge"),
+    secondCancelCalls: requestSources[1].cancelCalls,
+    secondDisposeCalls: requestSources[1].disposeCalls,
+  };
+
+  secondRequestGate.resolve("kotlin");
+  await secondRequest;
+  const secondSettlement = {
+    activeRequests: created.workspace.runnerLanguageRequests.size,
+    firstCancelCalls: requestSources[0].cancelCalls,
+    firstDisposeCalls: requestSources[0].disposeCalls,
+    language: created.workspace.getClientLanguageMap().get("/workspace/gauge"),
+    secondCancelCalls: requestSources[1].cancelCalls,
+    secondDisposeCalls: requestSources[1].disposeCalls,
+  };
+  await created.workspace.dispose();
+
+  assert.deepEqual(firstSettlement, {
+    activeRequests: 1,
+    firstCancelCalls: 1,
+    firstDisposeCalls: 1,
+    language: undefined,
+    secondCancelCalls: 0,
+    secondDisposeCalls: 0,
+  });
+  assert.deepEqual(secondSettlement, {
+    activeRequests: 0,
+    firstCancelCalls: 1,
+    firstDisposeCalls: 1,
+    language: "kotlin",
+    secondCancelCalls: 0,
+    secondDisposeCalls: 1,
+  });
+  assert.equal(secondStopCalls, 1);
+});
+
+test("GaugeWorkspace closes runner language sources during synchronous terminal reentrancy", async () => {
+  for (const boundary of ["source construction", "token access"]) {
+    const created = createEmptyKotlinWorkspace();
+    await created.workspace.ready();
+    const client = await created.workspace.startServerFor("/workspace/gauge");
+    await new Promise((resolve) => setImmediate(resolve));
+    created.workspace.getClientLanguageMap().clear();
+    let removalPromise;
+    let requestCalls = 0;
+    const sources = [];
+    client.sendRequest = () => {
+      requestCalls += 1;
+      return Promise.resolve("java");
+    };
+    created.vscode.CancellationTokenSource = class ReentrantCancellationTokenSource {
+      constructor() {
+        this.cancelCalls = 0;
+        this.disposeCalls = 0;
+        const token = { source: this };
+        if (boundary === "source construction") {
+          created.workspace.dispose();
+          this.token = token;
+        } else {
+          Object.defineProperty(this, "token", {
+            get() {
+              removalPromise = created.workspace.stopServerFor("/workspace/gauge");
+              return token;
+            },
+          });
+        }
+        sources.push(this);
+      }
+
+      cancel() {
+        this.cancelCalls += 1;
+      }
+
+      dispose() {
+        this.disposeCalls += 1;
+      }
+    };
+
+    const request = created.workspace.setLanguageId(
+      client,
+      "/workspace/gauge",
+      created.workspace.serverStartGeneration("/workspace/gauge"),
+    );
+    await request;
+    if (removalPromise) {
+      await removalPromise;
+    }
+    await created.workspace.dispose();
+
+    assert.deepEqual({
+      activeRequests: created.workspace.runnerLanguageRequests.size,
+      cancelCalls: sources[0].cancelCalls,
+      disposeCalls: sources[0].disposeCalls,
+      languageCount: created.workspace.getClientLanguageMap().size,
+      requestCalls,
+    }, {
+      activeRequests: 0,
+      cancelCalls: 1,
+      disposeCalls: 1,
+      languageCount: 0,
+      requestCalls: 0,
+    }, boundary);
+  }
+});
+
+test("GaugeWorkspace continues client cleanup when runner language source cleanup throws", async () => {
+  const created = createEmptyKotlinWorkspace();
+  await created.workspace.ready();
+  const client = await created.workspace.startServerFor("/workspace/gauge");
+  await new Promise((resolve) => setImmediate(resolve));
+  const languageRequestEntered = deferred();
+  const languageRequestGate = deferred();
+  const lateRequestError = new Error("late runner language failure");
+  const stopError = new Error("language client stop failed");
+  let cancelCalls = 0;
+  let disposeCalls = 0;
+  let stopCalls = 0;
+  created.vscode.CancellationTokenSource = class ThrowingCancellationTokenSource {
+    constructor() {
+      this.token = { source: this };
+    }
+
+    cancel() {
+      cancelCalls += 1;
+      throw new Error("runner language cancel failed");
+    }
+
+    dispose() {
+      disposeCalls += 1;
+      throw new Error("runner language dispose failed");
+    }
+  };
+  client.sendRequest = () => {
+    languageRequestEntered.resolve();
+    return languageRequestGate.promise;
+  };
+  client.stop = () => {
+    stopCalls += 1;
+    return Promise.reject(stopError);
+  };
+  const request = created.workspace.setLanguageId(
+    client,
+    "/workspace/gauge",
+    created.workspace.serverStartGeneration("/workspace/gauge"),
+  );
+  await languageRequestEntered.promise;
+
+  await assert.rejects(
+    created.workspace.stopServerFor("/workspace/gauge"),
+    (error) => error === stopError,
+  );
+  await request;
+  languageRequestGate.reject(lateRequestError);
+  await new Promise((resolve) => setImmediate(resolve));
+  await created.workspace.dispose();
+
+  assert.deepEqual({
+    activeRequests: created.workspace.runnerLanguageRequests.size,
+    cancelCalls,
+    clientCount: created.clients.size,
+    disposeCalls,
+    errors: created.errors,
+    languageCount: created.workspace.getClientLanguageMap().size,
+    stopCalls,
+  }, {
+    activeRequests: 0,
+    cancelCalls: 1,
+    clientCount: 0,
+    disposeCalls: 1,
+    errors: [],
+    languageCount: 0,
+    stopCalls: 1,
+  });
 });
 
 test("GaugeWorkspace retries a failed stop after pending client startup settles", async () => {

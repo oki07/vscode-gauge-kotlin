@@ -50,6 +50,7 @@ const NESTED_PROJECT_EXCLUDED_DIRECTORIES = new Set([
 ]);
 const DEFAULT_CLIENT_START_CONCURRENCY = 4;
 const DEFAULT_LANGUAGE_CLIENT_RUNNING_STATE = 2;
+const CANCELLED_RUNNER_LANGUAGE_REQUEST = Symbol("cancelled runner language request");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -103,9 +104,9 @@ function getLanguageClientModule(options) {
   return require("vscode-languageclient/node");
 }
 
-function createToken(vscode) {
+function createTokenSource(vscode) {
   if (typeof vscode.CancellationTokenSource === "function") {
-    return new vscode.CancellationTokenSource().token;
+    return new vscode.CancellationTokenSource();
   }
   return undefined;
 }
@@ -395,6 +396,7 @@ class GaugeWorkspace {
     this.stoppedLanguageClients = new WeakSet();
     this.localFeatureStateDisposables = new WeakMap();
     this.localFeatureRefreshes = new WeakMap();
+    this.runnerLanguageRequests = new Set();
     this.disposed = false;
     this.disposalPromise = undefined;
     this.env = envWithGaugeHome(options.env || process.env, {
@@ -453,6 +455,7 @@ class GaugeWorkspace {
     });
     this.disposalPromise.catch(() => undefined);
     this.disposed = true;
+    this.cancelAllRunnerLanguageRequests();
     const pendingServerStartRoots = new Set(this.pendingServerStarts.keys());
     this.pendingServerStarts.clear();
     const cleanupErrors = [];
@@ -1088,9 +1091,12 @@ class GaugeWorkspace {
 
   async stopLanguageClient(languageClient, suppressStopError) {
     this.releaseLocallyOwnedLspFeatures(languageClient);
+    if (!languageClient) {
+      return undefined;
+    }
+    this.cancelRunnerLanguageRequestsFor(languageClient);
     if (
-      !languageClient
-      || typeof languageClient.stop !== "function"
+      typeof languageClient.stop !== "function"
       || this.stoppedLanguageClients.has(languageClient)
     ) {
       return undefined;
@@ -1276,22 +1282,124 @@ class GaugeWorkspace {
   }
 
   async setLanguageId(languageClient, projectRoot, startGeneration) {
+    let operation;
     try {
-      const language = await languageClient.sendRequest("gauge/getRunnerLanguage", createToken(this.vscode));
-      const currentEntry = this.clientsMap.has(projectRoot)
-        ? Map.prototype.get.call(this.clientsMap, projectRoot)
-        : undefined;
+      if (!this.runnerLanguageRequestCurrent(languageClient, projectRoot, startGeneration)) {
+        return undefined;
+      }
+      operation = this.createRunnerLanguageRequest(languageClient);
+      if (!operation) {
+        return undefined;
+      }
+      if (!this.runnerLanguageRequestCurrent(languageClient, projectRoot, startGeneration)) {
+        this.releaseRunnerLanguageRequest(operation, true);
+        return undefined;
+      }
+      const token = operation.source ? operation.source.token : undefined;
+      if (!operation.active) {
+        return undefined;
+      }
+      const request = languageClient.sendRequest("gauge/getRunnerLanguage", token);
+      const observedRequest = Promise.resolve(request);
+      const language = await Promise.race([observedRequest, operation.cancellation]);
       if (
-        this.isServerStartCurrent(projectRoot, startGeneration)
-        && currentEntry
-        && currentEntry.client === languageClient
+        operation.active
+        && language !== CANCELLED_RUNNER_LANGUAGE_REQUEST
+        && this.runnerLanguageRequestCurrent(languageClient, projectRoot, startGeneration)
       ) {
         this.clientLanguageMap.set(projectRoot, language);
       }
     } catch (_error) {
       return undefined;
+    } finally {
+      this.releaseRunnerLanguageRequest(operation);
     }
     return undefined;
+  }
+
+  createRunnerLanguageRequest(languageClient) {
+    if (this.disposed) {
+      return undefined;
+    }
+    const source = createTokenSource(this.vscode);
+    if (this.disposed) {
+      this.cleanupRunnerLanguageSource(source, true);
+      return undefined;
+    }
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      languageClient,
+      resolveCancellation,
+      source,
+    };
+    this.runnerLanguageRequests.add(operation);
+    return operation;
+  }
+
+  runnerLanguageRequestCurrent(languageClient, projectRoot, startGeneration) {
+    const currentEntry = this.clientsMap.has(projectRoot)
+      ? Map.prototype.get.call(this.clientsMap, projectRoot)
+      : undefined;
+    return this.isServerStartCurrent(projectRoot, startGeneration)
+      && currentEntry
+      && currentEntry.client === languageClient;
+  }
+
+  cleanupRunnerLanguageSource(source, cancel) {
+    if (!source) {
+      return;
+    }
+    if (cancel) {
+      try {
+        if (typeof source.cancel === "function") {
+          source.cancel();
+        }
+      } catch (_error) {
+        // Continue disposing the owned request source after cancellation fails.
+      }
+    }
+    try {
+      if (typeof source.dispose === "function") {
+        source.dispose();
+      }
+    } catch (_error) {
+      // Request-source cleanup cannot reactivate a terminal language lookup.
+    }
+  }
+
+  releaseRunnerLanguageRequest(operation, cancel = false) {
+    if (!operation || !operation.active) {
+      return;
+    }
+    operation.active = false;
+    this.runnerLanguageRequests.delete(operation);
+    const source = operation.source;
+    operation.source = undefined;
+    if (cancel) {
+      operation.resolveCancellation(CANCELLED_RUNNER_LANGUAGE_REQUEST);
+    }
+    this.cleanupRunnerLanguageSource(source, cancel);
+  }
+
+  cancelRunnerLanguageRequestsFor(languageClient) {
+    if (!languageClient) {
+      return;
+    }
+    for (const operation of [...this.runnerLanguageRequests]) {
+      if (operation.languageClient === languageClient) {
+        this.releaseRunnerLanguageRequest(operation, true);
+      }
+    }
+  }
+
+  cancelAllRunnerLanguageRequests() {
+    for (const operation of [...this.runnerLanguageRequests]) {
+      this.releaseRunnerLanguageRequest(operation, true);
+    }
   }
 }
 
