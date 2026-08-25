@@ -397,6 +397,7 @@ class GaugeWorkspace {
     this.stoppedLanguageClients = new WeakSet();
     this.localFeatureStateDisposables = new WeakMap();
     this.localFeatureRefreshes = new WeakMap();
+    this.serverMessageFilterRegistrations = new WeakMap();
     this.projectSelectionOperations = new Set();
     this.runnerLanguageRequests = new Set();
     this.disposed = false;
@@ -1271,6 +1272,7 @@ class GaugeWorkspace {
         return this.cleanupLanguageClient(projectRoot, languageClient);
       }
       this.maintainLocallyOwnedLspFeatures(languageClient, projectRoot);
+      this.registerServerMessageFilter(languageClient, projectRoot, startGeneration);
     } catch (error) {
       await this.cleanupLanguageClient(projectRoot, languageClient);
       if (this.isServerStartCurrent(projectRoot, startGeneration)) {
@@ -1278,9 +1280,8 @@ class GaugeWorkspace {
       }
       return undefined;
     }
-    this.registerServerMessageFilter(languageClient);
     this.setLanguageId(languageClient, projectRoot, startGeneration);
-    if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
+    if (!this.languageClientStartCurrent(languageClient, projectRoot, startGeneration)) {
       return this.cleanupLanguageClient(projectRoot, languageClient);
     }
     return languageClient;
@@ -1299,6 +1300,7 @@ class GaugeWorkspace {
   }
 
   async stopLanguageClient(languageClient, suppressStopError) {
+    this.releaseServerMessageFilter(languageClient);
     this.releaseLocallyOwnedLspFeatures(languageClient);
     if (!languageClient) {
       return undefined;
@@ -1416,11 +1418,75 @@ class GaugeWorkspace {
     return window.showErrorMessage(`Unable to start Gauge language server for ${project.root()}.${suffix}`);
   }
 
-  registerServerMessageFilter(languageClient) {
-    if (typeof languageClient.onNotification !== "function" || !this.ShowMessageNotification) {
+  languageClientStartCurrent(languageClient, projectRoot, startGeneration) {
+    const current = Map.prototype.get.call(this.clientsMap, projectRoot);
+    return this.isServerStartCurrent(projectRoot, startGeneration)
+      && current
+      && current.client === languageClient;
+  }
+
+  serverMessageFilterCurrent(operation) {
+    return Boolean(operation && operation.active) && this.languageClientStartCurrent(
+      operation.languageClient,
+      operation.projectRoot,
+      operation.startGeneration,
+    );
+  }
+
+  disposeServerMessageFilter(disposable) {
+    if (!disposable || typeof disposable.dispose !== "function") {
       return;
     }
-    languageClient.onNotification(this.ShowMessageNotification.type, (params) => {
+    try {
+      disposable.dispose();
+    } catch (_error) {
+      // Language client shutdown remains authoritative when handler cleanup fails.
+    }
+  }
+
+  releaseServerMessageFilter(languageClient) {
+    if (!languageClient) {
+      return;
+    }
+    const operation = this.serverMessageFilterRegistrations.get(languageClient);
+    if (!operation) {
+      return;
+    }
+    this.serverMessageFilterRegistrations.delete(languageClient);
+    operation.active = false;
+    const disposable = operation.disposable;
+    operation.disposable = undefined;
+    this.disposeServerMessageFilter(disposable);
+  }
+
+  registerServerMessageFilter(languageClient, projectRoot, startGeneration) {
+    if (
+      !languageClient
+      || typeof languageClient.onNotification !== "function"
+      || !this.ShowMessageNotification
+      || !this.languageClientStartCurrent(languageClient, projectRoot, startGeneration)
+    ) {
+      return;
+    }
+    const existing = this.serverMessageFilterRegistrations.get(languageClient);
+    if (existing) {
+      if (this.serverMessageFilterCurrent(existing)) {
+        return;
+      }
+      this.releaseServerMessageFilter(languageClient);
+    }
+    const operation = {
+      active: true,
+      disposable: undefined,
+      languageClient,
+      projectRoot,
+      startGeneration,
+    };
+    this.serverMessageFilterRegistrations.set(languageClient, operation);
+    const disposable = languageClient.onNotification(this.ShowMessageNotification.type, (params) => {
+      if (!this.serverMessageFilterCurrent(operation)) {
+        return;
+      }
       // The Gauge runner statically scans only Java sources, so every Kotlin
       // @Step is reported as external and the Gauge LSP raises this error for
       // valid step-to-implementation navigation, including from .cpt concept
@@ -1431,6 +1497,15 @@ class GaugeWorkspace {
       }
       this.showServerMessage(params);
     });
+    if (!operation.active || !this.serverMessageFilterCurrent(operation)) {
+      if (this.serverMessageFilterRegistrations.get(languageClient) === operation) {
+        this.serverMessageFilterRegistrations.delete(languageClient);
+      }
+      operation.active = false;
+      this.disposeServerMessageFilter(disposable);
+      return;
+    }
+    operation.disposable = disposable;
   }
 
   showServerMessage(params) {

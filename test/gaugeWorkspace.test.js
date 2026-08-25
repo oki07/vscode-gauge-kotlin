@@ -2152,6 +2152,569 @@ test("GaugeWorkspace suppresses the external implementation source popup from Ga
   assert.deepEqual(infos.map((entry) => entry.message), ["runner ready"]);
 });
 
+test("GaugeWorkspace releases server message filters before stopping clients", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const roots = ["/workspace/one", "/workspace/two"];
+  const clients = new GaugeClients();
+  const events = [];
+  const firstStop = deferred();
+  const filterCleanupError = new Error("message filter cleanup failed");
+  const stopError = new Error("language client stop failed");
+  const instances = new Map();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/one/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/one/build.gradle.kts": "",
+    "/workspace/two/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/two/build.gradle.kts": "",
+  });
+  const { errors, infos, vscode, warnings } = createFakeVscode({
+    workspaceFolders: roots.map((root) => ({ uri: { fsPath: root } })),
+  });
+
+  class TrackedMessageLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      this.root = args[3].workspaceFolder.uri.fsPath;
+      this.filterDisposals = 0;
+      this.stopCalls = 0;
+      instances.set(this.root, this);
+    }
+
+    onNotification(type, handler) {
+      const method = typeof type === "string" ? type : type.method;
+      this.notificationHandlers.set(method, handler);
+      return {
+        dispose: () => {
+          this.filterDisposals += 1;
+          events.push(`dispose:${this.root}`);
+          if (this.root === roots[0]) {
+            throw filterCleanupError;
+          }
+        },
+      };
+    }
+
+    stop() {
+      this.stopCalls += 1;
+      this.stopped = true;
+      events.push(`stop:${this.root}`);
+      return this.root === roots[0] ? firstStop.promise : Promise.resolve();
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    execSync() {
+      return Buffer.from("/workspace/classes\n");
+    },
+    fileSystem,
+    LanguageClient: TrackedMessageLanguageClient,
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    vscode,
+  });
+  await workspace.ready();
+
+  const first = instances.get(roots[0]);
+  const second = instances.get(roots[1]);
+  const firstHandler = first.notificationHandlers.get("window/showMessage");
+  const secondHandler = second.notificationHandlers.get("window/showMessage");
+  const stoppingFirst = workspace.stopServerFor(roots[0]);
+
+  firstHandler({ type: 1, message: "stale error" });
+  firstHandler({ type: 2, message: "stale warning" });
+  firstHandler({ type: 3, message: "stale information" });
+  secondHandler({ type: 3, message: "live information" });
+  const beforeFirstStop = {
+    errors: errors.map((entry) => entry.message),
+    events: [...events],
+    firstRegistrationOwned: workspace.serverMessageFilterRegistrations.has(first),
+    infos: infos.map((entry) => entry.message),
+    secondRegistrationOwned: workspace.serverMessageFilterRegistrations.has(second),
+    warnings: warnings.map((entry) => entry.message),
+  };
+
+  firstStop.reject(stopError);
+  const firstStopOutcome = await Promise.allSettled([stoppingFirst]);
+  await workspace.dispose();
+  await workspace.dispose();
+  secondHandler({ type: 1, message: "disposed error" });
+
+  assert.deepEqual(beforeFirstStop, {
+    errors: [],
+    events: ["dispose:/workspace/one", "stop:/workspace/one"],
+    firstRegistrationOwned: false,
+    infos: ["live information"],
+    secondRegistrationOwned: true,
+    warnings: [],
+  });
+  assert.deepEqual(events, [
+    "dispose:/workspace/one",
+    "stop:/workspace/one",
+    "dispose:/workspace/two",
+    "stop:/workspace/two",
+  ]);
+  assert.deepEqual(firstStopOutcome, [{ status: "rejected", reason: stopError }]);
+  assert.deepEqual({
+    errors: errors.map((entry) => entry.message),
+    firstFilterDisposals: first.filterDisposals,
+    firstStopCalls: first.stopCalls,
+    infos: infos.map((entry) => entry.message),
+    secondFilterDisposals: second.filterDisposals,
+    secondRegistrationOwned: workspace.serverMessageFilterRegistrations.has(second),
+    secondStopCalls: second.stopCalls,
+    warnings: warnings.map((entry) => entry.message),
+  }, {
+    errors: [],
+    firstFilterDisposals: 1,
+    firstStopCalls: 1,
+    infos: ["live information"],
+    secondFilterDisposals: 1,
+    secondRegistrationOwned: false,
+    secondStopCalls: 1,
+    warnings: [],
+  });
+});
+
+test("GaugeWorkspace cleans a started client when server message filter registration fails", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const clients = new GaugeClients();
+  const registrationError = new Error("message filter registration failed");
+  const instances = [];
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { errors, vscode } = createFakeVscode();
+
+  class RejectingMessageLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      this.stopCalls = 0;
+      instances.push(this);
+    }
+
+    onNotification() {
+      throw registrationError;
+    }
+
+    stop() {
+      this.stopCalls += 1;
+      return super.stop();
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    execSync() {
+      return Buffer.from("/workspace/classes\n");
+    },
+    fileSystem,
+    LanguageClient: RejectingMessageLanguageClient,
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    vscode,
+  });
+
+  const outcome = await Promise.allSettled([workspace.ready()]);
+  const snapshot = {
+    clients: clients.size,
+    environments: workspace.projectEnvironmentCache.size,
+    errors: errors.map((entry) => entry.message),
+    languages: workspace.getClientLanguageMap().size,
+    pendingStarts: workspace.pendingServerStarts.size,
+    registrationOwned: workspace.serverMessageFilterRegistrations.has(instances[0]),
+    started: instances[0].started,
+    stopped: instances[0].stopped,
+    stopCalls: instances[0].stopCalls,
+  };
+  await workspace.dispose().catch(() => undefined);
+
+  assert.deepEqual(outcome, [{ status: "fulfilled", value: undefined }]);
+  assert.deepEqual(snapshot, {
+    clients: 0,
+    environments: 0,
+    errors: [
+      "Unable to start Gauge language server for /workspace/gauge. message filter registration failed",
+    ],
+    languages: 0,
+    pendingStarts: 0,
+    registrationOwned: false,
+    started: true,
+    stopped: true,
+    stopCalls: 1,
+  });
+});
+
+test("GaugeWorkspace closes a server message filter returned during synchronous teardown", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const root = "/workspace/gauge";
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { errors, vscode } = createFakeVscode({ workspaceFolders: [] });
+  const events = [];
+  let filterDisposals = 0;
+  let instance;
+  let workspace;
+
+  class ReentrantMessageLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      this.stopCalls = 0;
+      instance = this;
+    }
+
+    onNotification(type, handler) {
+      const method = typeof type === "string" ? type : type.method;
+      this.notificationHandlers.set(method, handler);
+      workspace.cancelServerStart(root);
+      handler({ type: 1, message: "stale synchronous error" });
+      return {
+        dispose() {
+          filterDisposals += 1;
+          events.push("filter:dispose");
+        },
+      };
+    }
+
+    stop() {
+      this.stopCalls += 1;
+      events.push("client:stop");
+      return super.stop();
+    }
+  }
+
+  workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    execSync() {
+      return Buffer.from("/workspace/classes\n");
+    },
+    fileSystem,
+    LanguageClient: ReentrantMessageLanguageClient,
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    vscode,
+  });
+  await workspace.ready();
+  workspace.setLanguageId = () => events.push("set-language");
+
+  const started = await workspace.startServerFor(root);
+  const handler = instance.notificationHandlers.get("window/showMessage");
+  handler({ type: 1, message: "stale reentrant error" });
+  const snapshot = {
+    clients: clients.size,
+    errors: errors.map((entry) => entry.message),
+    events: [...events],
+    filterDisposals,
+    registrationOwned: workspace.serverMessageFilterRegistrations.has(instance),
+    started,
+    stopCalls: instance.stopCalls,
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(snapshot, {
+    clients: 0,
+    errors: [],
+    events: ["filter:dispose", "set-language", "client:stop"],
+    filterDisposals: 1,
+    registrationOwned: false,
+    started: undefined,
+    stopCalls: 1,
+  });
+  assert.equal(filterDisposals, 1);
+});
+
+test("GaugeWorkspace abandons a server message filter after synchronous client replacement", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const root = "/workspace/gauge";
+  const clients = new GaugeClients();
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { errors, vscode } = createFakeVscode({ workspaceFolders: [] });
+  let filterDisposals = 0;
+  let oldClient;
+  let replacement;
+
+  class ReplacedMessageLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      this.stopCalls = 0;
+      oldClient = this;
+    }
+
+    onNotification(type, handler) {
+      const method = typeof type === "string" ? type : type.method;
+      this.notificationHandlers.set(method, handler);
+      const entry = Map.prototype.get.call(clients, root);
+      replacement = new FakeLanguageClient("replacement", "Gauge replacement", {}, {});
+      clients.set(root, { project: entry.project, client: replacement });
+      return {
+        dispose() {
+          filterDisposals += 1;
+        },
+      };
+    }
+
+    stop() {
+      this.stopCalls += 1;
+      return super.stop();
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    execSync() {
+      return Buffer.from("/workspace/classes\n");
+    },
+    fileSystem,
+    LanguageClient: ReplacedMessageLanguageClient,
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    vscode,
+  });
+  await workspace.ready();
+
+  const started = await workspace.startServerFor(root);
+  oldClient.notificationHandlers.get("window/showMessage")({
+    type: 1,
+    message: "old replacement error",
+  });
+  const snapshot = {
+    currentClientIsReplacement: Map.prototype.get.call(clients, root).client === replacement,
+    environments: workspace.projectEnvironmentCache.size,
+    errors: errors.map((entry) => entry.message),
+    filterDisposals,
+    oldRegistrationOwned: workspace.serverMessageFilterRegistrations.has(oldClient),
+    oldStopped: oldClient.stopped,
+    oldStopCalls: oldClient.stopCalls,
+    startedIsUndefined: started === undefined,
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(snapshot, {
+    currentClientIsReplacement: true,
+    environments: 1,
+    errors: [],
+    filterDisposals: 1,
+    oldRegistrationOwned: false,
+    oldStopped: true,
+    oldStopCalls: 1,
+    startedIsUndefined: true,
+  });
+});
+
+test("GaugeWorkspace requires exact project ownership for server message filters", () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const root = "/workspace/gauge";
+  const clients = new GaugeClients();
+  let registrations = 0;
+  const languageClient = {
+    onNotification() {
+      registrations += 1;
+      return { dispose() {} };
+    },
+  };
+  clients.set(root, {
+    client: languageClient,
+    project: {
+      hasFile(file) {
+        return file === root || file.startsWith(`${root}/`);
+      },
+      root() {
+        return root;
+      },
+    },
+  });
+  const workspace = Object.create(GaugeWorkspace.prototype);
+  workspace.clientsMap = clients;
+  workspace.disposed = false;
+  workspace.serverMessageFilterRegistrations = new WeakMap();
+  workspace.serverStartGenerations = new Map();
+  workspace.ShowMessageNotification = { type: { method: "window/showMessage" } };
+
+  workspace.registerServerMessageFilter(languageClient, `${root}/nested`, 0);
+
+  assert.deepEqual({
+    nearestClient: clients.get(`${root}/nested`).client === languageClient,
+    registrationOwned: workspace.serverMessageFilterRegistrations.has(languageClient),
+    registrations,
+  }, {
+    nearestClient: true,
+    registrationOwned: false,
+    registrations: 0,
+  });
+});
+
+test("GaugeWorkspace keeps server message filter ownership client-local", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const root = "/workspace/gauge";
+  const clients = new GaugeClients();
+  const instances = [];
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "kotlin",
+      Plugins: [{ name: "kotlin" }],
+    }),
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const { errors, infos, vscode } = createFakeVscode();
+
+  class ClientLocalMessageLanguageClient extends FakeLanguageClient {
+    constructor(...args) {
+      super(...args);
+      this.filterDisposals = 0;
+      this.notificationRegistrations = 0;
+      this.stateListeners = new Set();
+      instances.push(this);
+    }
+
+    onDidChangeState(listener) {
+      this.stateListeners.add(listener);
+      return { dispose: () => this.stateListeners.delete(listener) };
+    }
+
+    onNotification(type, handler) {
+      this.notificationRegistrations += 1;
+      const method = typeof type === "string" ? type : type.method;
+      this.notificationHandlers.set(method, handler);
+      return {
+        dispose: () => {
+          this.filterDisposals += 1;
+        },
+      };
+    }
+  }
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), {
+      version: "1.2.3",
+      plugins: [{ name: "kotlin", version: "0.9.0" }],
+    }, new Command("mvn"), new Command("gradle")),
+    clientsMap: clients,
+    execSync() {
+      return Buffer.from("/workspace/classes\n");
+    },
+    fileSystem,
+    LanguageClient: ClientLocalMessageLanguageClient,
+    MessageType: { Error: 1, Warning: 2, Info: 3 },
+    pathModule: path.posix,
+    ShowMessageNotification: { type: { method: "window/showMessage" } },
+    vscode,
+  });
+  await workspace.ready();
+
+  const entry = Map.prototype.get.call(clients, root);
+  const oldClient = entry.client;
+  for (const listener of oldClient.stateListeners) {
+    listener({ newState: 1 });
+    listener({ newState: 3 });
+    listener({ newState: 2 });
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+  workspace.registerServerMessageFilter(
+    oldClient,
+    root,
+    workspace.serverStartGeneration(root),
+  );
+  oldClient.notificationHandlers.get("window/showMessage")({
+    type: 3,
+    message: "restart ready",
+  });
+  const replacement = new ClientLocalMessageLanguageClient("gauge", "Gauge", {}, {});
+  clients.set(root, { project: entry.project, client: replacement });
+  workspace.registerServerMessageFilter(
+    replacement,
+    root,
+    workspace.serverStartGeneration(root),
+  );
+  await workspace.stopLanguageClient(oldClient, true);
+
+  oldClient.notificationHandlers.get("window/showMessage")({
+    type: 1,
+    message: "old client error",
+  });
+  replacement.notificationHandlers.get("window/showMessage")({
+    type: 3,
+    message: "replacement ready",
+  });
+  const beforeDisposal = {
+    errors: errors.map((item) => item.message),
+    oldFilterDisposals: oldClient.filterDisposals,
+    oldRegistrationOwned: workspace.serverMessageFilterRegistrations.has(oldClient),
+    oldRegistrations: oldClient.notificationRegistrations,
+    replacementFilterDisposals: replacement.filterDisposals,
+    replacementRegistrationOwned: workspace.serverMessageFilterRegistrations.has(replacement),
+    replacementRegistrations: replacement.notificationRegistrations,
+    infos: infos.map((item) => item.message),
+  };
+  await workspace.dispose();
+
+  assert.deepEqual(beforeDisposal, {
+    errors: [],
+    oldFilterDisposals: 1,
+    oldRegistrationOwned: false,
+    oldRegistrations: 1,
+    replacementFilterDisposals: 0,
+    replacementRegistrationOwned: true,
+    replacementRegistrations: 1,
+    infos: ["restart ready", "replacement ready"],
+  });
+  assert.equal(replacement.filterDisposals, 1);
+  assert.equal(workspace.serverMessageFilterRegistrations.has(replacement), false);
+  assert.equal(instances.length, 2);
+});
+
 test("GaugeWorkspace drops the misleading Java extension hint before the LSP handshake", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeClients } = require("../src/gaugeClients");
