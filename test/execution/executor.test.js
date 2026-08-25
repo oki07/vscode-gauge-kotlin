@@ -2291,11 +2291,84 @@ test("executor cancels active execution and rejects later work when disposed", a
 
 test("executor observes asynchronous debugger shutdown when disposed", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
+  for (const settlement of ["resolve", "reject"]) {
+    const runnerEntered = deferred();
+    let debugSubscriptionDisposals = 0;
+    let debuggerShutdownObservations = 0;
+    let runCancellationObservations = 0;
+    const { vscode } = createFakeVscode();
+    const controller = createGaugeExecutionController({
+      vscode,
+      pathModule: path.posix,
+      fileSystem: { existsSync: () => false },
+      debuggerFactory() {
+        return {
+          async addDebugEnv(env) {
+            return env;
+          },
+          registerStopDebugger() {
+            return {
+              dispose() {
+                debugSubscriptionDisposals += 1;
+              },
+            };
+          },
+          stopDebugger() {
+            return {
+              then(resolve, reject) {
+                debuggerShutdownObservations += 1;
+                if (settlement === "reject") {
+                  reject(new Error("debug shutdown failed"));
+                } else {
+                  resolve(undefined);
+                }
+              },
+            };
+          },
+        };
+      },
+      runner() {
+        runnerEntered.resolve();
+        const run = new Promise(() => {});
+        run.cancel = () => ({
+          then(resolve) {
+            runCancellationObservations += 1;
+            resolve(undefined);
+          },
+        });
+        return run;
+      },
+    });
+
+    const execution = controller.handleCommand("gauge.specexplorer.debugNode", {
+      file: "/workspace/specs/example.spec",
+      executionIdentifier: "/workspace/specs/example.spec:8",
+    }, { debug: true });
+    await runnerEntered.promise;
+    controller.dispose();
+    controller.dispose();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual({
+      debugSubscriptionDisposals,
+      debuggerShutdownObservations,
+      execution: await execution,
+      runCancellationObservations,
+    }, {
+      debugSubscriptionDisposals: 1,
+      debuggerShutdownObservations: 1,
+      execution: undefined,
+      runCancellationObservations: 1,
+    });
+  }
+});
+
+test("executor cancels the run when debugger shutdown throws", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
   const runnerEntered = deferred();
   let debugSubscriptionDisposals = 0;
-  let debuggerShutdownObservations = 0;
-  let runCancellationObservations = 0;
-  const { vscode } = createFakeVscode();
+  let runCancellationCalls = 0;
+  const { errors, vscode } = createFakeVscode();
   const controller = createGaugeExecutionController({
     vscode,
     pathModule: path.posix,
@@ -2313,24 +2386,17 @@ test("executor observes asynchronous debugger shutdown when disposed", async () 
           };
         },
         stopDebugger() {
-          return {
-            then(resolve) {
-              debuggerShutdownObservations += 1;
-              resolve(undefined);
-            },
-          };
+          throw new Error("debug shutdown failed");
         },
       };
     },
     runner() {
       runnerEntered.resolve();
       const run = new Promise(() => {});
-      run.cancel = () => ({
-        then(resolve) {
-          runCancellationObservations += 1;
-          resolve(undefined);
-        },
-      });
+      run.cancel = () => {
+        runCancellationCalls += 1;
+        return Promise.resolve(undefined);
+      };
       return run;
     },
   });
@@ -2340,21 +2406,77 @@ test("executor observes asynchronous debugger shutdown when disposed", async () 
     executionIdentifier: "/workspace/specs/example.spec:8",
   }, { debug: true });
   await runnerEntered.promise;
-  controller.dispose();
-  controller.dispose();
-  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.deepEqual({
-    debugSubscriptionDisposals,
-    debuggerShutdownObservations,
-    execution: await execution,
-    runCancellationObservations,
-  }, {
-    debugSubscriptionDisposals: 1,
-    debuggerShutdownObservations: 1,
-    execution: undefined,
-    runCancellationObservations: 1,
-  });
+  controller.dispose();
+  assert.equal(await execution, undefined);
+  assert.equal(debugSubscriptionDisposals, 1);
+  assert.deepEqual(errors, []);
+  assert.equal(runCancellationCalls, 1);
+});
+
+test("executor observes debugger stop notifications while cancelling the run", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+
+  for (const notificationFailure of ["throw", "reject"]) {
+    const finish = deferred();
+    const runnerEntered = deferred();
+    let notificationCalls = 0;
+    let notificationObservations = 0;
+    let runCancellationCalls = 0;
+    const { vscode } = createFakeVscode();
+    vscode.window.showErrorMessage = () => {
+      notificationCalls += 1;
+      if (notificationFailure === "throw") {
+        throw new Error("notification failed");
+      }
+      return {
+        then(_resolve, reject) {
+          notificationObservations += 1;
+          reject(new Error("notification failed"));
+        },
+      };
+    };
+    const controller = createGaugeExecutionController({
+      vscode,
+      pathModule: path.posix,
+      fileSystem: { existsSync: () => false },
+      debuggerFactory() {
+        return {
+          async addDebugEnv(env) {
+            return env;
+          },
+          registerStopDebugger() {
+            return { dispose() {} };
+          },
+          stopDebugger() {
+            throw new Error("debug shutdown failed");
+          },
+        };
+      },
+      runner() {
+        runnerEntered.resolve();
+        const run = finish.promise;
+        run.cancel = () => {
+          runCancellationCalls += 1;
+          finish.resolve(false);
+          return Promise.resolve(undefined);
+        };
+        return run;
+      },
+    });
+    const execution = controller.handleCommand("gauge.specexplorer.debugNode", {
+      file: "/workspace/specs/example.spec",
+      executionIdentifier: "/workspace/specs/example.spec:8",
+    }, { debug: true });
+    await runnerEntered.promise;
+
+    await assert.doesNotReject(() => controller.handleCommand("gauge.stopExecution"));
+    assert.equal(await execution, false);
+    assert.equal(notificationCalls, 1);
+    assert.equal(notificationObservations, notificationFailure === "reject" ? 1 : 0);
+    assert.equal(runCancellationCalls, 1);
+    controller.dispose();
+  }
 });
 
 test("executor does not start work when disposal occurs in onStart", async () => {
@@ -4610,7 +4732,133 @@ test("debug node executes with JVM debug env and starts debugger on runner readi
     ["pid", 2468],
     ["start"],
     ["dispose"],
+    ["stop"],
   ]);
+});
+
+test("executor closes a pending debugger attach when the run completes", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const attachEntered = deferred();
+  const attachResponse = deferred();
+  const runnerEntered = deferred();
+  const runnerResponse = deferred();
+  const calls = [];
+  const { vscode } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/build.gradle.kts";
+      },
+    },
+    debuggerFactory() {
+      return {
+        async addDebugEnv(env) {
+          return env;
+        },
+        addProcessId() {},
+        registerStopDebugger() {
+          return {
+            dispose() {
+              calls.push("dispose");
+            },
+          };
+        },
+        startDebugger() {
+          calls.push("attach");
+          attachEntered.resolve();
+          return attachResponse.promise;
+        },
+        stopDebugger() {
+          calls.push("stop");
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+    runner() {
+      runnerEntered.resolve();
+      return runnerResponse.promise;
+    },
+  });
+
+  const run = controller.handleCommand("gauge.specexplorer.debugNode", {
+    file: "/workspace/specs/example.spec",
+    executionIdentifier: "/workspace/specs/example.spec:9",
+  });
+  await runnerEntered.promise;
+  controller.processOutputLine("Runner Ready for Debugging at Process ID 2468");
+  await attachEntered.promise;
+
+  runnerResponse.resolve(true);
+  const result = await run;
+  const callsBeforeAttachSettlement = [...calls];
+  attachResponse.resolve(false);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.dispose();
+
+  assert.equal(result, true);
+  assert.deepEqual(callsBeforeAttachSettlement, ["attach", "dispose", "stop"]);
+  assert.deepEqual(calls, ["attach", "dispose", "stop"]);
+});
+
+test("executor preserves a completed run when debugger cleanup throws", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  for (const failure of ["subscription", "stop"]) {
+    const cleanupError = new Error(`debug ${failure} cleanup failed`);
+    const runnerEntered = deferred();
+    const runnerResponse = deferred();
+    const { vscode } = createFakeVscode();
+    let stopCalls = 0;
+
+    const controller = createGaugeExecutionController({
+      vscode,
+      pathModule: path.posix,
+      fileSystem: {
+        existsSync(filename) {
+          return filename === "/workspace/build.gradle.kts";
+        },
+      },
+      debuggerFactory() {
+        return {
+          async addDebugEnv(env) {
+            return env;
+          },
+          registerStopDebugger() {
+            return {
+              dispose() {
+                if (failure === "subscription") {
+                  throw cleanupError;
+                }
+              },
+            };
+          },
+          stopDebugger() {
+            stopCalls += 1;
+            if (failure === "stop") {
+              throw cleanupError;
+            }
+          },
+        };
+      },
+      runner() {
+        runnerEntered.resolve();
+        return runnerResponse.promise;
+      },
+    });
+
+    const run = controller.handleCommand("gauge.specexplorer.debugNode", {
+      file: "/workspace/specs/example.spec",
+      executionIdentifier: "/workspace/specs/example.spec:9",
+    });
+    await runnerEntered.promise;
+    runnerResponse.resolve(true);
+
+    assert.equal(await run, true);
+    assert.equal(stopCalls, 1);
+    controller.dispose();
+  }
 });
 
 test("debug node uses the project runner language for debugger selection", async () => {

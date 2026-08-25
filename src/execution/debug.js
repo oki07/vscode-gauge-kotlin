@@ -7,6 +7,7 @@ const DEFAULT_DEBUG_START_DELAY_MS = 100;
 const DEFAULT_DEBUG_ATTACH_RETRY_DELAY_MS = 5000;
 const DEFAULT_DEBUG_ATTACH_TIMEOUT_MS = 25000;
 const DEBUG_SESSION_OWNER_KEY = "__gaugeExecutionId";
+const CANCELLED_DEBUG_ATTACH = Symbol("cancelledDebugAttach");
 
 let nextDebugSessionId = 0;
 
@@ -112,6 +113,10 @@ function createGaugeDebugger(options = {}) {
   let debugPort = options.debugPort;
   let debugSession;
   let processId;
+  let attachAttempted = false;
+  let stopped = false;
+  const activeAttachOperations = new Set();
+  const stoppedDebugSessionIds = new Set();
 
   function ownsDebugSession(session) {
     return Boolean(
@@ -123,6 +128,185 @@ function createGaugeDebugger(options = {}) {
 
   function isOwnedDebugSession(session) {
     return Boolean(debugSession && session && session.id === debugSession.id);
+  }
+
+  function disposeSafely(disposable) {
+    if (!disposable || typeof disposable.dispose !== "function") {
+      return;
+    }
+    try {
+      disposable.dispose();
+    } catch (_error) {
+      // Continue terminal cleanup after host resource failures.
+    }
+  }
+
+  function observeDetached(callback) {
+    try {
+      Promise.resolve(callback()).catch(() => undefined);
+    } catch (_error) {
+      // Detached terminal cleanup must not escape to the completed run.
+    }
+  }
+
+  function operationIsCurrent(operation) {
+    return !stopped && operation.active;
+  }
+
+  function createAttachOperation() {
+    let resolveCancellation;
+    const operation = {
+      active: true,
+      cancellation: new Promise((resolve) => {
+        resolveCancellation = resolve;
+      }),
+      hostAttachPending: false,
+      lateOwnedSession: undefined,
+      lateStartSubscription: undefined,
+      lateStartSubscriptionClosed: false,
+      lateStartSubscriptionRegistered: false,
+      resolveCancellation,
+    };
+    activeAttachOperations.add(operation);
+    return operation;
+  }
+
+  function finishAttachOperation(operation) {
+    operation.active = false;
+    activeAttachOperations.delete(operation);
+  }
+
+  function disposeLateStartSubscription(operation) {
+    operation.lateStartSubscriptionClosed = true;
+    const subscription = operation.lateStartSubscription;
+    operation.lateStartSubscription = undefined;
+    disposeSafely(subscription);
+  }
+
+  function stopOwnedDebugSession(session) {
+    if (!vscode || !vscode.debug || !session || !ownsDebugSession(session)) {
+      return undefined;
+    }
+    if (debugSession && debugSession.id !== session.id) {
+      return undefined;
+    }
+    debugSession = session;
+    if (stoppedDebugSessionIds.has(session.id)) {
+      return undefined;
+    }
+    stoppedDebugSessionIds.add(session.id);
+    if (typeof vscode.debug.stopDebugging === "function") {
+      return vscode.debug.stopDebugging(session);
+    }
+    if (typeof session.customRequest === "function") {
+      return session.customRequest("disconnect");
+    }
+    return undefined;
+  }
+
+  function stopLateOwnedSession(operation, session) {
+    if (!session || !ownsDebugSession(session)) {
+      return;
+    }
+    if (debugSession && debugSession.id !== session.id) {
+      return;
+    }
+    operation.lateOwnedSession = session;
+    observeDetached(() => stopOwnedDebugSession(session));
+  }
+
+  function registerLateStartSubscription(operation) {
+    if (
+      operation.lateStartSubscriptionRegistered
+      || operation.lateStartSubscriptionClosed
+      || !vscode
+      || !vscode.debug
+      || typeof vscode.debug.onDidStartDebugSession !== "function"
+    ) {
+      return;
+    }
+    operation.lateStartSubscriptionRegistered = true;
+    let subscription;
+    try {
+      subscription = vscode.debug.onDidStartDebugSession((session) => {
+        if (!ownsDebugSession(session)) {
+          return;
+        }
+        stopLateOwnedSession(operation, session);
+        disposeLateStartSubscription(operation);
+      });
+    } catch (_error) {
+      operation.lateStartSubscriptionClosed = true;
+      return;
+    }
+    if (operation.lateStartSubscriptionClosed) {
+      disposeSafely(subscription);
+      return;
+    }
+    operation.lateStartSubscription = subscription;
+  }
+
+  function cancelAttachOperation(operation) {
+    if (!operation.active) {
+      return;
+    }
+    operation.active = false;
+    activeAttachOperations.delete(operation);
+    if (operation.hostAttachPending) {
+      registerLateStartSubscription(operation);
+    }
+    operation.resolveCancellation(CANCELLED_DEBUG_ATTACH);
+  }
+
+  async function waitForAttachBoundary(operation, callback) {
+    const observed = Promise.resolve().then(() => {
+      if (!operationIsCurrent(operation)) {
+        return CANCELLED_DEBUG_ATTACH;
+      }
+      return callback();
+    });
+    return Promise.race([observed, operation.cancellation]);
+  }
+
+  async function startHostDebugger(operation, folder, configuration) {
+    disposeLateStartSubscription(operation);
+    operation.lateOwnedSession = undefined;
+    operation.lateStartSubscriptionClosed = false;
+    operation.lateStartSubscriptionRegistered = false;
+    const hostAttach = Promise.resolve().then(() => {
+      if (!operationIsCurrent(operation)) {
+        return CANCELLED_DEBUG_ATTACH;
+      }
+      operation.hostAttachPending = true;
+      return vscode.debug.startDebugging(folder, configuration);
+    });
+    const observed = hostAttach.then(
+      (started) => {
+        operation.hostAttachPending = false;
+        if (!operationIsCurrent(operation)) {
+          if (started === true) {
+            const session = operation.lateOwnedSession
+              || (ownsDebugSession(vscode.debug.activeDebugSession)
+                ? vscode.debug.activeDebugSession
+                : undefined);
+            stopLateOwnedSession(operation, session);
+          }
+          disposeLateStartSubscription(operation);
+          return CANCELLED_DEBUG_ATTACH;
+        }
+        disposeLateStartSubscription(operation);
+        return started;
+      },
+      (error) => {
+        operation.hostAttachPending = false;
+        disposeLateStartSubscription(operation);
+        if (!operationIsCurrent(operation)) {
+          return CANCELLED_DEBUG_ATTACH;
+        }
+        throw error;
+      },
+    );
+    return Promise.race([observed, operation.cancellation]);
   }
 
   async function addDebugEnv(env = baseEnv) {
@@ -222,36 +406,74 @@ function createGaugeDebugger(options = {}) {
   }
 
   async function startDebugger() {
+    if (stopped || attachAttempted) {
+      return false;
+    }
+    attachAttempted = true;
+    const operation = createAttachOperation();
     vscode = vscode || require("vscode");
-    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(projectRoot));
-    if (!folder) {
-      throw new Error(`The debugger does not work for a stand alone file. Please open the folder ${projectRoot}.`);
-    }
-    await sleepProvider(debugStartDelayMs);
-    const maxAttempts = debugAttachAttempts(debugAttachTimeoutMs, debugAttachRetryDelayMs);
-    const configuration = {
-      ...getDebuggerConfiguration(),
-      [DEBUG_SESSION_OWNER_KEY]: debugSessionId,
-    };
-    let lastError;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (attempt > 0) {
-        await sleepProvider(debugAttachRetryDelayMs);
+    try {
+      const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(projectRoot));
+      if (!operationIsCurrent(operation)) {
+        return false;
       }
-      try {
-        const started = await vscode.debug.startDebugging(folder, configuration);
-        if (started) {
-          if (!debugSession && ownsDebugSession(vscode.debug.activeDebugSession)) {
-            debugSession = vscode.debug.activeDebugSession;
+      if (!folder) {
+        throw new Error(`The debugger does not work for a stand alone file. Please open the folder ${projectRoot}.`);
+      }
+      const initialDelay = await waitForAttachBoundary(
+        operation,
+        () => sleepProvider(debugStartDelayMs),
+      );
+      if (initialDelay === CANCELLED_DEBUG_ATTACH || !operationIsCurrent(operation)) {
+        return false;
+      }
+      const maxAttempts = debugAttachAttempts(debugAttachTimeoutMs, debugAttachRetryDelayMs);
+      const configuration = {
+        ...getDebuggerConfiguration(),
+        [DEBUG_SESSION_OWNER_KEY]: debugSessionId,
+      };
+      if (!operationIsCurrent(operation)) {
+        return false;
+      }
+      let lastError;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (attempt > 0) {
+          const retryDelay = await waitForAttachBoundary(
+            operation,
+            () => sleepProvider(debugAttachRetryDelayMs),
+          );
+          if (retryDelay === CANCELLED_DEBUG_ATTACH || !operationIsCurrent(operation)) {
+            return false;
           }
-          return started;
         }
-        lastError = new Error("VS Code did not start the debugger.");
-      } catch (error) {
-        lastError = error;
+        try {
+          const started = await startHostDebugger(operation, folder, configuration);
+          if (started === CANCELLED_DEBUG_ATTACH || !operationIsCurrent(operation)) {
+            return false;
+          }
+          if (started) {
+            if (!debugSession && ownsDebugSession(vscode.debug.activeDebugSession)) {
+              debugSession = vscode.debug.activeDebugSession;
+            }
+            return started;
+          }
+          lastError = new Error("VS Code did not start the debugger.");
+        } catch (error) {
+          if (!operationIsCurrent(operation)) {
+            return false;
+          }
+          lastError = error;
+        }
       }
+      throw lastError;
+    } catch (error) {
+      if (!operationIsCurrent(operation)) {
+        return false;
+      }
+      throw error;
+    } finally {
+      finishAttachOperation(operation);
     }
-    throw lastError;
   }
 
   function registerStopDebugger(callback) {
@@ -260,54 +482,73 @@ function createGaugeDebugger(options = {}) {
       return undefined;
     }
     let startSubscription;
+    let startSubscriptionClosed = false;
     let terminationSubscription;
     if (typeof vscode.debug.onDidStartDebugSession === "function") {
-      startSubscription = vscode.debug.onDidStartDebugSession((session) => {
-        if (!ownsDebugSession(session)) {
-          return;
-        }
-        debugSession = session;
-        startSubscription.dispose();
-        startSubscription = undefined;
-      });
+      let subscription;
+      try {
+        subscription = vscode.debug.onDidStartDebugSession((session) => {
+          if (!ownsDebugSession(session)) {
+            return;
+          }
+          debugSession = session;
+          startSubscriptionClosed = true;
+          const ownedSubscription = startSubscription;
+          startSubscription = undefined;
+          disposeSafely(ownedSubscription);
+          if (stopped) {
+            observeDetached(() => stopOwnedDebugSession(session));
+          }
+        });
+      } catch (error) {
+        throw error;
+      }
+      if (startSubscriptionClosed) {
+        disposeSafely(subscription);
+      } else {
+        startSubscription = subscription;
+      }
     }
     if (typeof vscode.debug.onDidTerminateDebugSession === "function") {
-      terminationSubscription = vscode.debug.onDidTerminateDebugSession((session) => {
-        if (!isOwnedDebugSession(session)) {
-          return;
-        }
-        debugSession = undefined;
-        callback(session);
-      });
+      try {
+        terminationSubscription = vscode.debug.onDidTerminateDebugSession((session) => {
+          if (!isOwnedDebugSession(session)) {
+            return;
+          }
+          debugSession = undefined;
+          callback(session);
+        });
+      } catch (error) {
+        const ownedStartSubscription = startSubscription;
+        startSubscription = undefined;
+        disposeSafely(ownedStartSubscription);
+        throw error;
+      }
     }
     if (!startSubscription && !terminationSubscription) {
       return undefined;
     }
     return {
       dispose() {
-        if (startSubscription) {
-          startSubscription.dispose();
-          startSubscription = undefined;
-        }
-        if (terminationSubscription) {
-          terminationSubscription.dispose();
-          terminationSubscription = undefined;
-        }
+        const ownedStartSubscription = startSubscription;
+        const ownedTerminationSubscription = terminationSubscription;
+        startSubscription = undefined;
+        terminationSubscription = undefined;
+        disposeSafely(ownedStartSubscription);
+        disposeSafely(ownedTerminationSubscription);
       },
     };
   }
 
   function stopDebugger() {
-    if (!vscode || !vscode.debug || !debugSession) {
+    stopped = true;
+    for (const operation of [...activeAttachOperations]) {
+      cancelAttachOperation(operation);
+    }
+    if (!debugSession) {
       return undefined;
     }
-    if (typeof vscode.debug.stopDebugging === "function") {
-      return vscode.debug.stopDebugging(debugSession);
-    }
-    if (typeof debugSession.customRequest === "function") {
-      return debugSession.customRequest("disconnect");
-    }
-    return undefined;
+    return stopOwnedDebugSession(debugSession);
   }
 
   return {

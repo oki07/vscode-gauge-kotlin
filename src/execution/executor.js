@@ -733,6 +733,34 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
+  function observeDebuggerStopFailure(error) {
+    if (
+      disposed
+      || !vscode.window
+      || typeof vscode.window.showErrorMessage !== "function"
+    ) {
+      return;
+    }
+    try {
+      ignoreRejection(vscode.window.showErrorMessage(`Failed to Stop Run: ${error.message}`));
+    } catch (_error) {
+      // Advisory stop notifications cannot block process cancellation.
+    }
+  }
+
+  function disposeActiveDebuggerSessionSubscription() {
+    const subscription = activeDebuggerSessionSubscription;
+    activeDebuggerSessionSubscription = undefined;
+    if (!subscription || typeof subscription.dispose !== "function") {
+      return;
+    }
+    try {
+      subscription.dispose();
+    } catch (_error) {
+      // Continue releasing the debugger and execution state.
+    }
+  }
+
   async function waitForPreparation(value) {
     try {
       const result = await Promise.race([Promise.resolve(value), disposalSignal]);
@@ -950,13 +978,14 @@ function createGaugeExecutionController(options = {}) {
       }
       return result;
     } finally {
-      if (
-        activeDebuggerSessionSubscription
-        && typeof activeDebuggerSessionSubscription.dispose === "function"
-      ) {
-        activeDebuggerSessionSubscription.dispose();
+      disposeActiveDebuggerSessionSubscription();
+      if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
+        try {
+          ignoreRejection(activeDebugger.stopDebugger());
+        } catch (_error) {
+          // Preserve the completed run while releasing debugger ownership.
+        }
       }
-      activeDebuggerSessionSubscription = undefined;
       if (!disposed) {
         await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
         await setExecutingContext(vscode, false);
@@ -1400,17 +1429,29 @@ function createGaugeExecutionController(options = {}) {
     request.cancelRequested = true;
     notifyExecutionRequest(request, notification);
     activeRunUserAborted = Boolean(aborted);
+    let debuggerStopError;
     try {
       if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
         ignoreRejection(activeDebugger.stopDebugger());
       }
+    } catch (error) {
+      debuggerStopError = error;
+    }
+    try {
       if (activeRun && typeof activeRun.cancel === "function") {
-        return activeRun.cancel(aborted);
+        const cancellation = activeRun.cancel(aborted);
+        if (debuggerStopError) {
+          observeDebuggerStopFailure(debuggerStopError);
+        }
+        return cancellation;
       }
     } catch (error) {
       if (!disposed && vscode.window && typeof vscode.window.showErrorMessage === "function") {
         return vscode.window.showErrorMessage(`Failed to Stop Run: ${error.message}`);
       }
+    }
+    if (debuggerStopError) {
+      observeDebuggerStopFailure(debuggerStopError);
     }
     return undefined;
   }
@@ -1618,13 +1659,7 @@ function createGaugeExecutionController(options = {}) {
         settleExecutionRequest(pendingExecutionRequest, "resolve", undefined);
         pendingExecutionRequest = undefined;
       }
-      if (
-        activeDebuggerSessionSubscription
-        && typeof activeDebuggerSessionSubscription.dispose === "function"
-      ) {
-        activeDebuggerSessionSubscription.dispose();
-      }
-      activeDebuggerSessionSubscription = undefined;
+      disposeActiveDebuggerSessionSubscription();
       if (activeExecutionRequest) {
         const cancellation = activeExecutionRequest.cancelRequested
           ? undefined

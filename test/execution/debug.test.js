@@ -1,6 +1,20 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function nextTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 test("GaugeDebugger adds JVM debug environment for Kotlin projects", async () => {
   const { createGaugeDebugger } = require("../../src/execution/debug");
 
@@ -143,6 +157,503 @@ test("GaugeDebugger retries VS Code attach debugging while the runner starts", a
     hostName: "127.0.0.1",
     port: 5005,
   });
+});
+
+test("GaugeDebugger closes a pending initial attach when stopped", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+
+  for (const settlement of ["resolve", "reject"]) {
+    const sleepEntered = deferred();
+    const sleepResponse = deferred();
+    let folderCalls = 0;
+    let startCalls = 0;
+    const vscode = {
+      workspace: {
+        getWorkspaceFolder(uri) {
+          folderCalls += 1;
+          return { uri, name: "workspace" };
+        },
+      },
+      Uri: {
+        file(filename) {
+          return { fsPath: filename };
+        },
+      },
+      debug: {
+        async startDebugging() {
+          startCalls += 1;
+          return true;
+        },
+      },
+    };
+    const debuggerSession = createGaugeDebugger({
+      vscode,
+      projectRoot: "/workspace",
+      language: "kotlin",
+      sleep() {
+        sleepEntered.resolve();
+        return sleepResponse.promise;
+      },
+    });
+
+    let outcome;
+    const started = debuggerSession.startDebugger().then(
+      (value) => {
+        outcome = { status: "fulfilled", value };
+        return value;
+      },
+      (reason) => {
+        outcome = { reason, status: "rejected" };
+        return undefined;
+      },
+    );
+    await sleepEntered.promise;
+
+    await debuggerSession.stopDebugger();
+    await nextTurn();
+    const outcomeBeforeSleep = outcome;
+    if (settlement === "resolve") {
+      sleepResponse.resolve();
+    } else {
+      sleepResponse.reject(new Error("late sleep failure"));
+    }
+    await started;
+    await nextTurn();
+    const postStopResult = await debuggerSession.startDebugger();
+
+    assert.deepEqual({
+      folderCalls,
+      outcome,
+      outcomeBeforeSleep,
+      postStopResult,
+      startCalls,
+    }, {
+      folderCalls: 1,
+      outcome: { status: "fulfilled", value: false },
+      outcomeBeforeSleep: { status: "fulfilled", value: false },
+      postStopResult: false,
+      startCalls: 0,
+    });
+  }
+});
+
+test("GaugeDebugger stops retrying while an attach delay is pending", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const retryEntered = deferred();
+  const retryResponse = deferred();
+  const attempts = [];
+  let sleepCalls = 0;
+  const vscode = {
+    workspace: {
+      getWorkspaceFolder(uri) {
+        return { uri, name: "workspace" };
+      },
+    },
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
+    debug: {
+      async startDebugging() {
+        attempts.push("start");
+        if (attempts.length === 1) {
+          throw new Error("debug port is not ready");
+        }
+        return true;
+      },
+    },
+  };
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 0,
+    debugAttachRetryDelayMs: 5000,
+    debugAttachTimeoutMs: 10000,
+    sleep() {
+      sleepCalls += 1;
+      if (sleepCalls === 1) {
+        return Promise.resolve();
+      }
+      retryEntered.resolve();
+      return retryResponse.promise;
+    },
+  });
+
+  let outcome;
+  const started = debuggerSession.startDebugger().then((value) => {
+    outcome = value;
+    return value;
+  });
+  await retryEntered.promise;
+
+  await debuggerSession.stopDebugger();
+  await nextTurn();
+  const outcomeBeforeRetry = outcome;
+  retryResponse.resolve();
+  const result = await started;
+
+  assert.deepEqual({
+    attempts,
+    outcomeBeforeRetry,
+    result,
+    sleepCalls,
+  }, {
+    attempts: ["start"],
+    outcomeBeforeRetry: false,
+    result: false,
+    sleepCalls: 2,
+  });
+});
+
+test("GaugeDebugger keeps one attach operation per execution", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const startEntered = deferred();
+  const startResponse = deferred();
+  let startCalls = 0;
+  const vscode = {
+    workspace: {
+      getWorkspaceFolder(uri) {
+        return { uri, name: "workspace" };
+      },
+    },
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
+    debug: {
+      startDebugging() {
+        startCalls += 1;
+        startEntered.resolve();
+        return startResponse.promise;
+      },
+    },
+  };
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 0,
+    sleep: () => Promise.resolve(),
+  });
+
+  const first = debuggerSession.startDebugger();
+  await startEntered.promise;
+  let secondOutcome;
+  const second = debuggerSession.startDebugger().then((value) => {
+    secondOutcome = value;
+    return value;
+  });
+  await nextTurn();
+  const secondBeforeStop = secondOutcome;
+
+  await debuggerSession.stopDebugger();
+  startResponse.resolve(true);
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.deepEqual({
+    firstResult,
+    secondBeforeStop,
+    secondResult,
+    startCalls,
+  }, {
+    firstResult: false,
+    secondBeforeStop: false,
+    secondResult: false,
+    startCalls: 1,
+  });
+
+  let completedStartCalls = 0;
+  const completedDebugger = createGaugeDebugger({
+    vscode: {
+      ...vscode,
+      debug: {
+        activeDebugSession: undefined,
+        async startDebugging(_folder, configuration) {
+          completedStartCalls += 1;
+          this.activeDebugSession = {
+            configuration,
+            id: "completed",
+            name: "Gauge Debugger",
+          };
+          return true;
+        },
+      },
+    },
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 0,
+    sleep: () => Promise.resolve(),
+  });
+
+  assert.equal(await completedDebugger.startDebugger(), true);
+  assert.equal(await completedDebugger.startDebugger(), false);
+  assert.equal(completedStartCalls, 1);
+});
+
+test("GaugeDebugger preserves live attach failures", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const attachError = new Error("debug adapter unavailable");
+  let startResult = Promise.reject(attachError);
+  const vscode = {
+    workspace: {
+      getWorkspaceFolder(uri) {
+        return { uri, name: "workspace" };
+      },
+    },
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
+    debug: {
+      startDebugging() {
+        return startResult;
+      },
+    },
+  };
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 0,
+    debugAttachRetryDelayMs: 0,
+    debugAttachTimeoutMs: 0,
+    sleep: () => Promise.resolve(),
+  });
+
+  await assert.rejects(
+    debuggerSession.startDebugger(),
+    (error) => error === attachError,
+  );
+
+  startResult = Promise.resolve(false);
+  const falseDebuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 0,
+    debugAttachRetryDelayMs: 0,
+    debugAttachTimeoutMs: 0,
+    sleep: () => Promise.resolve(),
+  });
+  await assert.rejects(
+    falseDebuggerSession.startDebugger(),
+    (error) => error.message === "VS Code did not start the debugger.",
+  );
+});
+
+test("GaugeDebugger stops an owned session that starts after attach cancellation", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+
+  for (const scenario of [
+    { retry: false, settlement: "resolve" },
+    { retry: true, settlement: "resolve" },
+    { activeFallback: true, retry: false, settlement: "resolve" },
+    { retry: false, settlement: "false" },
+    { retry: false, settlement: "reject" },
+    { retry: false, settlement: "resolve", synchronousStart: true },
+    { retry: false, settlement: "resolve", stopFailure: "throw" },
+    { retry: false, settlement: "resolve", stopFailure: "reject" },
+  ]) {
+    const startEntered = deferred();
+    const startResponse = deferred();
+    const startListeners = new Set();
+    const stopCalls = [];
+    let configuration;
+    let hostStartCalls = 0;
+    let startListenerDisposals = 0;
+    let startListenerRegistrations = 0;
+    const unrelatedSession = {
+      configuration: {},
+      id: "unrelated",
+      name: "Unrelated",
+    };
+    const vscode = {
+      workspace: {
+        getWorkspaceFolder(uri) {
+          return { uri, name: "workspace" };
+        },
+      },
+      Uri: {
+        file(filename) {
+          return { fsPath: filename };
+        },
+      },
+      debug: {
+        activeDebugSession: unrelatedSession,
+        onDidStartDebugSession(callback) {
+          startListenerRegistrations += 1;
+          startListeners.add(callback);
+          if (scenario.synchronousStart && startListenerRegistrations === 2) {
+            callback({
+              configuration,
+              id: "owned",
+              name: "Gauge Debugger",
+            });
+          }
+          return {
+            dispose() {
+              if (startListeners.delete(callback)) {
+                startListenerDisposals += 1;
+              }
+            },
+          };
+        },
+        startDebugging(_folder, debugConfiguration) {
+          hostStartCalls += 1;
+          configuration = debugConfiguration;
+          if (scenario.retry && hostStartCalls === 1) {
+            return Promise.resolve(false);
+          }
+          startEntered.resolve();
+          return startResponse.promise;
+        },
+        stopDebugging(session) {
+          stopCalls.push(session);
+          if (scenario.stopFailure === "throw") {
+            throw new Error("late debugger stop failed");
+          }
+          if (scenario.stopFailure === "reject") {
+            return Promise.reject(new Error("late debugger stop failed"));
+          }
+          return Promise.resolve(true);
+        },
+      },
+    };
+    const debuggerSession = createGaugeDebugger({
+      vscode,
+      projectRoot: "/workspace",
+      language: "kotlin",
+      debugStartDelayMs: 0,
+      debugAttachRetryDelayMs: 1,
+      debugAttachTimeoutMs: 2,
+      sleep: () => Promise.resolve(),
+    });
+    const externalSubscription = debuggerSession.registerStopDebugger(() => {});
+
+    let outcome;
+    const started = debuggerSession.startDebugger().then((value) => {
+      outcome = value;
+      return value;
+    });
+    await startEntered.promise;
+
+    externalSubscription.dispose();
+    await debuggerSession.stopDebugger();
+    await nextTurn();
+    const outcomeBeforeHost = outcome;
+    if (scenario.settlement === "resolve") {
+      const ownedSession = {
+        configuration,
+        id: "owned",
+        name: "Gauge Debugger",
+      };
+      if (!scenario.synchronousStart && !scenario.activeFallback) {
+        for (const listener of [...startListeners]) {
+          listener(unrelatedSession);
+        }
+        assert.deepEqual(stopCalls, []);
+        assert.equal(startListeners.size, 1);
+        for (const listener of [...startListeners]) {
+          listener(ownedSession);
+        }
+      }
+      vscode.debug.activeDebugSession = scenario.activeFallback
+        ? ownedSession
+        : unrelatedSession;
+      startResponse.resolve(true);
+    } else if (scenario.settlement === "false") {
+      startResponse.resolve(false);
+    } else {
+      startResponse.reject(new Error("late attach failure"));
+    }
+    const result = await started;
+    await nextTurn();
+
+    assert.equal(outcomeBeforeHost, false);
+    assert.equal(result, false);
+    assert.equal(startListeners.size, 0);
+    assert.equal(startListenerDisposals, startListenerRegistrations);
+    assert.equal(startListenerRegistrations, 2);
+    assert.equal(hostStartCalls, scenario.retry ? 2 : 1);
+    if (scenario.settlement === "resolve") {
+      assert.equal(stopCalls.length, 1);
+      assert.equal(stopCalls[0].id, "owned");
+    } else {
+      assert.deepEqual(stopCalls, []);
+    }
+  }
+});
+
+test("GaugeDebugger releases a synchronously started session subscription", async () => {
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  let ownedSession;
+  let startDisposals = 0;
+  let terminationDisposals = 0;
+  const vscode = {
+    workspace: {
+      getWorkspaceFolder(uri) {
+        return { uri, name: "workspace" };
+      },
+    },
+    Uri: {
+      file(filename) {
+        return { fsPath: filename };
+      },
+    },
+    debug: {
+      activeDebugSession: undefined,
+      onDidStartDebugSession(callback) {
+        callback(ownedSession);
+        return {
+          dispose() {
+            startDisposals += 1;
+            throw new Error("start subscription cleanup failed");
+          },
+        };
+      },
+      onDidTerminateDebugSession() {
+        return {
+          dispose() {
+            terminationDisposals += 1;
+            throw new Error("termination subscription cleanup failed");
+          },
+        };
+      },
+      async startDebugging(_folder, configuration) {
+        ownedSession = {
+          configuration,
+          id: "owned",
+          name: "Gauge Debugger",
+        };
+        this.activeDebugSession = ownedSession;
+        return true;
+      },
+    },
+  };
+  const debuggerSession = createGaugeDebugger({
+    vscode,
+    projectRoot: "/workspace",
+    language: "kotlin",
+    debugStartDelayMs: 0,
+    sleep: () => Promise.resolve(),
+  });
+  await debuggerSession.startDebugger();
+
+  let subscription;
+  assert.doesNotThrow(() => {
+    subscription = debuggerSession.registerStopDebugger(() => {});
+  });
+  assert.equal(startDisposals, 1);
+  assert.equal(terminationDisposals, 0);
+
+  assert.doesNotThrow(() => subscription.dispose());
+  assert.doesNotThrow(() => subscription.dispose());
+  assert.equal(startDisposals, 1);
+  assert.equal(terminationDisposals, 1);
 });
 
 test("GaugeDebugger uses the configured Gauge debug port by default", async () => {
