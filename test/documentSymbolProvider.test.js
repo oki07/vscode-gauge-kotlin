@@ -445,6 +445,86 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
   ]);
 });
 
+test("GaugeDocumentSymbolProvider excludes closed doc string headings from concept workspace symbols", async () => {
+  const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
+  const vscode = createFakeVscode();
+  const documents = [
+    createDocument([
+      "# Owner concept",
+      "* Send payload",
+      "\"\"\"",
+      "# Payload hash hidden",
+      "Payload legacy hidden",
+      "=====================",
+      "\"\"\"",
+      "# Payload retained",
+      "* Retained step",
+    ].join("\n"), "/workspace/gauge/specs/closed.cpt", "gauge-concept"),
+    createDocument([
+      "# Unterminated owner",
+      "* Send payload",
+      "\"\"\"",
+      "# Payload unterminated",
+      "* Unterminated step",
+    ].join("\n"), "/workspace/gauge/specs/unterminated.cpt", "gauge-concept"),
+    createDocument([
+      "** Comment",
+      "\"\"\"",
+      "# Payload comment visible",
+      "\"\"\"",
+      "* Comment step",
+    ].join("\n"), "/workspace/gauge/specs/comment.cpt", "gauge-concept"),
+    createDocument([
+      "* Send payload",
+      "",
+      "\"\"\"",
+      "# Payload separated visible",
+      "\"\"\"",
+      "* Separated step",
+    ].join("\n"), "/workspace/gauge/specs/separated.cpt", "gauge-concept"),
+  ];
+  const documentStore = {
+    documents() {
+      return documents;
+    },
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    async whenReady() {},
+  };
+  const provider = new GaugeDocumentSymbolProvider({ documentStore, vscode });
+
+  const symbols = await provider.provideWorkspaceSymbols("Payload");
+  provider.dispose();
+
+  assert.deepEqual(symbols.map((symbol) => ({
+    file: symbol.location.uri.fsPath,
+    line: symbol.location.range.start.line,
+    name: symbol.name,
+  })), [
+    {
+      file: "/workspace/gauge/specs/comment.cpt",
+      line: 2,
+      name: "# Payload comment visible",
+    },
+    {
+      file: "/workspace/gauge/specs/closed.cpt",
+      line: 7,
+      name: "# Payload retained",
+    },
+    {
+      file: "/workspace/gauge/specs/separated.cpt",
+      line: 3,
+      name: "# Payload separated visible",
+    },
+    {
+      file: "/workspace/gauge/specs/unterminated.cpt",
+      line: 3,
+      name: "# Payload unterminated",
+    },
+  ]);
+});
+
 test("GaugeDocumentSymbolProvider excludes non-Gauge open concepts from stored workspace symbols", async () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const fixture = createWorkspaceSymbolProjectScopeFixture();

@@ -2,6 +2,7 @@
 
 const {
   isConceptHashHeading,
+  isDocStringFenceLine,
   isGaugeHashHeading,
 } = require("./gaugeHeadings");
 
@@ -206,6 +207,27 @@ function hashHeadingAt(line, conceptDocument) {
     return isConceptHashHeading(line) ? line : undefined;
   }
   return isGaugeHashHeading(line) ? line : undefined;
+}
+
+function isDocStringOwningStep(line) {
+  const text = String(line || "").trimStart();
+  return text.startsWith("*") && !text.startsWith("**");
+}
+
+function closedDocStringEndAfterStep(lines, stepLine) {
+  if (!isDocStringOwningStep(lines[stepLine])) {
+    return undefined;
+  }
+  const openLine = stepLine + 1;
+  if (!isDocStringFenceLine(lines[openLine])) {
+    return undefined;
+  }
+  for (let line = openLine + 1; line < lines.length; line += 1) {
+    if (isDocStringFenceLine(lines[line])) {
+      return line;
+    }
+  }
+  return undefined;
 }
 
 function workspaceSymbolQuery(query) {
@@ -424,6 +446,13 @@ class GaugeDocumentSymbolProvider {
     const symbols = [];
 
     for (let line = 0; line < lines.length; line += 1) {
+      if (conceptDocument) {
+        const closeLine = closedDocStringEndAfterStep(lines, line);
+        if (closeLine !== undefined) {
+          line = closeLine;
+          continue;
+        }
+      }
       const text = lines[line];
       const hashHeading = hashHeadingAt(text, conceptDocument);
       if (hashHeading) {
