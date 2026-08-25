@@ -98,6 +98,9 @@ class WorkspaceDocumentStore {
     this.generation = 0;
     this.readyPromise = undefined;
     this.scanComplete = false;
+    this.disposalSignal = new Promise((resolve) => {
+      this.resolveDisposal = resolve;
+    });
   }
 
   rootForFile(file) {
@@ -133,6 +136,9 @@ class WorkspaceDocumentStore {
   }
 
   onDidChangeDocuments(listener) {
+    if (this.disposed) {
+      return { dispose() {} };
+    }
     this.changeListeners.add(listener);
     const listeners = this.changeListeners;
     return {
@@ -176,6 +182,9 @@ class WorkspaceDocumentStore {
   }
 
   async loadDiskDocument(file, options = {}) {
+    if (this.disposed) {
+      return;
+    }
     const fileGeneration = this.nextFileGeneration(file);
     try {
       const text = await this.readFileText(file);
@@ -199,6 +208,9 @@ class WorkspaceDocumentStore {
   }
 
   handleFileEvent(uri) {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
     const file = uriPath(uri);
     if (!file || !isWorkspaceDocumentPath(file) || !this.belongsToGaugeProject(file)) {
       return Promise.resolve();
@@ -207,6 +219,9 @@ class WorkspaceDocumentStore {
   }
 
   handleFileDelete(uri) {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
     const file = uriPath(uri);
     if (!file || (!this.diskDocuments.has(file) && !this.fileGenerations.has(file))) {
       return Promise.resolve();
@@ -218,6 +233,9 @@ class WorkspaceDocumentStore {
   }
 
   handleDocumentEvent(document) {
+    if (this.disposed) {
+      return;
+    }
     const file = documentPath(document);
     if (!file || !isWorkspaceDocumentPath(file) || !isFileSchemeDocument(document)) {
       return;
@@ -226,6 +244,9 @@ class WorkspaceDocumentStore {
   }
 
   handleDocumentClose(document) {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
     const file = documentPath(document);
     if (!file || !isWorkspaceDocumentPath(file) || !isFileSchemeDocument(document)) {
       return Promise.resolve();
@@ -238,34 +259,91 @@ class WorkspaceDocumentStore {
   }
 
   registerEventListeners() {
+    if (this.disposed) {
+      return false;
+    }
     const workspace = this.vscode.workspace || {};
+    const registered = [];
+    const own = (disposable) => {
+      if (!disposable) {
+        return !this.disposed;
+      }
+      if (this.disposed) {
+        this.disposeSafely(disposable);
+        return false;
+      }
+      this.disposables.push(disposable);
+      registered.push(disposable);
+      return true;
+    };
     const listen = (name, listener) => {
+      if (this.disposed) {
+        return false;
+      }
       if (typeof workspace[name] === "function") {
         const disposable = workspace[name](listener);
-        if (disposable) {
-          this.disposables.push(disposable);
+        return own(disposable);
+      }
+      return !this.disposed;
+    };
+    try {
+      if (!listen("onDidOpenTextDocument", (document) => this.handleDocumentEvent(document))) {
+        return false;
+      }
+      if (!listen(
+        "onDidChangeTextDocument",
+        (event) => this.handleDocumentEvent(event && event.document),
+      )) {
+        return false;
+      }
+      if (!listen("onDidCloseTextDocument", (document) => this.handleDocumentClose(document))) {
+        return false;
+      }
+      if (this.disposed || typeof workspace.createFileSystemWatcher !== "function") {
+        return !this.disposed;
+      }
+      const watcher = workspace.createFileSystemWatcher(WORKSPACE_DOCUMENT_GLOB);
+      if (!own(watcher)) {
+        return false;
+      }
+      const listenToWatcher = (name, listener) => {
+        if (this.disposed) {
+          return false;
+        }
+        if (typeof watcher[name] !== "function") {
+          return true;
+        }
+        return own(watcher[name](listener));
+      };
+      if (!listenToWatcher("onDidCreate", (uri) => this.handleFileEvent(uri))) {
+        return false;
+      }
+      if (!listenToWatcher("onDidChange", (uri) => this.handleFileEvent(uri))) {
+        return false;
+      }
+      if (!listenToWatcher("onDidDelete", (uri) => this.handleFileDelete(uri))) {
+        return false;
+      }
+      return !this.disposed;
+    } catch (error) {
+      for (const disposable of registered) {
+        const index = this.disposables.indexOf(disposable);
+        if (index >= 0) {
+          this.disposables.splice(index, 1);
+          this.disposeSafely(disposable);
         }
       }
-    };
-    listen("onDidOpenTextDocument", (document) => this.handleDocumentEvent(document));
-    listen("onDidChangeTextDocument", (event) => this.handleDocumentEvent(event && event.document));
-    listen("onDidCloseTextDocument", (document) => this.handleDocumentClose(document));
-    if (typeof workspace.createFileSystemWatcher === "function") {
-      const watcher = workspace.createFileSystemWatcher(WORKSPACE_DOCUMENT_GLOB);
-      this.disposables.push(watcher);
-      if (typeof watcher.onDidCreate === "function") {
-        watcher.onDidCreate((uri) => this.handleFileEvent(uri));
+      if (this.disposed) {
+        return false;
       }
-      if (typeof watcher.onDidChange === "function") {
-        watcher.onDidChange((uri) => this.handleFileEvent(uri));
-      }
-      if (typeof watcher.onDidDelete === "function") {
-        watcher.onDidDelete((uri) => this.handleFileDelete(uri));
-      }
+      throw error;
     }
   }
 
   async scanWorkspace() {
+    if (this.disposed) {
+      return;
+    }
     const workspace = this.vscode.workspace || {};
     if (typeof workspace.findFiles !== "function") {
       this.notifyChange(undefined);
@@ -277,24 +355,58 @@ class WorkspaceDocumentStore {
     } catch (_error) {
       uris = [];
     }
+    if (this.disposed) {
+      return;
+    }
     await mapWithConcurrency(uris, this.initialReadConcurrency, async (uri) => {
+      if (this.disposed) {
+        return;
+      }
       const file = uriPath(uri);
       if (!file || !isWorkspaceDocumentPath(file) || !this.belongsToGaugeProject(file)) {
         return;
       }
       await this.loadDiskDocument(file, { silent: true });
     });
+    if (this.disposed) {
+      return;
+    }
     this.scanComplete = true;
     this.notifyChange(undefined);
   }
 
   start() {
+    if (this.disposed) {
+      return Promise.resolve(undefined);
+    }
     if (this.readyPromise) {
       return this.readyPromise;
     }
-    this.registerEventListeners();
-    this.readyPromise = this.scanWorkspace();
-    return this.readyPromise;
+    let rejectReady;
+    let resolveReady;
+    const ready = new Promise((resolve, reject) => {
+      rejectReady = reject;
+      resolveReady = resolve;
+    });
+    this.readyPromise = ready;
+    try {
+      if (!this.registerEventListeners() || this.disposed) {
+        resolveReady(undefined);
+        return ready;
+      }
+      const scan = this.scanWorkspace();
+      Promise.race([scan, this.disposalSignal]).then(
+        () => resolveReady(undefined),
+        (error) => rejectReady(error),
+      );
+      return ready;
+    } catch (error) {
+      if (this.readyPromise === ready) {
+        this.readyPromise = undefined;
+      }
+      resolveReady(undefined);
+      throw error;
+    }
   }
 
   whenReady() {
@@ -306,6 +418,9 @@ class WorkspaceDocumentStore {
   }
 
   documents() {
+    if (this.disposed) {
+      return [];
+    }
     if (this.cachedDocuments) {
       return this.cachedDocuments;
     }
@@ -338,17 +453,37 @@ class WorkspaceDocumentStore {
   }
 
   dispose() {
-    this.disposed = true;
-    this.changeListeners.clear();
-    for (const disposable of this.disposables) {
-      if (disposable && typeof disposable.dispose === "function") {
-        disposable.dispose();
-      }
+    if (this.disposed) {
+      return;
     }
+    this.disposed = true;
+    const resolveDisposal = this.resolveDisposal;
+    this.resolveDisposal = undefined;
+    if (resolveDisposal) {
+      resolveDisposal(undefined);
+    }
+    this.changeListeners.clear();
+    const disposables = this.disposables;
     this.disposables = [];
     this.diskDocuments.clear();
     this.fileGenerations.clear();
     this.cachedDocuments = undefined;
+    this.readyPromise = undefined;
+    this.scanComplete = false;
+    for (const disposable of disposables) {
+      this.disposeSafely(disposable);
+    }
+  }
+
+  disposeSafely(disposable) {
+    if (!disposable || typeof disposable.dispose !== "function") {
+      return;
+    }
+    try {
+      disposable.dispose();
+    } catch (_error) {
+      // Cleanup failure cannot reactivate a terminal document store.
+    }
   }
 }
 
