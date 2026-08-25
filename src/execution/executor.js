@@ -699,6 +699,7 @@ function createGaugeExecutionController(options = {}) {
   let activeExecutionProjectRoot;
   let activeDebugger;
   let activeDebuggerSessionSubscription;
+  let activeDebuggerStopRequested = false;
   let activeRunUserAborted = false;
   let executionLoop;
   let latestScheduledExecutionSequence = 0;
@@ -733,7 +734,7 @@ function createGaugeExecutionController(options = {}) {
     }
   }
 
-  function observeDebuggerStopFailure(error) {
+  function observeStopFailure(error) {
     if (
       disposed
       || !vscode.window
@@ -759,6 +760,35 @@ function createGaugeExecutionController(options = {}) {
     } catch (_error) {
       // Continue releasing the debugger and execution state.
     }
+  }
+
+  function stopActiveDebugger() {
+    if (
+      activeDebuggerStopRequested
+      || !activeDebugger
+      || typeof activeDebugger.stopDebugger !== "function"
+    ) {
+      return undefined;
+    }
+    activeDebuggerStopRequested = true;
+    try {
+      ignoreRejection(activeDebugger.stopDebugger());
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  }
+
+  function cancelOwnedActiveRun(request, aborted) {
+    if (
+      request.activeRunCancellationIssued
+      || !activeRun
+      || typeof activeRun.cancel !== "function"
+    ) {
+      return undefined;
+    }
+    request.activeRunCancellationIssued = true;
+    return activeRun.cancel(aborted);
   }
 
   async function waitForPreparation(value) {
@@ -936,6 +966,7 @@ function createGaugeExecutionController(options = {}) {
       }
 
       if (flags.debug) {
+        activeDebuggerStopRequested = false;
         activeDebugger = debuggerFactory({
           vscode,
           projectRoot,
@@ -943,10 +974,21 @@ function createGaugeExecutionController(options = {}) {
           baseEnv: command.env || executionEnv,
           debugPortProvider: options.debugPortProvider,
         });
+        if (request.cancelRequested) {
+          const debuggerStopError = stopActiveDebugger();
+          if (debuggerStopError) {
+            observeStopFailure(debuggerStopError);
+          }
+          return undefined;
+        }
         if (typeof activeDebugger.registerStopDebugger === "function") {
           activeDebuggerSessionSubscription = activeDebugger.registerStopDebugger(() => {
             cancelExecutionRequest(request, false);
           });
+          if (request.cancelRequested) {
+            disposeActiveDebuggerSessionSubscription();
+            return undefined;
+          }
         }
         command.env = await activeDebugger.addDebugEnv(command.env || executionEnv);
         if (request.cancelRequested) {
@@ -957,7 +999,16 @@ function createGaugeExecutionController(options = {}) {
       if (request.cancelRequested) {
         return undefined;
       }
+      request.phase = "startingRun";
       activeRun = runner(command);
+      request.phase = "activeRun";
+      if (request.cancelRequested) {
+        try {
+          ignoreRejection(cancelOwnedActiveRun(request, activeRunUserAborted));
+        } catch (error) {
+          observeStopFailure(error);
+        }
+      }
       result = await activeRun;
       activeRun = undefined;
       if (testUi && !activeRunUserAborted) {
@@ -979,13 +1030,7 @@ function createGaugeExecutionController(options = {}) {
       return result;
     } finally {
       disposeActiveDebuggerSessionSubscription();
-      if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
-        try {
-          ignoreRejection(activeDebugger.stopDebugger());
-        } catch (_error) {
-          // Preserve the completed run while releasing debugger ownership.
-        }
-      }
+      stopActiveDebugger();
       if (!disposed) {
         await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
         await setExecutingContext(vscode, false);
@@ -993,6 +1038,7 @@ function createGaugeExecutionController(options = {}) {
       activeExecutionProjectRoot = undefined;
       activeRun = undefined;
       activeDebugger = undefined;
+      activeDebuggerStopRequested = false;
       activeRunUserAborted = false;
     }
   }
@@ -1042,6 +1088,7 @@ function createGaugeExecutionController(options = {}) {
         continue;
       }
       activeExecutionRequest = request;
+      request.phase = "preparing";
       try {
         notifyExecutionRequest(request, "onStart");
         if (!disposed && !request.cancelRequested) {
@@ -1082,9 +1129,11 @@ function createGaugeExecutionController(options = {}) {
     latestScheduledExecutionSequence = sequence;
     const execution = new Promise((resolve, reject) => {
       const request = {
+        activeRunCancellationIssued: false,
         cancelRequested: false,
         flags,
         metadata: flags[EXECUTION_METADATA],
+        phase: "queued",
         projectRoot,
         reject,
         resolve,
@@ -1097,7 +1146,11 @@ function createGaugeExecutionController(options = {}) {
         cancelActiveExecution(true, "onSuperseded");
       }
       if (!executionLoop) {
-        executionLoop = drainExecutionRequests();
+        executionLoop = true;
+        const loop = drainExecutionRequests();
+        if (executionLoop === true) {
+          executionLoop = loop;
+        }
       }
     });
     return execution;
@@ -1428,20 +1481,17 @@ function createGaugeExecutionController(options = {}) {
     }
     request.cancelRequested = true;
     notifyExecutionRequest(request, notification);
-    activeRunUserAborted = Boolean(aborted);
-    let debuggerStopError;
-    try {
-      if (activeDebugger && typeof activeDebugger.stopDebugger === "function") {
-        ignoreRejection(activeDebugger.stopDebugger());
-      }
-    } catch (error) {
-      debuggerStopError = error;
+    if (request.phase === "preparing") {
+      settleExecutionRequest(request, "resolve", undefined);
+      disposeActiveDebuggerSessionSubscription();
     }
+    activeRunUserAborted = Boolean(aborted);
+    const debuggerStopError = stopActiveDebugger();
     try {
       if (activeRun && typeof activeRun.cancel === "function") {
-        const cancellation = activeRun.cancel(aborted);
+        const cancellation = cancelOwnedActiveRun(request, aborted);
         if (debuggerStopError) {
-          observeDebuggerStopFailure(debuggerStopError);
+          observeStopFailure(debuggerStopError);
         }
         return cancellation;
       }
@@ -1451,7 +1501,7 @@ function createGaugeExecutionController(options = {}) {
       }
     }
     if (debuggerStopError) {
-      observeDebuggerStopFailure(debuggerStopError);
+      observeStopFailure(debuggerStopError);
     }
     return undefined;
   }

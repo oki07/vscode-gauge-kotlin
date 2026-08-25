@@ -4,11 +4,13 @@ const path = require("node:path");
 const test = require("node:test");
 
 function deferred() {
+  let reject;
   let resolve;
-  const promise = new Promise((nextResolve) => {
+  const promise = new Promise((nextResolve, nextReject) => {
+    reject = nextReject;
     resolve = nextResolve;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 function installCancellationSources(vscode) {
@@ -2012,16 +2014,19 @@ test("executor keeps only the latest request while the active run is stopping", 
 
 test("executor skips a superseded run that is still preparing", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
-  let finishFirstSave;
+  const firstSaveEntered = deferred();
+  const firstSave = deferred();
+  const lifecycle = [];
   let saveCalls = 0;
-  const firstSave = new Promise((resolve) => {
-    finishFirstSave = resolve;
-  });
   const runnerCalls = [];
   const { vscode, errors } = createFakeVscode({
     saveAll() {
       saveCalls += 1;
-      return saveCalls === 1 ? firstSave : Promise.resolve(true);
+      if (saveCalls === 1) {
+        firstSaveEntered.resolve();
+        return firstSave.promise;
+      }
+      return Promise.resolve(true);
     },
   });
 
@@ -2039,21 +2044,620 @@ test("executor skips a superseded run that is still preparing", async () => {
     },
   });
 
-  const firstRun = controller.handleCommand("gauge.execute.specification.all");
-  await Promise.resolve();
+  let firstOutcome = { status: "pending" };
+  const firstRun = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onStart() {
+        lifecycle.push("first:start");
+      },
+      onSuperseded() {
+        lifecycle.push("first:superseded");
+      },
+    },
+  );
+  firstRun.then((value) => {
+    firstOutcome = { status: "fulfilled", value };
+  });
+  await firstSaveEntered.promise;
+  let middleOutcome = { status: "pending" };
+  const middleRun = controller.handleCommandWithMetadata(
+    "gauge.execute",
+    {
+      onSuperseded() {
+        lifecycle.push("middle:superseded");
+      },
+    },
+    "/workspace/specs/middle.spec",
+  );
+  middleRun.then((value) => {
+    middleOutcome = { status: "fulfilled", value };
+  });
+  let latestOutcome = { status: "pending" };
   const latestRun = controller.handleCommand(
     "gauge.execute",
     "/workspace/specs/latest.spec",
   );
+  latestRun.then((value) => {
+    latestOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeBorrowedSaveSettlement = {
+    firstOutcome,
+    latestOutcome,
+    lifecycle: [...lifecycle],
+    middleOutcome,
+    runnerStatuses: runnerCalls.map((command) => command.status),
+    saveCalls,
+  };
 
-  finishFirstSave(true);
+  firstSave.resolve(true);
+  const settlements = await Promise.all([firstRun, middleRun, latestRun]);
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(await firstRun, undefined);
-  assert.equal(await latestRun, true);
+  assert.deepEqual(beforeBorrowedSaveSettlement, {
+    firstOutcome: { status: "fulfilled", value: undefined },
+    latestOutcome: { status: "pending" },
+    lifecycle: ["first:start", "first:superseded", "middle:superseded"],
+    middleOutcome: { status: "fulfilled", value: undefined },
+    runnerStatuses: [],
+    saveCalls: 1,
+  });
+  assert.deepEqual(settlements, [undefined, undefined, true]);
   assert.deepEqual(runnerCalls.map((command) => command.status), [
     "/workspace/specs/latest.spec",
   ]);
   assert.deepEqual(errors, []);
+});
+
+test("executor releases a stopped build preparation while preserving the scheduler barrier", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const buildEntered = deferred();
+  const firstBuild = deferred();
+  const firstBuildError = new Error("cancelled build failed");
+  const lifecycle = [];
+  const runnerCalls = [];
+  let environmentCalls = 0;
+  const { errors, vscode } = createFakeVscode();
+  const project = {
+    executionEnvsAsync() {},
+  };
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    projectFactory: {
+      get() {
+        return project;
+      },
+    },
+    projectEnvironmentService: {
+      executionEnvironmentFor() {
+        environmentCalls += 1;
+        if (environmentCalls === 1) {
+          buildEntered.resolve();
+          return firstBuild.promise;
+        }
+        return Promise.resolve({});
+      },
+    },
+    async runner(command) {
+      runnerCalls.push(command);
+      return true;
+    },
+  });
+
+  let stoppedOutcome = { status: "pending" };
+  const stopped = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onCancelled: () => lifecycle.push("stopped:cancelled"),
+      onStart: () => lifecycle.push("stopped:start"),
+    },
+  );
+  stopped.then((value) => {
+    stoppedOutcome = { status: "fulfilled", value };
+  });
+  await buildEntered.promise;
+  await controller.stopExecution();
+
+  let latestOutcome = { status: "pending" };
+  const latest = controller.handleCommand(
+    "gauge.execute",
+    "/workspace/specs/latest.spec",
+  );
+  latest.then((value) => {
+    latestOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeBuildSettlement = {
+    environmentCalls,
+    latestOutcome,
+    lifecycle: [...lifecycle],
+    runnerCalls: runnerCalls.length,
+    stoppedOutcome,
+  };
+
+  firstBuild.reject(firstBuildError);
+  const settlements = await Promise.all([stopped, latest]);
+  controller.dispose();
+
+  assert.deepEqual(beforeBuildSettlement, {
+    environmentCalls: 1,
+    latestOutcome: { status: "pending" },
+    lifecycle: ["stopped:start", "stopped:cancelled"],
+    runnerCalls: 0,
+    stoppedOutcome: { status: "fulfilled", value: undefined },
+  });
+  assert.deepEqual(settlements, [undefined, true]);
+  assert.equal(environmentCalls, 2);
+  assert.deepEqual(runnerCalls.map((command) => command.status), [
+    "/workspace/specs/latest.spec",
+  ]);
+  assert.deepEqual(errors, []);
+});
+
+test("executor closes debugger preparation when stopped before the run starts", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const debugEnvironmentEntered = deferred();
+  const debugEnvironment = deferred();
+  const lateDebugError = new Error("cancelled debug environment failed");
+  const lifecycle = [];
+  let debugSubscriptionDisposals = 0;
+  let debuggerStopCalls = 0;
+  let runnerCalls = 0;
+  const { errors, vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    debuggerFactory() {
+      return {
+        addDebugEnv() {
+          debugEnvironmentEntered.resolve();
+          return debugEnvironment.promise;
+        },
+        registerStopDebugger() {
+          return {
+            dispose() {
+              debugSubscriptionDisposals += 1;
+            },
+          };
+        },
+        stopDebugger() {
+          debuggerStopCalls += 1;
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+    async runner() {
+      runnerCalls += 1;
+      return true;
+    },
+  });
+
+  let executionOutcome = { status: "pending" };
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.specexplorer.debugNode",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+    {
+      file: "/workspace/specs/example.spec",
+      executionIdentifier: "/workspace/specs/example.spec:9",
+    },
+    { debug: true },
+  );
+  execution.then((value) => {
+    executionOutcome = { status: "fulfilled", value };
+  });
+  await debugEnvironmentEntered.promise;
+  await controller.stopExecution();
+  let latestOutcome = { status: "pending" };
+  const latest = controller.handleCommand(
+    "gauge.execute",
+    "/workspace/specs/latest.spec",
+  );
+  latest.then((value) => {
+    latestOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeDebugEnvironmentSettlement = {
+    debugSubscriptionDisposals,
+    debuggerStopCalls,
+    executionOutcome,
+    latestOutcome,
+    lifecycle: [...lifecycle],
+    runnerCalls,
+  };
+
+  debugEnvironment.reject(lateDebugError);
+  assert.equal(await execution, undefined);
+  assert.equal(await latest, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.dispose();
+
+  assert.deepEqual(beforeDebugEnvironmentSettlement, {
+    debugSubscriptionDisposals: 1,
+    debuggerStopCalls: 1,
+    executionOutcome: { status: "fulfilled", value: undefined },
+    latestOutcome: { status: "pending" },
+    lifecycle: ["start", "cancelled"],
+    runnerCalls: 0,
+  });
+  assert.equal(debugSubscriptionDisposals, 1);
+  assert.equal(debuggerStopCalls, 1);
+  assert.equal(runnerCalls, 1);
+  assert.deepEqual(errors, []);
+});
+
+test("executor closes debugger ownership after synchronous preparation cancellation", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+
+  for (const cancellationPoint of ["factory", "registration"]) {
+    const debugEnvironment = deferred();
+    const lifecycle = [];
+    let debugEnvironmentCalls = 0;
+    let debuggerStopCalls = 0;
+    let registerCalls = 0;
+    let runnerCalls = 0;
+    let subscriptionDisposals = 0;
+    let controller;
+    const { vscode } = createFakeVscode();
+    controller = createGaugeExecutionController({
+      vscode,
+      pathModule: path.posix,
+      fileSystem: { existsSync: () => false },
+      debuggerFactory() {
+        if (cancellationPoint === "factory") {
+          controller.stopExecution();
+        }
+        return {
+          addDebugEnv() {
+            debugEnvironmentCalls += 1;
+            return debugEnvironment.promise;
+          },
+          registerStopDebugger(callback) {
+            registerCalls += 1;
+            if (cancellationPoint === "registration") {
+              callback();
+            }
+            return {
+              dispose() {
+                subscriptionDisposals += 1;
+              },
+            };
+          },
+          stopDebugger() {
+            debuggerStopCalls += 1;
+          },
+        };
+      },
+      async runner() {
+        runnerCalls += 1;
+        return true;
+      },
+    });
+
+    let executionOutcome = { status: "pending" };
+    const execution = controller.handleCommandWithMetadata(
+      "gauge.specexplorer.debugNode",
+      {
+        onCancelled: () => lifecycle.push("cancelled"),
+        onStart: () => lifecycle.push("start"),
+      },
+      {
+        file: "/workspace/specs/example.spec",
+        executionIdentifier: "/workspace/specs/example.spec:9",
+      },
+      { debug: true },
+    );
+    execution.then((value) => {
+      executionOutcome = { status: "fulfilled", value };
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const snapshot = {
+      debugEnvironmentCalls,
+      debuggerStopCalls,
+      executionOutcome,
+      lifecycle: [...lifecycle],
+      registerCalls,
+      runnerCalls,
+      subscriptionDisposals,
+    };
+
+    debugEnvironment.resolve({});
+    await execution;
+    await new Promise((resolve) => setImmediate(resolve));
+    controller.dispose();
+
+    assert.deepEqual(snapshot, {
+      debugEnvironmentCalls: 0,
+      debuggerStopCalls: 1,
+      executionOutcome: { status: "fulfilled", value: undefined },
+      lifecycle: ["start", "cancelled"],
+      registerCalls: cancellationPoint === "factory" ? 0 : 1,
+      runnerCalls: 0,
+      subscriptionDisposals: cancellationPoint === "factory" ? 0 : 1,
+    });
+    assert.equal(debuggerStopCalls, 1);
+    assert.equal(runnerCalls, 0);
+  }
+});
+
+test("executor preserves live build and debug preparation failures", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+
+  for (const preparation of ["build", "debug"]) {
+    const preparationError = new Error(`live ${preparation} preparation failed`);
+    const { vscode } = createFakeVscode();
+    const project = {
+      executionEnvsAsync() {},
+    };
+    const controller = createGaugeExecutionController({
+      vscode,
+      pathModule: path.posix,
+      fileSystem: { existsSync: () => false },
+      projectFactory: preparation === "build"
+        ? {
+          get() {
+            return project;
+          },
+        }
+        : undefined,
+      projectEnvironmentService: preparation === "build"
+        ? {
+          executionEnvironmentFor() {
+            return Promise.reject(preparationError);
+          },
+        }
+        : undefined,
+      debuggerFactory: preparation === "debug"
+        ? () => ({
+          addDebugEnv() {
+            return Promise.reject(preparationError);
+          },
+          registerStopDebugger() {
+            return { dispose() {} };
+          },
+          stopDebugger() {},
+        })
+        : undefined,
+    });
+
+    const execution = preparation === "build"
+      ? controller.handleCommand("gauge.execute.specification.all")
+      : controller.handleCommand(
+        "gauge.specexplorer.debugNode",
+        {
+          file: "/workspace/specs/example.spec",
+          executionIdentifier: "/workspace/specs/example.spec:9",
+        },
+        { debug: true },
+      );
+
+    await assert.rejects(execution, (error) => error === preparationError);
+    controller.dispose();
+  }
+});
+
+test("executor owns a run cancelled synchronously while the runner starts", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const runResponse = deferred();
+  const lifecycle = [];
+  const cancelArguments = [];
+  let cancelCalls = 0;
+  let cancellationObservations = 0;
+  let controller;
+  const { vscode } = createFakeVscode();
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    runner() {
+      controller.stopExecution();
+      controller.stopExecution();
+      const run = runResponse.promise;
+      run.cancel = (aborted) => {
+        cancelCalls += 1;
+        cancelArguments.push(aborted);
+        return {
+          then(_resolve, reject) {
+            cancellationObservations += 1;
+            reject(new Error("runner startup cancellation failed"));
+          },
+        };
+      };
+      return run;
+    },
+  });
+
+  let executionOutcome = { status: "pending" };
+  const execution = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+    },
+  );
+  execution.then((value) => {
+    executionOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeRunSettlement = {
+    cancelCalls,
+    cancellationObservations,
+    executionOutcome,
+    lifecycle: [...lifecycle],
+  };
+
+  runResponse.resolve(false);
+  const result = await execution;
+  controller.dispose();
+
+  assert.deepEqual(beforeRunSettlement, {
+    cancelCalls: 1,
+    cancellationObservations: 1,
+    executionOutcome: { status: "pending" },
+    lifecycle: ["start", "cancelled"],
+  });
+  assert.equal(result, false);
+  assert.equal(cancelCalls, 1);
+  assert.deepEqual(cancelArguments, [true]);
+});
+
+test("executor owns a run superseded synchronously while the runner starts", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const firstRunnerEntered = deferred();
+  const firstRunResponse = deferred();
+  const lifecycle = [];
+  const runnerStatuses = [];
+  let cancelCalls = 0;
+  let controller;
+  let latestExecution;
+  const { vscode } = createFakeVscode();
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    runner(command) {
+      runnerStatuses.push(command.status);
+      if (runnerStatuses.length === 1) {
+        latestExecution = controller.handleCommand(
+          "gauge.execute",
+          "/workspace/specs/latest.spec",
+        );
+        firstRunnerEntered.resolve();
+        const run = firstRunResponse.promise;
+        run.cancel = () => {
+          cancelCalls += 1;
+        };
+        return run;
+      }
+      return Promise.resolve(true);
+    },
+  });
+
+  let firstOutcome = { status: "pending" };
+  const firstExecution = controller.handleCommandWithMetadata(
+    "gauge.execute.specification.all",
+    {
+      onStart: () => lifecycle.push("start"),
+      onSuperseded: () => lifecycle.push("superseded"),
+    },
+  );
+  firstExecution.then((value) => {
+    firstOutcome = { status: "fulfilled", value };
+  });
+  await firstRunnerEntered.promise;
+  let latestOutcome = { status: "pending" };
+  latestExecution.then((value) => {
+    latestOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeFirstRunSettlement = {
+    cancelCalls,
+    firstOutcome,
+    latestOutcome,
+    lifecycle: [...lifecycle],
+    runnerStatuses: [...runnerStatuses],
+  };
+
+  firstRunResponse.resolve(false);
+  const settlements = await Promise.all([firstExecution, latestExecution]);
+  controller.dispose();
+
+  assert.deepEqual(beforeFirstRunSettlement, {
+    cancelCalls: 1,
+    firstOutcome: { status: "pending" },
+    latestOutcome: { status: "pending" },
+    lifecycle: ["start", "superseded"],
+    runnerStatuses: ["/workspace/All specs"],
+  });
+  assert.deepEqual(settlements, [false, true]);
+  assert.deepEqual(runnerStatuses, [
+    "/workspace/All specs",
+    "/workspace/specs/latest.spec",
+  ]);
+});
+
+test("executor preserves a synchronously superseded run when stop reporting throws", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const firstRunnerEntered = deferred();
+  const firstRunResponse = deferred();
+  const runnerStatuses = [];
+  let cancelCalls = 0;
+  let controller;
+  let latestExecution;
+  let notificationCalls = 0;
+  const { vscode } = createFakeVscode();
+  vscode.window.showErrorMessage = () => {
+    notificationCalls += 1;
+    throw new Error("stop notification failed");
+  };
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    runner(command) {
+      runnerStatuses.push(command.status);
+      if (runnerStatuses.length === 1) {
+        latestExecution = controller.handleCommand(
+          "gauge.execute",
+          "/workspace/specs/latest.spec",
+        );
+        firstRunnerEntered.resolve();
+        const run = firstRunResponse.promise;
+        run.cancel = () => {
+          cancelCalls += 1;
+          throw new Error("runner cancellation failed");
+        };
+        return run;
+      }
+      return Promise.resolve(true);
+    },
+  });
+
+  let firstOutcome = { status: "pending" };
+  const firstExecution = controller.handleCommand("gauge.execute.specification.all");
+  firstExecution.then(
+    (value) => {
+      firstOutcome = { status: "fulfilled", value };
+    },
+    (error) => {
+      firstOutcome = { error, status: "rejected" };
+    },
+  );
+  await firstRunnerEntered.promise;
+  let latestOutcome = { status: "pending" };
+  latestExecution.then((value) => {
+    latestOutcome = { status: "fulfilled", value };
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const beforeFirstRunSettlement = {
+    cancelCalls,
+    firstOutcome,
+    latestOutcome,
+    notificationCalls,
+    runnerStatuses: [...runnerStatuses],
+  };
+
+  firstRunResponse.resolve(false);
+  const settlements = await Promise.allSettled([firstExecution, latestExecution]);
+  controller.dispose();
+
+  assert.deepEqual(beforeFirstRunSettlement, {
+    cancelCalls: 1,
+    firstOutcome: { status: "pending" },
+    latestOutcome: { status: "pending" },
+    notificationCalls: 1,
+    runnerStatuses: ["/workspace/All specs"],
+  });
+  assert.deepEqual(settlements, [
+    { status: "fulfilled", value: false },
+    { status: "fulfilled", value: true },
+  ]);
 });
 
 test("executor stop command clears the pending latest request", async () => {
