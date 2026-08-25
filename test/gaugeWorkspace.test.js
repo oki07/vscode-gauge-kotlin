@@ -4646,6 +4646,86 @@ test("GaugeWorkspace stops restart prompting after synchronous debug setting dis
   await workspace.dispose();
 });
 
+test("GaugeWorkspace stops configuration reads after old debug setting disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    contexts,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    workspaceFolders: [],
+  });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+  let newSettingReads = 0;
+  workspace.launchConfig = {
+    get() {
+      workspace.dispose();
+      return false;
+    },
+  };
+  workspace.getWorkspaceConfiguration = () => ({
+    get() {
+      newSettingReads += 1;
+      return true;
+    },
+  });
+
+  const result = configurationChangeListeners[0]({});
+
+  assert.equal(result, undefined);
+  assert.equal(newSettingReads, 0);
+  assert.deepEqual(warnings, []);
+  assert.equal(contexts.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
+  await workspace.dispose();
+});
+
+test("GaugeWorkspace stops restart prompting after returned debug setting disposal", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    contexts,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+    },
+    workspaceFolders: [],
+  });
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+  workspace.getWorkspaceConfiguration = () => ({
+    get() {
+      workspace.dispose();
+      return true;
+    },
+  });
+
+  const result = configurationChangeListeners[0]({});
+
+  assert.equal(result, undefined);
+  assert.deepEqual(warnings, []);
+  assert.equal(contexts.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
+  await workspace.dispose();
+});
+
 test("GaugeWorkspace neutralizes synchronous restart continuation disposal", async () => {
   const { CLI, Command } = require("../src/cli");
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
