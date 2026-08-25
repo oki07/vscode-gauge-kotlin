@@ -1043,7 +1043,7 @@ class GaugeWorkspace {
     );
     this.clientsMap.set(project.root(), { project, client: languageClient });
     try {
-      await this.installRunnerFor(project);
+      await this.installRunnerFor(project, projectRoot, startGeneration);
       if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
         return this.cleanupLanguageClient(projectRoot, languageClient);
       }
@@ -1268,14 +1268,23 @@ class GaugeWorkspace {
     return true;
   }
 
-  async installRunnerFor(project) {
+  async installRunnerFor(project, projectRoot, startGeneration) {
+    if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
+      return undefined;
+    }
     const language = project.language();
     if (!language || this.cli.isPluginInstalled(language)) {
       return undefined;
     }
     const message = `The project ${this.pathModule.basename(project.root())} requires gauge ${language} to be installed. Would you like to install it?`;
+    if (!this.isServerStartCurrent(projectRoot, startGeneration)) {
+      return undefined;
+    }
     const action = await this.vscode.window.showErrorMessage(message, { modal: true }, "Yes", "No");
-    if (action === "Yes") {
+    if (
+      action === "Yes"
+      && this.isServerStartCurrent(projectRoot, startGeneration)
+    ) {
       return this.cli.installGaugeRunner(language, { vscode: this.vscode });
     }
     return undefined;

@@ -806,6 +806,227 @@ test("GaugeWorkspace abandons a registered language server start after disposal"
   assert.equal(workspace.getClientLanguageMap().size, 0);
 });
 
+test("GaugeWorkspace does not install a runner accepted after startup ownership ends", async () => {
+  for (const terminalBoundary of ["workspace disposal", "project removal"]) {
+    const promptEntered = deferred();
+    const promptResponse = deferred();
+    const installCalls = [];
+    const created = createEmptyKotlinWorkspace();
+    created.workspace.cli.gaugePlugins = [];
+    created.workspace.cli.installGaugeRunner = async (language) => {
+      installCalls.push(language);
+      return true;
+    };
+    created.vscode.window.showErrorMessage = (message, options, ...actions) => {
+      assert.match(message, /requires gauge kotlin to be installed/);
+      assert.deepEqual(options, { modal: true });
+      assert.deepEqual(actions, ["Yes", "No"]);
+      promptEntered.resolve();
+      return promptResponse.promise;
+    };
+    await created.workspace.ready();
+
+    const start = created.workspace.startServerFor("/workspace/gauge");
+    await promptEntered.promise;
+    const client = created.clients.get("/workspace/gauge").client;
+    if (terminalBoundary === "workspace disposal") {
+      await created.workspace.dispose();
+    } else {
+      await created.workspace.stopServerFor("/workspace/gauge");
+    }
+    promptResponse.resolve("Yes");
+    const startedClient = await start;
+    if (terminalBoundary === "project removal") {
+      await created.workspace.dispose();
+    }
+
+    assert.deepEqual({
+      clientCount: created.clients.size,
+      clientStopped: client.stopped,
+      installCalls,
+      languageCount: created.workspace.getClientLanguageMap().size,
+      startedClient,
+    }, {
+      clientCount: 0,
+      clientStopped: true,
+      installCalls: [],
+      languageCount: 0,
+      startedClient: undefined,
+    }, terminalBoundary);
+  }
+});
+
+test("GaugeWorkspace ignores an old runner install prompt after same-root restart", async () => {
+  const promptEntered = [deferred(), deferred()];
+  const promptResponse = [deferred(), deferred()];
+  const installCalls = [];
+  let promptCalls = 0;
+  const created = createEmptyKotlinWorkspace();
+  created.workspace.cli.gaugePlugins = [];
+  created.workspace.cli.installGaugeRunner = async (language) => {
+    installCalls.push(language);
+    return true;
+  };
+  created.vscode.window.showErrorMessage = () => {
+    const call = promptCalls;
+    promptCalls += 1;
+    promptEntered[call].resolve();
+    return promptResponse[call].promise;
+  };
+  await created.workspace.ready();
+
+  const firstStart = created.workspace.startServerFor("/workspace/gauge");
+  await promptEntered[0].promise;
+  const firstClient = created.clients.get("/workspace/gauge").client;
+  await created.workspace.stopServerFor("/workspace/gauge");
+
+  const secondStart = created.workspace.startServerFor("/workspace/gauge");
+  await promptEntered[1].promise;
+  const secondClient = created.clients.get("/workspace/gauge").client;
+  promptResponse[0].resolve("Yes");
+  const firstResult = await firstStart;
+  const afterOldPrompt = [...installCalls];
+
+  promptResponse[1].resolve("Yes");
+  const secondResult = await secondStart;
+  await created.workspace.dispose();
+
+  assert.equal(firstResult, undefined);
+  assert.deepEqual(afterOldPrompt, []);
+  assert.equal(firstClient.stopped, true);
+  assert.equal(secondResult, secondClient);
+  assert.deepEqual(installCalls, ["kotlin"]);
+  assert.equal(promptCalls, 2);
+});
+
+test("GaugeWorkspace does not open a runner prompt after synchronous startup cancellation", async () => {
+  const installCalls = [];
+  let pluginChecks = 0;
+  let promptCalls = 0;
+  let removal;
+  const created = createEmptyKotlinWorkspace();
+  created.workspace.cli.isPluginInstalled = () => {
+    pluginChecks += 1;
+    removal = created.workspace.stopServerFor("/workspace/gauge");
+    return false;
+  };
+  created.workspace.cli.installGaugeRunner = async (language) => {
+    installCalls.push(language);
+    return true;
+  };
+  created.vscode.window.showErrorMessage = () => {
+    promptCalls += 1;
+    return Promise.resolve("Yes");
+  };
+  await created.workspace.ready();
+
+  const startedClient = await created.workspace.startServerFor("/workspace/gauge");
+  await removal;
+  await created.workspace.dispose();
+
+  assert.deepEqual({
+    clientCount: created.clients.size,
+    installCalls,
+    pluginChecks,
+    promptCalls,
+    startedClient,
+  }, {
+    clientCount: 0,
+    installCalls: [],
+    pluginChecks: 1,
+    promptCalls: 0,
+    startedClient: undefined,
+  });
+});
+
+test("GaugeWorkspace reports a live runner install prompt failure", async () => {
+  const promptError = new Error("runner prompt failed");
+  const startupErrors = [];
+  let promptCalls = 0;
+  const installCalls = [];
+  const created = createEmptyKotlinWorkspace();
+  created.workspace.cli.gaugePlugins = [];
+  created.workspace.cli.installGaugeRunner = async (language) => {
+    installCalls.push(language);
+    return true;
+  };
+  created.vscode.window.showErrorMessage = (message) => {
+    if (message.includes("requires gauge kotlin")) {
+      promptCalls += 1;
+      return Promise.reject(promptError);
+    }
+    startupErrors.push(message);
+    return Promise.resolve(undefined);
+  };
+  await created.workspace.ready();
+
+  const startedClient = await created.workspace.startServerFor("/workspace/gauge");
+  await created.workspace.dispose();
+
+  assert.deepEqual({
+    clientCount: created.clients.size,
+    installCalls,
+    promptCalls,
+    startedClient,
+    startupErrors,
+  }, {
+    clientCount: 0,
+    installCalls: [],
+    promptCalls: 1,
+    startedClient: undefined,
+    startupErrors: [
+      "Unable to start Gauge language server for /workspace/gauge. runner prompt failed",
+    ],
+  });
+});
+
+test("GaugeWorkspace suppresses an old runner prompt failure after same-root restart", async () => {
+  const promptEntered = [deferred(), deferred()];
+  const promptResponse = [deferred(), deferred()];
+  const oldPromptError = new Error("old runner prompt failed");
+  const startupErrors = [];
+  let promptCalls = 0;
+  const created = createEmptyKotlinWorkspace();
+  created.workspace.cli.gaugePlugins = [];
+  created.vscode.window.showErrorMessage = (message) => {
+    if (!message.includes("requires gauge kotlin")) {
+      startupErrors.push(message);
+      return Promise.resolve(undefined);
+    }
+    const call = promptCalls;
+    promptCalls += 1;
+    promptEntered[call].resolve();
+    return promptResponse[call].promise;
+  };
+  await created.workspace.ready();
+
+  const firstStart = created.workspace.startServerFor("/workspace/gauge");
+  await promptEntered[0].promise;
+  const firstClient = created.clients.get("/workspace/gauge").client;
+  await created.workspace.stopServerFor("/workspace/gauge");
+
+  const secondStart = created.workspace.startServerFor("/workspace/gauge");
+  await promptEntered[1].promise;
+  const secondClient = created.clients.get("/workspace/gauge").client;
+  promptResponse[0].reject(oldPromptError);
+  const firstResult = await firstStart;
+  const afterOldPrompt = {
+    currentClient: created.clients.get("/workspace/gauge").client,
+    startupErrors: [...startupErrors],
+  };
+
+  promptResponse[1].resolve("No");
+  const secondResult = await secondStart;
+  await created.workspace.dispose();
+
+  assert.equal(firstResult, undefined);
+  assert.equal(firstClient.stopped, true);
+  assert.equal(afterOldPrompt.currentClient, secondClient);
+  assert.deepEqual(afterOldPrompt.startupErrors, []);
+  assert.equal(secondResult, secondClient);
+  assert.equal(promptCalls, 2);
+});
+
 test("GaugeWorkspace stops a client-start boundary once during disposal", async () => {
   let markStartEntered;
   const startEntered = new Promise((resolve) => {
