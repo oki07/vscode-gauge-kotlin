@@ -979,7 +979,15 @@ function startGaugeServices(context, vscode, options = {}) {
   if (dependencyStepIndexDisposable) {
     context.subscriptions.push(dependencyStepIndexDisposable);
   }
-  (options.showWelcomeNotification || showWelcomeNotification)(context, vscode);
+  observeDetachedNotification(() => (
+    options.showWelcomeNotification || showWelcomeNotification
+  )(context, vscode, {
+    isCurrent: () => isExtensionActivationCurrent(options.extensionActivation),
+    stoppedSignal: options.extensionActivation && options.extensionActivation.stoppedSignal,
+  }));
+  if (!isExtensionActivationCurrent(options.extensionActivation)) {
+    return undefined;
+  }
   registerDebugConfigurationProvider(context, vscode);
   registerGaugeLanguageConfiguration(context, vscode);
   const WorkspaceDocumentStoreCtor = options.WorkspaceDocumentStore || WorkspaceDocumentStore;

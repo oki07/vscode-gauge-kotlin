@@ -4545,6 +4545,161 @@ test("activation does not wait for Gauge CLI gate notifications", async () => {
   ]);
 });
 
+test("activation owns and observes the welcome notification operation", async () => {
+  const extension = require("../src/extension");
+  const snapshots = [];
+
+  for (const settlement of ["throw", "reject", "stop-and-throw"]) {
+    await extension.deactivate();
+    const notificationError = new Error(`${settlement} welcome notification failed`);
+    const context = { subscriptions: [] };
+    const { fakeVscode } = createFakeVscode({
+      workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+    });
+    let notificationObservations = 0;
+    let workspaceCreations = 0;
+    let workspaceDisposals = 0;
+    const cli = {
+      isGaugeInstalled() {
+        return true;
+      },
+      isGaugeVersionGreaterOrEqual() {
+        return true;
+      },
+    };
+
+    let helperCall;
+    let stoppedSignalOutcome = "missing";
+    const activationOutcome = await Promise.resolve().then(() => extension.activate(
+      context,
+      fakeVscode,
+      {
+        ConfigProvider: class FakeConfigProvider {
+          dispose() {}
+        },
+        createCli() {
+          return cli;
+        },
+        GaugeWorkspace: class FakeGaugeWorkspace {
+          constructor() {
+            this.disposed = false;
+            workspaceCreations += 1;
+          }
+
+          dispose() {
+            if (this.disposed) {
+              return;
+            }
+            this.disposed = true;
+            workspaceDisposals += 1;
+          }
+        },
+        ProjectInitializer: class FakeProjectInitializer {
+          dispose() {}
+        },
+        projectFactory: {
+          getGaugeRootFromFilePath() {
+            return "/workspace/gauge";
+          },
+          isGaugeProject() {
+            return true;
+          },
+        },
+        semanticTokensLegend: {},
+        showWelcomeNotification(receivedContext, receivedVscode, ownership) {
+          if (ownership && ownership.stoppedSignal) {
+            stoppedSignalOutcome = "pending";
+            Promise.resolve(ownership.stoppedSignal).then(
+              () => {
+                stoppedSignalOutcome = "fulfilled";
+              },
+              () => {
+                stoppedSignalOutcome = "rejected";
+              },
+            );
+          }
+          helperCall = {
+            context: receivedContext,
+            currentAtCall: ownership && ownership.isCurrent(),
+            ownership,
+            vscode: receivedVscode,
+          };
+          if (settlement === "stop-and-throw") {
+            extension.deactivate();
+          }
+          if (settlement !== "reject") {
+            throw notificationError;
+          }
+          return {
+            then(_resolve, reject) {
+              notificationObservations += 1;
+              reject(notificationError);
+            },
+          };
+        },
+        SpecNodeProvider: class FakeSpecNodeProvider {
+          dispose() {}
+        },
+      },
+    )).then(
+      () => "fulfilled",
+      () => "rejected",
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    snapshots.push({
+      activationOutcome,
+      currentAtCall: helperCall && helperCall.currentAtCall,
+      currentAtSnapshot: helperCall && helperCall.ownership.isCurrent(),
+      notificationObservations,
+      settlement,
+      stoppedSignalOutcome,
+      workspaceCreations,
+    });
+    await extension.deactivate();
+    for (const subscription of context.subscriptions) {
+      if (subscription && typeof subscription.dispose === "function") {
+        try {
+          subscription.dispose();
+        } catch (_error) {
+          // Test cleanup continues across unrelated provider disposals.
+        }
+      }
+    }
+    assert.equal(workspaceDisposals, workspaceCreations);
+  }
+
+  assert.deepEqual(snapshots, [
+    {
+      activationOutcome: "fulfilled",
+      currentAtCall: true,
+      currentAtSnapshot: true,
+      notificationObservations: 0,
+      settlement: "throw",
+      stoppedSignalOutcome: "pending",
+      workspaceCreations: 1,
+    },
+    {
+      activationOutcome: "fulfilled",
+      currentAtCall: true,
+      currentAtSnapshot: true,
+      notificationObservations: 1,
+      settlement: "reject",
+      stoppedSignalOutcome: "pending",
+      workspaceCreations: 1,
+    },
+    {
+      activationOutcome: "fulfilled",
+      currentAtCall: true,
+      currentAtSnapshot: false,
+      notificationObservations: 0,
+      settlement: "stop-and-throw",
+      stoppedSignalOutcome: "fulfilled",
+      workspaceCreations: 0,
+    },
+  ]);
+});
+
 test("activation shares a single CLI probe across services and execution", () => {
   const extension = require("../src/extension");
 
