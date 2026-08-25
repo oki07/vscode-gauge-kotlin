@@ -4909,6 +4909,13 @@ function findConceptHeadings(text) {
   const lines = text.split("\n");
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
+    if (isGaugeStepLine(rawLine)) {
+      const docStringEndLine = docStringEndLineAfterStep(lines, line);
+      if (docStringEndLine !== undefined) {
+        line = docStringEndLine;
+        continue;
+      }
+    }
     const hashHeading = conceptHashHeading(rawLine, line);
     if (hashHeading) {
       headings.push(hashHeading);

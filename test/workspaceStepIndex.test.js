@@ -108,6 +108,57 @@ test("WorkspaceStepIndex shares completion, definition, and reference analysis",
   assert.equal(referenceCount, 1);
 });
 
+test("WorkspaceStepIndex excludes closed multiline payload headings from concepts", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const concept = createDocument([
+    "# Alpha concept",
+    "* Payload",
+    "\"\"\"",
+    "# Hidden hash concept",
+    "Hidden legacy concept",
+    "=====================",
+    "\"\"\"",
+    "# Omega concept",
+    "* Visible",
+    "** Comment",
+    "\"\"\"",
+    "# Double-star concept",
+    "* Visible through comment fence",
+    "# Owner concept",
+    "* Payload",
+    "\"\"\"",
+    "# Retained concept",
+    "* Retained",
+  ].join("\n"), "/workspace/gauge/concepts/payload.cpt", "gauge-concept", 1);
+  const store = new FakeDocumentStore([concept]);
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    vscode: { workspace: { textDocuments: [concept] } },
+  });
+
+  const completion = await index.completionEntries(concept);
+  const hiddenDefinitions = await index.definitionEntries(
+    concept,
+    ["Hidden hash concept", "Hidden legacy concept"],
+  );
+  const retainedDefinitions = await index.definitionEntries(concept, ["Retained concept"]);
+
+  assert.deepEqual(
+    completion.filter((entry) => entry.detail === "concept").map((entry) => entry.label),
+    [
+      "Alpha concept",
+      "Omega concept",
+      "Double-star concept",
+      "Owner concept",
+      "Retained concept",
+    ],
+  );
+  assert.deepEqual(hiddenDefinitions, []);
+  assert.equal(retainedDefinitions.length, 1);
+  assert.equal(retainedDefinitions[0].heading.start.line, 16);
+});
+
 test("WorkspaceStepIndex refreshes unopened constant-backed aliases", async () => {
   const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
   const constantsPath = "/workspace/gauge/src/Constants.kt";
