@@ -15,6 +15,7 @@ const CONCEPT_STATIC_PARAMETER_MESSAGE = "Concept heading can have only Dynamic 
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const DUPLICATE_SCENARIO_PREFIX = "Duplicate scenario definition";
+const MIXED_MULTILINE_PARAMETER_MESSAGE = "Step should not mix inline parameters with a multiline argument";
 const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same file";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
@@ -4939,6 +4940,32 @@ function findConceptDefinitionHeadings(text) {
     .filter((heading) => !isHashScenarioHeading(lines[heading.start.line]));
 }
 
+// Gauge stops parsing inline parameters as soon as a step carries a multi-line
+// argument (references/gauge/parser/stepParser.go processStep), so the step
+// keeps its raw text as the step value and gets exactly one implicit argument
+// (references/gauge/parser/specparser.go CreateStepUsingLookup). A quoted or
+// angled parameter left on such a step is therefore never read as a parameter:
+// a static one only matches an implementation that hard codes the literal
+// value, and a dynamic one can never match at all, because a runner turns
+// every <name> in its annotation into a placeholder
+// (references/gauge-java/src/main/java/com/thoughtworks/gauge/scan/StepsUtil.java).
+// Gauge means to reject the combination outright, as its own parser test
+// records (references/gauge/parser/specparser_test.go
+// TestStepWithMixedExplicitAndImplicitArgs, "we can't mix explicit and
+// implicit args"), but the real parse path never enforces it. Reporting it
+// here keeps the editor from calling a step resolved that Gauge will refuse.
+function stepParseError(stepText, docStringEndLine) {
+  if (!stepText) {
+    return undefined;
+  }
+  if (docStringEndLine === undefined) {
+    return stepParserError(stepText);
+  }
+  return countStepParameters(stepText) > 0
+    ? MIXED_MULTILINE_PARAMETER_MESSAGE
+    : undefined;
+}
+
 function findGaugeSteps(text, options = {}) {
   const entries = [];
   const lines = text.split("\n");
@@ -4975,9 +5002,7 @@ function findGaugeSteps(text, options = {}) {
     entries.push({
       end: { line: endLine, character: endCharacter },
       marker,
-      parseError: stepText && docStringEndLine === undefined
-        ? stepParserError(stepText)
-        : undefined,
+      parseError: stepParseError(stepText, docStringEndLine),
       normalized: stepText ? normalizeStepTemplate(stepText) : undefined,
       start: { line: startLine, character: marker },
       text: stepText,
@@ -5411,7 +5436,7 @@ function conceptCircularReferenceDiagnostics(vscode, document, conceptDocuments)
 function collectStepUsageTemplates(text, usage) {
   const lines = text.split("\n");
   for (const entry of findGaugeSteps(text)) {
-    if (!entry.text || !entry.normalized) {
+    if (!entry.text || !entry.normalized || entry.parseError) {
       continue;
     }
     usage.used.add(entry.normalized);

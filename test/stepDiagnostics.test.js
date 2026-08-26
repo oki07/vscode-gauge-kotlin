@@ -4990,6 +4990,102 @@ test("GaugeStepDiagnosticsProvider skips inline parser errors for docstring step
   );
 });
 
+test("GaugeStepDiagnosticsProvider reports a static parameter mixed with a multiline argument", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Send \"alice\" payload",
+    "\"\"\"",
+    "body",
+    "\"\"\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Send <name> payload\")",
+    "fun send(name: String, content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Step should not mix inline parameters with a multiline argument"],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
+});
+
+test("GaugeStepDiagnosticsProvider reports a dynamic parameter mixed with a multiline argument", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "|name|",
+    "|----|",
+    "|bob|",
+    "",
+    "## Scenario",
+    "* Send <name> payload",
+    "\"\"\"",
+    "body",
+    "\"\"\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Send <name> payload\")",
+    "fun send(name: String, content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Step should not mix inline parameters with a multiline argument"],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider reports mixed multiline arguments inside concepts", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Send the payload",
+    "* Send \"alice\" payload",
+    "\"\"\"",
+    "body",
+    "\"\"\"",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/send.cpt");
+
+  const diagnostics = provider.provideDiagnostics(document, [document]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Step should not mix inline parameters with a multiline argument"],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider keeps a mixed multiline step out of the step usage index", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Send \"alice\" payload",
+    "\"\"\"",
+    "body",
+    "\"\"\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Send <name> payload\")",
+    "fun send(name: String, content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(implementation, [
+    specDocument,
+    implementation,
+  ]);
+
+  assert.deepEqual(diagnostics, []);
+});
+
 test("GaugeStepDiagnosticsProvider reports Gauge table header parser errors", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
