@@ -77,6 +77,7 @@ function createFakeVscode(options = {}) {
   const calls = [];
   const commandCalls = [];
   const profiles = [];
+  const runCancellations = [];
   const documentListeners = {
     close: undefined,
   };
@@ -103,7 +104,10 @@ function createFakeVscode(options = {}) {
     },
     createTestRun(request) {
       calls.push(["run", request]);
+      const cancellation = createCancellationToken();
+      runCancellations.push(cancellation);
       return {
+        token: cancellation.token,
         appendOutput(output, location, item) {
           calls.push(item
             ? ["output", output, location, item.id]
@@ -140,6 +144,7 @@ function createFakeVscode(options = {}) {
     commandCalls,
     controller,
     profiles,
+    runCancellations,
     vscode: {
       commands: {
         executeCommand(command) {
@@ -3713,4 +3718,51 @@ test("GaugeTestController terminates and de-duplicates skip reasons in the run o
   assert.deepEqual(itemOutputs.map((entry) => [entry[1], entry[3]]), [
     ["Gauge skipped this scenario without reporting a reason.\r\n", "scenario-2"],
   ]);
+});
+
+test("GaugeTestController stops execution when the Test Results run is cancelled", async () => {
+  const { GaugeTestController } = require("../src/testController");
+  const executionEntered = deferred();
+  const executionResponse = deferred();
+  const { calls, controller, runCancellations, vscode } = createFakeVscode();
+  const stopCommands = [];
+  const executionController = {
+    handleCommand(command) {
+      stopCommands.push(command);
+      return Promise.resolve(undefined);
+    },
+    handleCommandWithMetadata(_command, metadata) {
+      metadata.onStart();
+      executionEntered.resolve();
+      return executionResponse.promise;
+    },
+  };
+  const gaugeTests = new GaugeTestController({ executionController, vscode });
+  gaugeTests.register();
+  const scenario = controller.createTestItem(
+    "/workspace/specs/example.spec:3",
+    "Successful checkout",
+    { fsPath: "/workspace/specs/example.spec" },
+  );
+  const sink = gaugeTests.createExecutionEventSink();
+
+  // A CodeLens run carries no run-handler token, so the Test Results stop
+  // button can only reach the extension through TestRun.token.
+  const pendingRun = gaugeTests.runCodeLensTarget("gauge.execute", scenario.id);
+  await executionEntered.promise;
+  sink({ type: "testStarted", id: scenario.id, name: scenario.label });
+
+  assert.equal(calls.filter((entry) => entry[0] === "run").length, 1);
+  assert.equal(runCancellations.length, 1);
+
+  runCancellations[0].cancel();
+  await drainMicrotasks();
+
+  assert.deepEqual(stopCommands, ["gauge.stopExecution"]);
+
+  executionResponse.resolve(undefined);
+  await pendingRun;
+
+  assert.equal(runCancellations[0].listenerCount, 0);
+  assert.equal(runCancellations[0].disposalCalls, 1);
 });

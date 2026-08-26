@@ -473,6 +473,7 @@ class GaugeTestController {
     this.workspaceDiscoveryGeneration = 0;
     this.discoveryCancellationSources = new Set();
     this.registrationDisposables = undefined;
+    this.runTokenDisposables = new Map();
     this.disposed = false;
   }
 
@@ -1069,6 +1070,7 @@ class GaugeTestController {
     ) {
       currentRun.end();
     }
+    this.releaseAllRunTokenCancellations();
     this.activeRunContext = undefined;
     this.currentRun = undefined;
     this.currentRequest = undefined;
@@ -1274,6 +1276,7 @@ class GaugeTestController {
       this.currentRequest = undefined;
     }
     this.releaseRunCancellation(context);
+    this.releaseRunTokenCancellation(run);
     if (!wasEnded && run && typeof run.end === "function") {
       run.end();
     }
@@ -1419,6 +1422,7 @@ class GaugeTestController {
       return undefined;
     }
     this.currentRun = run;
+    this.observeRunCancellation(run);
     return run;
   }
 
@@ -1452,6 +1456,75 @@ class GaugeTestController {
     Promise.resolve(this.executionController.handleCommand("gauge.stopExecution")).catch(() => {});
   }
 
+  requestHostCancellation(context) {
+    if (this.disposed) {
+      return;
+    }
+    if (!context) {
+      // A run without an owning context still has to stop the Gauge process
+      // the Test UI is reporting on.
+      this.stopExecution();
+      return;
+    }
+    context.cancelled = true;
+    context.hostCancellationRequested = true;
+    const executionCommand = context.activeCommand;
+    if (executionCommand && executionCommand.started) {
+      this.stopExecutionCommand(context, executionCommand);
+    } else {
+      this.resolveExecutionCommand(executionCommand);
+    }
+  }
+
+  observeRunCancellation(run) {
+    if (this.disposed || !run || this.runTokenDisposables.has(run)) {
+      return;
+    }
+    const token = run.token;
+    if (!token || typeof token.onCancellationRequested !== "function") {
+      return;
+    }
+    let cancelled = false;
+    const cancel = () => {
+      if (cancelled) {
+        return;
+      }
+      cancelled = true;
+      // TestRun.token is the only cancellation signal for runs the extension
+      // starts itself, such as CodeLens and spec explorer runs.
+      this.requestHostCancellation(this.activeRunContext);
+    };
+    const disposable = token.onCancellationRequested(cancel);
+    this.runTokenDisposables.set(run, disposable);
+    if (token.isCancellationRequested) {
+      cancel();
+    }
+    if (this.disposed) {
+      this.releaseRunTokenCancellation(run);
+    }
+  }
+
+  releaseRunTokenCancellation(run) {
+    const disposable = run && this.runTokenDisposables.get(run);
+    if (!disposable) {
+      return;
+    }
+    this.runTokenDisposables.delete(run);
+    if (typeof disposable.dispose === "function") {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Host cancellation cleanup must not replace the execution outcome.
+      }
+    }
+  }
+
+  releaseAllRunTokenCancellations() {
+    for (const run of [...this.runTokenDisposables.keys()]) {
+      this.releaseRunTokenCancellation(run);
+    }
+  }
+
   registerCancellation(token, context) {
     if (
       this.disposed
@@ -1467,14 +1540,7 @@ class GaugeTestController {
       }
       cancelled = true;
       if (context) {
-        context.cancelled = true;
-        context.hostCancellationRequested = true;
-        const executionCommand = context.activeCommand;
-        if (executionCommand && executionCommand.started) {
-          this.stopExecutionCommand(context, executionCommand);
-        } else {
-          this.resolveExecutionCommand(executionCommand);
-        }
+        this.requestHostCancellation(context);
       }
     };
     const disposable = token.onCancellationRequested(cancel);
@@ -1658,6 +1724,7 @@ class GaugeTestController {
         if (this.activeRunContext) {
           this.activeRunContext.run = run;
         }
+        this.observeRunCancellation(run);
       }
     }
     return this.currentRun;
