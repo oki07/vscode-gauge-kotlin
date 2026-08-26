@@ -180,11 +180,6 @@
         "icon": "$(open-preview)"
       },
       {
-        "command": "gauge.config.saveRecommended",
-        "title": "Optimize VS Code configuration for Gauge",
-        "category": "Gauge"
-      },
-      {
         "command": "gauge.stopExecution",
         "title": "Stop current gauge execution",
         "category": "Gauge",
@@ -345,10 +340,6 @@
           "when": "gauge:activated"
         },
         {
-          "command": "gauge.config.saveRecommended",
-          "when": "gauge:activated"
-        },
-        {
           "command": "gauge.specexplorer.runAllActiveProjectSpecs",
           "when": "config.noExists"
         },
@@ -467,16 +458,6 @@
           "type": "boolean",
           "default": true,
           "description": "When true, Run and Debug CodeLens actions appear above Gauge specification and scenario headings."
-        },
-        "gauge.recommendedSettings.options": {
-          "type": "string",
-          "default": "Remind me later",
-          "enum": [
-            "Apply & Reload",
-            "Remind me later",
-            "Ignore"
-          ],
-          "description": "Gauge recommended settings are shown/ignored based on the given value."
         },
         "gauge.kotlin.template": {
           "type": "string",

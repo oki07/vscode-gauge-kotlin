@@ -252,7 +252,6 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "gauge.format",
     "gauge.toggle.lineComment",
     "gauge.preview",
-    "gauge.config.saveRecommended",
     "gauge.stopExecution",
     "gauge.execute.failed",
     "gauge.report.html",
@@ -1209,5 +1208,40 @@ test("extension manifest preserves official debugger configuration snippets", ()
   assert.deepEqual(
     debuggerByType(manifest, "gauge").configurationSnippets,
     debuggerByType(referenceManifest, "gauge").configurationSnippets,
+  );
+});
+
+test("extension manifest drops the Gauge recommended settings surface", () => {
+  const manifest = readPackageJson();
+  const referenceManifest = readReferencePackageJson();
+
+  // gauge-vscode recommends files.autoSave because it only saves when the
+  // language server asks. This extension saves before every execution, rename,
+  // format and saveFiles request, so the recommendation is dead weight that only
+  // writes a .vscode/settings.json into the user project.
+  assert.ok(
+    referenceManifest.contributes.commands
+      .some((entry) => entry.command === "gauge.config.saveRecommended"),
+  );
+  assert.ok(
+    referenceManifest.contributes.configuration.properties["gauge.recommendedSettings.options"],
+  );
+
+  assert.equal(
+    manifest.contributes.commands
+      .some((entry) => entry.command === "gauge.config.saveRecommended"),
+    false,
+  );
+  assert.equal(
+    manifest.contributes.menus.commandPalette
+      .some((entry) => entry.command === "gauge.config.saveRecommended"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      manifest.contributes.configuration.properties,
+      "gauge.recommendedSettings.options",
+    ),
+    false,
   );
 });

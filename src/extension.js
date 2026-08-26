@@ -6,7 +6,6 @@ const {
   GaugeArgumentCodeActionProvider,
   registerArgumentSelectionCommand,
 } = require("./argumentCodeActions");
-const { ConfigProvider } = require("./config/configProvider");
 const { toggleGaugeLineComment } = require("./commentCommand");
 const {
   EXECUTION_COMMANDS,
@@ -77,7 +76,6 @@ const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
   "gauge.create.specification",
   "gauge.create.concept",
-  "gauge.config.saveRecommended",
   "gauge.extract.concept",
   "gauge.showReferences.atCursor",
   "gauge.specexplorer.debugNode",
@@ -123,7 +121,6 @@ const GAUGE_COMMANDS = [
   "gauge.format",
   "gauge.toggle.lineComment",
   "gauge.preview",
-  "gauge.config.saveRecommended",
   "gauge.stopExecution",
   "gauge.execute.failed",
   "gauge.report.html",
@@ -878,8 +875,6 @@ function createCommandHandler(command, vscode, executionController, options = {}
         return (options.formatDocument || formatActiveGaugeDocument)(vscode, options);
       case "gauge.toggle.lineComment":
         return (options.toggleLineComment || toggleGaugeLineComment)(vscode, options);
-      case "gauge.config.saveRecommended":
-        return notify(vscode, "Gauge recommended settings are not available yet.");
       case "gauge.stopExecution":
         return notify(vscode, "No Gauge execution is currently running.");
       default:
@@ -1086,7 +1081,6 @@ function startGaugeServices(context, vscode, options = {}) {
     || ExtractConceptCommandProvider;
   const GenerateStubCommandProviderCtor = options.GenerateStubCommandProvider || GenerateStubCommandProvider;
   const SpecNodeProviderCtor = options.SpecNodeProvider || SpecNodeProvider;
-  const ConfigProviderCtor = options.ConfigProvider || ConfigProvider;
   const detachedServices = [];
   const gaugeWorkspace = new GaugeWorkspaceCtor({
     cli,
@@ -1144,11 +1138,6 @@ function startGaugeServices(context, vscode, options = {}) {
   if (stopDetachedServices(options.extensionActivation, detachedServices)) {
     return undefined;
   }
-  const configProvider = new ConfigProviderCtor(context, { vscode });
-  detachedServices.push(configProvider);
-  if (stopDetachedServices(options.extensionActivation, detachedServices)) {
-    return undefined;
-  }
   activeClientsMap = clientsMap;
   activeGaugeWorkspace = gaugeWorkspace;
   activeGaugeWorkspaceDisposal = undefined;
@@ -1158,7 +1147,6 @@ function startGaugeServices(context, vscode, options = {}) {
     extractConceptProvider,
     generateStubProvider,
     specNodeProvider,
-    configProvider,
   );
   return gaugeWorkspace;
 }

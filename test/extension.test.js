@@ -14,7 +14,6 @@ function deferred() {
 
 const PROVIDER_COMMANDS = new Set([
   "gauge.createProject",
-  "gauge.config.saveRecommended",
   "gauge.extract.concept",
   "gauge.showReferences.atCursor",
   "gauge.specexplorer.debugNode",
@@ -433,7 +432,6 @@ test("activation preserves Gauge editor language configuration", () => {
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
-    ConfigProvider: DisposableOnly,
     ExtractConceptCommandProvider: DisposableOnly,
     GenerateStubCommandProvider: DisposableOnly,
     SpecNodeProvider: DisposableOnly,
@@ -500,10 +498,6 @@ test("activation registers Gauge reference providers", () => {
       constructor() {}
       dispose() {}
     },
-    ConfigProvider: class ConfigProvider {
-      constructor() {}
-      dispose() {}
-    },
     SpecNodeProvider: class SpecNodeProvider {
       constructor() {}
       dispose() {}
@@ -537,20 +531,9 @@ test("activation defers CLI and debug provider creation when Gauge services are 
   const extension = require("../src/extension");
 
   let createCliCalls = 0;
-  let configProvider;
   let projectInitializerOptions;
   const context = { subscriptions: [] };
   const { debugProviders, fakeVscode } = createFakeVscode();
-
-  class FakeConfigProvider {
-    constructor(receivedContext, options) {
-      this.context = receivedContext;
-      this.options = options;
-      configProvider = this;
-    }
-
-    dispose() {}
-  }
 
   class FakeProjectInitializer {
     constructor(options) {
@@ -575,12 +558,10 @@ test("activation defers CLI and debug provider creation when Gauge services are 
     createExecutionController() {
       return { handleCommand() {} };
     },
-    ConfigProvider: FakeConfigProvider,
     ProjectInitializer: FakeProjectInitializer,
   });
 
   assert.equal(createCliCalls, 0);
-  assert.equal(configProvider, undefined);
   assert.equal(typeof projectInitializerOptions.createCli, "function");
   assert.deepEqual(debugProviders, []);
 
@@ -588,24 +569,35 @@ test("activation defers CLI and debug provider creation when Gauge services are 
   assert.equal(createCliCalls, 1);
 });
 
-test("activation registers config provider only after Gauge services start", () => {
+test("activation writes no workspace settings and recommends none", () => {
   const extension = require("../src/extension");
 
-  let configProvider;
   const context = { subscriptions: [] };
   const { fakeVscode } = createFakeVscode({
     workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
   });
-
-  class FakeConfigProvider {
-    constructor(receivedContext, options) {
-      this.context = receivedContext;
-      this.options = options;
-      configProvider = this;
-    }
-
-    dispose() {}
-  }
+  const configurationUpdates = [];
+  const informationMessages = [];
+  const originalGetConfiguration = fakeVscode.workspace.getConfiguration;
+  fakeVscode.workspace.getConfiguration = (section) => {
+    const configuration = originalGetConfiguration(section);
+    return {
+      get(key) {
+        return typeof configuration.get === "function" ? configuration.get(key) : undefined;
+      },
+      inspect() {
+        return {};
+      },
+      update(key, value, target) {
+        configurationUpdates.push({ key, target, value });
+        return Promise.resolve(undefined);
+      },
+    };
+  };
+  fakeVscode.window.showInformationMessage = (message) => {
+    informationMessages.push(message);
+    return undefined;
+  };
 
   extension.activate(context, fakeVscode, {
     createCli() {
@@ -624,7 +616,6 @@ test("activation registers config provider only after Gauge services start", () 
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: FakeConfigProvider,
     ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
       dispose() {}
     },
@@ -660,9 +651,13 @@ test("activation registers config provider only after Gauge services start", () 
     showWelcomeNotification() {},
   });
 
-  assert.equal(configProvider.context, context);
-  assert.equal(configProvider.options.vscode, fakeVscode);
-  assert.equal(context.subscriptions.includes(configProvider), true);
+  // Only the Global semantic token colors may be written. Nothing may land in
+  // the workspace target, which is what creates a project .vscode/settings.json.
+  assert.deepEqual(
+    configurationUpdates.filter((entry) => entry.target !== "global"),
+    [],
+  );
+  assert.deepEqual(informationMessages, []);
 });
 
 test("activation ignores Markdown Gauge language documents outside Gauge projects", () => {
@@ -1259,7 +1254,6 @@ test("new activation supersedes pending asynchronous Gauge service discovery", a
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
-    ConfigProvider: DisposableOnly,
     ExtractConceptCommandProvider: DisposableOnly,
     GenerateStubCommandProvider: DisposableOnly,
     SpecNodeProvider: DisposableOnly,
@@ -1442,7 +1436,6 @@ test("activation does not discover tests after pending workspace readiness is de
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
-    ConfigProvider: DisposableOnly,
     ExtractConceptCommandProvider: DisposableOnly,
     GenerateStubCommandProvider: DisposableOnly,
     SpecNodeProvider: DisposableOnly,
@@ -1548,7 +1541,6 @@ test("activation does not connect a workspace handed off after deactivation", as
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
-    ConfigProvider: DisposableOnly,
     ExtractConceptCommandProvider: DisposableOnly,
     GenerateStubCommandProvider: DisposableOnly,
     SpecNodeProvider: DisposableOnly,
@@ -1633,7 +1625,7 @@ test("activation disposes unpublished services after synchronous deactivation", 
       constructions.push("late");
       finalProviders.push(this);
       lateProviderConstructions += 1;
-      if (lateProviderConstructions === 4) {
+      if (lateProviderConstructions === 3) {
         extension.deactivate();
       }
     }
@@ -1666,7 +1658,6 @@ test("activation disposes unpublished services after synchronous deactivation", 
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: CountedReferenceProvider,
-    ConfigProvider: LateProvider,
     ExtractConceptCommandProvider: LateProvider,
     GenerateStubCommandProvider: LateProvider,
     SpecNodeProvider: LateProvider,
@@ -1692,10 +1683,9 @@ test("activation disposes unpublished services after synchronous deactivation", 
     "late",
     "late",
     "late",
-    "late",
   ]);
   assert.equal(workspaceDisposeCalls, 1);
-  assert.equal(finalProviderDisposeCalls, 5);
+  assert.equal(finalProviderDisposeCalls, 4);
   assert.equal(context.subscriptions.includes(workspace), false);
   assert.equal(finalProviders.every(
     (provider) => !context.subscriptions.includes(provider),
@@ -2262,9 +2252,6 @@ test("create specification command provides Gauge LSP spec directories", async (
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
       dispose() {}
     },
@@ -2348,9 +2335,6 @@ test("file creation commands use Gauge client project roots", async () => {
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
       dispose() {}
     },
@@ -2425,9 +2409,6 @@ test("file creation commands use Explorer folder URI as the target directory", a
     GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
     semanticTokensLegend: { id: "legend" },
     GaugeWorkspace: class FakeGaugeWorkspace {
-      dispose() {}
-    },
-    ConfigProvider: class FakeConfigProvider {
       dispose() {}
     },
     GenerateStubCommandProvider: class FakeGenerateStubCommandProvider {
@@ -2728,16 +2709,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
     dispose() {}
   }
 
-  class FakeConfigProvider {
-    constructor(receivedContext, options) {
-      this.context = receivedContext;
-      this.options = options;
-      created.configProvider = this;
-    }
-
-    dispose() {}
-  }
-
   class FakeGenerateStubCommandProvider {
     constructor(clients, options) {
       this.clients = clients;
@@ -2913,7 +2884,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
     GaugeState: FakeGaugeState,
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
-    ConfigProvider: FakeConfigProvider,
     ExtractConceptCommandProvider: FakeExtractConceptCommandProvider,
     GenerateStubCommandProvider: FakeGenerateStubCommandProvider,
     SpecNodeProvider: FakeSpecNodeProvider,
@@ -3011,8 +2981,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
   assert.equal(definitionProviders[0].provider.workspaceStepIndex, created.workspaceStepIndex);
   assert.equal(created.referenceProvider.options.workspaceStepIndex, created.workspaceStepIndex);
   assert.equal(context.subscriptions.includes(created.workspaceStepIndex), true);
-  assert.equal(created.configProvider.context, context);
-  assert.equal(created.configProvider.options.vscode, fakeVscode);
   assert.equal(created.extractConceptProvider.clients, created.clientsMap);
   assert.equal(created.extractConceptProvider.options.vscode, fakeVscode);
   assert.equal(created.generateStubProvider.clients, created.clientsMap);
@@ -3031,7 +2999,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
   assert.equal(created.testController.refreshes, 1);
   assert.equal(context.subscriptions.includes(created.workspace), true);
   assert.equal(context.subscriptions.includes(created.referenceProvider), true);
-  assert.equal(context.subscriptions.includes(created.configProvider), true);
   assert.equal(context.subscriptions.includes(created.extractConceptProvider), true);
   assert.equal(context.subscriptions.includes(created.generateStubProvider), true);
   assert.equal(context.subscriptions.includes(created.specNodeProvider), true);
@@ -3233,9 +3200,6 @@ test("activation registers dynamic argument completions for Gauge documents", ()
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     DynamicArgumentCompletionProvider: FakeDynamicArgumentCompletionProvider,
     ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
       dispose() {}
@@ -3325,9 +3289,6 @@ test("activation owns one lifecycle-aware dynamic completion provider", () => {
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     DynamicArgumentCompletionProvider: FakeDynamicArgumentCompletionProvider,
     ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
       dispose() {}
@@ -3411,9 +3372,6 @@ test("activation owns one lifecycle-aware local CodeLens provider", () => {
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
     ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
       dispose() {}
@@ -3487,9 +3445,6 @@ test("activation leaves Gauge document formatting to the Gauge language client",
         gaugeWorkspaces += 1;
       }
 
-      dispose() {}
-    },
-    ConfigProvider: class FakeConfigProvider {
       dispose() {}
     },
     DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
@@ -3566,9 +3521,6 @@ test("activation leaves document symbols to Gauge LSP and registers concept work
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
     ExtractConceptCommandProvider: class FakeExtractConceptCommandProvider {
       dispose() {}
@@ -3643,9 +3595,6 @@ test("activation keeps local Gauge definitions independent from the language cli
       return { handleCommand() {} };
     },
     GaugeWorkspace: class FakeGaugeWorkspace {
-      dispose() {}
-    },
-    ConfigProvider: class FakeConfigProvider {
       dispose() {}
     },
     DynamicArgumentCompletionProvider: class FakeDynamicArgumentCompletionProvider {},
@@ -3760,7 +3709,6 @@ test("activation starts Gauge workspace services for an active Kotlin implementa
     },
     GaugeClients: FakeGaugeClients,
     GaugeWorkspace: FakeGaugeWorkspace,
-    ConfigProvider: FakeProvider,
     ExtractConceptCommandProvider: FakeProvider,
     GenerateStubCommandProvider: FakeProvider,
     SpecNodeProvider: FakeProvider,
@@ -3906,7 +3854,6 @@ test("activation starts Gauge workspace services for an active Java implementati
     },
     GaugeClients: FakeGaugeClients,
     GaugeWorkspace: FakeGaugeWorkspace,
-    ConfigProvider: FakeProvider,
     ExtractConceptCommandProvider: FakeProvider,
     GenerateStubCommandProvider: FakeProvider,
     SpecNodeProvider: FakeProvider,
@@ -4005,7 +3952,6 @@ test("activation starts Gauge workspace services for an active concept file by e
     },
     GaugeClients: FakeGaugeClients,
     GaugeWorkspace: FakeGaugeWorkspace,
-    ConfigProvider: FakeProvider,
     ExtractConceptCommandProvider: FakeProvider,
     GenerateStubCommandProvider: FakeProvider,
     SpecNodeProvider: FakeProvider,
@@ -4104,7 +4050,6 @@ test("activation starts Gauge workspace services for an active gauge-concept doc
     },
     GaugeClients: FakeGaugeClients,
     GaugeWorkspace: FakeGaugeWorkspace,
-    ConfigProvider: FakeProvider,
     ExtractConceptCommandProvider: FakeProvider,
     GenerateStubCommandProvider: FakeProvider,
     SpecNodeProvider: FakeProvider,
@@ -4306,7 +4251,6 @@ test("activation propagates the default project factory to Gauge providers", () 
   }
 
   extension.activate(context, fakeVscode, {
-    ConfigProvider: FakeProvider,
     createCli() {
       return cli;
     },
@@ -4574,9 +4518,6 @@ test("activation owns and observes the welcome notification operation", async ()
       context,
       fakeVscode,
       {
-        ConfigProvider: class FakeConfigProvider {
-          dispose() {}
-        },
         createCli() {
           return cli;
         },
@@ -4773,9 +4714,6 @@ test("activation does not save Gauge documents when Enter is typed", () => {
     GaugeWorkspace: class FakeGaugeWorkspace {
       dispose() {}
     },
-    ConfigProvider: class FakeConfigProvider {
-      dispose() {}
-    },
     SpecNodeProvider: class FakeSpecNodeProvider {
       dispose() {}
     },
@@ -4865,9 +4803,6 @@ test("activation skips the global semantic color write when rules are unchanged"
     semanticTokensLegend: {},
     showWelcomeNotification() {},
     GaugeWorkspace: class FakeGaugeWorkspace {
-      dispose() {}
-    },
-    ConfigProvider: class FakeConfigProvider {
       dispose() {}
     },
     SpecNodeProvider: class FakeSpecNodeProvider {
