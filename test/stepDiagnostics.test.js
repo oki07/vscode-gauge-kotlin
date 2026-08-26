@@ -5010,7 +5010,7 @@ test("GaugeStepDiagnosticsProvider reports a static parameter mixed with a multi
 
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.message),
-    ["Step should not mix inline parameters with a multiline argument"],
+    ["Step with a multiline argument should not have inline parameters"],
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
 });
@@ -5039,7 +5039,7 @@ test("GaugeStepDiagnosticsProvider reports a dynamic parameter mixed with a mult
 
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.message),
-    ["Step should not mix inline parameters with a multiline argument"],
+    ["Step with a multiline argument should not have inline parameters"],
   );
 });
 
@@ -5058,7 +5058,7 @@ test("GaugeStepDiagnosticsProvider reports mixed multiline arguments inside conc
 
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.message),
-    ["Step should not mix inline parameters with a multiline argument"],
+    ["Step with a multiline argument should not have inline parameters"],
   );
 });
 

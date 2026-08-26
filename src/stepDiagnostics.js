@@ -15,7 +15,7 @@ const CONCEPT_STATIC_PARAMETER_MESSAGE = "Concept heading can have only Dynamic 
 const CONCEPT_WITHOUT_STEP_MESSAGE = "Concept should have at least one step";
 const DUPLICATE_CONCEPT_MESSAGE = "Duplicate concept definition found";
 const DUPLICATE_SCENARIO_PREFIX = "Duplicate scenario definition";
-const MIXED_MULTILINE_PARAMETER_MESSAGE = "Step should not mix inline parameters with a multiline argument";
+const MIXED_MULTILINE_PARAMETER_MESSAGE = "Step with a multiline argument should not have inline parameters";
 const MULTIPLE_SPEC_HEADINGS_MESSAGE = "Multiple spec headings found in same file";
 const PARAMETER_MISMATCH_PREFIX = "Parameter count mismatch";
 const SCENARIO_BEFORE_SPEC_MESSAGE = "Scenario should be defined after the spec heading";
@@ -4954,6 +4954,14 @@ function findConceptDefinitionHeadings(text) {
 // TestStepWithMixedExplicitAndImplicitArgs, "we can't mix explicit and
 // implicit args"), but the real parse path never enforces it. Reporting it
 // here keeps the editor from calling a step resolved that Gauge will refuse.
+// The wording follows Gauge's own rule errors, closest to "Multiline step
+// should have exactly one argument" (references/gauge/parser/stepParser.go)
+// and "Step text should not have '{static}' or '{dynamic}' or '{special}'".
+// It does not reuse either string: the first says "Multiline step", which in
+// Gauge also names the unrelated feature that spreads one step text over
+// several lines (references/gauge/parser/lex.go AllowMultiLineStep, supported
+// here as the allowMultilineStep option below), and the second describes
+// parser internals rather than anything the author wrote.
 function stepParseError(stepText, docStringEndLine) {
   if (!stepText) {
     return undefined;
