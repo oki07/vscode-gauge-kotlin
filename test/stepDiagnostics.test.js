@@ -147,6 +147,128 @@ test("GaugeStepDiagnosticsProvider ignores unterminated docstrings for Step para
   assert.deepEqual(diagnostics, []);
 });
 
+test("GaugeStepDiagnosticsProvider accepts docstring Step parameters used by Gauge concepts", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Run the payload",
+    "* Execute the following content",
+    "\"\"\"",
+    "payload",
+    "\"\"\"",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/run.cpt");
+  const stepDocument = createDocument([
+    "@Step(\"Execute the following content\")",
+    "fun execute(content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [
+    conceptDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(diagnostics, []);
+});
+
+test("GaugeStepDiagnosticsProvider skips the single extra Step parameter when no usage decides it", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const stepDocument = createDocument([
+    "@Step(\"Execute the following content\")",
+    "fun execute(content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [stepDocument]);
+
+  assert.deepEqual(diagnostics, []);
+});
+
+test("GaugeStepDiagnosticsProvider skips the single extra Step parameter for unused aliases", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Execute the following content",
+    "\"\"\"",
+    "payload",
+    "\"\"\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const stepDocument = createDocument([
+    "@Step(\"Execute the following content\", \"Run the following content\")",
+    "fun execute(content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [
+    specDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(diagnostics, []);
+});
+
+test("GaugeStepDiagnosticsProvider reports the extra Step parameter when usage has no docstring", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "## Scenario",
+    "* Execute the following content",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const stepDocument = createDocument([
+    "@Step(\"Execute the following content\")",
+    "fun execute(content: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [
+    specDocument,
+    stepDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [0]) with step annotation : \"Execute the following content\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider reports more than one extra Step parameter without usage", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const stepDocument = createDocument([
+    "@Step(\"Execute the following content\")",
+    "fun execute(content: String, extra: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [stepDocument]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [2] expected [0]) with step annotation : \"Execute the following content\". ",
+    ],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider reports missing Step parameters without usage", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const stepDocument = createDocument([
+    "@Step(\"Say <what> to <who>\")",
+    "fun say(what: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+
+  const diagnostics = provider.provideDiagnostics(stepDocument, [stepDocument]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [1] expected [2]) with step annotation : \"Say <what> to <who>\". ",
+    ],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports plaintext Kotlin Step parameter count mismatches", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -7599,7 +7721,7 @@ test("GaugeStepDiagnosticsProvider clears diagnostic arbitration on disposal", (
   assert.deepEqual({
     diagnostics: provider.provideDiagnostics(specDocument, documents),
     diagnosisKeys: provider.lastDiagnosisKeys.size,
-    docStrings: provider.storeDocStringsCache.size,
+    docStrings: provider.storeStepUsageCache.size,
     implemented: provider.stepImplementedAt(specDocument, 2, documents),
     lines: provider.publishedDiagnosticLines(specDocument, UNDEFINED_STEP_MESSAGE),
     publishedLines: provider.publishedLines.size,

@@ -5408,18 +5408,18 @@ function conceptCircularReferenceDiagnostics(vscode, document, conceptDocuments)
     ));
 }
 
-function findDocStringStepTemplates(text) {
-  const templates = new Set();
+function collectStepUsageTemplates(text, usage) {
   const lines = text.split("\n");
   for (const entry of findGaugeSteps(text)) {
-    if (
-      entry.text
-      && docStringEndLineAfterStep(lines, entry.start.line) !== undefined
-    ) {
-      templates.add(entry.normalized);
+    if (!entry.text || !entry.normalized) {
+      continue;
+    }
+    usage.used.add(entry.normalized);
+    if (docStringEndLineAfterStep(lines, entry.start.line) !== undefined) {
+      usage.docString.add(entry.normalized);
     }
   }
-  return templates;
+  return usage;
 }
 
 function splitTopLevelParameters(text) {
@@ -8199,6 +8199,34 @@ function findJavaStepFunctions(text, externalConstants) {
   return entries;
 }
 
+function emptyStepUsage() {
+  return { docString: new Set(), used: new Set() };
+}
+
+function stepUsageEquals(left, right) {
+  return Boolean(left && right)
+    && setContentEquals(left.docString, right.docString)
+    && setContentEquals(left.used, right.used);
+}
+
+// IntelliJ resolves the parameter count of a step annotation through the Gauge
+// API and only ever adds one context derived parameter, the inline table
+// (references/intellij-gauge-plugin/src/com/thoughtworks/gauge/language/psi/SpecPsiImplUtil.java
+// getStepValueFor, references/gauge/parser/parse.go ExtractStepValueAndParams).
+// A multi-line argument is the same kind of context derived parameter, except
+// that it leaves no trace at all in the annotation text: Gauge skips inline
+// parsing for a step followed by a docstring and gives the step exactly one
+// implicit argument (references/gauge/parser/stepParser.go processStep,
+// references/gauge/parser/specparser.go CreateStepUsingLookup), which Gauge
+// then reports as the parameter count
+// (references/gauge/validation/validate.go NumberOfParameters).
+// So an implementation that takes exactly one parameter more than the
+// annotation declares is indistinguishable from a valid multi-line step
+// implementation until a spec or concept shows how the step is used.
+function isUndecidedMultilineParameter(actual, inlineParameters, stepUsage, template) {
+  return actual === inlineParameters + 1 && !stepUsage.used.has(template);
+}
+
 function mismatchMessage(actual, expected, alias) {
   return `${PARAMETER_MISMATCH_PREFIX}(found [${actual}] expected [${expected}]) with step annotation : "${alias}". `;
 }
@@ -8403,7 +8431,7 @@ class GaugeStepDiagnosticsProvider {
     this.workspaceMemos = new WeakMap();
     this.storeConstantsCache = new Map();
     this.storeTemplatesCache = new Map();
-    this.storeDocStringsCache = new Map();
+    this.storeStepUsageCache = new Map();
     this.lastDiagnosisKeys = new Map();
     this.publishedLines = new Map();
     this.rootGenerations = new Map();
@@ -8887,24 +8915,29 @@ class GaugeStepDiagnosticsProvider {
     const externalConstants = isStepImplementationDocument(document)
       ? this.collectWorkspaceConstants(document, workspaceDocuments)
       : undefined;
-    const docStringSteps = isStepImplementationDocument(document)
-      ? this.docStringStepTemplates(document, workspaceDocuments)
-      : new Set();
+    const stepUsage = isStepImplementationDocument(document)
+      ? this.stepUsageTemplates(document, workspaceDocuments)
+      : emptyStepUsage();
     for (const entry of this.stepFunctionsFor(document, externalConstants)) {
       const actual = countKotlinParameters(entry.parameterText);
       const start = positionAt(text, entry.parameterStart, document);
       const end = positionAt(text, entry.parameterEnd, document);
       const range = createRange(this.vscode, start, end);
       for (const alias of entry.aliases) {
-        const expected = countStepParameters(alias)
-          + (docStringSteps.has(normalizeStepTemplate(alias)) ? 1 : 0);
-        if (actual !== expected) {
-          diagnostics.push(createDiagnostic(
-            this.vscode,
-            range,
-            mismatchMessage(actual, expected, alias),
-          ));
+        const template = normalizeStepTemplate(alias);
+        const inlineParameters = countStepParameters(alias);
+        const expected = inlineParameters + (stepUsage.docString.has(template) ? 1 : 0);
+        if (
+          actual === expected
+          || isUndecidedMultilineParameter(actual, inlineParameters, stepUsage, template)
+        ) {
+          continue;
         }
+        diagnostics.push(createDiagnostic(
+          this.vscode,
+          range,
+          mismatchMessage(actual, expected, alias),
+        ));
       }
     }
     return diagnostics;
@@ -8968,27 +9001,29 @@ class GaugeStepDiagnosticsProvider {
     ));
   }
 
-  docStringStepTemplates(document, workspaceDocuments) {
-    const entry = this.docStringCacheEntry(document, workspaceDocuments);
+  stepUsageTemplates(document, workspaceDocuments) {
+    const entry = this.stepUsageCacheEntry(document, workspaceDocuments);
     return entry
       ? entry.value
-      : this.computeDocStringStepTemplates(document, workspaceDocuments);
+      : this.computeStepUsageTemplates(document, workspaceDocuments);
   }
 
-  docStringCacheEntry(document, workspaceDocuments) {
+  stepUsageCacheEntry(document, workspaceDocuments) {
     const store = this.storeFor(workspaceDocuments);
     if (!store) {
       return undefined;
     }
     const rootKey = this.gaugeProjectRoot(document) || "";
     const generations = this.rootGenerationsFor(rootKey);
-    const cacheKey = `${this.fullGeneration}:${generations.spec}`;
-    const cached = this.storeDocStringsCache.get(rootKey);
+    // Concepts carry step usage too, and they bump the implementation
+    // generation rather than the spec one.
+    const cacheKey = `${this.fullGeneration}:${generations.spec}:${generations.impl}`;
+    const cached = this.storeStepUsageCache.get(rootKey);
     if (cached && cached.cacheKey === cacheKey) {
       return cached;
     }
-    const value = this.computeDocStringStepTemplates(document, workspaceDocuments);
-    if (cached && setContentEquals(cached.value, value)) {
+    const value = this.computeStepUsageTemplates(document, workspaceDocuments);
+    if (cached && stepUsageEquals(cached.value, value)) {
       cached.cacheKey = cacheKey;
       return cached;
     }
@@ -8997,18 +9032,23 @@ class GaugeStepDiagnosticsProvider {
       contentVersion: cached ? cached.contentVersion + 1 : 0,
       value,
     };
-    this.storeDocStringsCache.set(rootKey, entry);
+    this.storeStepUsageCache.set(rootKey, entry);
     return entry;
   }
 
-  computeDocStringStepTemplates(document, workspaceDocuments) {
-    const templates = new Set();
-    for (const candidate of this.gaugeSpecDocuments(document, workspaceDocuments)) {
-      for (const template of findDocStringStepTemplates(candidate.getText())) {
-        templates.add(template);
-      }
+  // Gauge parses concept files with the very same lexer it uses for specs
+  // (references/gauge/parser/conceptParser.go Parse), so a docstring below a
+  // step inside a concept carries a multi-line argument exactly like a spec.
+  computeStepUsageTemplates(document, workspaceDocuments) {
+    const usage = emptyStepUsage();
+    const candidates = [
+      ...this.gaugeSpecDocuments(document, workspaceDocuments),
+      ...this.conceptDocuments(document, workspaceDocuments),
+    ];
+    for (const candidate of candidates) {
+      collectStepUsageTemplates(candidate.getText(), usage);
     }
-    return templates;
+    return usage;
   }
 
   implementedStepTemplates(document, workspaceDocuments) {
@@ -9450,10 +9490,10 @@ class GaugeStepDiagnosticsProvider {
         return undefined;
       }
       const constantsEntry = this.storeConstantsCache.get(documentPath(document));
-      const docStringsEntry = this.docStringCacheEntry(document, workspaceDocuments);
+      const stepUsageEntry = this.stepUsageCacheEntry(document, workspaceDocuments);
       const constantsVersion = constantsEntry ? constantsEntry.contentVersion : -1;
-      const docStringsVersion = docStringsEntry ? docStringsEntry.contentVersion : -1;
-      return `impl:${document.version}:${this.fullGeneration}:${constantsVersion}:${docStringsVersion}:${dependencyGeneration}`;
+      const stepUsageVersion = stepUsageEntry ? stepUsageEntry.contentVersion : -1;
+      return `impl:${document.version}:${this.fullGeneration}:${constantsVersion}:${stepUsageVersion}:${dependencyGeneration}`;
     }
     if (isConceptDocument(document)) {
       const generations = this.rootGenerationsFor(this.gaugeProjectRoot(document) || "");
@@ -9584,7 +9624,7 @@ class GaugeStepDiagnosticsProvider {
     this.workspaceMemos = new WeakMap();
     this.storeConstantsCache.clear();
     this.storeTemplatesCache.clear();
-    this.storeDocStringsCache.clear();
+    this.storeStepUsageCache.clear();
     this.lastDiagnosisKeys.clear();
     this.publishedLines.clear();
     this.rootGenerations.clear();
