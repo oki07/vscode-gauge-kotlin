@@ -1788,15 +1788,21 @@ class GaugeRenameProvider {
     );
   }
 
+  // Reports whether the step is backed by a source implementation. Gauge renames
+  // a concept itself, but it delegates a step implementation rename to the
+  // runner, and gauge-java refactors Java sources with JavaParser against a
+  // runtime step registry. It cannot rewrite a Kotlin `@Step` function, so a
+  // source-backed step is renamed locally instead of through the engine.
   async validateRenameTarget(sourceDocument, documents, step, operation) {
     if (!this.isOperationActive(operation)) {
       return CANCELLED_RENAME_OPERATION;
     }
     if (!step) {
-      return;
+      return { sourceImplemented: false };
     }
     const implementationDocuments = this.stepImplementationDocuments(documents);
-    for (const document of this.stepImplementationDocuments(documents)) {
+    let sourceImplemented = false;
+    for (const document of implementationDocuments) {
       const entries = await this.stepEntriesFor(
         sourceDocument,
         document,
@@ -1807,12 +1813,18 @@ class GaugeRenameProvider {
         return CANCELLED_RENAME_OPERATION;
       }
       for (const entry of entries) {
-        if (entry.aliases.length > 1 && stepEntryHasTemplate(entry, step.template)) {
+        if (!stepEntryHasTemplate(entry, step.template)) {
+          continue;
+        }
+        if (entry.aliases.length > 1) {
           throw new Error(ALIASED_STEP_RENAME_ERROR);
         }
+        sourceImplemented = true;
       }
     }
-    return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
+    return this.isOperationActive(operation)
+      ? { sourceImplemented }
+      : CANCELLED_RENAME_OPERATION;
   }
 
   projectClientFor(document) {
@@ -2304,7 +2316,7 @@ class GaugeRenameProvider {
     if (preflight === CANCELLED_RENAME_OPERATION) {
       return CANCELLED_RENAME_OPERATION;
     }
-    if (step.engineRename) {
+    if (step.engineRename && !validated.sourceImplemented) {
       const languageServerEdit = await this.provideLanguageServerRenameEdits(
         document,
         position,

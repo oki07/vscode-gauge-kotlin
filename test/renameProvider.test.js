@@ -298,7 +298,7 @@ test("GaugeRenameProvider uses the shared workspace step index", async () => {
   ]);
 });
 
-test("GaugeRenameProvider augments language server Gauge renames with Kotlin Step annotations", async () => {
+test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge client is available", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -310,8 +310,10 @@ test("GaugeRenameProvider augments language server Gauge renames with Kotlin Ste
     "@Step(\"Pay with <amount>\")",
     "fun pay(amount: String) {}",
   ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const requests = [];
   const client = {
-    sendRequest() {
+    sendRequest(method) {
+      requests.push(method);
       return {
         changes: {
           "file:///workspace/gauge/specs/checkout.spec": [
@@ -342,6 +344,7 @@ test("GaugeRenameProvider augments language server Gauge renames with Kotlin Ste
     "Pay with <value>",
   );
 
+  assert.deepEqual(requests, []);
   assert.deepEqual(
     edit.replacements.map((replacement) => ({
       file: replacement.uri.fsPath,
@@ -2901,9 +2904,9 @@ test("GaugeRenameProvider detaches pending preflight and augmentation stages", a
 
     assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
     assert.equal(stepEntryCalls, 2);
-    assert.equal(sources.length, 1);
-    assert.equal(sources[0].cancelCalls, 0);
-    assert.equal(sources[0].disposeCalls, 1);
+    // A Kotlin-backed step never reaches the Gauge engine, so no language
+    // server request source is created for it.
+    assert.equal(sources.length, 0);
     assert.equal(provider.activeOperations.size, 0);
   }
 });
@@ -3317,4 +3320,203 @@ test("GaugeRenameProvider isolates concurrent request cancellation", async () =>
   gates[0].reject(new Error("late first rename failure"));
   gates[1].resolve({ changes: {} });
   await Promise.allSettled(invocations);
+});
+
+test("GaugeRenameProvider renames spec steps backed by Kotlin implementations without the Gauge engine", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const requests = [];
+  const client = {
+    sendRequest(method) {
+      requests.push(method);
+      // gauge-java refactors Java sources with JavaParser and a runtime step
+      // registry, so a Kotlin-backed step always fails engine refactoring.
+      throw new Error("Step Implementation Not Found: Unable to find a file Name to refactor");
+    },
+  };
+  const clientsMap = {
+    get() {
+      return { client };
+    },
+  };
+  const vscode = createFakeVscode([specDocument, conceptDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ clientsMap, vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(requests, []);
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      newText: replacement.newText,
+      range: {
+        start: { ...replacement.range.start },
+        end: { ...replacement.range.end },
+      },
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/checkout.spec",
+        newText: "Pay with <value>",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+      },
+      {
+        file: "/workspace/gauge/specs/concepts/payment.cpt",
+        newText: "Pay with <value>",
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 1, character: 19 },
+        },
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        newText: "Pay with <value>",
+        range: {
+          start: { line: 2, character: 7 },
+          end: { line: 2, character: 24 },
+        },
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        newText: "argValue: Any",
+        range: {
+          start: { line: 3, character: 8 },
+          end: { line: 3, character: 22 },
+        },
+      },
+    ],
+  );
+});
+
+test("GaugeRenameProvider renames concept-backed spec steps through the Gauge engine", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Reuse payment <card>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment <method>",
+    "* Confirm order",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
+  const requests = [];
+  const client = {
+    sendRequest(method) {
+      requests.push(method);
+      return {
+        changes: {
+          "file:///workspace/gauge/specs/checkout.spec": [
+            {
+              range: {
+                start: { line: 1, character: 2 },
+                end: { line: 1, character: 22 },
+              },
+              newText: "Shared payment <account>",
+            },
+          ],
+        },
+      };
+    },
+  };
+  const clientsMap = {
+    get() {
+      return { client };
+    },
+  };
+  const vscode = createFakeVscode([specDocument, conceptDocument]);
+  const provider = new GaugeRenameProvider({ clientsMap, vscode });
+
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Shared payment <account>",
+  );
+
+  // Gauge renames concepts itself without asking the runner, so the engine
+  // stays in charge of concept-backed steps.
+  assert.deepEqual(requests, ["textDocument/rename"]);
+  assert.deepEqual(
+    edit.replacements.map((replacement) => replacement.uri.fsPath),
+    ["/workspace/gauge/specs/checkout.spec"],
+  );
+});
+
+test("GaugeRenameProvider renames concept file steps backed by Kotlin implementations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Reuse payment",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/concepts/payment.cpt");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const requests = [];
+  const clientsMap = {
+    get() {
+      return {
+        client: {
+          sendRequest(method) {
+            requests.push(method);
+            throw new Error("Step Implementation Not Found: Unable to find a file Name to refactor");
+          },
+        },
+      };
+    },
+  };
+  const vscode = createFakeVscode([specDocument, conceptDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ clientsMap, vscode });
+
+  const edit = await provider.provideRenameEdits(
+    conceptDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
+  );
+
+  assert.deepEqual(requests, []);
+  assert.deepEqual(
+    edit.replacements.map((replacement) => ({
+      file: replacement.uri.fsPath,
+      newText: replacement.newText,
+    })),
+    [
+      {
+        file: "/workspace/gauge/specs/concepts/payment.cpt",
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        newText: "Pay with <value>",
+      },
+      {
+        file: "/workspace/gauge/src/test/kotlin/Steps.kt",
+        newText: "argValue: Any",
+      },
+    ],
+  );
 });
