@@ -9601,6 +9601,92 @@ class GaugeStepDiagnosticsProvider {
   }
 }
 
+// An expression body runs to the end of its logical line. Brackets, strings and
+// comments are tracked so a wrapped argument list stays inside the expression.
+function expressionBodyEnd(text, startIndex) {
+  let depth = 0;
+  let quote;
+
+  for (let index = skipWhitespaceAndComments(text, startIndex); index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (quote === "\"\"\"") {
+        if (text.startsWith("\"\"\"", index)) {
+          quote = undefined;
+          index += 2;
+        }
+      } else if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    const commentEnd = findCommentEnd(text, index);
+    if (commentEnd !== undefined) {
+      index = commentEnd - 1;
+      continue;
+    }
+    if (text.startsWith("\"\"\"", index)) {
+      quote = "\"\"\"";
+      index += 2;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" || char === "]" || char === "}") {
+      depth -= 1;
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && depth <= 0) {
+      return index;
+    }
+  }
+  return text.length;
+}
+
+function stepImplementationBodyEnd(text, declarationEnd) {
+  const bodyStart = skipWhitespaceAndComments(text, declarationEnd);
+  if (bodyStart >= text.length) {
+    return declarationEnd;
+  }
+  if (text[bodyStart] === "{") {
+    const bodyEnd = findMatchingBrace(text, bodyStart);
+    return bodyEnd === -1 ? declarationEnd : bodyEnd + 1;
+  }
+  if (text[bodyStart] === "=") {
+    return expressionBodyEnd(text, bodyStart + 1);
+  }
+  // Abstract, interface and expression-less declarations own no body.
+  return declarationEnd;
+}
+
+// The offsets of the whole step implementation: its Step annotation, the
+// declaration, and the body it owns.
+function stepImplementationBlockRange(text, entry) {
+  const declarationStart = entry.declarationStart !== undefined
+    ? entry.declarationStart
+    : entry.parameterStart;
+  const declarationEnd = entry.declarationEnd !== undefined
+    ? entry.declarationEnd
+    : entry.parameterEnd;
+  const annotationStart = entry.annotationStart;
+  const start = annotationStart !== undefined && annotationStart >= 0
+    ? Math.min(annotationStart, declarationStart)
+    : declarationStart;
+  return {
+    end: stepImplementationBodyEnd(text, declarationEnd),
+    start,
+  };
+}
+
 module.exports = {
   COLLECTION_NAME,
   GaugeStepDiagnosticsProvider,
@@ -9616,4 +9702,5 @@ module.exports = {
   isKotlinDocument,
   isStepImplementationDocument,
   positionAt,
+  stepImplementationBlockRange,
 };

@@ -5,6 +5,7 @@ const {
   isConceptDocument,
   isStepImplementationDocument,
   positionAt,
+  stepImplementationBlockRange,
 } = require("./stepDiagnostics");
 
 const COLLECTION_NAME = "gauge-unused-references";
@@ -221,11 +222,15 @@ class GaugeUnusedReferenceDiagnosticsProvider {
         if (counts.length !== aliases.length || !counts.every((count) => count === 0)) {
           continue;
         }
-        const start = positionAt(text, entry.declarationStart, document);
+        const block = stepImplementationBlockRange(text, entry);
         if (this.disposed) {
           return [];
         }
-        const end = positionAt(text, entry.declarationEnd, document);
+        const start = positionAt(text, block.start, document);
+        if (this.disposed) {
+          return [];
+        }
+        const end = positionAt(text, block.end, document);
         if (this.disposed) {
           return [];
         }

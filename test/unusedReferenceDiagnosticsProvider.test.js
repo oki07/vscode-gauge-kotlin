@@ -169,7 +169,7 @@ test("GaugeUnusedReferenceDiagnosticsProvider fades a Step declaration only when
   assert.deepEqual(diagnostics.map(diagnosticSummary), [
     {
       code: "gauge.unusedStepImplementation",
-      end: { line: 4, character: 16 },
+      end: { line: 4, character: 19 },
       message: "Step implementation has no references.",
       severity: "hint",
       source: "gauge",
@@ -266,8 +266,10 @@ test("GaugeUnusedReferenceDiagnosticsProvider uses the shared index for concept 
   ]);
   assert.deepEqual({ ...conceptDiagnostics[0].range.start }, { line: 3, character: 0 });
   assert.deepEqual({ ...conceptDiagnostics[0].range.end }, { line: 4, character: 16 });
-  assert.deepEqual({ ...kotlinDiagnostics[0].range.start }, { line: 6, character: 0 });
-  assert.deepEqual({ ...javaDiagnostics[0].range.start }, { line: 6, character: 7 });
+  assert.deepEqual({ ...kotlinDiagnostics[0].range.start }, { line: 5, character: 0 });
+  assert.deepEqual({ ...kotlinDiagnostics[0].range.end }, { line: 6, character: 25 });
+  assert.deepEqual({ ...javaDiagnostics[0].range.start }, { line: 5, character: 2 });
+  assert.deepEqual({ ...javaDiagnostics[0].range.end }, { line: 6, character: 26 });
   workspaceStepIndex.dispose();
 });
 
@@ -1009,4 +1011,97 @@ test("GaugeUnusedReferenceDiagnosticsProvider fades the whole unreferenced conce
     { start: { line: 3, character: 2 }, end: { line: 5, character: 12 } },
     { start: { line: 7, character: 0 }, end: { line: 9, character: 14 } },
   ]);
+});
+
+test("GaugeUnusedReferenceDiagnosticsProvider fades the whole unreferenced Step function block", async () => {
+  const {
+    GaugeUnusedReferenceDiagnosticsProvider,
+  } = require("../src/unusedReferenceDiagnosticsProvider");
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Used Kotlin step",
+    "* Used Java step",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Used Kotlin step\")",
+    "fun usedKotlinStep() {}",
+    "",
+    "@Step(\"Unused Kotlin step\")",
+    "fun unusedKotlinStep() {",
+    "    println(\"unused\")",
+    "}",
+    "",
+    "@Step(\"Unused expression step\")",
+    "fun unusedExpressionStep() = println(\"unused\")",
+  ].join("\n"), "/workspace/gauge/src/test/kotlin/Steps.kt", "kotlin");
+  const javaDocument = createDocument([
+    "import com.thoughtworks.gauge.Step;",
+    "",
+    "class Steps {",
+    "  @Step(\"Used Java step\")",
+    "  void usedJavaStep() {}",
+    "",
+    "  @Step(\"Unused Java step\")",
+    "  void unusedJavaStep() {",
+    "    System.out.println(\"unused\");",
+    "  }",
+    "}",
+  ].join("\n"), "/workspace/gauge/src/test/java/Steps.java", "java");
+  const documents = [specDocument, kotlinDocument, javaDocument];
+  const documentStore = {
+    documents() {
+      return documents;
+    },
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    start() {},
+    whenReady() {
+      return Promise.resolve();
+    },
+  };
+  const projectFactory = {
+    getGaugeRootFromFilePath() {
+      return "/workspace/gauge";
+    },
+    isGaugeProject() {
+      return true;
+    },
+  };
+  const vscode = createFakeVscode(documents);
+  const workspaceStepIndex = new WorkspaceStepIndex({
+    documentStore,
+    projectFactory,
+    vscode,
+  });
+  const provider = new GaugeUnusedReferenceDiagnosticsProvider({
+    documentStore,
+    vscode,
+    workspaceStepIndex,
+  });
+
+  const [kotlinDiagnostics, javaDiagnostics] = await Promise.all([
+    provider.provideDiagnostics(kotlinDocument),
+    provider.provideDiagnostics(javaDocument),
+  ]);
+
+  assert.deepEqual(kotlinDiagnostics.map((diagnostic) => ({
+    end: { ...diagnostic.range.end },
+    start: { ...diagnostic.range.start },
+  })), [
+    // Step annotation through the closing brace of the function body.
+    { start: { line: 5, character: 0 }, end: { line: 8, character: 1 } },
+    // Expression bodies end with the expression.
+    { start: { line: 10, character: 0 }, end: { line: 11, character: 46 } },
+  ]);
+  assert.deepEqual(javaDiagnostics.map((diagnostic) => ({
+    end: { ...diagnostic.range.end },
+    start: { ...diagnostic.range.start },
+  })), [
+    { start: { line: 6, character: 2 }, end: { line: 9, character: 3 } },
+  ]);
+  workspaceStepIndex.dispose();
 });
