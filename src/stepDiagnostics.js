@@ -8285,6 +8285,7 @@ const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 const MARKDOWN_FILE_PATTERN = /\.md$/i;
 const GAUGE_SPECS_DIRECTORY = "specs";
+const GAUGE_SPECS_DIR_PROPERTY = "gauge_specs_dir";
 const JAVA_WORKSPACE_PATTERN = "**/*.java";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
@@ -8346,15 +8347,52 @@ function isConceptDocument(candidate) {
   return typeof file === "string" && CONCEPT_FILE_PATTERN.test(file);
 }
 
-// Gauge only reads Markdown as a specification inside its spec directories
-// (references/gauge/util/util.go GetSpecDirs, default "specs"). Without that
-// scope a README or CHANGELOG in a Gauge project is parsed as a spec and its
-// bullet list is reported as undefined steps.
-function isMarkdownSpecPath(file) {
-  return String(file).split(/[\\/]/).slice(0, -1).includes(GAUGE_SPECS_DIRECTORY);
+function pathSegments(value) {
+  return String(value || "")
+    .split(/[\\/]/)
+    .filter((segment) => segment !== "" && segment !== ".");
 }
 
-function isGaugeSpecDocument(candidate) {
+function startsWithSegments(segments, prefix) {
+  return prefix.length > 0
+    && segments.length >= prefix.length
+    && prefix.every((segment, index) => segment === segments[index]);
+}
+
+// Gauge reads the spec directories from `gauge_specs_dir`, a comma separated
+// list of project relative directories that defaults to "specs"
+// (references/gauge/util/util.go GetSpecDirs, references/gauge/env/env.go).
+function gaugeSpecDirs(options = {}) {
+  const configured = process.env[GAUGE_SPECS_DIR_PROPERTY]
+    || projectDefaultProperty(options, GAUGE_SPECS_DIR_PROPERTY);
+  const directories = String(configured || "")
+    .split(",")
+    .map((entry) => pathSegments(entry.trim()))
+    .filter((segments) => segments.length > 0);
+  return directories.length > 0 ? directories : [[GAUGE_SPECS_DIRECTORY]];
+}
+
+// Gauge only reads Markdown as a specification inside its spec directories.
+// Without that scope a README or CHANGELOG in a Gauge project is parsed as a
+// spec and its bullet list is reported as undefined steps. The scope carries
+// the project root and resolves the configured directories lazily, so a caller
+// that walks many candidates reads the project properties at most once and a
+// caller that never sees Markdown never reads them at all.
+function isMarkdownSpecPath(file, scope) {
+  const directories = pathSegments(file).slice(0, -1);
+  const projectRoot = scope && scope.projectRoot;
+  if (!projectRoot) {
+    return directories.includes(GAUGE_SPECS_DIRECTORY);
+  }
+  const rootSegments = pathSegments(projectRoot);
+  if (!startsWithSegments(directories, rootSegments)) {
+    return directories.includes(GAUGE_SPECS_DIRECTORY);
+  }
+  const relative = directories.slice(rootSegments.length);
+  return scope.specDirs().some((specDir) => startsWithSegments(relative, specDir));
+}
+
+function isGaugeSpecDocument(candidate, scope) {
   if (!candidate) {
     return false;
   }
@@ -8366,13 +8404,13 @@ function isGaugeSpecDocument(candidate) {
     return false;
   }
   if (MARKDOWN_FILE_PATTERN.test(file)) {
-    return isMarkdownSpecPath(file);
+    return isMarkdownSpecPath(file, scope);
   }
   return SPEC_FILE_PATTERN.test(file);
 }
 
-function isGaugeStepSourceDocument(candidate) {
-  return isGaugeSpecDocument(candidate) || isConceptDocument(candidate);
+function isGaugeStepSourceDocument(candidate, scope) {
+  return isGaugeSpecDocument(candidate, scope) || isConceptDocument(candidate);
 }
 
 const TYPE_ALIAS_TOKEN_PATTERN = /\btypealias\b/;
@@ -8627,10 +8665,37 @@ class GaugeStepDiagnosticsProvider {
     return this.gaugeProjectRoot(candidate) === sourceRoot;
   }
 
+  // One scope per caller, resolved on first use. Only Markdown candidates ever
+  // ask for the directories, so the project properties are read at most once
+  // per call and never for a `.spec`, `.cpt`, `.kt` or `.java` document.
+  createSpecScope(projectRoot) {
+    let directories;
+    return {
+      projectRoot,
+      specDirs: () => {
+        if (!directories) {
+          directories = gaugeSpecDirs({
+            fileSystem: this.fileSystem,
+            pathModule: this.pathModule,
+            projectRoot,
+          });
+        }
+        return directories;
+      },
+    };
+  }
+
+  specScopeFor(document) {
+    return this.createSpecScope(this.gaugeProjectRoot(document));
+  }
+
   shouldDiagnose(document) {
     return Boolean(
       document
-      && (isStepImplementationDocument(document) || isGaugeStepSourceDocument(document))
+      && (
+        isStepImplementationDocument(document)
+        || isGaugeStepSourceDocument(document, this.specScopeFor(document))
+      )
       && typeof document.getText === "function"
       && this.isGaugeProjectDocument(document),
     );
@@ -8859,9 +8924,10 @@ class GaugeStepDiagnosticsProvider {
 
     const text = document.getText();
     const diagnostics = [];
-    if (isGaugeStepSourceDocument(document)) {
+    const specScope = this.specScopeFor(document);
+    if (isGaugeStepSourceDocument(document, specScope)) {
       const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
-      const projectRoot = this.gaugeProjectRoot(document);
+      const projectRoot = specScope.projectRoot;
       for (const entry of findGaugeSteps(text, {
         allowMultilineStep: allowMultilineStep({
           fileSystem: this.fileSystem,
@@ -8895,7 +8961,7 @@ class GaugeStepDiagnosticsProvider {
         }
       }
       diagnostics.push(...tableHeaderDiagnostics(this.vscode, text));
-      if (isGaugeSpecDocument(document)) {
+      if (isGaugeSpecDocument(document, specScope)) {
         diagnostics.push(...dataTableWithoutRowDiagnostics(this.vscode, text));
         diagnostics.push(...externalDataTableScopeDiagnostics(this.vscode, text, {
           fileSystem: this.fileSystem,
@@ -9026,9 +9092,10 @@ class GaugeStepDiagnosticsProvider {
       ? workspaceDocuments
       : (Array.isArray(workspace.textDocuments) ? workspace.textDocuments : []);
     const sourceRoot = this.gaugeProjectRoot(document);
+    const specScope = this.createSpecScope(sourceRoot);
     return candidates.filter((candidate) => (
       candidate
-      && isGaugeSpecDocument(candidate)
+      && isGaugeSpecDocument(candidate, specScope)
       && typeof candidate.getText === "function"
       && this.belongsToSourceGaugeProject(candidate, sourceRoot)
     ));
@@ -9100,7 +9167,7 @@ class GaugeStepDiagnosticsProvider {
       this.disposed
       || !document
       || typeof document.getText !== "function"
-      || !isGaugeStepSourceDocument(document)
+      || !isGaugeStepSourceDocument(document, this.specScopeFor(document))
       || typeof line !== "number"
     ) {
       return undefined;
@@ -9129,7 +9196,7 @@ class GaugeStepDiagnosticsProvider {
 
   implementedTemplatesCacheEntry(document, workspaceDocuments) {
     const store = this.storeFor(workspaceDocuments);
-    if (!store || !isGaugeStepSourceDocument(document)) {
+    if (!store || !isGaugeStepSourceDocument(document, this.specScopeFor(document))) {
       return undefined;
     }
     const rootKey = this.gaugeProjectRoot(document) || "";
@@ -9319,6 +9386,17 @@ class GaugeStepDiagnosticsProvider {
     }
 
     const scan = (async () => {
+      // The scan walks several projects, so keep one lazy spec scope per root
+      // instead of resolving the configured directories for every Markdown hit.
+      const scopesByRoot = new Map();
+      const scanSpecScope = (document) => {
+        const root = this.rootForFile(documentPath(document));
+        const key = root || "";
+        if (!scopesByRoot.has(key)) {
+          scopesByRoot.set(key, this.createSpecScope(root));
+        }
+        return scopesByRoot.get(key);
+      };
       const documentPatterns = [
         {
           matches: isKotlinDocument,
@@ -9337,7 +9415,7 @@ class GaugeStepDiagnosticsProvider {
           pattern: SPEC_WORKSPACE_PATTERN,
         },
         {
-          matches: isGaugeSpecDocument,
+          matches: (document) => isGaugeSpecDocument(document, scanSpecScope(document)),
           pattern: MARKDOWN_SPEC_WORKSPACE_PATTERN,
         },
       ];
@@ -9532,7 +9610,7 @@ class GaugeStepDiagnosticsProvider {
       const generations = this.rootGenerationsFor(this.gaugeProjectRoot(document) || "");
       return `cpt:${document.version}:${this.fullGeneration}:${generations.impl}:${dependencyGeneration}`;
     }
-    if (isGaugeStepSourceDocument(document)) {
+    if (isGaugeStepSourceDocument(document, this.specScopeFor(document))) {
       const templatesEntry = this.implementedTemplatesCacheEntry(document, workspaceDocuments);
       const templatesVersion = templatesEntry ? templatesEntry.contentVersion : -1;
       return `spec:${document.version}:${this.fullGeneration}:${templatesVersion}`;

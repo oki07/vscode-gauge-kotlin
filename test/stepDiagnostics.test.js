@@ -8114,3 +8114,106 @@ test("GaugeStepDiagnosticsProvider leaves ordinary Markdown outside the spec dir
     ["Undefined Step"],
   );
 });
+
+function createSpecDirsProvider(properties, documents) {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  return new GaugeStepDiagnosticsProvider({
+    documentStore: {
+      documents: () => documents,
+      onDidChangeDocuments: () => ({ dispose() {} }),
+      start() {},
+    },
+    fileSystem: {
+      readFileSync(filename) {
+        if (filename === "/workspace/gauge/env/default/default.properties") {
+          return properties;
+        }
+        throw new Error(`Unexpected file ${filename}`);
+      },
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: (file) => (
+        String(file).startsWith("/workspace/gauge") ? "/workspace/gauge" : undefined
+      ),
+    },
+    vscode: createFakeVscode(),
+  });
+}
+
+test("GaugeStepDiagnosticsProvider reads Markdown specs from a configured gauge_specs_dir", () => {
+  const steps = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "class Steps {",
+    '  @Step("a real step")',
+    "  fun real() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const configured = createDocument([
+    "# Checkout",
+    "",
+    "## Buy",
+    "* a real step",
+    "* a missing step",
+  ].join("\n"), "markdown", "/workspace/gauge/anotherSpecDir/checkout.md");
+  const documents = [steps, configured];
+  const provider = createSpecDirsProvider("gauge_specs_dir = anotherSpecDir\n", documents);
+
+  assert.equal(provider.shouldDiagnose(configured), true);
+  assert.deepEqual(
+    provider.provideDiagnostics(configured, documents).map((entry) => entry.message),
+    ["Undefined Step"],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider reads Markdown specs from every comma separated gauge_specs_dir", () => {
+  const first = createDocument([
+    "# Checkout",
+    "",
+    "## Buy",
+    "* a missing step",
+  ].join("\n"), "markdown", "/workspace/gauge/api-specs/checkout.md");
+  const second = createDocument([
+    "# Login",
+    "",
+    "## Sign in",
+    "* another missing step",
+  ].join("\n"), "markdown", "/workspace/gauge/ui/specs/login.md");
+  const documents = [first, second];
+  const provider = createSpecDirsProvider(
+    "gauge_specs_dir = api-specs, ui/specs\n",
+    documents,
+  );
+
+  assert.equal(provider.shouldDiagnose(first), true);
+  assert.equal(provider.shouldDiagnose(second), true);
+});
+
+test("GaugeStepDiagnosticsProvider leaves Markdown in the default spec directory alone once gauge_specs_dir moves it", () => {
+  const moved = createDocument([
+    "# Release notes",
+    "",
+    "## 1.0",
+    "* Added a thing",
+  ].join("\n"), "markdown", "/workspace/gauge/specs/release-notes.md");
+  const documents = [moved];
+  const provider = createSpecDirsProvider("gauge_specs_dir = anotherSpecDir\n", documents);
+
+  assert.equal(provider.shouldDiagnose(moved), false);
+  assert.deepEqual(provider.provideDiagnostics(moved, documents), []);
+});
+
+test("GaugeStepDiagnosticsProvider leaves Markdown in a nested directory named specs alone", () => {
+  const nested = createDocument([
+    "# Design notes",
+    "",
+    "## Goals",
+    "* Ship the thing",
+  ].join("\n"), "markdown", "/workspace/gauge/docs/specs/design.md");
+  const documents = [nested];
+  const provider = createSpecDirsProvider("", documents);
+
+  assert.equal(provider.shouldDiagnose(nested), false);
+  assert.deepEqual(provider.provideDiagnostics(nested, documents), []);
+});
