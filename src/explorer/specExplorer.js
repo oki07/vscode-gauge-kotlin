@@ -114,31 +114,37 @@ class SpecNodeProvider {
     this.clientGeneration = 0;
     this.disposed = false;
     this.initialActivationPending = false;
+    this.treeViewEnabled = isSpecExplorerEnabled(this.vscode);
     this.onDidChangeTreeDataEmitter = new this.vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
     setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
-    if (isSpecExplorerEnabled(this.vscode)) {
+    // gauge.specExplorer.enabled owns the tree view only. The client activation
+    // below also owns gauge:activated, which gates the whole Gauge command
+    // surface, so it has to run either way. references/gauge-vscode keeps both
+    // behind the setting because its manifest gates only the palette entries
+    // and the view itself on that key.
+    if (this.treeViewEnabled) {
       addDisposable(
         this.disposables,
         this.vscode.window.registerTreeDataProvider(SPEC_EXPLORER_VIEW, this),
       );
       this.registerRefreshListeners();
       this.registerCommands();
-      this.registerProjectChangeListener();
-      const initialFolder = this.gaugeWorkspace.getDefaultFolder();
-      this.activeFolder = initialFolder;
-      const generation = ++this.clientGeneration;
-      const initialEntry = this.clientEntryFor(initialFolder);
-      if (
-        (!initialEntry || !initialEntry.client)
-        && typeof this.gaugeWorkspace.ready === "function"
-      ) {
-        this.initialActivationPending = true;
-        this.activation = this.activateInitialClientAfterWorkspaceReady(generation);
-      } else {
-        this.activation = this.activateTreeDataProvider(initialFolder, generation);
-      }
+    }
+    this.registerProjectChangeListener();
+    const initialFolder = this.gaugeWorkspace.getDefaultFolder();
+    this.activeFolder = initialFolder;
+    const generation = ++this.clientGeneration;
+    const initialEntry = this.clientEntryFor(initialFolder);
+    if (
+      (!initialEntry || !initialEntry.client)
+      && typeof this.gaugeWorkspace.ready === "function"
+    ) {
+      this.initialActivationPending = true;
+      this.activation = this.activateInitialClientAfterWorkspaceReady(generation);
+    } else {
+      this.activation = this.activateTreeDataProvider(initialFolder, generation);
     }
   }
 
@@ -181,7 +187,7 @@ class SpecNodeProvider {
   }
 
   async getChildren(element) {
-    if (this.disposed) {
+    if (this.disposed || !this.treeViewEnabled) {
       return [];
     }
     if (this.initialActivationPending) {
@@ -447,8 +453,7 @@ class SpecNodeProvider {
     if (this.disposed || generation !== this.clientGeneration) {
       return Promise.resolve(undefined);
     }
-    const enabled = isSpecExplorerEnabled(this.vscode);
-    const entry = enabled ? this.clientEntryFor(projectPath) : undefined;
+    const entry = this.clientEntryFor(projectPath);
     if (this.disposed || generation !== this.clientGeneration) {
       return Promise.resolve(undefined);
     }

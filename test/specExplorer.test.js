@@ -1450,7 +1450,13 @@ test("SpecNodeProvider initial readiness stops after synchronous disposal", asyn
   });
 });
 
-test("SpecNodeProvider disables the activated context when spec explorer is disabled", async () => {
+// gauge.specExplorer.enabled only owns the tree view. gauge:activated gates the
+// whole Gauge command surface here - the palette entries, the explorer and
+// editor context menus, the editor title action and the keybindings - so tying
+// it to the tree view setting would remove every Gauge command from the UI.
+// references/gauge-vscode can afford that coupling because its manifest gates
+// only palette entries and the view itself on the key.
+test("SpecNodeProvider activates the Gauge command context when spec explorer is disabled", async () => {
   const { SpecNodeProvider } = require("../src/explorer/specExplorer");
   const client = createFakeClient();
   const {
@@ -1461,20 +1467,48 @@ test("SpecNodeProvider disables the activated context when spec explorer is disa
     watcherListeners,
   } = createFakeVscode({ enabled: false });
   const workspace = createFakeWorkspace(client);
+  const timers = [];
 
   const provider = new SpecNodeProvider(workspace, {
     pathModule: path.posix,
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return { unref() {} };
+    },
     vscode,
   });
   await provider.ready();
 
+  assert.equal(client.started, 1);
+  assert.equal(timers.length, 1);
+  await timers[0].callback();
+
   assert.deepEqual(contexts, [
     { command: "setContext", key: "gauge:activated", value: false },
+    { command: "setContext", key: "gauge:activated", value: true },
   ]);
   assert.deepEqual(treeProviders, []);
   assert.deepEqual(commands, []);
   assert.deepEqual(watcherListeners, []);
-  assert.equal(client.started, 0);
+});
+
+test("SpecNodeProvider serves no tree nodes when spec explorer is disabled", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  const { treeProviders, vscode } = createFakeVscode({ enabled: false });
+  const workspace = createFakeWorkspace(client);
+
+  const provider = new SpecNodeProvider(workspace, {
+    pathModule: path.posix,
+    setTimeout() {
+      return { unref() {} };
+    },
+    vscode,
+  });
+  await provider.ready();
+
+  assert.deepEqual(treeProviders, []);
+  assert.deepEqual(await provider.getChildren(), []);
 });
 
 test("SpecNodeProvider watcher listens for spec creation and deletion events", async () => {
