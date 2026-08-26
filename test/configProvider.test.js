@@ -83,29 +83,20 @@ function flushAsyncWork() {
   });
 }
 
-test("ConfigProvider applies Gauge file associations and recommended settings", async () => {
+test("ConfigProvider keeps workspace settings untouched on activation", async () => {
   const { ConfigProvider } = require("../src/config/configProvider");
   const { commands, updates, vscode } = createFakeVscode();
 
   new ConfigProvider({ subscriptions: [] }, { vscode });
+  await flushAsyncWork();
 
   const command = commands.find((entry) => entry.command === "gauge.config.saveRecommended");
   assert.ok(command);
-  assert.deepEqual(updates, [
-    {
-      key: "files.associations",
-      value: {
-        "*.md": "markdown",
-        "*.spec": "gauge",
-        "*.cpt": "gauge-concept",
-      },
-      target: "workspace",
-    },
-  ]);
+  assert.deepEqual(updates, []);
 
   await command.handler();
 
-  assert.deepEqual(updates.slice(1), [
+  assert.deepEqual(updates, [
     { key: "files.autoSave", value: "afterDelay", target: "workspace" },
     { key: "files.autoSaveDelay", value: 500, target: "workspace" },
   ]);
@@ -133,7 +124,7 @@ test("ConfigProvider applies and reloads when the user accepts recommended setti
       actions: ["Apply & Reload", "Remind me later", "Ignore"],
     },
   ]);
-  assert.deepEqual(updates.slice(1), [
+  assert.deepEqual(updates, [
     { key: "files.autoSave", value: "afterDelay", target: "workspace" },
     { key: "files.autoSaveDelay", value: 500, target: "workspace" },
     { key: "gauge.recommendedSettings.options", value: "Apply & Reload", target: "global" },
@@ -162,7 +153,7 @@ test("ConfigProvider stores Ignore without reloading when the user rejects recom
       actions: ["Apply & Reload", "Remind me later", "Ignore"],
     },
   ]);
-  assert.deepEqual(updates.slice(1), [
+  assert.deepEqual(updates, [
     { key: "gauge.recommendedSettings.options", value: "Ignore", target: "global" },
   ]);
   assert.equal(commands.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
@@ -184,10 +175,10 @@ test("ConfigProvider stores Remind me later only when it is not already selected
   new ConfigProvider({ subscriptions: [] }, { vscode: second.vscode });
   await flushAsyncWork();
 
-  assert.deepEqual(first.updates.slice(1), [
+  assert.deepEqual(first.updates, [
     { key: "gauge.recommendedSettings.options", value: "Remind me later", target: "global" },
   ]);
-  assert.deepEqual(second.updates.slice(1), []);
+  assert.deepEqual(second.updates, []);
   assert.equal(first.commands.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
   assert.equal(second.commands.some((entry) => entry.command === "workbench.action.reloadWindow"), false);
 });
@@ -207,7 +198,7 @@ test("ConfigProvider auto-applies recommended settings when Apply and Reload is 
   await flushAsyncWork();
 
   assert.deepEqual(informationPrompts, []);
-  assert.deepEqual(updates.slice(1), [
+  assert.deepEqual(updates, [
     { key: "files.autoSave", value: "afterDelay", target: "workspace" },
     { key: "files.autoSaveDelay", value: 500, target: "workspace" },
   ]);
@@ -262,7 +253,6 @@ test("ConfigProvider ignores pending prompts and retained commands after disposa
     const disposalHandlerValue = await disposalHandlerResult;
     const retainedResult = await retainedHandler();
     const directResults = await Promise.all([
-      provider.applyDefaultSettings(),
       provider.showRecommendedSettingsNotification(),
       provider.applySelectedOption("Apply & Reload"),
       provider.applyAndReload({ "files.autoSave": "afterDelay" }, "workspace"),
@@ -282,24 +272,14 @@ test("ConfigProvider ignores pending prompts and retained commands after disposa
       updates: fake.updates,
     }, {
       commandDisposeCalls: 1,
-      directResults: [undefined, undefined, undefined, undefined],
+      directResults: [undefined, undefined, undefined],
       disposalHandlerValue: undefined,
       informationPromptCount: 1,
       outcome,
       promptOutcome: [{ status: "fulfilled", value: undefined }],
       reloadCalls: 0,
       retainedResult: undefined,
-      updates: [
-        {
-          key: "files.associations",
-          value: {
-            "*.md": "markdown",
-            "*.spec": "gauge",
-            "*.cpt": "gauge-concept",
-          },
-          target: "workspace",
-        },
-      ],
+      updates: [],
     });
   }
 });
@@ -353,15 +333,6 @@ test("ConfigProvider neutralizes settings updates that settle after disposal", a
       pendingOutcome: [{ status: "fulfilled", value: undefined }],
       reloadCalls: 0,
       updates: [
-        {
-          key: "files.associations",
-          value: {
-            "*.md": "markdown",
-            "*.spec": "gauge",
-            "*.cpt": "gauge-concept",
-          },
-          target: "workspace",
-        },
         { key: "files.autoSave", value: "afterDelay", target: "workspace" },
         { key: "files.autoSaveDelay", value: 500, target: "workspace" },
       ],
@@ -404,15 +375,6 @@ test("ConfigProvider stops settings updates after synchronous disposal", async (
     reloadCalls: 0,
     result: undefined,
     updates: [
-      {
-        key: "files.associations",
-        value: {
-          "*.md": "markdown",
-          "*.spec": "gauge",
-          "*.cpt": "gauge-concept",
-        },
-        target: "workspace",
-      },
       { key: "files.autoSave", value: "afterDelay", target: "workspace" },
     ],
   });
@@ -421,13 +383,11 @@ test("ConfigProvider stops settings updates after synchronous disposal", async (
 test("ConfigProvider suppresses constructor operation failures after disposal", async () => {
   const { ConfigProvider } = require("../src/config/configProvider");
 
-  for (const boundaryName of ["associations", "auto-apply"]) {
+  for (const boundaryName of ["auto-apply"]) {
     const updateGate = deferred();
     const updateEntered = deferred();
     const fake = createFakeVscode({
-      inspected: boundaryName === "auto-apply"
-        ? needsRecommendedSettings("Apply & Reload")
-        : undefined,
+      inspected: needsRecommendedSettings("Apply & Reload"),
     });
     const originalGetConfiguration = fake.vscode.workspace.getConfiguration;
     fake.vscode.workspace.getConfiguration = () => {
@@ -436,10 +396,7 @@ test("ConfigProvider suppresses constructor operation failures after disposal", 
         inspect: configuration.inspect,
         update(key, value, target) {
           fake.updates.push({ key, value, target });
-          const gated = boundaryName === "associations"
-            ? key === "files.associations"
-            : key === "files.autoSave";
-          if (gated) {
+          if (key === "files.autoSave") {
             updateEntered.resolve();
             return updateGate.promise;
           }
@@ -463,9 +420,7 @@ test("ConfigProvider suppresses constructor operation failures after disposal", 
     }, {
       boundaryName,
       reloadCalls: 0,
-      updates: boundaryName === "associations"
-        ? ["files.associations"]
-        : ["files.associations", "files.autoSave", "files.autoSaveDelay"],
+      updates: ["files.autoSave", "files.autoSaveDelay"],
     });
   }
 });

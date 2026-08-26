@@ -1,6 +1,5 @@
 "use strict";
 
-const FILE_ASSOCIATIONS_KEY = "files.associations";
 const SAVE_RECOMMENDED_SETTINGS = "gauge.config.saveRecommended";
 const RELOAD_WINDOW = "workbench.action.reloadWindow";
 const RECOMMENDED_SETTINGS_OPTION = "gauge.recommendedSettings.options";
@@ -23,7 +22,9 @@ class ConfigProvider {
     this.disposed = false;
     this.disposables = [];
 
-    this.applyDefaultSettings();
+    // Spec and concept files are mapped to their languages by the `languages`
+    // contribution in package.json, so no workspace `files.associations` entry
+    // is written here. Activation must not create a project `.vscode/settings.json`.
     this.registerCommand();
     this.showRecommendedSettingsNotification();
   }
@@ -65,38 +66,6 @@ class ConfigProvider {
       return;
     }
     this.disposables.push(disposable);
-  }
-
-  async applyDefaultSettings() {
-    if (this.disposed) {
-      return undefined;
-    }
-    const configuration = this.configuration();
-    if (this.disposed) {
-      return undefined;
-    }
-    const inspected = this.inspectConfiguration(FILE_ASSOCIATIONS_KEY);
-    if (this.disposed) {
-      return undefined;
-    }
-    const associations = {
-      ...(inspected.workspaceValue || {}),
-      "*.spec": "gauge",
-      "*.cpt": "gauge-concept",
-    };
-    const target = this.configurationTarget().Workspace;
-    if (this.disposed) {
-      return undefined;
-    }
-    try {
-      await configuration.update(FILE_ASSOCIATIONS_KEY, associations, target);
-    } catch (error) {
-      if (this.disposed) {
-        return undefined;
-      }
-      throw error;
-    }
-    return undefined;
   }
 
   verifyRecommendedConfig() {
