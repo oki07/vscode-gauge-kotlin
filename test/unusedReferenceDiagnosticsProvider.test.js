@@ -81,7 +81,7 @@ function diagnosticSummary(diagnostic) {
   };
 }
 
-test("GaugeUnusedReferenceDiagnosticsProvider fades only unreferenced concept headings", async () => {
+test("GaugeUnusedReferenceDiagnosticsProvider fades only unreferenced concepts", async () => {
   const {
     GaugeUnusedReferenceDiagnosticsProvider,
   } = require("../src/unusedReferenceDiagnosticsProvider");
@@ -111,11 +111,11 @@ test("GaugeUnusedReferenceDiagnosticsProvider fades only unreferenced concept he
   assert.deepEqual(diagnostics.map(diagnosticSummary), [
     {
       code: "gauge.unusedConcept",
-      end: { line: 3, character: 16 },
+      end: { line: 4, character: 14 },
       message: "Concept has no references.",
       severity: "hint",
       source: "gauge",
-      start: { line: 3, character: 2 },
+      start: { line: 3, character: 0 },
       tags: ["unnecessary"],
     },
   ]);
@@ -264,7 +264,8 @@ test("GaugeUnusedReferenceDiagnosticsProvider uses the shared index for concept 
   assert.deepEqual(javaDiagnostics.map((diagnostic) => diagnostic.code), [
     "gauge.unusedStepImplementation",
   ]);
-  assert.deepEqual({ ...conceptDiagnostics[0].range.start }, { line: 3, character: 2 });
+  assert.deepEqual({ ...conceptDiagnostics[0].range.start }, { line: 3, character: 0 });
+  assert.deepEqual({ ...conceptDiagnostics[0].range.end }, { line: 4, character: 16 });
   assert.deepEqual({ ...kotlinDiagnostics[0].range.start }, { line: 6, character: 0 });
   assert.deepEqual({ ...javaDiagnostics[0].range.start }, { line: 6, character: 7 });
   workspaceStepIndex.dispose();
@@ -963,4 +964,49 @@ test("GaugeUnusedReferenceDiagnosticsProvider stops publication after synchronou
   await provider.waitForPendingRefresh();
 
   assert.deepEqual(setFiles, [firstDocument.uri.fsPath]);
+});
+
+test("GaugeUnusedReferenceDiagnosticsProvider fades the whole unreferenced concept block", async () => {
+  const {
+    GaugeUnusedReferenceDiagnosticsProvider,
+  } = require("../src/unusedReferenceDiagnosticsProvider");
+  const document = createDocument([
+    "## Reuse checkout <user>",
+    "* Prepare cart",
+    "",
+    "  ## Unused concept",
+    "* Prepare cart",
+    "* Ship order",
+    "",
+    "Legacy unused concept",
+    "=====================",
+    "* Prepare cart",
+    "",
+    "",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "gauge-concept");
+  const referenceCounts = new Map([
+    ["Reuse checkout {}", 1],
+    ["Unused concept", 0],
+    ["Legacy unused concept", 0],
+  ]);
+  const provider = new GaugeUnusedReferenceDiagnosticsProvider({
+    vscode: createFakeVscode([document]),
+    workspaceStepIndex: {
+      referenceCount(_sourceDocument, template) {
+        return referenceCounts.get(template);
+      },
+    },
+  });
+
+  const diagnostics = await provider.provideDiagnostics(document);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => ({
+    end: { ...diagnostic.range.end },
+    start: { ...diagnostic.range.start },
+  })), [
+    // Heading marker through the last step of the block, stopping before the
+    // next heading and excluding trailing blank lines.
+    { start: { line: 3, character: 2 }, end: { line: 5, character: 12 } },
+    { start: { line: 7, character: 0 }, end: { line: 9, character: 14 } },
+  ]);
 });

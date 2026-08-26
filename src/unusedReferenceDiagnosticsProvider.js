@@ -53,6 +53,33 @@ function createUnusedDiagnostic(vscode, range, message, code) {
   return diagnostic;
 }
 
+function trimEndLength(line) {
+  return String(line || "").replace(/\s+$/, "").length;
+}
+
+function firstContentCharacter(line) {
+  const marker = String(line || "").search(/\S/);
+  return marker === -1 ? 0 : marker;
+}
+
+// The fade covers the whole concept: the heading marker, the heading text, any
+// legacy underline, and every step below it up to the next heading. Trailing
+// blank lines stay at full opacity so the gap between concepts stays visible.
+function conceptBlockRange(lines, heading, nextHeading) {
+  const startLine = heading.start.line;
+  const limit = nextHeading ? nextHeading.start.line : lines.length;
+  let endLine = startLine;
+  for (let line = startLine; line < limit && line < lines.length; line += 1) {
+    if (trimEndLength(lines[line]) > 0) {
+      endLine = line;
+    }
+  }
+  return {
+    end: { line: endLine, character: trimEndLength(lines[endLine]) },
+    start: { line: startLine, character: firstContentCharacter(lines[startLine]) },
+  };
+}
+
 function uniqueNonEmpty(values) {
   return [...new Set((values || []).filter((value) => String(value || "").trim().length > 0))];
 }
@@ -91,14 +118,23 @@ class GaugeUnusedReferenceDiagnosticsProvider {
     ) {
       return [];
     }
-    const headings = findConceptHeadings(document.getText())
-      .filter((heading) => Boolean(heading.normalized));
+    const text = document.getText();
+    const lines = text.split("\n");
+    // Block bounds come from the full heading list so a heading without a
+    // template still terminates the block above it.
+    const allHeadings = findConceptHeadings(text);
+    const headings = allHeadings
+      .map((heading, index) => ({
+        heading,
+        range: conceptBlockRange(lines, heading, allHeadings[index + 1]),
+      }))
+      .filter(({ heading }) => Boolean(heading.normalized));
     if (this.disposed) {
       return [];
     }
     const countPromises = [];
     try {
-      for (const heading of headings) {
+      for (const { heading } of headings) {
         if (this.disposed) {
           break;
         }
@@ -118,10 +154,10 @@ class GaugeUnusedReferenceDiagnosticsProvider {
         if (counts[index] !== 0) {
           continue;
         }
-        const heading = headings[index];
+        const { range } = headings[index];
         diagnostics.push(createUnusedDiagnostic(
           this.vscode,
-          createRange(this.vscode, heading.start, heading.end),
+          createRange(this.vscode, range.start, range.end),
           UNUSED_CONCEPT_MESSAGE,
           UNUSED_CONCEPT_CODE,
         ));
