@@ -159,8 +159,11 @@ test("ProjectInitializer creates a Gauge project from the selected template", as
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(quickPicks[0], [
-    { label: "kotlin", description: "Kotlin", value: "kotlin" },
+  assert.deepEqual(quickPicks[0][0], { label: "kotlin", description: "Kotlin", value: "kotlin" });
+  assert.deepEqual(quickPicks[0].map((template) => template.label), [
+    "kotlin",
+    "kotlin_gradle",
+    "kotlin_maven",
   ]);
   assert.deepEqual(openDialogs[0], {
     canSelectFolders: true,
@@ -289,8 +292,11 @@ test("ProjectInitializer rejects an existing Gauge project directory without rem
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(quickPicks[0], [
-    { label: "kotlin", description: "Kotlin", value: "kotlin" },
+  assert.deepEqual(quickPicks[0][0], { label: "kotlin", description: "Kotlin", value: "kotlin" });
+  assert.deepEqual(quickPicks[0].map((template) => template.label), [
+    "kotlin",
+    "kotlin_gradle",
+    "kotlin_maven",
   ]);
   assert.deepEqual(openDialogs[0], {
     canSelectFolders: true,
@@ -675,17 +681,157 @@ test("ProjectInitializer offers only Kotlin project templates by configured pref
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });
 
-test("ProjectInitializer rejects project creation when Kotlin templates are unavailable", async () => {
+// Gauge publishes no Kotlin template. references/gauge/template/template.go
+// defaults() seeds dotnet, java, java_gradle, java_maven, java_maven_selenium,
+// js, js_simple, python, python_selenium, ruby, ruby_selenium and ts, and the
+// list only grows through an explicit `gauge template <name> <url>` this
+// extension never issues. Without a bundled scaffold gauge.createProject - a
+// palette command and one of only two onCommand activation events - can never
+// succeed.
+function createStockGaugeCli(spawns, child) {
+  return {
+    isGaugeInstalled() {
+      return true;
+    },
+    gaugeCommand() {
+      return {
+        spawn(args, options) {
+          spawns.push({ args, options });
+          setImmediate(() => child.emit("close", 0));
+          return child;
+        },
+        spawnSync() {
+          return {
+            stdout: Buffer.from(JSON.stringify([
+              { key: "dotnet", Description: "Dotnet", value: "dotnet" },
+              { key: "java", Description: "Java", value: "java" },
+              { key: "java_gradle", Description: "Java Gradle", value: "java_gradle" },
+              { key: "java_maven", Description: "Java Maven", value: "java_maven" },
+              { key: "js", Description: "JavaScript", value: "js" },
+              { key: "python", Description: "Python", value: "python" },
+              { key: "ruby", Description: "Ruby", value: "ruby" },
+              { key: "ts", Description: "TypeScript", value: "ts" },
+            ])),
+          };
+        },
+      };
+    },
+  };
+}
+
+function createRecordingFileSystem(writes, mkdirs) {
+  return {
+    // mkdirSync is called with { recursive: true }, so every ancestor of a
+    // created directory exists too.
+    existsSync(filename) {
+      return writes.some((entry) => entry.filename === filename)
+        || mkdirs.some((directory) => directory === filename || directory.startsWith(`${filename}/`));
+    },
+    readFileSync(filename) {
+      const written = writes.find((entry) => entry.filename === filename);
+      if (!written) {
+        throw new Error(`Unexpected file ${filename}`);
+      }
+      return Buffer.from(written.content);
+    },
+    mkdirSync(filename) {
+      mkdirs.push(filename);
+    },
+    writeFileSync(filename, content) {
+      writes.push({ filename, content: String(content) });
+    },
+    removeSync() {},
+  };
+}
+
+test("ProjectInitializer offers bundled Kotlin templates when Gauge lists none", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
-  const {
-    errors,
-    inputs,
-    openDialogs,
-    quickPicks,
-    registered,
-    vscode,
-  } = createFakeVscode();
+  const { errors, quickPicks, registered, vscode } = createFakeVscode();
   const spawns = [];
+  const writes = [];
+  const mkdirs = [];
+
+  new ProjectInitializer({
+    cli: createStockGaugeCli(spawns, createChildProcess()),
+    fileSystem: createRecordingFileSystem(writes, mkdirs),
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(quickPicks[0].map((template) => template.label), [
+    "kotlin_gradle",
+    "kotlin_maven",
+  ]);
+  assert.deepEqual(errors, []);
+});
+
+test("ProjectInitializer scaffolds a bundled Kotlin template without running gauge init", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const { commands, errors, registered, vscode } = createFakeVscode();
+  const spawns = [];
+  const writes = [];
+  const mkdirs = [];
+
+  new ProjectInitializer({
+    cli: createStockGaugeCli(spawns, createChildProcess()),
+    fileSystem: createRecordingFileSystem(writes, mkdirs),
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  assert.deepEqual(spawns, []);
+  assert.deepEqual(errors, []);
+  const written = writes.map((entry) => entry.filename);
+  assert.ok(written.includes("/workspace/shop/manifest.json"), written.join(", "));
+  assert.ok(written.includes("/workspace/shop/build.gradle.kts"), written.join(", "));
+  assert.ok(
+    written.some((filename) => filename.endsWith(".kt")),
+    written.join(", "),
+  );
+  assert.ok(
+    written.some((filename) => filename.endsWith(".spec")),
+    written.join(", "),
+  );
+  assert.deepEqual(commands, [
+    {
+      command: "vscode.openFolder",
+      args: [{ fsPath: "/workspace/shop" }, true],
+    },
+  ]);
+});
+
+test("ProjectInitializer names the bundled project after the created folder", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const { registered, vscode } = createFakeVscode();
+  const writes = [];
+  const mkdirs = [];
+
+  new ProjectInitializer({
+    cli: createStockGaugeCli([], createChildProcess()),
+    fileSystem: createRecordingFileSystem(writes, mkdirs),
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  await command.handler();
+
+  const settings = writes.find((entry) => entry.filename.endsWith("settings.gradle.kts"));
+  assert.ok(settings, writes.map((entry) => entry.filename).join(", "));
+  assert.match(settings.content, /rootProject\.name = "shop"/);
+  assert.doesNotMatch(settings.content, /\{\{/);
+});
+
+test("ProjectInitializer keeps a Kotlin project whose Gauge manifest language is java", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const { commands, errors, registered, vscode } = createFakeVscode();
+  const removed = [];
   const child = createChildProcess();
   const cli = {
     isGaugeInstalled() {
@@ -693,16 +839,14 @@ test("ProjectInitializer rejects project creation when Kotlin templates are unav
     },
     gaugeCommand() {
       return {
-        spawn(args) {
-          spawns.push(args);
+        spawn() {
           setImmediate(() => child.emit("close", 0));
           return child;
         },
         spawnSync() {
           return {
             stdout: Buffer.from(JSON.stringify([
-              { key: "java", Description: "Java", value: "java" },
-              { key: "js", Description: "JavaScript", value: "js" },
+              { key: "kotlin_gradle", Description: "Kotlin Gradle", value: "kotlin_gradle" },
             ])),
           };
         },
@@ -713,11 +857,18 @@ test("ProjectInitializer rejects project creation when Kotlin templates are unav
   new ProjectInitializer({
     cli,
     fileSystem: {
-      existsSync() {
-        return false;
+      existsSync(filename) {
+        return filename === "/workspace/shop/src/test/kotlin";
+      },
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/shop/manifest.json");
+        return Buffer.from(JSON.stringify({ Language: "java", Plugins: ["html-report"] }));
       },
       mkdirSync() {},
-      removeSync() {},
+      writeFileSync() {},
+      removeSync(filename) {
+        removed.push(filename);
+      },
     },
     pathModule: path.posix,
     vscode,
@@ -726,13 +877,14 @@ test("ProjectInitializer rejects project creation when Kotlin templates are unav
   const command = registered.find((entry) => entry.command === "gauge.createProject");
   await command.handler();
 
-  assert.deepEqual(errors, [
-    "No Kotlin Gauge project templates are available.",
+  assert.deepEqual(errors, []);
+  assert.deepEqual(removed, []);
+  assert.deepEqual(commands, [
+    {
+      command: "vscode.openFolder",
+      args: [{ fsPath: "/workspace/shop" }, true],
+    },
   ]);
-  assert.deepEqual(quickPicks, []);
-  assert.deepEqual(openDialogs, []);
-  assert.deepEqual(inputs, []);
-  assert.deepEqual(spawns, []);
 });
 
 test("ProjectInitializer rejects templates that create non-Kotlin Gauge projects", async () => {

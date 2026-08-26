@@ -8,6 +8,11 @@ const {
   manifestLanguage,
   readProjectManifest,
 } = require("../project/manifest");
+const {
+  isBundledTemplate,
+  listBundledKotlinTemplates,
+  writeBundledKotlinTemplate,
+} = require("./bundledKotlinTemplates");
 
 const CREATE_PROJECT_COMMAND = "gauge.createProject";
 const GAUGE_INIT_ARG = "init";
@@ -19,8 +24,11 @@ const TEMPLATE_CONFIGURATION_KEY = "template";
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const EXISTING_GAUGE_PROJECT_MESSAGE =
   "Given location is already a Gauge Project. Please try to initialize a Gauge project in a different location.";
-const NO_KOTLIN_TEMPLATES_MESSAGE = "No Kotlin Gauge project templates are available.";
 const NON_KOTLIN_PROJECT_MESSAGE = "Selected template did not create a Kotlin Gauge project.";
+const KOTLIN_SOURCE_ROOTS = [
+  ["src", "test", "kotlin"],
+  ["src", "main", "kotlin"],
+];
 const DISPOSED_OPERATION = Symbol("disposed project initialization");
 
 function getVscode(vscode) {
@@ -64,13 +72,38 @@ function isGaugeProjectDir(fileSystem, pathModule, dirname) {
   return isGaugeProjectRoot(fileSystem, pathModule, dirname);
 }
 
+// A Kotlin Gauge project runs on the gauge-java runner, so its manifest language
+// is "java", not "kotlin": that is the shape of
+// test/fixtures/selected-scenario-lifecycle and the shape
+// src/project/projectFactory.js accepts through isJvmLanguage. Requiring
+// "kotlin" here rejected exactly the project shape the rest of the extension
+// supports, so accept either JVM language and prove the Kotlin half from the
+// sources the template wrote.
+function hasKotlinSourceRoot(fileSystem, pathModule, dirname) {
+  return KOTLIN_SOURCE_ROOTS.some((sourceRoot) => {
+    try {
+      return fileSystem.existsSync(pathModule.join(dirname, ...sourceRoot));
+    } catch (_error) {
+      return false;
+    }
+  });
+}
+
 function isKotlinGaugeProjectDir(fileSystem, pathModule, dirname) {
+  let language;
   try {
     const manifest = readProjectManifest(fileSystem, pathModule, dirname);
-    return String(manifestLanguage(manifest) || "").trim().toLowerCase() === "kotlin";
+    language = String(manifestLanguage(manifest) || "").trim().toLowerCase();
   } catch (_error) {
     return false;
   }
+  if (language === "kotlin") {
+    return true;
+  }
+  if (language !== "java") {
+    return false;
+  }
+  return hasKotlinSourceRoot(fileSystem, pathModule, dirname);
 }
 
 class ProgressHandler {
@@ -568,6 +601,39 @@ class ProjectInitializer {
     };
 
     cancellationDisposable = operation.onCancellation(() => progressHandler.neutral());
+    // A bundled template has nothing for `gauge init` to unpack, so write it
+    // here and hand the same zero exit code to onClose. Everything downstream -
+    // the Kotlin project verification, cancellation, directory cleanup and the
+    // folder opening - stays on one path.
+    if (isBundledTemplate(template)) {
+      try {
+        progressHandler.report("Initializing project...");
+        if (this.operationStopped(operation)) {
+          this.cleanupOperationDirectory(operation);
+          progressHandler.neutral();
+          cancellationDisposable.dispose();
+          return;
+        }
+        writeBundledKotlinTemplate({
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: projectFolder.fsPath,
+          template,
+        });
+      } catch (error) {
+        cancellationDisposable.dispose();
+        if (this.operationStopped(operation)) {
+          this.cleanupOperationDirectory(operation);
+          progressHandler.neutral();
+          return;
+        }
+        this.completeOperation(operation);
+        progressHandler.fail(error);
+        return;
+      }
+      onClose(0);
+      return;
+    }
     try {
       const command = cli.gaugeCommand();
       if (this.operationStopped(operation)) {
@@ -632,17 +698,12 @@ class ProjectInitializer {
         value: template.value,
       }));
       const kotlinTemplates = templates.filter(isKotlinTemplate);
-      if (kotlinTemplates.length === 0) {
-        const resultValue = await this.callForOperation(
-          operation,
-          () => this.vscode.window.showErrorMessage(NO_KOTLIN_TEMPLATES_MESSAGE),
-        );
-        if (resultValue === DISPOSED_OPERATION) {
-          return DISPOSED_OPERATION;
-        }
-        return [];
-      }
-      const sorted = this.sortTemplatesByPreference(kotlinTemplates);
+      // A template the user registered with `gauge template <name> <url>` wins
+      // over the bundled scaffold of the same name.
+      const upstreamLabels = new Set(kotlinTemplates.map((template) => template.label));
+      const bundled = listBundledKotlinTemplates()
+        .filter((template) => !upstreamLabels.has(template.label));
+      const sorted = this.sortTemplatesByPreference(kotlinTemplates.concat(bundled));
       return operation && this.operationStopped(operation) ? DISPOSED_OPERATION : sorted;
     } catch (_error) {
       // The suggestion belongs in the message: a second argument renders as a
