@@ -22,7 +22,20 @@ const KOTLIN_LANGUAGE = "kotlin";
 const DISPOSED_OPERATION = Symbol("disposed generate stub operation");
 
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
+const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const GAUGE_STEP_IMPORT = "import com.thoughtworks.gauge.Step";
+
+function mergeImplementationFiles(runnerFiles, kotlinFiles) {
+  const merged = Array.isArray(runnerFiles) ? [...runnerFiles] : [];
+  const seen = new Set(merged);
+  for (const file of kotlinFiles || []) {
+    if (!seen.has(file)) {
+      seen.add(file);
+      merged.push(file);
+    }
+  }
+  return merged;
+}
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -336,9 +349,13 @@ class GenerateStubCommandProvider {
       if (projectRoot === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
       }
+      const kotlinFiles = await this.kotlinImplementationFiles(operation, projectRoot);
+      if (kotlinFiles === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
       const items = this.callSyncForOperation(
         operation,
-        () => this.getFileLists(files, projectRoot),
+        () => this.getFileLists(mergeImplementationFiles(files, kotlinFiles), projectRoot),
       );
       if (items === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
@@ -918,6 +935,33 @@ class GenerateStubCommandProvider {
       return undefined;
     }
     return this.vscode.window.showErrorMessage(`Unable to generate implementation. ${reason}`);
+  }
+
+  // gauge/getImplFiles is delegated to the runner, and gauge-java's FileHelper
+  // only scans files ending in .java, so a Kotlin project gets an empty list and
+  // the picker can only offer "New File". Add the project's own Kotlin sources.
+  async kotlinImplementationFiles(operation, projectRoot) {
+    const workspace = this.vscode.workspace;
+    if (!projectRoot || !workspace || typeof workspace.findFiles !== "function") {
+      return [];
+    }
+    let uris;
+    try {
+      uris = await this.callForOperation(
+        operation,
+        () => workspace.findFiles(KOTLIN_WORKSPACE_PATTERN),
+      );
+    } catch (_error) {
+      return this.operationStopped(operation) ? DISPOSED_OPERATION : [];
+    }
+    if (uris === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const prefix = `${projectRoot}/`;
+    return (uris || [])
+      .map((uri) => (uri && (uri.fsPath || uri.path)) || "")
+      .filter((file) => file && file.replace(/\\/g, "/").startsWith(prefix))
+      .sort();
   }
 
   getFileLists(files, cwd, copy = true) {

@@ -154,6 +154,70 @@ function createFakeVscode(overrides = {}) {
   };
 }
 
+// gauge/getImplFiles is delegated to the runner, and gauge-java's FileHelper
+// only scans files ending in .java
+// (references/gauge-java/src/main/java/com/thoughtworks/gauge/FileHelper.java).
+// A Kotlin project therefore gets an empty list and the picker can only ever
+// offer "New File": there is no way to add a step to an existing Kotlin file.
+test("GenerateStubCommandProvider lists workspace Kotlin files the Java runner cannot see", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const { commands, quickPicks, vscode } = createFakeVscode();
+  const findFilePatterns = [];
+  vscode.workspace.findFiles = (pattern) => {
+    findFilePatterns.push(pattern);
+    return Promise.resolve([
+      { fsPath: "/workspace/src/test/kotlin/Steps.kt" },
+      { fsPath: "/workspace/src/test/kotlin/login/LoginSteps.kt" },
+      { fsPath: "/elsewhere/Other.kt" },
+    ]);
+  };
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method) {
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve([]);
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+
+  new GenerateStubCommandProvider({ get() { return { project, client }; } }, {
+    fileSystem: {
+      existsSync() {
+        return true;
+      },
+      readFileSync() {
+        return "";
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("fun step() {}");
+
+  assert.deepEqual(quickPicks[0], [
+    { label: "New File", description: "Create a new file", value: "New File" },
+    { label: "Copy To Clipboard", description: "", value: "Copy To Clipboard" },
+    { label: "Steps.kt", description: "src/test/kotlin", value: "/workspace/src/test/kotlin/Steps.kt" },
+    {
+      label: "LoginSteps.kt",
+      description: "src/test/kotlin/login",
+      value: "/workspace/src/test/kotlin/login/LoginSteps.kt",
+    },
+  ]);
+});
+
 // gauge/putStubImpl is answered by gauge-java's StubImplementationCodeProcessor,
 // which parses the target with JavaParser
 // (references/gauge-java/src/main/java/com/thoughtworks/gauge/connection/StubImplementationCodeProcessor.java).
