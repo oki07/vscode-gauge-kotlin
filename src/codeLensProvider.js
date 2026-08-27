@@ -207,7 +207,7 @@ function countStepReferences(document, normalizedStep, options = {}) {
         stepEndLine = nextLine;
       }
     }
-    if (stepText && lines[stepEndLine + 1] !== undefined && isTableLine(lines[stepEndLine + 1])) {
+    if (stepText && inlineTableLineAfterStep(lines, stepEndLine) !== undefined) {
       stepText = `${stepText} <table>`;
     }
     if (stepText && normalizeStepTemplate(stepText) === normalizedStep) {
@@ -370,6 +370,22 @@ function isExternalDataTableLine(line) {
   const text = String(line || "").trim().toLowerCase();
   return text.startsWith("table:") || text.startsWith("table :");
 }
+
+// Gauge's lexer emits no token for a blank line following a step
+// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// so a table separated from its step by blank lines still attaches to it.
+// Verified against parser.SpecParser.Parse.
+function inlineTableLineAfterStep(lines, endLine) {
+  for (let index = endLine + 1; index < lines.length; index += 1) {
+    const text = String(lines[index] || "").trim();
+    if (text === "") {
+      continue;
+    }
+    return isTableLine(text) ? index : undefined;
+  }
+  return undefined;
+}
+
 
 function normalizedStepValues(aliases) {
   const values = [];

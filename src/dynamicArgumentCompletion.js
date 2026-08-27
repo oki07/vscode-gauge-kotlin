@@ -249,6 +249,22 @@ function isTableLine(line) {
   return text.startsWith("|");
 }
 
+// Gauge's lexer emits no token for a blank line following a step
+// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// so a table separated from its step by blank lines still attaches to it.
+// Verified against parser.SpecParser.Parse.
+function inlineTableLineAfterStep(lines, endLine) {
+  for (let index = endLine + 1; index < lines.length; index += 1) {
+    const text = String(lines[index] || "").trim();
+    if (text === "") {
+      continue;
+    }
+    return isTableLine(text) ? index : undefined;
+  }
+  return undefined;
+}
+
+
 function isTableBlockStartLine(line, options = {}) {
   return options.allowIndented ? isTableLine(line) : String(line || "").startsWith("|") && isTableLine(line);
 }
@@ -1316,7 +1332,7 @@ function usedStepRecordsFromDocument(document, options = {}) {
     }
     const endLine = multiline ? multilineStepEndLine(lines, lineNumber) : lineNumber;
     entries.push({
-      label: isTableLine(lines[endLine + 1] || "")
+      label: inlineTableLineAfterStep(lines, endLine) !== undefined
         ? `${usedStepCompletionText(stepText)} <table>`
         : usedStepCompletionText(stepText),
       line: lineNumber,

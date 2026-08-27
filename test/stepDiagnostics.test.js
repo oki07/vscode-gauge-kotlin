@@ -8217,3 +8217,69 @@ test("GaugeStepDiagnosticsProvider leaves Markdown in a nested directory named s
   assert.equal(provider.shouldDiagnose(nested), false);
   assert.deepEqual(provider.provideDiagnostics(nested, documents), []);
 });
+
+// Gauge's lexer emits no token for a blank line that follows a step
+// (references/gauge/parser/lex.go: newToken.Suffix = "\n"; continue), so the
+// step token is still the last token when the table arrives and the table
+// attaches to it. Verified against the real parser: for "* Send payload" with a
+// blank line before an inline table, parser.SpecParser.Parse returns step value
+// "Send payload {}" with one table argument, the same as with no blank line. A
+// non-blank comment line in between does break the attachment.
+test("GaugeStepDiagnosticsProvider attaches an inline table separated from its step by a blank line", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const spec = createDocument([
+    "# Checkout",
+    "",
+    "## Buy",
+    "* Send payload",
+    "",
+    "   |a|b|",
+    "   |-|-|",
+    "   |1|2|",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const steps = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "import com.thoughtworks.gauge.Table",
+    "class Steps {",
+    "  @Step(\"Send payload <table>\")",
+    "  fun send(table: Table) {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const documents = [spec, steps];
+
+  assert.deepEqual(
+    provider.provideDiagnostics(spec, documents).map((entry) => entry.message),
+    [],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider leaves a table behind a comment line unattached", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const spec = createDocument([
+    "# Checkout",
+    "",
+    "## Buy",
+    "* Send payload",
+    "a comment",
+    "   |a|b|",
+    "   |-|-|",
+    "   |1|2|",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const steps = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "class Steps {",
+    "  @Step(\"Send payload\")",
+    "  fun send() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const documents = [spec, steps];
+
+  assert.deepEqual(
+    provider.provideDiagnostics(spec, documents).map((entry) => entry.message),
+    [],
+  );
+});

@@ -170,6 +170,22 @@ function isInlineTableLine(line) {
   return text.startsWith("|");
 }
 
+// Gauge's lexer emits no token for a blank line following a step
+// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// so a table separated from its step by blank lines still attaches to it.
+// Verified against parser.SpecParser.Parse.
+function inlineTableLineAfterStep(lines, endLine) {
+  for (let index = endLine + 1; index < lines.length; index += 1) {
+    const text = String(lines[index] || "").trim();
+    if (text === "") {
+      continue;
+    }
+    return isInlineTableLine(text) ? index : undefined;
+  }
+  return undefined;
+}
+
+
 function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
@@ -443,7 +459,7 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines, options = {}) {
   const textEnd = endLine === startLine
     ? textStart + text.length
     : lineTrimEndLength(sourceLines[endLine]);
-  const hasInlineTable = isInlineTableLine(sourceLines[endLine + 1]);
+  const hasInlineTable = inlineTableLineAfterStep(sourceLines, endLine) !== undefined;
   const template = normalizeStepTemplate(hasInlineTable ? `${stepText} <table>` : stepText);
   if (!template) {
     return undefined;

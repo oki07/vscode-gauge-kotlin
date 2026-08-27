@@ -3836,6 +3836,24 @@ function isInlineTableLine(line) {
   return text.startsWith("|");
 }
 
+// Gauge's lexer emits no token for a blank line following a step
+// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// so the step token is still current when a table arrives and the table attaches
+// to the step. Verified against parser.SpecParser.Parse: a blank line between a
+// step and an inline table still yields one table argument. A non-blank comment
+// line in between does break the attachment.
+function inlineTableLineAfterStep(lines, endLine) {
+  for (let index = endLine + 1; index < lines.length; index += 1) {
+    const text = String(lines[index] || "").trim();
+    if (text === "") {
+      continue;
+    }
+    return isInlineTableLine(text) ? index : undefined;
+  }
+  return undefined;
+}
+
+
 function isGaugeTableRow(line) {
   const text = String(line || "").trim();
   return text.startsWith("|") && text.endsWith("|");
@@ -5003,7 +5021,7 @@ function findGaugeSteps(text, options = {}) {
     }
 
     let stepText = textLines.join(" ").trim();
-    if (stepText && lines[line + 1] !== undefined && isInlineTableLine(lines[line + 1])) {
+    if (stepText && inlineTableLineAfterStep(lines, line) !== undefined) {
       stepText = `${stepText} <table>`;
     }
     const docStringEndLine = docStringEndLineAfterStep(lines, startLine);
