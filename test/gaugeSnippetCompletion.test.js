@@ -139,3 +139,53 @@ test("GaugeSnippetCompletionProvider registers for Gauge documents only", () => 
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
   ]);
 });
+
+// The provider must read gauge_specs_dir exactly as src/stepDiagnostics.js does,
+// escapes included, or the same project property would decide differently
+// depending on which provider asked.
+test("GaugeSnippetCompletionProvider follows a configured gauge_specs_dir", () => {
+  const { GaugeSnippetCompletionProvider } = require("../src/gaugeSnippetCompletion");
+  const { vscode } = createFakeVscode();
+  const provider = new GaugeSnippetCompletionProvider({
+    fileSystem: {
+      readFileSync(filename) {
+        assert.equal(filename, "/workspace/gauge/env/default/default.properties");
+        return "gauge_specs_dir = anotherSpecDir\n";
+      },
+    },
+    pathModule: require("node:path").posix,
+    projectFactory: gaugeProjectFactory(),
+    vscode,
+  });
+
+  assert.ok(
+    provider.provideCompletionItems(
+      createDocument("/workspace/gauge/anotherSpecDir/checkout.md"),
+    ).length > 0,
+  );
+  assert.deepEqual(
+    provider.provideCompletionItems(createDocument("/workspace/gauge/specs/checkout.md")),
+    [],
+  );
+});
+
+test("GaugeSnippetCompletionProvider reads a property whose value contains an escaped separator", () => {
+  const { GaugeSnippetCompletionProvider } = require("../src/gaugeSnippetCompletion");
+  const { vscode } = createFakeVscode();
+  const provider = new GaugeSnippetCompletionProvider({
+    fileSystem: {
+      readFileSync() {
+        return "gauge_specs_dir = spec\\=dir\n";
+      },
+    },
+    pathModule: require("node:path").posix,
+    projectFactory: gaugeProjectFactory(),
+    vscode,
+  });
+
+  assert.ok(
+    provider.provideCompletionItems(
+      createDocument("/workspace/gauge/spec=dir/checkout.md"),
+    ).length > 0,
+  );
+});

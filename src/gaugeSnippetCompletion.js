@@ -53,17 +53,71 @@ function startsWithSegments(segments, prefix) {
     && prefix.every((segment, index) => segment === segments[index]);
 }
 
+function isEscapedAt(text, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function firstUnescapedIndex(line, characters) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (characters.has(line[index]) && !isEscapedAt(line, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function firstWhitespaceIndex(line) {
+  for (let index = 0; index < line.length; index += 1) {
+    if (/\s/.test(line[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function unescapePropertyValue(value) {
+  return String(value || "")
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
+      if (character === "t") {
+        return "\t";
+      }
+      if (character === "n") {
+        return "\n";
+      }
+      if (character === "r") {
+        return "\r";
+      }
+      if (character === "f") {
+        return "\f";
+      }
+      return character;
+    });
+}
+
+// Kept byte for byte in step with the copies in src/stepDiagnostics.js and its
+// siblings: a project property must not parse differently depending on which
+// provider read it.
 function propertiesValue(content, key) {
+  const separators = new Set(["=", ":"]);
   for (const rawLine of String(content || "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#") || line.startsWith("!")) {
       continue;
     }
-    const separator = line.search(/[=:\s]/);
-    if (separator === -1 || line.slice(0, separator).trim() !== key) {
+    const explicitSeparator = firstUnescapedIndex(line, separators);
+    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
+    if (separator === -1) {
       continue;
     }
-    return line.slice(separator + 1).replace(/^[=:\s]+/, "").trim();
+    if (line.slice(0, separator).trim() !== key) {
+      continue;
+    }
+    return unescapePropertyValue(line.slice(separator + 1).trim());
   }
   return undefined;
 }
