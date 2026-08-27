@@ -5146,6 +5146,52 @@ test("GaugeStepDiagnosticsProvider reports Gauge data tables without rows", () =
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 13 });
 });
 
+// Only the row immediately below the header is the separator. Verified against
+// the real parser: "|a|b| / |-|-| / |-|-|" parses with ok=true and the dash row
+// is data, while the header and separator alone give this error.
+test("GaugeStepDiagnosticsProvider accepts a data row of dash placeholders", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| id | name |",
+    "|----|------|",
+    "| -  | -    |",
+    "## Scenario",
+    "* Confirm order <id>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order <id>\")",
+    "fun confirm(id: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
+// The real parser reads a step left to right: a quote opens a static argument and
+// an angle bracket inside it is literal. `render "<html>"` parses with ok=true as
+// a single static argument, so it must not be scanned for dynamic parameters.
+test("GaugeStepDiagnosticsProvider treats angle brackets inside quotes as static text", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Render",
+    "",
+    "## Scenario",
+    "* Render \"<html>\" markup",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/render.spec");
+  const implementation = createDocument([
+    "@Step(\"Render <markup> markup\")",
+    "fun render(markup: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
 test("GaugeStepDiagnosticsProvider reports Gauge external tables without locations", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -5170,6 +5216,45 @@ test("GaugeStepDiagnosticsProvider reports Gauge external tables without locatio
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 1, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 1, character: 6 });
+});
+
+// A spec-level external data table supplies the dynamic parameters for every
+// scenario below it, exactly like an inline one. Verified against the real
+// parser: "table: data/users.csv" with a "word" header parses ok=true and the
+// spec data table headers are [word], so "* row <word>" resolves.
+test("GaugeStepDiagnosticsProvider resolves parameters from an external data table", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync: (filename) => filename === "/workspace/gauge/data/users.csv",
+      readFileSync(filename) {
+        if (filename === "/workspace/gauge/data/users.csv") {
+          return "word,count\nalice,3\n";
+        }
+        throw new Error(`unexpected read ${filename}`);
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+      isGaugeProject: () => true,
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "table: data/users.csv",
+    "",
+    "## Scenario",
+    "* Confirm order <word>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm order <word>\")",
+    "fun confirm(word: String) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
 test("GaugeStepDiagnosticsProvider reports unresolved Gauge external table files", () => {
@@ -6591,6 +6676,34 @@ test("GaugeStepDiagnosticsProvider reports unresolved concept step dynamic param
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 19 });
+});
+
+// An inline table under a concept step is a table argument, not a dynamic
+// parameter. The step signature gains a synthetic <table> so it can match an
+// implementation taking a Table, but that placeholder must not be resolved
+// against the concept heading. Verified against the real concept parser:
+// "# c <foo>" with "* use <foo>" and an inline table reports no errors at all.
+test("GaugeStepDiagnosticsProvider leaves a concept step inline table unresolved-free", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout <item>",
+    "* Use <item>",
+    "  |quantity|",
+    "  |--------|",
+    "  |2       |",
+  ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Use <item> <table>\")",
+    "fun use(item: String, rows: Table) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
 test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => {

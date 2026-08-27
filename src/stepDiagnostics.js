@@ -46,6 +46,7 @@ const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
 const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminated";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const GAUGE_DATA_DIR_PROPERTY = "gauge_data_dir";
+const CSV_DELIMITER_PROPERTY = "csv_delimiter";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
@@ -3533,12 +3534,30 @@ function findNextStepParameter(dynamicStart, staticStart) {
   return { openIndex: staticStart, type: "static" };
 }
 
+// The real parser reads a step left to right and whichever of `"` or `<` opens
+// first wins: inside a static argument an angle bracket is literal, so
+// `render "<html>"` is one static argument, not an unresolved <html>. An
+// unterminated quote yields no arguments at all ("String not terminated"), which
+// is why a missing closing quote stops the scan.
 function findDynamicParameterStart(text, startIndex) {
-  let openIndex = text.indexOf("<", startIndex);
-  while (openIndex !== -1 && isEscapedAt(text, openIndex)) {
-    openIndex = text.indexOf("<", openIndex + 1);
+  for (let index = Math.max(0, startIndex); index < text.length; index += 1) {
+    const character = text[index];
+    if (character !== "<" && character !== "\"") {
+      continue;
+    }
+    if (isEscapedAt(text, index)) {
+      continue;
+    }
+    if (character === "<") {
+      return index;
+    }
+    const closeQuote = findStaticParameterStart(text, index + 1);
+    if (closeQuote === -1) {
+      return -1;
+    }
+    index = closeQuote;
   }
-  return openIndex;
+  return -1;
 }
 
 function findStaticParameterStart(text, startIndex) {
@@ -4198,13 +4217,20 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       pendingDataTable = {
         hasDataRow: false,
         range: lineContentRange(vscode, rawLine, line),
+        sawSeparator: false,
       };
       continue;
     }
 
-    if (!isGaugeTableSeparatorRow(rawLine)) {
-      pendingDataTable.hasDataRow = true;
+    // Only the row immediately after the header is the separator. A later row of
+    // dashes is data: verified against the real parser, where
+    // "|a|b| / |-|-| / |-|-|" parses with ok=true while the header and separator
+    // alone give "Data table should have at least 1 data row".
+    if (!pendingDataTable.sawSeparator && isGaugeTableSeparatorRow(rawLine)) {
+      pendingDataTable.sawSeparator = true;
+      continue;
     }
+    pendingDataTable.hasDataRow = true;
   }
   flushPendingDataTable();
   return diagnostics;
@@ -4253,6 +4279,75 @@ function externalTableExists(location, options = {}) {
   }
   const filename = resolveExternalTablePath(location, options);
   return filename === undefined || fileSystem.existsSync(filename);
+}
+
+// Gauge reads an external data table as CSV: the first record is the header row,
+// `#` opens a comment and the delimiter defaults to a comma but is overridable
+// through csv_delimiter (references/gauge/parser/tableParser.go
+// convertCsvToTable). Only the headers matter here, so the reader stops at the
+// first record.
+function csvHeaderCells(contents, delimiter) {
+  const cells = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < contents.length; index += 1) {
+    const character = contents[index];
+    if (quoted) {
+      if (character !== "\"") {
+        cell += character;
+      } else if (contents[index + 1] === "\"") {
+        cell += "\"";
+        index += 1;
+      } else {
+        quoted = false;
+      }
+      continue;
+    }
+    if (character === "\"" && !cell) {
+      quoted = true;
+      continue;
+    }
+    if (character === delimiter) {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    if (character === "\n" || character === "\r") {
+      break;
+    }
+    cell += character;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function csvDelimiter(options = {}) {
+  const configured = process.env[CSV_DELIMITER_PROPERTY]
+    || projectDefaultProperty(options, CSV_DELIMITER_PROPERTY);
+  return configured ? configured[0] : ",";
+}
+
+function externalTableHeaders(location, options = {}) {
+  const fileSystem = options.fileSystem;
+  if (!location || !fileSystem || typeof fileSystem.readFileSync !== "function") {
+    return [];
+  }
+  const filename = resolveExternalTablePath(location, options);
+  if (filename === undefined) {
+    return [];
+  }
+  let contents;
+  try {
+    contents = String(fileSystem.readFileSync(filename, "utf8"));
+  } catch (_error) {
+    return [];
+  }
+  const firstRecord = contents
+    .split(/\r?\n/)
+    .find((line) => line.trim() && !line.trimStart().startsWith("#"));
+  return firstRecord === undefined
+    ? []
+    : csvHeaderCells(firstRecord, csvDelimiter(options)).filter(Boolean);
 }
 
 function externalDataTableLocation(line) {
@@ -4687,7 +4782,7 @@ function addTableHeaders(target, rawLine) {
   }
 }
 
-function dynamicStepParameterDiagnostics(vscode, text) {
+function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
   const specHeaders = new Set();
@@ -4727,6 +4822,22 @@ function dynamicStepParameterDiagnostics(vscode, text) {
       inScenario = true;
       scenarioHeaders = new Set();
       scenarioHasStep = false;
+      inTableBlock = false;
+      continue;
+    }
+
+    // A "table: <location>" line declares an external data table whose CSV
+    // headers become the dynamic parameters, exactly like an inline table.
+    const externalLocation = externalDataTableLocation(rawLine);
+    if (externalLocation) {
+      const headers = externalTableHeaders(externalLocation, options);
+      for (const header of headers) {
+        if (!inScenario) {
+          specHeaders.add(header);
+        } else if (!scenarioHasStep) {
+          scenarioHeaders.add(header);
+        }
+      }
       inTableBlock = false;
       continue;
     }
@@ -5067,12 +5178,18 @@ function findGaugeSteps(text, options = {}) {
       }
     }
 
-    let stepText = textLines.join(" ").trim();
+    // The step signature gains a synthetic <table> so it can match an
+    // implementation taking a Table argument. Keep the text as written too: the
+    // placeholder is a table argument, not a dynamic parameter, and resolving it
+    // against a concept heading would be a false unresolved-parameter error.
+    const declaredText = textLines.join(" ").trim();
+    let stepText = declaredText;
     if (stepText && inlineTableLineAfterStep(lines, line) !== undefined) {
       stepText = `${stepText} <table>`;
     }
     const docStringEndLine = docStringEndLineAfterStep(lines, startLine);
     entries.push({
+      declaredText,
       end: { line: endLine, character: endCharacter },
       marker,
       parseError: stepParseError(stepText, docStringEndLine),
@@ -5310,7 +5427,7 @@ function conceptStepDynamicParameterDiagnostics(vscode, text) {
       ) {
         continue;
       }
-      for (const parameter of dynamicStepParameters(step.text)) {
+      for (const parameter of dynamicStepParameters(step.declaredText || step.text)) {
         if (availableParameters.has(parameter)) {
           continue;
         }
@@ -8999,7 +9116,11 @@ class GaugeStepDiagnosticsProvider {
           projectRoot: this.gaugeProjectRoot(document),
         }));
         diagnostics.push(...unknownSpecialStepParameterDiagnostics(this.vscode, text));
-        diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text));
+        diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
         diagnostics.push(...teardownMarkerDiagnostics(this.vscode, text));
         diagnostics.push(...repeatedTagDiagnostics(this.vscode, text));
       }
