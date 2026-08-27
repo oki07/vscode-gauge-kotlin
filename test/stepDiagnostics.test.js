@@ -8283,3 +8283,44 @@ test("GaugeStepDiagnosticsProvider leaves a table behind a comment line unattach
     [],
   );
 });
+
+// Gauge's lexer accepts both spellings of the tag keyword:
+// references/gauge/parser/lex.go checkTag compares against "tags:" and "tags :".
+// Six other modules stop a multi-line step at either spelling; stepDiagnostics
+// only knew the first, so with allow_multiline_step a "tags : smoke" line was
+// swallowed into the step text here and nowhere else.
+test("GaugeStepDiagnosticsProvider ends a multiline step at a spaced tags keyword", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalAllowMultilineStep = process.env.allow_multiline_step;
+  process.env.allow_multiline_step = "true";
+  try {
+    const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+    const spec = createDocument([
+      "# Checkout",
+      "",
+      "## Buy",
+      "* Send payload",
+      "tags : smoke",
+    ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+    const steps = createDocument([
+      "package steps",
+      "import com.thoughtworks.gauge.Step",
+      "class Steps {",
+      "  @Step(\"Send payload\")",
+      "  fun send() {}",
+      "}",
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+    const documents = [spec, steps];
+
+    assert.deepEqual(
+      provider.provideDiagnostics(spec, documents).map((entry) => entry.message),
+      [],
+    );
+  } finally {
+    if (originalAllowMultilineStep === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultilineStep;
+    }
+  }
+});

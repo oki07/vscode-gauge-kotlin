@@ -4857,7 +4857,10 @@ function isGaugeSyntaxBoundary(line) {
   return !text
     || text.startsWith("*")
     || text.startsWith("#")
+    // Gauge accepts both spellings: references/gauge/parser/lex.go checkTag
+    // compares the line against "tags:" and "tags :".
     || text.toLowerCase().startsWith("tags:")
+    || text.toLowerCase().startsWith("tags :")
     || text.toLowerCase().startsWith("table:")
     || text.toLowerCase().startsWith("table :")
     || isInlineTableLine(text)
