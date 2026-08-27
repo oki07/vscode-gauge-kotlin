@@ -186,6 +186,82 @@ test("createSpecification writes a spec file under the workspace specs directory
   });
 });
 
+// With no language client running there is no gauge/specDirs answer, and the
+// fallback hard coded "specs". A project that moved its specifications with
+// gauge_specs_dir (references/gauge/util/util.go GetSpecDirs) then had new
+// specifications written into a directory Gauge does not read. The rule already
+// lives in src/gaugeSpecScope.js configuredSpecDirs.
+test("createSpecification honours gauge_specs_dir without a language client", async () => {
+  const { createSpecification } = require("../src/specification");
+  const writes = new Map();
+  const madeDirectories = [];
+
+  const fileSystem = {
+    existsSync() {
+      return false;
+    },
+    readFileSync(filename) {
+      if (filename === "/project/env/default/default.properties") {
+        return "gauge_specs_dir = features\n";
+      }
+      throw new Error(`Missing ${filename}`);
+    },
+    promises: {
+      async mkdir(directory, options) {
+        madeDirectories.push({ directory, options });
+      },
+      async writeFile(filename, content, encoding) {
+        writes.set(filename, { content, encoding });
+      },
+    },
+  };
+
+  const vscode = {
+    Position: class Position {
+      constructor(line, character) {
+        this.line = line;
+        this.character = character;
+      }
+    },
+    Range: class Range {
+      constructor(start, end) {
+        this.start = start;
+        this.end = end;
+      }
+    },
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/project" } }],
+      getConfiguration: () => ({ get: () => false }),
+      async openTextDocument(filename) {
+        return { filename };
+      },
+    },
+    window: {
+      async showInputBox() {
+        return "Login";
+      },
+      async showTextDocument() {},
+      async showErrorMessage(message) {
+        throw new Error(message);
+      },
+    },
+  };
+
+  await createSpecification({
+    vscode,
+    fileSystem,
+    pathModule: path.posix,
+    eol: "\n",
+    date: "2026-06-26",
+    user: "Ada",
+  });
+
+  assert.deepEqual(madeDirectories, [
+    { directory: "/project/features", options: { recursive: true } },
+  ]);
+  assert.equal(writes.has("/project/features/Login.spec"), true);
+});
+
 test("createSpecification asks for project and spec directory when multiple choices exist", async () => {
   const { createSpecification } = require("../src/specification");
   const writes = new Map();

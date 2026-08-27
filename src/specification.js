@@ -4,6 +4,8 @@ const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
 
+const { configuredSpecDirs } = require("./gaugeSpecScope");
+
 const SPEC_DIRS_REQUEST = "gauge/specDirs";
 const CREATE_SPECIFICATION_COMMAND = "gauge.create.specification";
 const CREATE_CONCEPT_COMMAND = "gauge.create.concept";
@@ -182,6 +184,14 @@ function releaseRequestSource(operation, source) {
     return;
   }
   cleanupOwnedSource(source, false);
+}
+
+function projectSpecDirs(projectRoot, options, pathModule) {
+  return configuredSpecDirs({
+    fileSystem: options.fileSystem,
+    pathModule,
+    projectRoot,
+  }).map((segments) => segments.join(pathModule.sep || "/"));
 }
 
 function createGaugeSpecDirsProvider(getClientsMap, options = {}) {
@@ -542,13 +552,17 @@ async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}
       operation,
       () => options.specDirsProvider(projectRoot, operation),
     )
-    : ["specs"];
+    : undefined;
   if (relativeSpecDirs === DISPOSED_CREATION || operationStopped(operation)) {
     return DISPOSED_CREATION;
   }
+  // gauge/specDirs only answers while a language client is running. Falling back
+  // to a hard coded "specs" wrote new specifications into a directory Gauge does
+  // not read whenever gauge_specs_dir moved them
+  // (references/gauge/util/util.go GetSpecDirs).
   const specDirs = relativeSpecDirs && relativeSpecDirs.length > 0
     ? relativeSpecDirs
-    : ["specs"];
+    : projectSpecDirs(projectRoot, options, pathModule);
 
   let selected = specDirs[0];
   if (specDirs.length > 1 && vscode.window.showQuickPick) {

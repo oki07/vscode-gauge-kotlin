@@ -4225,6 +4225,107 @@ test("activation shows install guidance when Gauge is unavailable", () => {
   assert.equal(context.subscriptions.includes(codeActionProviders[1].disposable), true);
 });
 
+// A Gauge manifest always names the runner language: it is what Gauge resolves a
+// runner with (references/gauge/manifest/manifest.go Manifest.Language), and a
+// project without one cannot run at all. The activation event is
+// workspaceContains:manifest.json, so a Chrome extension, a PWA or any other
+// project with an unrelated manifest.json at its root started the whole Gauge
+// service stack, including the "gauge daemon --lsp" launch and the Gauge Specs
+// view. src/project/manifest.js already carried hasGaugeLanguage for this and
+// nothing called it.
+test("activation does not start Gauge services for an unrelated manifest.json", () => {
+  const extension = require("../src/extension");
+
+  let workspaceCreated = false;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/web-app" } }],
+  });
+  const fileSystem = {
+    existsSync(filename) {
+      return filename === "/workspace/web-app/manifest.json";
+    },
+    readFileSync() {
+      return JSON.stringify({ manifest_version: 3, name: "Web App" });
+    },
+  };
+  class FakeGaugeWorkspace {
+    constructor() {
+      workspaceCreated = true;
+    }
+
+    dispose() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled: () => true,
+        isGaugeVersionGreaterOrEqual: () => true,
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    fileSystem,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    showWelcomeNotification() {},
+  });
+
+  assert.equal(workspaceCreated, false);
+});
+
+// The nested discovery path has the same exposure: a monorepo whose only
+// manifest.json belongs to a web app must not start the Gauge service stack.
+test("activation does not start Gauge services for a nested unrelated manifest.json", async () => {
+  const extension = require("../src/extension");
+
+  let workspaceCreated = false;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+  const fileSystem = {
+    existsSync(filename) {
+      return filename === "/workspace/web-app/manifest.json";
+    },
+    readFileSync() {
+      return JSON.stringify({ manifest_version: 3, name: "Web App" });
+    },
+  };
+  class FakeGaugeWorkspace {
+    constructor() {
+      workspaceCreated = true;
+    }
+
+    dispose() {}
+  }
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled: () => true,
+        isGaugeVersionGreaterOrEqual: () => true,
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    fileSystem,
+    GaugeWorkspace: FakeGaugeWorkspace,
+    projectFactory: {
+      findGaugeProjectRoots: () => ["/workspace/web-app"],
+      hasGaugeRunnerLanguage: () => false,
+      isGaugeProject: (root) => root === "/workspace/web-app",
+      isGaugeRunnableProject: () => false,
+    },
+    showWelcomeNotification() {},
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(workspaceCreated, false);
+});
+
 test("activation propagates the default project factory to Gauge providers", () => {
   const extension = require("../src/extension");
 

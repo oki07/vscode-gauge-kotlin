@@ -9,6 +9,7 @@ const { MavenProject } = require("./mavenProject");
 const {
   GAUGE_MANIFEST_FILE,
   isGaugeProjectRoot,
+  hasGaugeLanguage,
   manifestLanguage,
   readProjectManifest,
 } = require("./manifest");
@@ -55,6 +56,7 @@ function createProjectFactory(options = {}) {
   const projectCache = new Map();
   const reportedInvalidManifests = new Set();
   const gaugeProjectCache = new Map();
+  const gaugeRunnableCache = new Map();
   const rootLookupCache = new Map();
   const rootsDiscoveryCache = new Map();
   const rootsDiscoveryPending = new Map();
@@ -69,6 +71,7 @@ function createProjectFactory(options = {}) {
     discoveryGeneration += 1;
     projectCache.clear();
     gaugeProjectCache.clear();
+    gaugeRunnableCache.clear();
     rootLookupCache.clear();
     rootsDiscoveryCache.clear();
     rootsDiscoveryPending.clear();
@@ -119,6 +122,30 @@ function createProjectFactory(options = {}) {
     const result = isGaugeProjectRoot(fileSystem, pathModule, root);
     gaugeProjectCache.set(root, result);
     return result;
+  }
+
+  // A Gauge manifest always names the runner language
+  // (references/gauge/manifest/manifest.go Manifest.Language) and a project
+  // without one cannot run. Root resolution stays permissive so an existing
+  // project with a damaged manifest still resolves its files, but the service
+  // gate uses this so an unrelated manifest.json - a Chrome extension, a PWA -
+  // does not start the Gauge stack.
+  function hasGaugeRunnerLanguage(root) {
+    if (gaugeRunnableCache.has(root)) {
+      return gaugeRunnableCache.get(root);
+    }
+    let result;
+    try {
+      result = hasGaugeLanguage(readManifest(root));
+    } catch (_error) {
+      result = false;
+    }
+    gaugeRunnableCache.set(root, result);
+    return result;
+  }
+
+  function isGaugeRunnableProject(root) {
+    return isGaugeProject(root) && hasGaugeRunnerLanguage(root);
   }
 
   function isDirectory(filename) {
@@ -405,8 +432,10 @@ function createProjectFactory(options = {}) {
     findGaugeProjectRootsAsync,
     getGaugeRootFromFilePath,
     getProjectByFilepath,
+    hasGaugeRunnerLanguage,
     invalidate,
     isGaugeProject,
+    isGaugeRunnableProject,
   };
 }
 

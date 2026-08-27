@@ -358,17 +358,38 @@ function hasActiveImplementationGaugeDocument(vscode, projectFactory) {
   }
 }
 
+// The activation event is workspaceContains:manifest.json, so any project with an
+// unrelated manifest.json at its root reaches here. A Gauge manifest always names
+// the runner language (references/gauge/manifest/manifest.go Manifest.Language),
+// so require one before starting the Gauge service stack.
+// Discovery already returns only Gauge project roots, so those need the language
+// check alone rather than a second project check.
+function hasGaugeRunnerLanguage(projectFactory, root) {
+  if (typeof projectFactory.hasGaugeRunnerLanguage === "function") {
+    return projectFactory.hasGaugeRunnerLanguage(root);
+  }
+  return true;
+}
+
+function isGaugeServiceProject(projectFactory, root) {
+  if (typeof projectFactory.isGaugeRunnableProject === "function") {
+    return projectFactory.isGaugeRunnableProject(root);
+  }
+  return projectFactory.isGaugeProject(root);
+}
+
 function hasGaugeProject(vscode, projectFactory) {
   return workspaceFolders(vscode).some((folder) => {
     const folderPath = folder.uri.fsPath;
-    if (projectFactory.isGaugeProject(folderPath)) {
+    if (isGaugeServiceProject(projectFactory, folderPath)) {
       return true;
     }
     if (typeof projectFactory.findGaugeProjectRootsAsync === "function") {
       return false;
     }
     if (typeof projectFactory.findGaugeProjectRoots === "function") {
-      return projectFactory.findGaugeProjectRoots(folderPath).length > 0;
+      return projectFactory.findGaugeProjectRoots(folderPath)
+        .some((root) => hasGaugeRunnerLanguage(projectFactory, root));
     }
     return false;
   });
@@ -381,7 +402,7 @@ async function hasGaugeProjectAsync(vscode, projectFactory, extensionActivation)
     }
     const folderPath = folder.uri.fsPath;
     try {
-      if (projectFactory.isGaugeProject(folderPath)) {
+      if (isGaugeServiceProject(projectFactory, folderPath)) {
         return true;
       }
       if (!isExtensionActivationCurrent(extensionActivation)) {
@@ -392,7 +413,7 @@ async function hasGaugeProjectAsync(vscode, projectFactory, extensionActivation)
         if (!isExtensionActivationCurrent(extensionActivation)) {
           return false;
         }
-        if (roots.length > 0) {
+        if (roots.some((root) => hasGaugeRunnerLanguage(projectFactory, root))) {
           return true;
         }
       }
