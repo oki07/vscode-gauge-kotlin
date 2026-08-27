@@ -166,6 +166,30 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
 
+// Gauge compares the trimmed line (references/gauge/parser/lex.go), so a legacy
+// concept heading whose underline carries trailing whitespace still defines the
+// concept and its parameters. isLegacyScenarioHeadingAt already trimmed while
+// isLegacySpecHeadingAt and isLegacyConceptHeadingAt did not, so completion
+// refused to open inside such a heading.
+test("GaugeDynamicArgumentCompletionProvider completes in a legacy concept heading with an untidy underline", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const headingLine = "Shared checkout <i>";
+  const document = createDocument([
+    headingLine,
+    "===================   ",
+    "* Select <user>",
+  ].join("\n"), "/workspace/specs/concepts/shared.cpt");
+
+  const items = provider.provideCompletionItems(
+    document,
+    new vscode.Position(0, headingLine.indexOf("i") + 1),
+  );
+
+  assert.deepEqual(labels(items), ["i", "user"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider uses the shared workspace step index", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

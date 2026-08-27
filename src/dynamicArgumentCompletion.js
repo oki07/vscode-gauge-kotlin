@@ -222,9 +222,11 @@ function isLegacyScenarioHeadingAt(lines, lineNumber) {
     && /^-+$/.test(String(lines[lineNumber + 1] || "").trim());
 }
 
+// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// indented underline or one with trailing whitespace still opens the heading.
 function isLegacySpecHeadingAt(lines, lineNumber) {
   return hasLegacyHeadingText(lines[lineNumber])
-    && /^[=]+$/.test(lines[lineNumber + 1] || "");
+    && /^[=]+$/.test(String(lines[lineNumber + 1] || "").trim());
 }
 
 function isLegacyHeadingAt(lines, lineNumber) {
@@ -234,7 +236,7 @@ function isLegacyHeadingAt(lines, lineNumber) {
 
 function isLegacyConceptHeadingAt(lines, lineNumber) {
   return isConceptLegacyHeadingText(lines[lineNumber])
-    && /^[=]+$/.test(lines[lineNumber + 1] || "")
+    && /^[=]+$/.test(String(lines[lineNumber + 1] || "").trim())
     && hasFollowingLine(lines, lineNumber + 1);
 }
 

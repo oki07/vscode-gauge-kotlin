@@ -5066,7 +5066,11 @@ function conceptLegacyHeading(lines, lineNumber) {
   const rawLine = lines[lineNumber].replace(/\r$/, "");
   const underline = lines[lineNumber + 1].replace(/\r$/, "");
   const textStart = rawLine.search(/\S/);
-  if (textStart === -1 || !/^=+\s*$/.test(underline)) {
+  // Gauge compares the trimmed line (references/gauge/parser/lex.go) and
+  // parser/helper.go isUnderline accepts a run of one or more, so an indented
+  // underline still defines a concept, matching legacyHeadingKind in
+  // src/gaugeHeadings.js.
+  if (textStart === -1 || !/^=+$/.test(underline.trim())) {
     return undefined;
   }
   const text = rawLine.slice(textStart).trimEnd();
@@ -5309,8 +5313,10 @@ function stepsOutsideConceptDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// indented underline still marks a legacy scenario heading.
 function isLegacyScenarioUnderline(line) {
-  return /^-+\s*$/.test(String(line || ""));
+  return /^-+$/.test(String(line || "").trim());
 }
 
 function legacyScenarioHeadingDiagnostics(vscode, text) {

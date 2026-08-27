@@ -6648,6 +6648,67 @@ test("GaugeStepDiagnosticsProvider reports unresolved special concept heading pa
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 35 });
 });
 
+// Gauge compares the trimmed line (references/gauge/parser/lex.go) and
+// parser/helper.go isUnderline accepts a run of one or more, so an indented
+// legacy concept heading still defines a concept. Verified against
+// parser.CreateConceptsDictionary: "  my concept" over "  ==========="
+// registers the concept "my concept".
+// Verified against parser.CreateConceptsDictionary: an indented legacy scenario
+// heading in a concept file reports "Scenario Heading is not allowed in concept
+// file" exactly like a flush one, because Gauge compares the trimmed line.
+test("GaugeStepDiagnosticsProvider rejects an indented legacy scenario heading in a concept", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "  A scenario",
+    "  ----------",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(conceptDocument, [
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Scenario Heading is not allowed in concept file"],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider indexes an indented legacy concept heading", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Shared checkout",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "  Shared checkout",
+    "  ===============",
+    "* Confirm order",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const kotlinDocument = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    conceptDocument,
+    kotlinDocument,
+  ]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
 test("GaugeStepDiagnosticsProvider reports unresolved concept step dynamic parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
