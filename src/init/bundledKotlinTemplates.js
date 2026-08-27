@@ -45,8 +45,9 @@ gauge_reports_dir = reports
 # Overwrite the previous report instead of keeping a timestamped copy.
 overwrite_reports = true
 
-# Capture a screenshot when a step fails.
-screenshot_on_failure = false
+# Capture a screenshot when a step fails. This is Gauge's own default
+# (references/gauge/env/env.go addEnvVar(ScreenshotOnFailure, "true")).
+screenshot_on_failure = true
 
 # The directory Gauge writes logs to.
 logs_directory = logs
@@ -116,17 +117,24 @@ class StepImplementation {
 }
 `;
 
+// The extension writes .classpath and .project into non-Maven JVM projects
+// (src/config/gaugeProjectConfig.js), so a fresh project should not offer to
+// commit them.
 const GRADLE_GITIGNORE = `.gauge/
 logs/
 reports/
 build/
 .gradle/
+.classpath
+.project
 `;
 
 const MAVEN_GITIGNORE = `.gauge/
 logs/
 reports/
 target/
+.classpath
+.project
 `;
 
 const GRADLE_BUILD = `plugins {
@@ -207,6 +215,56 @@ const MAVEN_POM = `<?xml version="1.0" encoding="UTF-8"?>
 </project>
 `;
 
+// No gradle-wrapper.jar can be embedded in a JavaScript bundle, so a project
+// created from the Gradle template needs a Gradle on PATH until the user adds the
+// wrapper. Say so rather than letting the first run fail with a bare ENOENT.
+const GRADLE_README = `# {{projectName}}
+
+Gauge specifications with Kotlin step implementations.
+
+## Requirements
+
+- JDK ${JVM_TOOLCHAIN} or newer.
+- Gauge CLI on your PATH.
+- Gradle on your PATH. To make the project self-contained instead, run
+  \`gradle wrapper\` once and commit the generated \`gradlew\`,
+  \`gradlew.bat\` and \`gradle/wrapper/\` files; the extension prefers the
+  wrapper when it is present.
+
+## Layout
+
+- \`specs/\` holds the specifications. The directory is named by
+  \`gauge_specs_dir\` in \`env/default/default.properties\`.
+- \`src/test/kotlin/\` holds the step implementations.
+
+## Running
+
+Use the Test Explorer, the Run and Debug code lenses above each specification, or
+\`gauge run specs\` from a terminal.
+`;
+
+const MAVEN_README = `# {{projectName}}
+
+Gauge specifications with Kotlin step implementations.
+
+## Requirements
+
+- JDK ${JVM_TOOLCHAIN} or newer.
+- Gauge CLI on your PATH.
+- Maven on your PATH, or the Maven Wrapper (\`mvnw\`) in this directory.
+
+## Layout
+
+- \`specs/\` holds the specifications. The directory is named by
+  \`gauge_specs_dir\` in \`env/default/default.properties\`.
+- \`src/test/kotlin/\` holds the step implementations.
+
+## Running
+
+Use the Test Explorer, the Run and Debug code lenses above each specification, or
+\`gauge run specs\` from a terminal.
+`;
+
 const SHARED_FILES = [
   { path: ["manifest.json"], content: MANIFEST },
   { path: ["env", "default", "default.properties"], content: DEFAULT_PROPERTIES },
@@ -223,6 +281,7 @@ const BUNDLED_TEMPLATES = [
     files: SHARED_FILES.concat([
       { path: ["build.gradle.kts"], content: GRADLE_BUILD },
       { path: ["settings.gradle.kts"], content: GRADLE_SETTINGS },
+      { path: ["README.md"], content: GRADLE_README },
       { path: [".gitignore"], content: GRADLE_GITIGNORE },
     ]),
   },
@@ -232,6 +291,7 @@ const BUNDLED_TEMPLATES = [
     buildTool: "maven",
     files: SHARED_FILES.concat([
       { path: ["pom.xml"], content: MAVEN_POM },
+      { path: ["README.md"], content: MAVEN_README },
       { path: [".gitignore"], content: MAVEN_GITIGNORE },
     ]),
   },

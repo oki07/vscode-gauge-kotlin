@@ -1767,3 +1767,57 @@ test("ProjectInitializer preserves live synchronous spawn failures", async () =>
   assert.deepEqual(removes, []);
   initializer.dispose();
 });
+
+// The bundled templates are what a new user's project starts from, so their
+// defaults are the extension's defaults.
+test("bundled templates keep Gauge's own environment defaults", () => {
+  const {
+    listBundledKotlinTemplates,
+    writeBundledKotlinTemplate,
+  } = require("../src/init/bundledKotlinTemplates");
+
+  for (const template of listBundledKotlinTemplates()) {
+    const written = new Map();
+    writeBundledKotlinTemplate({
+      fileSystem: { mkdirSync() {}, writeFileSync(file, content) { written.set(file, content); } },
+      pathModule: path.posix,
+      projectRoot: "/p",
+      template,
+    });
+
+    const properties = written.get("/p/env/default/default.properties");
+    // references/gauge/env/env.go addEnvVar(ScreenshotOnFailure, "true"): a
+    // template that turns it off silently loses failure screenshots.
+    assert.match(properties, /^screenshot_on_failure = true$/m, template.label);
+
+    const gitignore = written.get("/p/.gitignore");
+    // The extension writes .classpath and .project into non-Maven JVM projects
+    // (src/config/gaugeProjectConfig.js), so a fresh project should not offer to
+    // commit them.
+    assert.match(gitignore, /^\.classpath$/m, template.label);
+    assert.match(gitignore, /^\.project$/m, template.label);
+  }
+});
+
+test("the bundled Gradle template says what it needs to run", () => {
+  const {
+    listBundledKotlinTemplates,
+    writeBundledKotlinTemplate,
+  } = require("../src/init/bundledKotlinTemplates");
+  const gradle = listBundledKotlinTemplates().find((entry) => entry.label === "kotlin_gradle");
+  const written = new Map();
+
+  writeBundledKotlinTemplate({
+    fileSystem: { mkdirSync() {}, writeFileSync(file, content) { written.set(file, content); } },
+    pathModule: path.posix,
+    projectRoot: "/p",
+    template: gradle,
+  });
+
+  // No gradle-wrapper.jar can be embedded in the bundle, so the project needs a
+  // Gradle on PATH until the user runs `gradle wrapper`. Say so rather than
+  // letting the first run fail with a bare ENOENT.
+  const readme = written.get("/p/README.md");
+  assert.ok(readme, [...written.keys()].join(", "));
+  assert.match(readme, /gradle wrapper/);
+});

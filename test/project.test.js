@@ -851,3 +851,64 @@ test("GradleProject reports a build tool failure that rejects with a frozen erro
     "Error calculating project classpath.\t\nCommand failed: gradle -q classpath --rerun",
   ]);
 });
+
+// A Maven project may ship only the Maven Wrapper, which is the whole point of
+// the wrapper: no system-wide Maven required. GradleProject already prefers
+// gradlew over a system gradle; MavenProject always asked the CLI for `mvn`, so
+// such a project could not resolve its classpath at all and every step read as
+// unimplemented.
+test("MavenProject prefers the Maven Wrapper over a system Maven", () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const calls = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("/workspace/gauge/target/classes\n");
+    },
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/gauge/mvnw";
+      },
+    },
+    pathModule: path.posix,
+  });
+
+  project.envs({
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  });
+
+  assert.deepEqual(calls.map((entry) => entry.command), ["./mvnw -q gauge:classpath"]);
+});
+
+test("MavenProject falls back to a system Maven with no wrapper", () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const calls = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("/workspace/gauge/target/classes\n");
+    },
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    pathModule: path.posix,
+  });
+
+  project.envs({
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  });
+
+  assert.deepEqual(calls.map((entry) => entry.command), ["mvn -q gauge:classpath"]);
+});
