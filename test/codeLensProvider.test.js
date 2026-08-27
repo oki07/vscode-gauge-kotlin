@@ -559,7 +559,10 @@ test("GaugeCodeLensProvider adds separate reference lenses for Step aliases", as
   ]);
 });
 
-test("GaugeCodeLensProvider counts double-star lines as step references", async () => {
+// references/gauge/parser/lex.go isStep requires the second character not to be
+// another '*', so "** Bold comment" is a comment and cannot reference a step.
+// Verified against the real parser.
+test("GaugeCodeLensProvider does not count double-star lines as step references", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
     "import com.thoughtworks.gauge.Step",
@@ -582,7 +585,7 @@ test("GaugeCodeLensProvider counts double-star lines as step references", async 
   const lenses = await provider.provideCodeLenses(document);
 
   assert.deepEqual(lenses.map((lens) => lens.command.title), [
-    "1 reference(s)",
+    "0 reference(s)",
   ]);
 });
 

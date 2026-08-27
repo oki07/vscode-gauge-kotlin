@@ -3927,7 +3927,7 @@ function isLegacyHeadingText(line) {
   return Boolean(text)
     && !text.startsWith("*")
     && !text.startsWith("|")
-    && !/^tags\s*:/i.test(text)
+    && !isGaugeTagKeywordLine(text)
     && !/^table\s*:/i.test(text);
 }
 
@@ -4211,7 +4211,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
 }
 
 function isGaugeTagLine(line) {
-  return /^tags\s*:/i.test(String(line || "").trim());
+  return isGaugeTagKeywordLine(String(line || "").trim());
 }
 
 function missingTableFileMessage(location, options = {}) {
@@ -4859,6 +4859,17 @@ function repeatedTagDiagnostics(vscode, text) {
     previousWasTag = true;
   }
   return diagnostics;
+}
+
+// references/gauge/parser/lex.go checkTag compares the lower-cased line against
+// exactly two literal prefixes, "tags:" and "tags :". Verified against the real
+// parser: "tags  : a" and "tags\t: a" produce no tags at all, so they are
+// comments. Every other module in the product already used the two forms; only
+// this one accepted any whitespace, which made a comment line look like a second
+// tags block.
+function isGaugeTagKeywordLine(line) {
+  const text = String(line || "").trim().toLowerCase();
+  return text.startsWith("tags:") || text.startsWith("tags :");
 }
 
 function isGaugeSyntaxBoundary(line) {

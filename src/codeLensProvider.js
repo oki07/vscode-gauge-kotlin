@@ -148,13 +148,16 @@ function isTableLine(line) {
   return text.startsWith("|");
 }
 
+// references/gauge/parser/lex.go isStep requires the second character not to be
+// another '*', so "**bold text**" is a comment, not a step.
 function gaugeStepText(line) {
-  const marker = String(line || "").search(/\S/);
-  if (marker === -1 || line[marker] !== "*") {
+  const text = String(line || "");
+  const marker = text.search(/\S/);
+  if (marker === -1 || text[marker] !== "*" || text[marker + 1] === "*") {
     return undefined;
   }
-  const text = String(line).slice(marker + 1).trim();
-  return text || undefined;
+  const value = text.slice(marker + 1).trim();
+  return value || undefined;
 }
 
 function isGaugeSyntaxBoundary(line) {

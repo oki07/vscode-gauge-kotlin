@@ -159,8 +159,10 @@ function normalizedSelection(selection) {
   return { start: selection.end, end: selection.start };
 }
 
+// references/gauge/parser/lex.go isStep requires the second character not to be
+// another '*', so "**bold text**" is a comment, not a step.
 function isStepLine(text) {
-  return /^\s*\*\s*\S.*$/.test(text);
+  return /^\s*\*(?!\*)\s*\S.*$/.test(text);
 }
 
 function isTableLine(text) {
@@ -220,8 +222,12 @@ function isGaugeSyntaxBoundary(text) {
     || DATA_TABLE_KEYWORD_PATTERN.test(line)
     || isTableLine(line)
     || isDocStringFenceLine(line)
-    || /^={3,}\s*$/.test(line)
-    || /^-{3,}\s*$/.test(line);
+    // A heading underline is one or more characters and the teardown marker ends
+    // the step too (references/gauge/parser/helper.go isUnderline,
+    // references/gauge/parser/lex.go isTearDown).
+    || /^=+$/.test(line)
+    || /^-+$/.test(line)
+    || /^_{3,}$/.test(line);
 }
 
 function multilineStepLineAt(document, lineNumber) {

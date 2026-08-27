@@ -8489,3 +8489,38 @@ test("GaugeStepDiagnosticsProvider reports an empty specification as having no e
     ["Spec should have at least one scenario"],
   );
 });
+
+// references/gauge/parser/lex.go checkTag compares the lower-cased line against
+// exactly two literal prefixes, "tags:" and "tags :". Verified against the real
+// parser: "tags  : a" and "tags\t: a" produce no tags at all, so they are
+// comments. Every other module used the two forms; stepDiagnostics accepted any
+// whitespace, so a comment line looked like a second tags block.
+test("GaugeStepDiagnosticsProvider treats a wide tags keyword as a comment", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const spec = createDocument([
+    "# Checkout",
+    "tags: smoke",
+    "a comment between them",
+    "tags  : regression",
+    "",
+    "## Buy",
+    "* a step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const steps = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "class Steps {",
+    "  @Step(\"a step\")",
+    "  fun step() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const documents = [spec, steps];
+
+  assert.deepEqual(
+    provider.provideDiagnostics(spec, documents)
+      .map((entry) => entry.message)
+      .filter((message) => message.startsWith("Tags can be defined only once")),
+    [],
+  );
+});
