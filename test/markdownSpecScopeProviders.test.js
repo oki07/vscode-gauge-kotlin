@@ -144,3 +144,42 @@ test("code lenses leave a README in a Gauge project alone", () => {
   assert.deepEqual(provider.provideCodeLenses(createDocument(README)), []);
   assert.ok(provider.provideCodeLenses(createDocument(SPEC)).length > 0);
 });
+
+// The command surface was the last place the gauge_specs_dir rule had not
+// reached. Preview, Format, Toggle Gauge Line Comment and Extract to Concept all
+// accepted any Markdown file in a Gauge project, so Format rewrote a README in
+// place with `gauge format` and Toggle Comment inserted Gauge comment syntax into
+// it, while the extension's own code lens and diagnostics were already suppressed
+// on the same file.
+
+test("Toggle Gauge Line Comment refuses a README in a Gauge project", () => {
+  const { toggleGaugeLineComment } = require("../src/commentCommand");
+  const edits = [];
+  const vscode = {
+    window: {
+      activeTextEditor: { document: createDocument(README) },
+      showErrorMessage() {},
+      showInformationMessage() {},
+    },
+    workspace: {
+      applyEdit(edit) {
+        edits.push(edit);
+        return Promise.resolve(true);
+      },
+    },
+  };
+
+  toggleGaugeLineComment(vscode, providerOptions());
+
+  assert.deepEqual(edits, []);
+});
+
+test("Format refuses a README in a Gauge project", () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  const provider = new GaugeFormatProvider(providerOptions({
+    vscode: { workspace: { getConfiguration: () => ({ get: () => undefined }) }, window: {} },
+  }));
+
+  assert.equal(provider.shouldFormat(createDocument(README)), false);
+  assert.equal(provider.shouldFormat(createDocument(SPEC)), true);
+});

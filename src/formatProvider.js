@@ -1,5 +1,7 @@
 "use strict";
 
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+
 const nodeFs = require("node:fs");
 const { envWithGaugeHome } = require("./config/gaugeConfig");
 
@@ -20,11 +22,14 @@ function documentPath(document) {
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
 }
 
-function isMarkdownSpecDocument(document, filePath) {
+// A Markdown file is a Gauge specification only inside the project's configured
+// gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). The rule lives in
+// src/gaugeSpecScope.js so every surface gives the same answer for the same file.
+function isMarkdownSpecDocument(document, filePath, options = {}) {
   return Boolean(
     document
     && document.languageId === MARKDOWN_LANGUAGE
-    && filePath.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+    && isMarkdownGaugeSpecFile(filePath, options)
   );
 }
 
@@ -416,9 +421,17 @@ class GaugeFormatProvider {
         document.languageId === GAUGE_LANGUAGE
         || isSpecDocument(filePath)
         || isConceptDocument(document, filePath)
-        || isMarkdownSpecDocument(document, filePath)
+        || isMarkdownSpecDocument(document, filePath, this.markdownScopeOptions())
       ),
     );
+  }
+
+  markdownScopeOptions() {
+    return {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    };
   }
 
   isGaugeProjectRoot(root) {
@@ -486,7 +499,7 @@ class GaugeFormatProvider {
     }
 
     const filePath = documentPath(document);
-    const markdownSpecDocument = isMarkdownSpecDocument(document, filePath);
+    const markdownSpecDocument = isMarkdownSpecDocument(document, filePath, this.markdownScopeOptions());
     let project;
     let root;
     try {

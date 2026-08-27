@@ -1,5 +1,7 @@
 "use strict";
 
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
@@ -30,11 +32,14 @@ function isGaugeDocument(document) {
     && (document.languageId === GAUGE_LANGUAGE || document.languageId === GAUGE_CONCEPT_LANGUAGE);
 }
 
-function isMarkdownGaugeSpec(document) {
+// A Markdown file is a Gauge specification only inside the project's configured
+// gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). The rule lives in
+// src/gaugeSpecScope.js so every surface gives the same answer for the same file.
+function isMarkdownGaugeSpec(document, options = {}) {
   return Boolean(
     document
     && document.languageId === MARKDOWN_LANGUAGE
-    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document) || ""),
+    && isMarkdownGaugeSpecFile(documentPath(document) || "", options),
   );
 }
 
@@ -44,8 +49,12 @@ function isGaugeFileByExtension(document) {
   return [...GAUGE_FILE_EXTENSIONS].some((extension) => lowerFile.endsWith(extension));
 }
 
-function isGaugeProjectDocument(document, projectFactory) {
-  if (!isMarkdownGaugeSpec(document) && !isGaugeDocument(document) && !isGaugeFileByExtension(document)) {
+function isGaugeProjectDocument(document, projectFactory, options = {}) {
+  if (
+    !isMarkdownGaugeSpec(document, { ...options, projectFactory })
+    && !isGaugeDocument(document)
+    && !isGaugeFileByExtension(document)
+  ) {
     return false;
   }
   if (!projectFactory || typeof projectFactory.getGaugeRootFromFilePath !== "function") {
@@ -137,7 +146,10 @@ function delegateToDefaultComment(vscode) {
 async function toggleGaugeLineComment(vscode, options = {}) {
   const editor = vscode.window && vscode.window.activeTextEditor;
   const document = editor && editor.document;
-  if (!document || !isGaugeProjectDocument(document, options.projectFactory)) {
+  if (!document || !isGaugeProjectDocument(document, options.projectFactory, {
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+  })) {
     return delegateToDefaultComment(vscode);
   }
   if (!vscode.workspace || typeof vscode.workspace.applyEdit !== "function") {

@@ -1162,7 +1162,9 @@ function startGaugeServices(context, vscode, options = {}) {
     return undefined;
   }
   const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
+    fileSystem: options.fileSystem,
     pathModule: options.pathModule,
+    projectFactory,
     vscode,
   });
   detachedServices.push(extractConceptProvider);

@@ -1,5 +1,7 @@
 "use strict";
 
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+
 const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
@@ -105,7 +107,10 @@ function showInformation(vscode, message, ...actions) {
   return undefined;
 }
 
-function activeGaugeFile(vscode) {
+// A Markdown file is a Gauge specification only inside the project's configured
+// gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). The rule lives in
+// src/gaugeSpecScope.js so every surface gives the same answer for the same file.
+function activeGaugeFile(vscode, scopeOptions = {}) {
   const editor = vscode.window && vscode.window.activeTextEditor;
   const document = editor && editor.document;
   const filePath = document && ((document.uri && document.uri.fsPath) || document.fileName);
@@ -120,7 +125,7 @@ function activeGaugeFile(vscode) {
   }
   if (
     document.languageId === MARKDOWN_LANGUAGE
-    && filePath.toLowerCase().endsWith(MARKDOWN_SPEC_EXTENSION)
+    && isMarkdownGaugeSpecFile(filePath, scopeOptions)
   ) {
     return filePath;
   }
@@ -412,6 +417,7 @@ class GaugePreviewController {
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.osModule = options.osModule || nodeOs;
+    this.projectFactory = options.projectFactory;
     this.activeOperations = new Set();
     this.disposed = false;
   }
@@ -450,7 +456,11 @@ class GaugePreviewController {
   async previewForOperation(operation) {
     const filePath = this.callSyncForOperation(
       operation,
-      () => activeGaugeFile(this.vscode),
+      () => activeGaugeFile(this.vscode, {
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectFactory: this.projectFactory,
+      }),
     );
     if (filePath === DISPOSED_PREVIEW) {
       return DISPOSED_PREVIEW;

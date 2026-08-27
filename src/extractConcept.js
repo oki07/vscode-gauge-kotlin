@@ -1,5 +1,7 @@
 "use strict";
 
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+
 // references/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
 // keyword and the colon. Verified against the real parser.
@@ -861,7 +863,7 @@ function documentPath(document) {
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
 }
 
-function canExtractConceptFromDocument(document, projectClient) {
+function canExtractConceptFromDocument(document, projectClient, scopeOptions = {}) {
   if (!document) {
     return false;
   }
@@ -875,8 +877,11 @@ function canExtractConceptFromDocument(document, projectClient) {
   if (CONCEPT_FILE_PATTERN.test(documentPath(document))) {
     return hasProjectClient;
   }
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). The
+  // rule lives in src/gaugeSpecScope.js so every surface agrees.
   return document.languageId === MARKDOWN_LANGUAGE
-    && MARKDOWN_SPEC_FILE_PATTERN.test(documentPath(document))
+    && isMarkdownGaugeSpecFile(documentPath(document), scopeOptions)
     && hasProjectClient;
 }
 
@@ -886,6 +891,7 @@ class ExtractConceptCommandProvider {
     this.fileSystem = options.fileSystem || nodeFs;
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
+    this.projectFactory = options.projectFactory;
     this.workspaceEditorFactory = options.workspaceEditorFactory
       || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit));
     this.activeOperations = new Set();
@@ -970,7 +976,11 @@ class ExtractConceptCommandProvider {
       if (projectClient === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
       }
-      if (!editor || !canExtractConceptFromDocument(editor.document, projectClient)) {
+      if (!editor || !canExtractConceptFromDocument(editor.document, projectClient, {
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectFactory: this.projectFactory,
+      })) {
         return this.showErrorForOperation(
           operation,
           "Cannot find Gauge document for extract to concept.",
