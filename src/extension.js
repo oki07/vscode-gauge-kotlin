@@ -1286,9 +1286,12 @@ function activate(context, vscodeApi, options = {}) {
     ? testController.createExecutionEventSink()
     : undefined;
   const ownsExecutionStatusProvider = !options.executionStatusProvider;
+  // The provider needs the file system to check for .gauge/executionStatus.json
+  // before asking: gauge/executionStatus exits the daemon when that file is
+  // missing (references/gauge/execution/execute.go ReadLastExecutionResult).
   const executionStatusProvider = options.executionStatusProvider || createGaugeExecutionStatusProvider(
     () => activeClientsMap,
-    { vscode },
+    { fileSystem: options.fileSystem, pathModule: options.pathModule, vscode },
   );
   const ownsScenariosProvider = !options.scenariosProvider;
   const scenariosProvider = options.scenariosProvider || createGaugeScenariosProvider(

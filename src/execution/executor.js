@@ -29,6 +29,9 @@ const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 const { createLspRequestOwner } = require("./lspRequestOwner");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
+// references/gauge/execution/execute.go executionStatusFile, common.DotGauge.
+const EXECUTION_STATUS_DIRECTORY = ".gauge";
+const EXECUTION_STATUS_FILE = "executionStatus.json";
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
 const EXECUTING_CONTEXT = "gauge:executing";
@@ -73,10 +76,40 @@ function resolveClientsMap(getClientsMap) {
   return typeof getClientsMap === "function" ? getClientsMap() : getClientsMap;
 }
 
+// gauge/executionStatus is answered by execution.ReadLastExecutionResult
+// (references/gauge/api/lang/server.go), which calls logger.Fatalf when the
+// status file cannot be read, and logger.Fatal ends with os.Exit(1)
+// (references/gauge/logger/gaugeLogger.go). Asking before any run has written
+// .gauge/executionStatus.json therefore kills the daemon and every language
+// feature with it.
+function hasExecutionStatusFile(projectRoot, options) {
+  const fileSystem = options.fileSystem;
+  const pathModule = options.pathModule;
+  if (
+    !projectRoot
+    || !fileSystem
+    || typeof fileSystem.existsSync !== "function"
+    || !pathModule
+    || typeof pathModule.join !== "function"
+  ) {
+    return true;
+  }
+  try {
+    return fileSystem.existsSync(
+      pathModule.join(projectRoot, EXECUTION_STATUS_DIRECTORY, EXECUTION_STATUS_FILE),
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
 function createGaugeExecutionStatusProvider(getClientsMap, options = {}) {
   const vscode = options.vscode || {};
   const owner = createLspRequestOwner(undefined);
   const executionStatusProvider = (projectRoot) => owner.run((operation) => {
+    if (!hasExecutionStatusFile(projectRoot, options)) {
+      return undefined;
+    }
     const clientsMap = resolveClientsMap(getClientsMap);
     if (owner.operationStopped(operation)) {
       return undefined;

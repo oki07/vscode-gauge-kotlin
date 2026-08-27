@@ -4025,6 +4025,71 @@ test("executor suppresses pending status and output after disposal", async () =>
   });
 });
 
+// gauge/executionStatus is answered by execution.ReadLastExecutionResult
+// (references/gauge/api/lang/server.go), which calls logger.Fatalf when the
+// status file cannot be read, and logger.Fatal ends with os.Exit(1)
+// (references/gauge/logger/gaugeLogger.go). Asking before any run has written
+// .gauge/executionStatus.json therefore kills the daemon and every language
+// feature with it, so do not ask until the file is there.
+test("executor does not ask for an execution status Gauge has never written", async () => {
+  const { createGaugeExecutionStatusProvider } = require("../../src/execution/executor");
+  const { vscode } = createFakeVscode();
+  const requests = [];
+  const checked = [];
+  const provider = createGaugeExecutionStatusProvider({
+    get() {
+      return {
+        client: {
+          sendRequest(method) {
+            requests.push(method);
+            return Promise.resolve({ status: "passed" });
+          },
+        },
+      };
+    },
+  }, {
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        checked.push(filename);
+        return false;
+      },
+    },
+  });
+
+  assert.equal(await provider("/workspace"), undefined);
+  assert.deepEqual(requests, []);
+  assert.deepEqual(checked, ["/workspace/.gauge/executionStatus.json"]);
+});
+
+test("executor asks for an execution status once Gauge has written one", async () => {
+  const { createGaugeExecutionStatusProvider } = require("../../src/execution/executor");
+  const { vscode } = createFakeVscode();
+  const requests = [];
+  const provider = createGaugeExecutionStatusProvider({
+    get() {
+      return {
+        client: {
+          sendRequest(method) {
+            requests.push(method);
+            return Promise.resolve({ status: "passed" });
+          },
+        },
+      };
+    },
+  }, {
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync: (filename) => filename === "/workspace/.gauge/executionStatus.json",
+    },
+  });
+
+  assert.deepEqual(await provider("/workspace"), { status: "passed" });
+  assert.deepEqual(requests, ["gauge/executionStatus"]);
+});
+
 test("executor disposes the real execution status provider and cancels its pending request exactly once", async () => {
   const {
     createGaugeExecutionController,

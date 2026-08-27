@@ -4326,6 +4326,58 @@ test("activation does not start Gauge services for a nested unrelated manifest.j
   assert.equal(workspaceCreated, false);
 });
 
+// The execution status guard only works if the provider can see the file system,
+// so prove the wiring: without it the guard defaults to permissive and the
+// daemon-killing request goes out anyway.
+test("activation gives the execution status provider a file system to check", () => {
+  const extension = require("../src/extension");
+
+  const checked = [];
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const fileSystem = {
+    existsSync(filename) {
+      checked.push(filename);
+      return filename === "/workspace/gauge/manifest.json";
+    },
+    readFileSync() {
+      return JSON.stringify({ Language: "java", Plugins: [] });
+    },
+  };
+  let capturedController;
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled: () => true,
+        isGaugeVersionGreaterOrEqual: () => true,
+      };
+    },
+    createExecutionController(controllerOptions) {
+      capturedController = controllerOptions;
+      return { handleCommand() {} };
+    },
+    fileSystem,
+    GaugeWorkspace: class GaugeWorkspace {
+      dispose() {}
+    },
+    pathModule: path.posix,
+    semanticTokensLegend: { id: "legend" },
+    showWelcomeNotification() {},
+    SpecNodeProvider: class SpecNodeProvider {
+      dispose() {}
+    },
+  });
+
+  assert.equal(typeof capturedController.executionStatusProvider, "function");
+  checked.length = 0;
+  capturedController.executionStatusProvider("/workspace/gauge");
+
+  assert.deepEqual(checked, ["/workspace/gauge/.gauge/executionStatus.json"]);
+});
+
 test("activation propagates the default project factory to Gauge providers", () => {
   const extension = require("../src/extension");
 
