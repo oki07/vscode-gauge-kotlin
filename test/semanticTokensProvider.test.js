@@ -784,7 +784,11 @@ test("GaugeSemanticTokensProvider ignores concept equals underline after identif
   ]);
 });
 
-test("GaugeSemanticTokensProvider ignores indented legacy underline headings", () => {
+// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// indented underline is still an underline. Verified against the real parser:
+// "Checkout / \u0020\u0020======== / ## Scenario / * a step" yields spec heading
+// "Checkout".
+test("GaugeSemanticTokensProvider colours indented legacy underline headings", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -819,16 +823,16 @@ test("GaugeSemanticTokensProvider ignores indented legacy underline headings", (
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
   assert.deepEqual(specTokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
-    "gaugeComment",
-    "gaugeComment",
+    "specification",
+    "specification",
   ]);
   assert.deepEqual(specTokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
     "stepMarker",
     "step",
   ]);
   assert.deepEqual(conceptTokens.filter((entry) => entry.line < 2).map((entry) => entry.type), [
-    "gaugeComment",
-    "gaugeComment",
+    "specification",
+    "specification",
   ]);
   assert.deepEqual(conceptTokens.filter((entry) => entry.line === 2).map((entry) => entry.type), [
     "stepMarker",

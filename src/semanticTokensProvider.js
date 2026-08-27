@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  closedDocStringLines,
   isConceptHashHeading,
   isGaugeHashHeading,
   isScenarioHashHeading,
@@ -210,11 +211,11 @@ function isLegacyUnderlineHeadingStartLine(lines, lineNumber, conceptDocument) {
   if (!line.trim()) {
     return false;
   }
-  if (/^[=]+$/.test(nextLine)) {
+  if (/^[=]+$/.test(String(nextLine || "").trim())) {
     return !conceptDocument
       || (isConceptLegacyUnderlineHeadingText(line) && hasFollowingLine(lines, lineNumber + 1));
   }
-  return !conceptDocument && /^[-]+$/.test(nextLine);
+  return !conceptDocument && /^[-]+$/.test(String(nextLine || "").trim());
 }
 
 function hasFollowingLine(lines, lineNumber) {
@@ -302,10 +303,20 @@ class GaugeSemanticTokensProvider {
     const tableDynamicArgumentRegex = /<(?:\\[<>|]|[^>|\r\n])*>/g;
     const tableHeaderSeparatorRegex = /^(?:\|\s*-+\s*)+\|?$/;
     let tagsContinuation = false;
+    // A `"""` block on the line after a step is that step's multi-line argument.
+    // Its payload is data, so a "## Login" or a table row inside it must not be
+    // coloured as Gauge syntax.
+    const docStringLines = closedDocStringLines(lines);
 
     for (let index = 0; index < lines.length;) {
       const line = lines[index];
       const trimmedLine = line.trim();
+
+      if (docStringLines.has(index)) {
+        tagsContinuation = false;
+        index += 1;
+        continue;
+      }
 
       if (trimmedLine.startsWith("//")) {
         tagsContinuation = false;
@@ -317,7 +328,7 @@ class GaugeSemanticTokensProvider {
       if (index + 1 < lines.length) {
         const nextLine = lines[index + 1];
         if (
-          /^[=]+$/.test(nextLine)
+          /^[=]+$/.test(String(nextLine || "").trim())
           && (
             !conceptDocument
             || (isConceptLegacyUnderlineHeadingText(line) && hasFollowingLine(lines, index + 1))
@@ -330,7 +341,7 @@ class GaugeSemanticTokensProvider {
           index += 2;
           continue;
         }
-        if (!conceptDocument && /^[-]+$/.test(nextLine)) {
+        if (!conceptDocument && /^[-]+$/.test(String(nextLine || "").trim())) {
           const leadingSpaces = line.length - line.trimStart().length;
           tagsContinuation = false;
           builder.push(index, leadingSpaces, line.length - leadingSpaces, tokenTypes.indexOf("scenario"), 0);

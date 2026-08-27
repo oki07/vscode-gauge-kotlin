@@ -466,12 +466,14 @@ class GaugeDocumentSymbolProvider {
     const symbols = [];
 
     for (let line = 0; line < lines.length; line += 1) {
-      if (conceptDocument) {
-        const closeLine = closedDocStringEndAfterStep(lines, line);
-        if (closeLine !== undefined) {
-          line = closeLine;
-          continue;
-        }
+      // A `"""` block on the line after a step is that step's multi-line
+      // argument and its payload is data, not Gauge syntax. A payload that
+      // happens to contain "## Login" must not become a scenario symbol. This
+      // held for concepts only.
+      const closeLine = closedDocStringEndAfterStep(lines, line);
+      if (closeLine !== undefined) {
+        line = closeLine;
+        continue;
       }
       const text = lines[line];
       const hashHeading = hashHeadingAt(text, conceptDocument);

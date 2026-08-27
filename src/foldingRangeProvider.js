@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  closedDocStringLines,
   isConceptHashHeading,
   isGaugeHashHeading,
 } = require("./gaugeHeadings");
@@ -70,8 +71,14 @@ function isConceptLegacyUnderlineHeadingText(line) {
 function foldingMarkers(lines, options = {}) {
   const markers = [];
   const conceptDocument = Boolean(options.conceptDocument);
+  // A `"""` block on the line after a step is that step's multi-line argument.
+  // Its payload is data, so a "## Login" inside it must not open a fold.
+  const docStringLines = closedDocStringLines(lines);
   let seenTeardown = false;
   for (let line = 0; line < lines.length; line += 1) {
+    if (docStringLines.has(line)) {
+      continue;
+    }
     const text = lines[line];
     const nextText = lines[line + 1];
 
