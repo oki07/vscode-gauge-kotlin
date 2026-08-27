@@ -2139,3 +2139,43 @@ test("GenerateStubCommandProvider reports a workspace edit VS Code refused", asy
   ]);
   assert.deepEqual(commands.filter((entry) => entry.command === "vscode.open"), []);
 });
+
+// clients.get() answers undefined when no Gauge language client is running for
+// the active file - the daemon has not started yet, it died, or the file is
+// outside a Gauge project. The command then read .client off undefined and the
+// user saw a raw TypeError. Upstream's identical unguarded access is unreachable
+// because there the quick fix is produced by the Gauge server itself
+// (references/gauge/api/lang/codeAction.go), so it only exists when a client does.
+test("GenerateStubCommandProvider explains that no Gauge project is running", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const { commands, errors, vscode } = createFakeVscode();
+
+  new GenerateStubCommandProvider({ get() { return undefined; } }, {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("fun step() {}");
+
+  assert.deepEqual(errors, [
+    "Unable to generate implementation. No Gauge project is running for this file.",
+  ]);
+});
+
+test("GenerateStubCommandProvider explains a missing Gauge project for concepts too", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const { commands, errors, vscode } = createFakeVscode();
+
+  new GenerateStubCommandProvider({ get() { return undefined; } }, {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.concept");
+  await command.handler({ conceptName: "a concept" });
+
+  assert.deepEqual(errors, [
+    "Unable to generate implementation. No Gauge project is running for this file.",
+  ]);
+});

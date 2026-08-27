@@ -20,6 +20,8 @@ const DEFAULT_JAVA_IMPLEMENTATION_FILE = "src/test/java/Steps.java";
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const DISPOSED_OPERATION = Symbol("disposed generate stub operation");
+const NO_PROJECT_CLIENT = Symbol("no gauge project client");
+const NO_PROJECT_CLIENT_MESSAGE = "No Gauge project is running for this file.";
 
 const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
@@ -331,6 +333,9 @@ class GenerateStubCommandProvider {
     if (context === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
     }
+    if (context === NO_PROJECT_CLIENT) {
+      return this.handleErrorForOperation(operation, NO_PROJECT_CLIENT_MESSAGE);
+    }
     const { projectClient } = context;
     let files;
     let selected;
@@ -510,6 +515,9 @@ class GenerateStubCommandProvider {
     if (context === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
     }
+    if (context === NO_PROJECT_CLIENT) {
+      return this.handleErrorForOperation(operation, NO_PROJECT_CLIENT_MESSAGE);
+    }
     const { activePath, projectClient } = context;
     let files;
     let selected;
@@ -584,6 +592,15 @@ class GenerateStubCommandProvider {
     );
     if (projectClient === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
+    }
+    // clients.get() answers undefined when no Gauge language client is running
+    // for the active file: the daemon has not started yet, it died, or the file
+    // is outside a Gauge project. Reading .client off that produced a raw
+    // TypeError in the error toast. Upstream's identical unguarded access is
+    // unreachable, because there the quick fix is produced by the Gauge server
+    // itself and so only exists when a client does.
+    if (!projectClient || !projectClient.client) {
+      return NO_PROJECT_CLIENT;
     }
     return { activePath, projectClient };
   }

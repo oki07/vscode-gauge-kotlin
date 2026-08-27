@@ -1655,3 +1655,47 @@ test("GaugePreviewController preserves independent live preview requests", async
   assert.deepEqual(children.map((child) => child.listenerCount("error")), [0, 0]);
   assert.deepEqual(children.map((child) => child.listenerCount("close")), [0, 0]);
 });
+
+// Spectacle can exit zero and still not produce the file the extension computed:
+// the plugin decides its own output layout, and spectacle_out_dir only names the
+// root. Opening a path that is not there does nothing at all and says nothing.
+test("previewGaugeDocument reports an HTML file Spectacle did not produce", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const { errors, opened, vscode } = createFakeVscode();
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn() {
+          return createChildProcess({ stdout: "created\n" });
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      mkdirSync() {},
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+    },
+    tempDirProvider() {
+      return "/tmp/gauge-preview";
+    },
+    vscode,
+  });
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(errors, [
+    "Unable to preview example.spec. Spectacle did not produce"
+    + " /tmp/gauge-preview/docs/html/specs/example.html.",
+  ]);
+});

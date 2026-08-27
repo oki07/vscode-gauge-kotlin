@@ -587,10 +587,22 @@ class GaugePreviewController {
       );
     }
 
-    return this.openHtmlForOperation(
-      operation,
-      htmlPathFor(this.pathModule, projectRoot, docsDir, filePath),
-    );
+    const htmlPath = htmlPathFor(this.pathModule, projectRoot, docsDir, filePath);
+    // Spectacle can exit zero and still not produce the file computed here: the
+    // plugin decides its own output layout and spectacle_out_dir only names the
+    // root. Opening a path that is not there does nothing and says nothing.
+    if (
+      this.fileSystem
+      && typeof this.fileSystem.existsSync === "function"
+      && !this.fileSystem.existsSync(htmlPath)
+    ) {
+      return this.showErrorForOperation(
+        operation,
+        `Unable to preview ${this.pathModule.basename(filePath)}.`
+        + ` Spectacle did not produce ${htmlPath}.`,
+      );
+    }
+    return this.openHtmlForOperation(operation, htmlPath);
   }
 
   async previewWithoutSpectacle(
