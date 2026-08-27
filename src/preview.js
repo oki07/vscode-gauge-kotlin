@@ -453,6 +453,29 @@ class GaugePreviewController {
     return operation.promise;
   }
 
+  // Preview shells out to "gauge docs spectacle", which reads the file from disk.
+  // With unsaved edits the preview shows the last saved text, which reads as the
+  // preview being broken rather than the file being stale. Only a dirty document
+  // is written: saving runs the user's save hooks and formatters
+  // (vscode.d.ts TextDocument.isDirty, TextDocument.save).
+  // Returns undefined, not a resolved promise, when there is nothing to save:
+  // an unconditional await would move every later step one microtask later and
+  // change when a disposal mid-preview is observed.
+  saveActiveDocumentForOperation(operation) {
+    const editor = this.callSyncForOperation(
+      operation,
+      () => this.vscode.window && this.vscode.window.activeTextEditor,
+    );
+    if (editor === DISPOSED_PREVIEW) {
+      return DISPOSED_PREVIEW;
+    }
+    const document = editor && editor.document;
+    if (!document || !document.isDirty || typeof document.save !== "function") {
+      return undefined;
+    }
+    return this.callForOperation(operation, () => document.save());
+  }
+
   async previewForOperation(operation) {
     const filePath = this.callSyncForOperation(
       operation,
@@ -467,6 +490,14 @@ class GaugePreviewController {
     }
     if (!filePath) {
       return this.showErrorForOperation(operation, NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE);
+    }
+
+    const savePending = this.saveActiveDocumentForOperation(operation);
+    if (savePending !== undefined) {
+      const saved = await savePending;
+      if (saved === DISPOSED_PREVIEW) {
+        return DISPOSED_PREVIEW;
+      }
     }
 
     let previewProject;

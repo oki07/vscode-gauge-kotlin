@@ -151,6 +151,88 @@ test("previewGaugeDocument creates Spectacle docs for the active Gauge document"
   ]);
 });
 
+// Preview shells out to "gauge docs spectacle", which reads the file from disk.
+// With unsaved edits in the editor the preview silently showed the last saved
+// text, which reads as the preview being broken rather than the file being
+// stale. Save first (vscode.d.ts TextDocument.save) so what is previewed is what
+// is on screen.
+test("previewGaugeDocument saves an unsaved Gauge document first", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const saves = [];
+  let savedBeforeSpawn;
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+    fileName: "/workspace/gauge/specs/example.spec",
+    isDirty: true,
+    save() {
+      saves.push("saved");
+      this.isDirty = false;
+      return Promise.resolve(true);
+    },
+  };
+  const { vscode } = createFakeVscode({ document });
+  const cli = {
+    gaugeCommand() {
+      return {
+        spawn() {
+          savedBeforeSpawn = saves.length;
+          return createChildProcess({ stdout: "created\n" });
+        },
+      };
+    },
+  };
+
+  await previewGaugeDocument({
+    cli,
+    env: { PATH: "/bin" },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    tempDirProvider: () => "/tmp/gauge-preview",
+    vscode,
+  });
+
+  assert.deepEqual(saves, ["saved"]);
+  assert.equal(savedBeforeSpawn, 1);
+});
+
+// A saved document must not be written again: saving runs the user's save hooks
+// and formatters.
+test("previewGaugeDocument does not save an unchanged Gauge document", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  const saves = [];
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/example.spec" },
+    fileName: "/workspace/gauge/specs/example.spec",
+    isDirty: false,
+    save() {
+      saves.push("saved");
+      return Promise.resolve(true);
+    },
+  };
+  const { vscode } = createFakeVscode({ document });
+
+  await previewGaugeDocument({
+    cli: {
+      gaugeCommand: () => ({ spawn: () => createChildProcess({ stdout: "created\n" }) }),
+    },
+    env: { PATH: "/bin" },
+    fileSystem: { mkdirSync() {} },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    tempDirProvider: () => "/tmp/gauge-preview",
+    vscode,
+  });
+
+  assert.deepEqual(saves, []);
+});
+
 test("previewGaugeDocument passes project environment to Spectacle", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { opened, vscode } = createFakeVscode();
