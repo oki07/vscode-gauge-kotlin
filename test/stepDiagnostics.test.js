@@ -8463,3 +8463,29 @@ test("GaugeStepDiagnosticsProvider keeps diagnosing after a fence that is not a 
     messages.join(" | "),
   );
 });
+
+// references/gauge/parser/specparser.go validateSpec returns "Spec does not have
+// any elements" when the specification has no items at all, and only falls
+// through to "Spec should have at least one scenario" once something else is
+// present. Verified against the real parser: "# Checkout" alone gives the first
+// message; adding a comment, a tags line, a context step or a table gives the
+// second.
+test("GaugeStepDiagnosticsProvider reports an empty specification as having no elements", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const empty = createDocument("# Checkout\n", "gauge", "/workspace/gauge/specs/a.spec");
+  const withComment = createDocument(
+    "# Checkout\n\nsome comment\n",
+    "gauge",
+    "/workspace/gauge/specs/b.spec",
+  );
+
+  assert.deepEqual(
+    provider.provideDiagnostics(empty, [empty]).map((entry) => entry.message),
+    ["Spec does not have any elements"],
+  );
+  assert.deepEqual(
+    provider.provideDiagnostics(withComment, [withComment]).map((entry) => entry.message),
+    ["Spec should have at least one scenario"],
+  );
+});

@@ -3962,6 +3962,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   // fence. Toggling on any `"""` let a stray or unmatched fence silence every
   // diagnostic after it.
   const docStringLines = closedSpecDocStringLines(lines);
+  let hasSpecElements = false;
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
   let hasEmptySpecHeading = false;
@@ -3976,6 +3977,9 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
     if (!firstContentRange && rawLine.trim()) {
       firstContentRange = lineContentRange(vscode, rawLine, line);
+    }
+    if (hasSpecHeading && rawLine.trim()) {
+      hasSpecElements = true;
     }
 
     const nextLine = lines[line + 1] === undefined
@@ -4075,10 +4079,16 @@ function duplicateScenarioDiagnostics(vscode, text) {
     ));
   }
   if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading && !hasEmptyScenarioHeading) {
+    // references/gauge/parser/specparser.go validateSpec answers "Spec does not
+    // have any elements" first, and only falls through to "Spec should have at
+    // least one scenario" once the specification holds something besides its
+    // heading. Verified against the real parser: "# Checkout" alone gives the
+    // first message; a comment, a tags line, a context step or a table gives the
+    // second.
     diagnostics.push(createDiagnostic(
       vscode,
       firstSpecHeadingRange,
-      SPEC_WITHOUT_SCENARIO_MESSAGE,
+      hasSpecElements ? SPEC_WITHOUT_SCENARIO_MESSAGE : SPEC_EMPTY_MESSAGE,
     ));
   }
   return diagnostics;
