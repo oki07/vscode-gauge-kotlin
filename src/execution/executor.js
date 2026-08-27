@@ -1210,10 +1210,13 @@ function createGaugeExecutionController(options = {}) {
     const resources = Array.isArray(selectedResources) && selectedResources.length > 0
       ? selectedResources
       : [argument];
+    // A scenario identifier is a specification path with a ":<line>" suffix.
+    // Gauge takes it as a run target exactly like the specification itself, so
+    // keep the identifier while testing the specification path behind it.
     const targets = resources
       .map(resourcePath)
       .filter((target) => (
-        isSpecPath(target, pathModule)
+        isSpecPath(getScenarioSpecPath(target), pathModule)
         || isRunnableDirectory(target, fileSystem, pathModule)
       ));
     return uniqueTargets(targets);
@@ -1249,7 +1252,7 @@ function createGaugeExecutionController(options = {}) {
     for (const target of targets) {
       const projectRoot = getProjectRootForSpec(
         vscode,
-        target,
+        getScenarioSpecPath(target),
         pathModule,
         projectFactory,
         allowWorkspaceProjectFallback,

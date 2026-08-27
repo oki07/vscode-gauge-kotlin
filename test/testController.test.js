@@ -1611,12 +1611,10 @@ test("GaugeTestController runs included Gauge test items instead of all specs", 
   await gaugeTests.run({ include: [spec, scenario] });
 
   assert.deepEqual(executionCalls, [
-    ["gauge.execute", "/workspace/specs/example.spec", {
-      "hide-suggestion": true,
-      "simple-console": false,
-      testUi: true,
-    }],
-    ["gauge.execute", "/workspace/specs/example.spec:3", {
+    ["gauge.execute.specification", undefined, [
+      "/workspace/specs/example.spec",
+      "/workspace/specs/example.spec:3",
+    ], {
       "hide-suggestion": true,
       "simple-console": false,
       testUi: true,
@@ -2993,13 +2991,15 @@ test("GaugeTestController runs known tests except excluded items", async () => {
 
   await gaugeTests.run({ exclude: [declined] });
 
+  // One Gauge process for the whole selection. Gauge accepts scenario
+  // identifiers alongside specification paths on a single command line, and one
+  // process per target would run Before Suite and After Suite, the JVM and the
+  // build once per target instead of once per run.
   assert.deepEqual(executionCalls, [
-    ["gauge.execute", "/workspace/specs/checkout.spec:3", {
-      "hide-suggestion": true,
-      "simple-console": false,
-      testUi: true,
-    }],
-    ["gauge.execute", "/workspace/specs/accounts.spec", {
+    ["gauge.execute.specification", undefined, [
+      "/workspace/specs/checkout.spec:3",
+      "/workspace/specs/accounts.spec",
+    ], {
       "hide-suggestion": true,
       "simple-console": false,
       testUi: true,
@@ -3037,13 +3037,10 @@ test("GaugeTestController debug profile runs included Gauge test items in debug 
   await debugProfile[3]({ include: [spec, scenario] });
 
   assert.deepEqual(executionCalls, [
-    ["gauge.execute", "/workspace/specs/example.spec", {
-      debug: true,
-      "hide-suggestion": true,
-      "simple-console": false,
-      testUi: true,
-    }],
-    ["gauge.execute", "/workspace/specs/example.spec:3", {
+    ["gauge.execute.specification", undefined, [
+      "/workspace/specs/example.spec",
+      "/workspace/specs/example.spec:3",
+    ], {
       debug: true,
       "hide-suggestion": true,
       "simple-console": false,

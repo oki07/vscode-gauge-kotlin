@@ -547,6 +547,51 @@ test("execute specification runs Explorer selected spec files and directories", 
   ]);
 });
 
+// Gauge accepts scenario identifiers on the same command line as specification
+// paths, so a Test Explorer selection that mixes them is still one run.
+test("execute specification keeps scenario identifiers in a batched selection", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/manifest.json";
+      },
+      statSync() {
+        throw new Error("not a directory");
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand(
+    "gauge.execute.specification",
+    undefined,
+    [
+      "/workspace/specs/checkout.spec:3",
+      "/workspace/specs/checkout.spec:8",
+      "/workspace/specs/accounts.spec",
+    ],
+  );
+
+  assert.equal(result, true);
+  assert.deepEqual(calls[0].args.slice(-3), [
+    "/workspace/specs/checkout.spec:3",
+    "/workspace/specs/checkout.spec:8",
+    "/workspace/specs/accounts.spec",
+  ]);
+  assert.equal(calls.length, 1);
+});
+
 test("execute specification splits Explorer selected specs by project root", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const calls = [];

@@ -310,8 +310,12 @@ function isScenarioTarget(target) {
   return /:\d+$/.test(String(target || ""));
 }
 
+// Gauge accepts scenario identifiers ("spec.spec:3") on the same command line
+// as specification paths, so any multi-target selection is one run. One process
+// per target would run Before Suite, After Suite, the JVM and the build tool
+// once per target instead of once per run.
 function canBatchSpecificationTargets(targets) {
-  return targets.length > 1 && targets.every((target) => !isScenarioTarget(target));
+  return targets.length > 1;
 }
 
 function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
