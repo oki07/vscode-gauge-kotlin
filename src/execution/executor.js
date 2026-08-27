@@ -24,11 +24,11 @@ const { CLI } = require("../cli");
 const { GradleProject } = require("../project/gradleProject");
 const { MavenProject } = require("../project/mavenProject");
 const { createProjectFactory } = require("../project/projectFactory");
+const { isMarkdownGaugeSpecFile } = require("../gaugeSpecScope");
 const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 const { createLspRequestOwner } = require("./lspRequestOwner");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
-const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
 const EXECUTING_CONTEXT = "gauge:executing";
@@ -311,8 +311,26 @@ function resourcePath(resource) {
   return resource.fsPath || resource.path;
 }
 
-function isSpecPath(filename, pathModule) {
-  return Boolean(filename && SPEC_EXTENSIONS.has(pathModule.extname(filename)));
+// `.spec` is unambiguous anywhere. `.md` is a specification only inside the
+// directories named by gauge_specs_dir (references/gauge/util/util.go
+// GetSpecDirs), which is the rule src/gaugeSpecScope.js owns for the other
+// fourteen surfaces. Gauge takes a bare path verbatim
+// (references/gauge/util/fileUtils.go GetSpecFiles accepts any file whose
+// extension is in gauge_spec_file_extensions, which defaults to ".spec, .md"),
+// so running a README parses the prose as a specification and reports every
+// bullet as a missing step.
+function isSpecPath(filename, pathModule, scopeOptions) {
+  if (!filename) {
+    return false;
+  }
+  const extension = pathModule.extname(filename).toLowerCase();
+  if (extension === ".spec") {
+    return true;
+  }
+  if (extension !== ".md") {
+    return false;
+  }
+  return isMarkdownGaugeSpecFile(filename, scopeOptions || {});
 }
 
 function isDirectory(filename, fileSystem) {
@@ -333,7 +351,7 @@ function isDirectory(filename, fileSystem) {
 // down did nothing: the target was filtered out and no run started.
 const MAX_SPEC_DIRECTORY_DEPTH = 8;
 
-function directoryContainsSpec(filename, fileSystem, pathModule, depth = MAX_SPEC_DIRECTORY_DEPTH) {
+function directoryContainsSpec(filename, fileSystem, pathModule, scopeOptions, depth = MAX_SPEC_DIRECTORY_DEPTH) {
   if (!fileSystem || typeof fileSystem.readdirSync !== "function" || depth < 0) {
     return false;
   }
@@ -349,22 +367,22 @@ function directoryContainsSpec(filename, fileSystem, pathModule, depth = MAX_SPE
     if (!entryName || entryName.startsWith(".")) {
       continue;
     }
-    if (isSpecPath(entryName, pathModule)) {
+    const child = pathModule.join(filename, entryName);
+    if (isSpecPath(child, pathModule, scopeOptions)) {
       return true;
     }
-    const child = pathModule.join(filename, entryName);
     if (isDirectory(child, fileSystem)) {
       directories.push(child);
     }
   }
   return directories.some((child) => (
-    directoryContainsSpec(child, fileSystem, pathModule, depth - 1)
+    directoryContainsSpec(child, fileSystem, pathModule, scopeOptions, depth - 1)
   ));
 }
 
-function isRunnableDirectory(filename, fileSystem, pathModule) {
+function isRunnableDirectory(filename, fileSystem, pathModule, scopeOptions) {
   return isDirectory(filename, fileSystem)
-    && directoryContainsSpec(filename, fileSystem, pathModule);
+    && directoryContainsSpec(filename, fileSystem, pathModule, scopeOptions);
 }
 
 function uniqueTargets(targets) {
@@ -1191,7 +1209,7 @@ function createGaugeExecutionController(options = {}) {
     }
 
     const spec = editor.document.fileName || (editor.document.uri && editor.document.uri.fsPath);
-    if (!SPEC_EXTENSIONS.has(pathModule.extname(spec))) {
+    if (!isSpecPath(spec, pathModule, markdownScopeOptions())) {
       return {
         error: `No ${kind} found. Current file is not a gauge specification.`,
       };
@@ -1231,6 +1249,10 @@ function createGaugeExecutionController(options = {}) {
     });
   }
 
+  function markdownScopeOptions() {
+    return { fileSystem, pathModule, projectFactory };
+  }
+
   function specificationTargetsFromSelection(argument, selectedResources) {
     const resources = Array.isArray(selectedResources) && selectedResources.length > 0
       ? selectedResources
@@ -1241,8 +1263,8 @@ function createGaugeExecutionController(options = {}) {
     const targets = resources
       .map(resourcePath)
       .filter((target) => (
-        isSpecPath(getScenarioSpecPath(target), pathModule)
-        || isRunnableDirectory(target, fileSystem, pathModule)
+        isSpecPath(getScenarioSpecPath(target), pathModule, markdownScopeOptions())
+        || isRunnableDirectory(target, fileSystem, pathModule, markdownScopeOptions())
       ));
     return uniqueTargets(targets);
   }

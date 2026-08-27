@@ -264,7 +264,7 @@
         },
         {
           "command": "gauge.execute.specification",
-          "when": "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec || resourceExtname == .md)",
+          "when": "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec)",
           "group": "gauge@3"
         }
       ],

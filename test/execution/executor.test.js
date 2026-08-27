@@ -6086,3 +6086,141 @@ test("execute specification runs a folder whose specs are in subdirectories", as
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].args.slice(-1), ["/workspace/specs"]);
 });
+
+// Gauge takes a bare path verbatim: references/gauge/util/fileUtils.go
+// GetSpecFiles accepts any file whose extension is in gauge_spec_file_extensions,
+// which env.go defaults to ".spec, .md". So `gauge run <root>/README.md` parses
+// the prose as a specification and reports every bullet as a missing step. The
+// extension already refuses a README everywhere else through
+// src/gaugeSpecScope.js; the execution controller was the last surface still
+// gated on the extension alone, so the Run commands and the Explorer entry
+// contradicted its own code lens, which is suppressed on the same file.
+test("run commands refuse a README in a Gauge project", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode, errors } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  vscode.window.activeTextEditor = {
+    document: {
+      fileName: "/workspace/gauge/README.md",
+      uri: { fsPath: "/workspace/gauge/README.md" },
+    },
+  };
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      readFileSync() {
+        throw new Error("no project properties");
+      },
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  for (const command of [
+    "gauge.execute.specification",
+    "gauge.execute.scenario",
+    "gauge.execute.scenarios",
+  ]) {
+    await controller.handleCommand(command);
+  }
+
+  assert.deepEqual(calls, []);
+  assert.equal(errors.length, 3);
+  for (const message of errors) {
+    assert.match(message, /Current file is not a gauge specification\./);
+  }
+});
+
+test("an Explorer selection of a README yields no run targets", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      readFileSync() {
+        throw new Error("no project properties");
+      },
+      statSync() {
+        throw new Error("not a directory");
+      },
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand(
+    "gauge.execute.specification",
+    { fsPath: "/workspace/gauge/README.md" },
+    [{ fsPath: "/workspace/gauge/README.md" }],
+  );
+
+  assert.deepEqual(calls, []);
+});
+
+test("a Markdown specification inside the spec directory stays runnable", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+      readFileSync() {
+        throw new Error("no project properties");
+      },
+      statSync() {
+        throw new Error("not a directory");
+      },
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand(
+    "gauge.execute.specification",
+    { fsPath: "/workspace/gauge/specs/login.md" },
+    [{ fsPath: "/workspace/gauge/specs/login.md" }],
+  );
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args.slice(-1), ["/workspace/gauge/specs/login.md"]);
+});

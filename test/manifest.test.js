@@ -307,7 +307,11 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     },
     {
       command: "gauge.execute.specification",
-      when: "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec || resourceExtname == .md)",
+      // No `.md` arm: a when-clause cannot read gauge_specs_dir, so the entry
+      // cannot tell a specification from a README, and running a README parses
+      // the prose as a specification. references/gauge-vscode contributes no
+      // explorer/context menu at all.
+      when: "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec)",
       group: "gauge@3",
     },
   ]);
@@ -1319,4 +1323,17 @@ test("Gauge view title actions are scoped to the Gauge Specs view", () => {
       `${entry.command} is not scoped to the Gauge Specs view`,
     );
   }
+});
+
+// A when-clause cannot read gauge_specs_dir, so the Explorer entry cannot tell a
+// specification from a README. references/gauge-vscode contributes no
+// explorer/context menu at all, so "right-click README.md -> Run Specification"
+// exists nowhere but here. The .spec arm and the folder arm stay.
+test("the Explorer run entry is not offered on Markdown files", () => {
+  const manifest = readPackageJson();
+  const entry = manifest.contributes.menus["explorer/context"]
+    .find((item) => item.command === "gauge.execute.specification");
+
+  assert.ok(entry);
+  assert.equal(entry.when, "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec)");
 });
