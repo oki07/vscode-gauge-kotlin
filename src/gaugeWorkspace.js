@@ -1157,6 +1157,20 @@ class GaugeWorkspace {
     };
   }
 
+  // Gauge documents only. Gauge LSP advertises DocumentFormattingProvider and
+  // CodeActionProvider (references/gauge/api/lang/capabilities.go) and treats
+  // every document it is offered as a Gauge specification, so offering it a
+  // Kotlin or Java source registers Gauge as a formatter for that language:
+  // Format Document would rewrite an implementation file as a specification,
+  // and with no Kotlin extension installed Gauge would be the only formatter
+  // registered for `.kt`. references/gauge-vscode/src/gaugeWorkspace.ts selects
+  // only `{ language: 'gauge' }`.
+  //
+  // Nothing is lost. Implementation-file references, definitions, diagnostics
+  // and completions are all computed locally (src/gaugeReference.js routes
+  // implementation documents to stepImplementationValuesAt without touching the
+  // client), and gauge-java builds its step registry by reflection at runner
+  // start rather than from synchronised document text.
   clientOptionsFor(project, folder) {
     const documentSelector = [
       { scheme: "file", language: GAUGE_LANGUAGE, pattern: `${project.root()}/**/*` },
@@ -1165,16 +1179,6 @@ class GaugeWorkspace {
       { scheme: "file", pattern: `${project.root()}/**/*.cpt` },
       { scheme: "file", language: MARKDOWN_LANGUAGE, pattern: `${project.root()}/**/*.md` },
     ];
-    if (project.language() === KOTLIN_RUNNER) {
-      documentSelector.push({ scheme: "file", language: KOTLIN_RUNNER, pattern: `${project.root()}/**/*` });
-      documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.kt` });
-      documentSelector.push({ scheme: "file", language: JAVA_RUNNER, pattern: `${project.root()}/**/*` });
-      documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.java` });
-    }
-    if (project.language() === JAVA_RUNNER) {
-      documentSelector.push({ scheme: "file", language: JAVA_RUNNER, pattern: `${project.root()}/**/*` });
-      documentSelector.push({ scheme: "file", pattern: `${project.root()}/**/*.java` });
-    }
     return {
       documentSelector,
       diagnosticCollectionName: "gauge",

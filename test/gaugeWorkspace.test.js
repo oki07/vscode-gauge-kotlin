@@ -395,16 +395,19 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
       },
     },
   });
+  // Gauge documents only. Gauge LSP advertises DocumentFormattingProvider and
+  // CodeActionProvider (references/gauge/api/lang/capabilities.go), and it
+  // treats every document it is offered as a Gauge specification. With .kt and
+  // .java in the selector, VS Code registered Gauge as a formatter for Kotlin
+  // and Java sources, so Format Document would rewrite an implementation file
+  // as a specification. references/gauge-vscode/src/gaugeWorkspace.ts selects
+  // only { language: 'gauge' } for the same reason.
   assert.deepEqual(entry.client.clientOptions.documentSelector, [
     { scheme: "file", language: "gauge", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", language: "gauge-concept", pattern: "/workspace/gauge/**/*" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.spec" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.cpt" },
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
-    { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
-    { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
-    { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
-    { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
   ]);
   assert.equal(entry.client.clientOptions.revealOutputChannelOn, 4);
   assert.equal(entry.client.clientOptions.workspaceFolder.uri.fsPath, "/workspace/gauge");
@@ -3380,8 +3383,6 @@ test("GaugeWorkspace generates Java config for mixed-case Java plugins", async (
     { scheme: "file", pattern: "/workspace/gauge/**/*.spec" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.cpt" },
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
-    { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
-    { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
   ]);
   assert.equal(env.SHOULD_BUILD_PROJECT, "false");
   assert.equal(entry.client.serverOptions.options.env.SHOULD_BUILD_PROJECT, "false");
@@ -5177,10 +5178,6 @@ test("GaugeWorkspace starts a client for the active Markdown Gauge specification
     { scheme: "file", pattern: "/workspace/gauge/**/*.spec" },
     { scheme: "file", pattern: "/workspace/gauge/**/*.cpt" },
     { scheme: "file", language: "markdown", pattern: "/workspace/gauge/**/*.md" },
-    { scheme: "file", language: "kotlin", pattern: "/workspace/gauge/**/*" },
-    { scheme: "file", pattern: "/workspace/gauge/**/*.kt" },
-    { scheme: "file", language: "java", pattern: "/workspace/gauge/**/*" },
-    { scheme: "file", pattern: "/workspace/gauge/**/*.java" },
   ]);
 });
 
