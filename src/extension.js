@@ -15,6 +15,7 @@ const {
 const { createGaugeScenariosProvider } = require("./execution/scenarioProvider");
 const { ExtractConceptCommandProvider } = require("./extractConcept");
 const { GaugeDynamicArgumentCompletionProvider } = require("./dynamicArgumentCompletion");
+const { GaugeSnippetCompletionProvider } = require("./gaugeSnippetCompletion");
 const { SpecNodeProvider } = require("./explorer/specExplorer");
 const { GenerateStubCommandProvider } = require("./annotator/generateStub");
 const { GaugeFormatProvider } = require("./formatProvider");
@@ -545,6 +546,28 @@ function registerDynamicArgumentCompletionProvider(context, vscode, options) {
   }
 }
 
+// contributes.snippets is static and global, so Gauge snippets contributed for
+// the `markdown` language reach every Markdown file in every workspace. Gauge
+// Markdown specifications get them from this provider instead, scoped to a Gauge
+// project's spec directories.
+function registerGaugeSnippetCompletionProvider(context, vscode, options) {
+  if (!vscode.languages || typeof vscode.languages.registerCompletionItemProvider !== "function") {
+    return;
+  }
+  const SnippetProviderCtor = options.GaugeSnippetCompletionProvider
+    || GaugeSnippetCompletionProvider;
+  const provider = new SnippetProviderCtor({
+    fileSystem: options.fileSystem,
+    pathModule: options.pathModule,
+    projectFactory: options.projectFactory,
+    vscode,
+  });
+  const disposable = provider.register();
+  if (disposable) {
+    context.subscriptions.push(disposable);
+  }
+}
+
 function registerCodeLensProvider(context, vscode, options) {
   if (!vscode.languages || typeof vscode.languages.registerCodeLensProvider !== "function") {
     return;
@@ -1025,6 +1048,10 @@ function startGaugeServices(context, vscode, options = {}) {
     documentStore,
     projectFactory,
     workspaceStepIndex,
+  });
+  registerGaugeSnippetCompletionProvider(context, vscode, {
+    ...options,
+    projectFactory,
   });
   registerCodeLensProvider(context, vscode, {
     ...options,

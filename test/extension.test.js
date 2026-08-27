@@ -3266,13 +3266,22 @@ test("activation registers dynamic argument completions for Gauge documents", ()
     showWelcomeNotification() {},
   });
 
-  assert.equal(completionProviders.length, 1);
+  // Two: the dynamic argument provider, and the Gauge snippet provider that
+  // replaces the global `markdown` snippets contribution.
+  assert.equal(completionProviders.length, 2);
   assert.deepEqual(completionProviders[0].selector, [
     { language: "gauge" },
     { language: "gauge-concept" },
     { scheme: "file", pattern: "**/*.spec" },
     { language: "markdown", scheme: "file", pattern: "**/*.md" },
     { scheme: "file", pattern: "**/*.cpt" },
+  ]);
+  assert.deepEqual(completionProviders[1].selector, [
+    { language: "gauge" },
+    { language: "gauge-concept" },
+    { scheme: "file", pattern: "**/*.spec" },
+    { scheme: "file", pattern: "**/*.cpt" },
+    { language: "markdown", scheme: "file", pattern: "**/*.md" },
   ]);
   assert.deepEqual(completionProviders[0].triggerCharacters, ["*", " ", "<", "\"", ":", ","]);
   assert.equal(completionProviders[0].provider.options.vscode, fakeVscode);
@@ -3358,7 +3367,9 @@ test("activation owns one lifecycle-aware dynamic completion provider", () => {
   assert.ok(completionProvider);
   assert.equal(completionProvider.registerCalls, 1);
   assert.equal(context.subscriptions.includes(completionProvider), true);
-  assert.equal(completionProviders.length, 0);
+  // Only the Gauge snippet provider registers directly; the dynamic argument
+  // provider owns its own registration through register().
+  assert.equal(completionProviders.length, 1);
   completionProvider.dispose();
   assert.equal(completionProvider.disposeCalls, 1);
 });

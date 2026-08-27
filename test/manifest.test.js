@@ -570,10 +570,6 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       language: "gauge-concept",
       path: "./snippets/gauge.json",
     },
-    {
-      language: "markdown",
-      path: "./snippets/gauge.json",
-    },
   ]);
 
   for (const relativePath of [
@@ -1282,4 +1278,20 @@ test("extension manifest drops the Gauge recommended settings surface", () => {
     ),
     false,
   );
+});
+
+// contributes.snippets is a static contribution: VS Code reads it at startup,
+// independently of activation, and applies it to every document of that
+// language in every workspace. references/gauge-vscode contributes snippets only
+// for its own `gauge` language. Contributing them for `markdown` put `spec`,
+// `sce`, `cpt` and the table snippets into every Markdown file the user ever
+// opens, in any repository. Gauge Markdown specifications get them from
+// GaugeSnippetCompletionProvider instead, which is scoped to Gauge projects.
+test("Gauge snippets are not contributed to the global Markdown language", () => {
+  const manifest = readPackageJson();
+
+  assert.deepEqual(manifest.contributes.snippets, [
+    { language: "gauge", path: "./snippets/gauge.json" },
+    { language: "gauge-concept", path: "./snippets/gauge.json" },
+  ]);
 });
