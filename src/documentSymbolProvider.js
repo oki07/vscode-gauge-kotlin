@@ -5,6 +5,7 @@ const {
   isDocStringFenceLine,
   isGaugeHashHeading,
 } = require("./gaugeHeadings");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -291,6 +292,22 @@ class GaugeDocumentSymbolProvider {
     }
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. Without this a README or CHANGELOG in a Gauge
+  // project is decorated as a specification. The rule lives in
+  // src/gaugeSpecScope.js so every provider gives the same answer.
+  isMarkdownDocumentInScope(document) {
+    const file = documentPath(document);
+    if (!/\.md$/i.test(String(file || ""))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   dispose() {
     if (this.disposed) {
       return;
@@ -438,7 +455,10 @@ class GaugeDocumentSymbolProvider {
   }
 
   provideDocumentSymbols(document) {
-    if (!supportedDocument(document, this.projectFactory)) {
+    if (
+      !supportedDocument(document, this.projectFactory)
+      || !this.isMarkdownDocumentInScope(document)
+    ) {
       return [];
     }
     const lines = documentLines(document);

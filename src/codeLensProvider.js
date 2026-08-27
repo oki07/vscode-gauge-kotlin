@@ -18,6 +18,7 @@ const {
 } = require("./stepDiagnostics");
 const { superStepAliasesForEntry } = require("./gaugeReference");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
@@ -429,6 +430,22 @@ class GaugeCodeLensProvider {
     this.activeOperations = new Set();
     this.registrationAttempted = false;
     this.registrationDisposable = undefined;
+  }
+
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. Without this a README in a Gauge project gets
+  // Run and Debug code lenses that would run Gauge against it. The rule lives in
+  // src/gaugeSpecScope.js so every provider gives the same answer.
+  isMarkdownDocumentInScope(document) {
+    const file = documentPath(document);
+    if (!/\.md$/i.test(String(file || ""))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
   }
 
   disposeOwnedProvider(provider) {
@@ -1290,9 +1307,12 @@ class GaugeCodeLensProvider {
       return this.provideStepReferenceCodeLenses(document, operation);
     }
     const supportedDocument = this.callSyncForOperation(operation, () => (
-      document.languageId === GAUGE_LANGUAGE
-      || isSpecDocument(document, file)
-      || isMarkdownSpecDocument(document, file)
+      (
+        document.languageId === GAUGE_LANGUAGE
+        || isSpecDocument(document, file)
+        || isMarkdownSpecDocument(document, file)
+      )
+      && this.isMarkdownDocumentInScope(document)
     ));
     if (supportedDocument === CANCELLED_CODE_LENS_OPERATION) {
       return CANCELLED_CODE_LENS_OPERATION;

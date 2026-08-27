@@ -4,6 +4,7 @@ const {
   isConceptHashHeading,
   isGaugeHashHeading,
 } = require("./gaugeHeadings");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -118,6 +119,22 @@ class GaugeFoldingRangeProvider {
     this.projectFactory = options.projectFactory;
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. Without this a README or CHANGELOG in a Gauge
+  // project is decorated as a specification. The rule lives in
+  // src/gaugeSpecScope.js so every provider gives the same answer.
+  isMarkdownDocumentInScope(document) {
+    const file = documentPath(document);
+    if (!/\.md$/i.test(String(file || ""))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   isGaugeProjectDocument(document) {
     const file = documentPath(document);
     if (!file) {
@@ -160,7 +177,11 @@ class GaugeFoldingRangeProvider {
       || isConceptDocument(document)
       || isMarkdownSpecDocument(document, file)
     );
-    if (!supportedDocument || !this.isGaugeProjectDocument(document)) {
+    if (
+      !supportedDocument
+      || !this.isGaugeProjectDocument(document)
+      || !this.isMarkdownDocumentInScope(document)
+    ) {
       return [];
     }
 

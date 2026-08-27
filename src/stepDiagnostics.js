@@ -3,6 +3,10 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { positionAt: indexedPositionAt } = require("./documentPosition");
+const {
+  createMarkdownSpecScope,
+  isMarkdownSpecPath: sharedIsMarkdownSpecPath,
+} = require("./gaugeSpecScope");
 
 const COLLECTION_NAME = "gauge-kotlin";
 const GAUGE_LANGUAGE = "gauge";
@@ -8308,8 +8312,6 @@ const KOTLIN_FILE_PATTERN = /\.kts?$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 const MARKDOWN_FILE_PATTERN = /\.md$/i;
-const GAUGE_SPECS_DIRECTORY = "specs";
-const GAUGE_SPECS_DIR_PROPERTY = "gauge_specs_dir";
 const JAVA_WORKSPACE_PATTERN = "**/*.java";
 const KOTLIN_WORKSPACE_PATTERN = "**/*.kt";
 const CONCEPT_WORKSPACE_PATTERN = "**/*.cpt";
@@ -8371,51 +8373,6 @@ function isConceptDocument(candidate) {
   return typeof file === "string" && CONCEPT_FILE_PATTERN.test(file);
 }
 
-function pathSegments(value) {
-  return String(value || "")
-    .split(/[\\/]/)
-    .filter((segment) => segment !== "" && segment !== ".");
-}
-
-function startsWithSegments(segments, prefix) {
-  return prefix.length > 0
-    && segments.length >= prefix.length
-    && prefix.every((segment, index) => segment === segments[index]);
-}
-
-// Gauge reads the spec directories from `gauge_specs_dir`, a comma separated
-// list of project relative directories that defaults to "specs"
-// (references/gauge/util/util.go GetSpecDirs, references/gauge/env/env.go).
-function gaugeSpecDirs(options = {}) {
-  const configured = process.env[GAUGE_SPECS_DIR_PROPERTY]
-    || projectDefaultProperty(options, GAUGE_SPECS_DIR_PROPERTY);
-  const directories = String(configured || "")
-    .split(",")
-    .map((entry) => pathSegments(entry.trim()))
-    .filter((segments) => segments.length > 0);
-  return directories.length > 0 ? directories : [[GAUGE_SPECS_DIRECTORY]];
-}
-
-// Gauge only reads Markdown as a specification inside its spec directories.
-// Without that scope a README or CHANGELOG in a Gauge project is parsed as a
-// spec and its bullet list is reported as undefined steps. The scope carries
-// the project root and resolves the configured directories lazily, so a caller
-// that walks many candidates reads the project properties at most once and a
-// caller that never sees Markdown never reads them at all.
-function isMarkdownSpecPath(file, scope) {
-  const directories = pathSegments(file).slice(0, -1);
-  const projectRoot = scope && scope.projectRoot;
-  if (!projectRoot) {
-    return directories.includes(GAUGE_SPECS_DIRECTORY);
-  }
-  const rootSegments = pathSegments(projectRoot);
-  if (!startsWithSegments(directories, rootSegments)) {
-    return directories.includes(GAUGE_SPECS_DIRECTORY);
-  }
-  const relative = directories.slice(rootSegments.length);
-  return scope.specDirs().some((specDir) => startsWithSegments(relative, specDir));
-}
-
 function isGaugeSpecDocument(candidate, scope) {
   if (!candidate) {
     return false;
@@ -8428,7 +8385,7 @@ function isGaugeSpecDocument(candidate, scope) {
     return false;
   }
   if (MARKDOWN_FILE_PATTERN.test(file)) {
-    return isMarkdownSpecPath(file, scope);
+    return sharedIsMarkdownSpecPath(file, scope);
   }
   return SPEC_FILE_PATTERN.test(file);
 }
@@ -8691,22 +8648,14 @@ class GaugeStepDiagnosticsProvider {
 
   // One scope per caller, resolved on first use. Only Markdown candidates ever
   // ask for the directories, so the project properties are read at most once
-  // per call and never for a `.spec`, `.cpt`, `.kt` or `.java` document.
+  // per call and never for a `.spec`, `.cpt`, `.kt` or `.java` document. The
+  // rule itself lives in src/gaugeSpecScope.js so every provider shares it.
   createSpecScope(projectRoot) {
-    let directories;
-    return {
+    return createMarkdownSpecScope({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
       projectRoot,
-      specDirs: () => {
-        if (!directories) {
-          directories = gaugeSpecDirs({
-            fileSystem: this.fileSystem,
-            pathModule: this.pathModule,
-            projectRoot,
-          });
-        }
-        return directories;
-      },
-    };
+    });
   }
 
   specScopeFor(document) {

@@ -3,6 +3,11 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const snippetDefinitions = require("../snippets/gauge.json");
+const {
+  createMarkdownSpecScope,
+  gaugeProjectRootForFile,
+  isMarkdownSpecPath,
+} = require("./gaugeSpecScope");
 
 // contributes.snippets is a static contribution: VS Code reads it at startup,
 // independently of activation, and applies it to every document of that language
@@ -20,9 +25,6 @@ const MARKDOWN_LANGUAGE = "markdown";
 const MARKDOWN_FILE_PATTERN = /\.md$/i;
 const SPEC_FILE_PATTERN = /\.spec$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
-const GAUGE_SPECS_DIRECTORY = "specs";
-const GAUGE_SPECS_DIR_PROPERTY = "gauge_specs_dir";
-const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 
 const DOCUMENT_SELECTOR = [
   { language: GAUGE_LANGUAGE },
@@ -39,87 +41,6 @@ function getVscode(vscode) {
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
-}
-
-function pathSegments(value) {
-  return String(value || "")
-    .split(/[\\/]/)
-    .filter((segment) => segment !== "" && segment !== ".");
-}
-
-function startsWithSegments(segments, prefix) {
-  return prefix.length > 0
-    && segments.length >= prefix.length
-    && prefix.every((segment, index) => segment === segments[index]);
-}
-
-function isEscapedAt(text, index) {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
-}
-
-function firstUnescapedIndex(line, characters) {
-  for (let index = 0; index < line.length; index += 1) {
-    if (characters.has(line[index]) && !isEscapedAt(line, index)) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function firstWhitespaceIndex(line) {
-  for (let index = 0; index < line.length; index += 1) {
-    if (/\s/.test(line[index])) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function unescapePropertyValue(value) {
-  return String(value || "")
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
-      if (character === "t") {
-        return "\t";
-      }
-      if (character === "n") {
-        return "\n";
-      }
-      if (character === "r") {
-        return "\r";
-      }
-      if (character === "f") {
-        return "\f";
-      }
-      return character;
-    });
-}
-
-// Kept byte for byte in step with the copies in src/stepDiagnostics.js and its
-// siblings: a project property must not parse differently depending on which
-// provider read it.
-function propertiesValue(content, key) {
-  const separators = new Set(["=", ":"]);
-  for (const rawLine of String(content || "").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || line.startsWith("!")) {
-      continue;
-    }
-    const explicitSeparator = firstUnescapedIndex(line, separators);
-    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
-    if (separator === -1) {
-      continue;
-    }
-    if (line.slice(0, separator).trim() !== key) {
-      continue;
-    }
-    return unescapePropertyValue(line.slice(separator + 1).trim());
-  }
-  return undefined;
 }
 
 function snippetItems(vscode) {
@@ -161,62 +82,19 @@ class GaugeSnippetCompletionProvider {
     return { dispose: () => this.dispose() };
   }
 
-  gaugeProjectRoot(file) {
-    if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
-      return undefined;
-    }
-    try {
-      const root = this.projectFactory.getGaugeRootFromFilePath(file);
-      if (!root) {
-        return undefined;
-      }
-      if (typeof this.projectFactory.isGaugeProject === "function") {
-        return this.projectFactory.isGaugeProject(root) === false ? undefined : root;
-      }
-      return root;
-    } catch (_error) {
-      return undefined;
-    }
-  }
-
-  // Same rule as src/stepDiagnostics.js: Gauge only reads Markdown as a
-  // specification inside the directories named by gauge_specs_dir.
-  specDirectories(projectRoot) {
-    let configured = process.env[GAUGE_SPECS_DIR_PROPERTY];
-    if (!configured && projectRoot && this.fileSystem
-      && typeof this.fileSystem.readFileSync === "function") {
-      try {
-        configured = propertiesValue(
-          this.fileSystem.readFileSync(
-            this.pathModule.join(projectRoot, ...DEFAULT_ENV_PROPERTIES),
-            "utf8",
-          ),
-          GAUGE_SPECS_DIR_PROPERTY,
-        );
-      } catch (_error) {
-        configured = undefined;
-      }
-    }
-    const directories = String(configured || "")
-      .split(",")
-      .map((entry) => pathSegments(entry.trim()))
-      .filter((segments) => segments.length > 0);
-    return directories.length > 0 ? directories : [[GAUGE_SPECS_DIRECTORY]];
-  }
-
+  // A Markdown file is a specification only inside the project's configured
+  // spec directories. The rule lives in src/gaugeSpecScope.js so every provider
+  // gives the same answer for the same file.
   isMarkdownSpecification(file) {
-    const projectRoot = this.gaugeProjectRoot(file);
+    const projectRoot = gaugeProjectRootForFile(file, this.projectFactory);
     if (!projectRoot) {
       return false;
     }
-    const directories = pathSegments(file).slice(0, -1);
-    const rootSegments = pathSegments(projectRoot);
-    if (!startsWithSegments(directories, rootSegments)) {
-      return directories.includes(GAUGE_SPECS_DIRECTORY);
-    }
-    const relative = directories.slice(rootSegments.length);
-    return this.specDirectories(projectRoot)
-      .some((specDir) => startsWithSegments(relative, specDir));
+    return isMarkdownSpecPath(file, createMarkdownSpecScope({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot,
+    }));
   }
 
   isGaugeDocument(document) {
