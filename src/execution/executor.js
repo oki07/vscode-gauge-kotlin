@@ -327,18 +327,39 @@ function isDirectory(filename, fileSystem) {
   }
 }
 
-function directoryContainsSpec(filename, fileSystem, pathModule) {
-  if (!fileSystem || typeof fileSystem.readdirSync !== "function") {
+// Gauge takes a directory as a run target and walks it recursively
+// (references/gauge/util/util.go GetSpecFiles). Looking only at the directory's
+// own entries meant Run Specification on a folder whose specs live one level
+// down did nothing: the target was filtered out and no run started.
+const MAX_SPEC_DIRECTORY_DEPTH = 8;
+
+function directoryContainsSpec(filename, fileSystem, pathModule, depth = MAX_SPEC_DIRECTORY_DEPTH) {
+  if (!fileSystem || typeof fileSystem.readdirSync !== "function" || depth < 0) {
     return false;
   }
+  let entries;
   try {
-    return fileSystem.readdirSync(filename).some((entry) => {
-      const entryName = typeof entry === "string" ? entry : entry.name;
-      return isSpecPath(entryName, pathModule);
-    });
+    entries = fileSystem.readdirSync(filename);
   } catch (_error) {
     return false;
   }
+  const directories = [];
+  for (const entry of entries) {
+    const entryName = typeof entry === "string" ? entry : entry.name;
+    if (!entryName || entryName.startsWith(".")) {
+      continue;
+    }
+    if (isSpecPath(entryName, pathModule)) {
+      return true;
+    }
+    const child = pathModule.join(filename, entryName);
+    if (isDirectory(child, fileSystem)) {
+      directories.push(child);
+    }
+  }
+  return directories.some((child) => (
+    directoryContainsSpec(child, fileSystem, pathModule, depth - 1)
+  ));
 }
 
 function isRunnableDirectory(filename, fileSystem, pathModule) {

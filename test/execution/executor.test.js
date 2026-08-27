@@ -5960,3 +5960,58 @@ test("report command explains that the remembered report is gone", async () => {
     "Can't open html report. /workspace/reports/html-report/index.html no longer exists.",
   ]);
 });
+
+// Gauge takes a directory as a run target and walks it recursively
+// (references/gauge/util/util.go GetSpecFiles). Testing only the directory's own
+// entries meant Run Specification on a folder whose specs live one level down -
+// specs/checkout/, the shape Gauge's own spec directories usually take - did
+// nothing at all: the target was filtered out and no run started.
+test("execute specification runs a folder whose specs are in subdirectories", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const calls = [];
+  const directories = new Set(["/workspace/specs", "/workspace/specs/checkout"]);
+  const files = new Set(["/workspace/manifest.json", "/workspace/specs/checkout/buy.spec"]);
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync(filename) {
+        return files.has(filename) || directories.has(filename);
+      },
+      readdirSync(filename) {
+        if (filename === "/workspace/specs") {
+          return ["checkout"];
+        }
+        if (filename === "/workspace/specs/checkout") {
+          return ["buy.spec"];
+        }
+        return [];
+      },
+      statSync(filename) {
+        return {
+          isDirectory() {
+            return directories.has(filename);
+          },
+        };
+      },
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  const result = await controller.handleCommand(
+    "gauge.execute.specification",
+    { fsPath: "/workspace/specs" },
+    [{ fsPath: "/workspace/specs" }],
+  );
+
+  assert.equal(result, true);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args.slice(-1), ["/workspace/specs"]);
+});
