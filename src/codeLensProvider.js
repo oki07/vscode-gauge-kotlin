@@ -355,11 +355,20 @@ function hasSpecificationDataTable(document, specificationLine) {
     if (isStepLine(lines[line])) {
       return false;
     }
-    if (isTableLine(lines[line])) {
+    // Gauge emits the parallel lens whenever spec.DataTable.IsInitialized()
+    // (references/gauge/api/lang/codeLens.go). An external `table: file.csv`
+    // initializes it through AddExternalDataTable
+    // (references/gauge/parser/convert.go) exactly like an inline table.
+    if (isTableLine(lines[line]) || isExternalDataTableLine(lines[line])) {
       return true;
     }
   }
   return false;
+}
+
+function isExternalDataTableLine(line) {
+  const text = String(line || "").trim().toLowerCase();
+  return text.startsWith("table:") || text.startsWith("table :");
 }
 
 function normalizedStepValues(aliases) {

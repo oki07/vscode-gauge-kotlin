@@ -257,6 +257,49 @@ test("GaugeCodeLensProvider mirrors Gauge parallel execution CodeLens for specif
   ]);
 });
 
+// Gauge emits the parallel lens whenever spec.DataTable.IsInitialized()
+// (references/gauge/api/lang/codeLens.go), and an external `table: file.csv`
+// initializes it through AddExternalDataTable
+// (references/gauge/parser/convert.go), exactly like an inline table.
+test("GaugeCodeLensProvider mirrors Gauge parallel execution CodeLens for external data tables", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Checkout",
+    "table: ./users.csv",
+    "",
+    "## Successful checkout",
+    "* Pay",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideCodeLenses(document).map((lens) => lens.command.title), [
+    "Run Scenario",
+    "Debug Scenario",
+    "Run Spec",
+    "Debug Spec",
+    "Run in parallel",
+  ]);
+});
+
+test("GaugeCodeLensProvider keeps the parallel CodeLens off a scenario data table", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+    "table: ./users.csv",
+    "* Pay",
+  ].join("\n"));
+
+  assert.deepEqual(provider.provideCodeLenses(document).map((lens) => lens.command.title), [
+    "Run Scenario",
+    "Debug Scenario",
+    "Run Spec",
+    "Debug Spec",
+  ]);
+});
+
 test("GaugeCodeLensProvider adds execution CodeLens text to Markdown Gauge specs", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
