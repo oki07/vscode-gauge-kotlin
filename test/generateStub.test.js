@@ -154,6 +154,53 @@ function createFakeVscode(overrides = {}) {
   };
 }
 
+// On Windows a project root is "C:\\ws\\gauge" and TextDocument.uri.fsPath is
+// "C:\\ws\\gauge\\...". The scan normalized the file to forward slashes but built
+// its prefix by appending "/" to the raw root, so every candidate was compared
+// against "C:\\ws\\gauge/" and filtered out. Generate Step Implementation could
+// then only ever offer "New File" on Windows.
+test("GenerateStubCommandProvider lists Kotlin files under a Windows project root", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const { commands, quickPicks, vscode } = createFakeVscode();
+  vscode.workspace.findFiles = () => Promise.resolve([
+    { fsPath: "C:\\ws\\gauge\\src\\test\\kotlin\\Steps.kt" },
+    { fsPath: "C:\\ws\\other\\Other.kt" },
+  ]);
+  const project = {
+    root() {
+      return "C:\\ws\\gauge";
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit: (edit) => Promise.resolve({ converted: edit }),
+    },
+    sendRequest(method) {
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve([]);
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+
+  new GenerateStubCommandProvider({ get() { return { project, client }; } }, {
+    fileSystem: {
+      existsSync: () => true,
+      readFileSync: () => "",
+    },
+    pathModule: path.win32,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("fun step() {}");
+
+  assert.deepEqual(
+    quickPicks[0].map((entry) => entry.value),
+    ["New File", "Copy To Clipboard", "C:\\ws\\gauge\\src\\test\\kotlin\\Steps.kt"],
+  );
+});
+
 // gauge/getImplFiles is delegated to the runner, and gauge-java's FileHelper
 // only scans files ending in .java
 // (references/gauge-java/src/main/java/com/thoughtworks/gauge/FileHelper.java).

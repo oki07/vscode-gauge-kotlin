@@ -43,6 +43,10 @@ function getVscode(vscode) {
   return vscode || require("vscode");
 }
 
+function forwardSlashes(value) {
+  return String(value || "").replace(/\\/g, "/");
+}
+
 function isKotlinImplementationFile(implementationFilePath) {
   return KOTLIN_FILE_PATTERN.test(String(implementationFilePath || ""));
 }
@@ -992,10 +996,13 @@ class GenerateStubCommandProvider {
     if (uris === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
     }
-    const prefix = `${projectRoot}/`;
+    // On Windows both the root and uri.fsPath use backslashes, so compare both
+    // sides normalized: appending "/" to the raw root produced a prefix like
+    // "C:\\ws\\gauge/" that no normalized path could ever start with.
+    const prefix = `${forwardSlashes(projectRoot)}/`;
     return (uris || [])
       .map((uri) => (uri && (uri.fsPath || uri.path)) || "")
-      .filter((file) => file && file.replace(/\\/g, "/").startsWith(prefix))
+      .filter((file) => file && forwardSlashes(file).startsWith(prefix))
       .sort();
   }
 
