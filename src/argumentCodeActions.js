@@ -1,4 +1,5 @@
-"use strict";
+
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");"use strict";
 
 const CONVERT_TO_DYNAMIC_TITLE = "Convert to Dynamic Parameter";
 const CONVERT_TO_STATIC_TITLE = "Convert to Static Parameter";
@@ -223,8 +224,28 @@ class GaugeArgumentCodeActionProvider {
     this.projectFactory = options.projectFactory;
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
+  // provider gives the same answer for the same file.
+  isMarkdownDocumentInScope(document) {
+    const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+      || (document && document.fileName)
+      || "";
+    if (!/\.md$/i.test(String(file))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: undefined,
+      pathModule: undefined,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   provideCodeActions(document, range) {
-    if (!isGaugeProjectDocument(document, this.projectFactory)) {
+    if (
+      !isGaugeProjectDocument(document, this.projectFactory)
+      || !this.isMarkdownDocumentInScope(document)
+    ) {
       return [];
     }
     if (closedDocStringLines(document).has(range.start.line)) {

@@ -5,6 +5,7 @@ const nodePath = require("node:path");
 
 const { countStepParameters, UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
 const { allowMultilineStep } = require("./stepDefinitionProvider");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const CREATE_CONCEPT_TITLE = "Create concept";
 const CREATE_STEP_IMPLEMENTATION_TITLE = "Create step implementation";
@@ -416,6 +417,23 @@ class GaugeStepCodeActionProvider {
     this.projectFactory = options.projectFactory;
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
+  // provider gives the same answer for the same file.
+  isMarkdownDocumentInScope(document) {
+    const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+      || (document && document.fileName)
+      || "";
+    if (!/\.md$/i.test(String(file))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   gaugeProjectRoot(document) {
     if (
       !this.projectFactory
@@ -453,6 +471,7 @@ class GaugeStepCodeActionProvider {
       !document
       || !isGaugeSpecDocument(document)
       || !isGaugeProjectDocument(document, this.projectFactory)
+      || !this.isMarkdownDocumentInScope(document)
       || !range
     ) {
       return [];

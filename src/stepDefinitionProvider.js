@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const {
   GaugeStepDiagnosticsProvider,
@@ -500,6 +501,23 @@ class GaugeStepDefinitionProvider {
     this.activeOperations = new Set();
     this.registrationDisposable = undefined;
     this.registrationAttempted = false;
+  }
+
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
+  // provider gives the same answer for the same file.
+  isMarkdownDocumentInScope(document) {
+    const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+      || (document && document.fileName)
+      || "";
+    if (!/\.md$/i.test(String(file))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
   }
 
   disposeOwnedProvider(provider) {
@@ -1384,6 +1402,9 @@ class GaugeStepDefinitionProvider {
   }
 
   provideDefinition(document, position, token) {
+    if (!this.isMarkdownDocumentInScope(document)) {
+      return [];
+    }
     return this.runOperation(
       token,
       (operation) => this.provideDefinitionForOperation(document, position, operation),

@@ -17,6 +17,7 @@ const {
   normalizeStepTemplate,
 } = require("./stepDefinitionProvider");
 const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
@@ -1263,6 +1264,23 @@ class GaugeRenameProvider {
     this.registrationDisposable = undefined;
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
+  // provider gives the same answer for the same file.
+  isMarkdownDocumentInScope(document) {
+    const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+      || (document && document.fileName)
+      || "";
+    if (!/\.md$/i.test(String(file))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: undefined,
+      pathModule: undefined,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   dispose() {
     if (this.disposed) {
       return;
@@ -1781,6 +1799,9 @@ class GaugeRenameProvider {
   }
 
   prepareRename(document, position, token) {
+    if (!this.isMarkdownDocumentInScope(document)) {
+      return undefined;
+    }
     return this.runOperation(
       token,
       (operation) => this.prepareRenameForOperation(operation, document, position),
@@ -2302,6 +2323,9 @@ class GaugeRenameProvider {
   }
 
   provideRenameEdits(document, position, newName, token) {
+    if (!this.isMarkdownDocumentInScope(document)) {
+      return undefined;
+    }
     return this.runOperation(
       token,
       (operation) => this.provideRenameEditsForOperation(

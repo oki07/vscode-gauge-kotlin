@@ -10,6 +10,7 @@ const {
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 const {
   isScenarioHashHeading,
 } = require("./gaugeHeadings");
@@ -1375,6 +1376,23 @@ class GaugeDynamicArgumentCompletionProvider {
     this.registrationDisposable = undefined;
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
+  // provider gives the same answer for the same file.
+  isMarkdownDocumentInScope(document) {
+    const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+      || (document && document.fileName)
+      || "";
+    if (!/\.md$/i.test(String(file))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   isCompletionOperationActive(operation) {
     return !this.disposed && (!operation || operation.active);
   }
@@ -2147,6 +2165,9 @@ class GaugeDynamicArgumentCompletionProvider {
   }
 
   provideCompletionItems(document, position, token) {
+    if (!this.isMarkdownDocumentInScope(document)) {
+      return [];
+    }
     return this.runCompletionOperation(
       token,
       (operation) => this.provideCompletionItemsForOperation(document, position, operation),

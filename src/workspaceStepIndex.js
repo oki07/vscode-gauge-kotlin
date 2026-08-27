@@ -22,6 +22,7 @@ const {
   isConceptDocument,
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const GAUGE_REFERENCE_FILE_PATTERN = /\.(?:cpt|md|spec)$/i;
 
@@ -46,14 +47,25 @@ function normalizedKey(value) {
   return normalized || String(value || "").trim().normalize("NFC");
 }
 
-function isGaugeReferenceDocument(document) {
+// Gauge reads Markdown as a specification only inside the directories named by
+// gauge_specs_dir. The index is fed by a whole-workspace scan, so without this an
+// unopened README that quotes a step text counts as a reference: it inflates Find
+// All References and silently suppresses the "no references" fade.
+function isGaugeReferenceDocument(document, options = {}) {
   if (!document) {
     return false;
   }
   if (["gauge", "gauge-concept"].includes(document.languageId)) {
     return true;
   }
-  return GAUGE_REFERENCE_FILE_PATTERN.test(documentPath(document));
+  const file = documentPath(document);
+  if (!GAUGE_REFERENCE_FILE_PATTERN.test(file)) {
+    return false;
+  }
+  if (!/\.md$/i.test(file)) {
+    return true;
+  }
+  return isMarkdownGaugeSpecFile(file, options);
 }
 
 function emptyRecord(document) {
@@ -145,6 +157,14 @@ class WorkspaceStepIndex {
     this.subscription = undefined;
     this.started = false;
     this.disposed = false;
+  }
+
+  markdownScopeOptions() {
+    return {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    };
   }
 
   start() {
@@ -264,7 +284,7 @@ class WorkspaceStepIndex {
     if (isConceptDocument(document)) {
       record.concepts = findConceptHeadings(document.getText());
     }
-    if (isGaugeReferenceDocument(document)) {
+    if (isGaugeReferenceDocument(document, this.markdownScopeOptions())) {
       record.references = await Promise.resolve(this.referenceEntriesProvider(document, root));
       const usedStepRecords = usedStepRecordsFromDocument(document, {
         allowMultilineStep: allowMultilineStep({
@@ -284,7 +304,7 @@ class WorkspaceStepIndex {
     if (isTagSourceDocument(document)) {
       record.tags = await Promise.resolve(this.tagEntriesProvider(document, root));
     }
-    if (isGaugeReferenceDocument(document)) {
+    if (isGaugeReferenceDocument(document, this.markdownScopeOptions())) {
       record.parameters = await Promise.resolve(this.parameterEntriesProvider(document, root));
     }
     return record;
@@ -465,7 +485,7 @@ class WorkspaceStepIndex {
     }
     const file = documentPath(sourceDocument);
     const record = state.records.get(file);
-    if (!record || !isGaugeReferenceDocument(sourceDocument)) {
+    if (!record || !isGaugeReferenceDocument(sourceDocument, this.markdownScopeOptions())) {
       return state.completionEntries.slice();
     }
     // The document can shrink while the snapshot is awaited, and lineAt

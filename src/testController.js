@@ -3,6 +3,7 @@
 const nodePath = require("node:path");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { headingMarkers } = require("./gaugeHeadings");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";
@@ -785,13 +786,23 @@ class GaugeTestController {
     ) {
       return [];
     }
+    // Gauge reads Markdown as a specification only inside the directories named
+    // by gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). Without
+    // this a README in a Gauge project becomes a runnable Test Explorer node and
+    // pressing Run starts a Gauge process against it.
     if (
       markdownSpec
       && (
         !this.projectFactory
         || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
+        || !isMarkdownGaugeSpecFile(documentPath(document), {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectFactory: this.projectFactory,
+        })
       )
     ) {
+      this.removeDocumentItems(document, this.workspaceDiscoveredIdsForPath(documentPath(document)));
       return [];
     }
     if (!this.isGaugeProjectDocument(document)) {

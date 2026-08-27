@@ -42,6 +42,7 @@ const {
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate, stepTextAt } = require("./stepDefinitionProvider");
+const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -976,6 +977,23 @@ class ReferenceProvider {
     }
   }
 
+  // A Markdown file is a Gauge specification only inside the project's
+  // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
+  // provider gives the same answer for the same file.
+  isMarkdownDocumentInScope(document) {
+    const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+      || (document && document.fileName)
+      || "";
+    if (!/\.md$/i.test(String(file))) {
+      return true;
+    }
+    return isMarkdownGaugeSpecFile(file, {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectFactory: this.projectFactory,
+    });
+  }
+
   registerDisposable(disposable) {
     if (!disposable) {
       return;
@@ -1656,6 +1674,9 @@ class ReferenceProvider {
   }
 
   provideReferences(document, position, contextOrToken, token) {
+    if (!this.isMarkdownDocumentInScope(document)) {
+      return [];
+    }
     const cancellationToken = this.referenceCancellationToken(contextOrToken, token);
     const context = this.referenceContext(contextOrToken, token);
     const includeDeclaration = context && typeof context.includeDeclaration === "boolean"

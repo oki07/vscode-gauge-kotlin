@@ -649,6 +649,43 @@ test("GaugeTestController discovers specification and scenario test items from o
   ]);
 });
 
+// Proven at runtime by the second sweep: a README in a Gauge project became a
+// runnable Test Explorer node with its "## Installation" heading as a scenario,
+// and pressing Run started a Gauge process against it. Gauge reads Markdown as a
+// specification only inside gauge_specs_dir (references/gauge/util/util.go
+// GetSpecDirs).
+test("GaugeTestController leaves a README in a Gauge project out of the tree", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const document = createDocument([
+    "# vscode-gauge-kotlin",
+    "",
+    "## Installation",
+    "* Download the VSIX",
+    "",
+  ].join("\n"), "/workspace/gauge/README.md", "markdown");
+  const { controller, vscode } = createFakeVscode({ textDocuments: [document] });
+  const gaugeTests = new GaugeTestController({
+    fileSystem: {
+      readFileSync() {
+        throw new Error("no project properties");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    vscode,
+  });
+
+  gaugeTests.register();
+
+  assert.equal(controller.items.get("/workspace/gauge/README.md"), undefined);
+});
+
 test("GaugeTestController discovers specification and scenario test items from open spec files by extension", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([
