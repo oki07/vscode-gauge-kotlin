@@ -219,7 +219,10 @@ function isGaugeSyntaxBoundary(line) {
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     || /^={3,}\s*$/.test(text)
-    || /^-{3,}\s*$/.test(text);
+    || /^-{3,}\s*$/.test(text)
+    // The teardown marker: references/gauge/parser/lex.go isTearDown ->
+    // parser/helper.go isUnderline recognises a line of underscores.
+    || /^_{3,}\s*$/.test(text);
 }
 
 function isStepLine(line) {

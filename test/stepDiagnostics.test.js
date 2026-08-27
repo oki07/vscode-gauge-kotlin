@@ -8324,3 +8324,48 @@ test("GaugeStepDiagnosticsProvider ends a multiline step at a spaced tags keywor
     }
   }
 });
+
+// references/gauge/parser/lex.go isTearDown -> parser/helper.go isUnderline
+// recognises a line of underscores as the teardown marker. Verified against the
+// real parser: "* first step" followed by "____" and "* teardown step" yields a
+// scenario with one step and one teardown step, parse ok. The boundary check knew
+// the "=" and "-" underlines but not "_", so with allow_multiline_step the
+// teardown marker was swallowed into the preceding step.
+test("GaugeStepDiagnosticsProvider ends a multiline step at the teardown marker", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalAllowMultilineStep = process.env.allow_multiline_step;
+  process.env.allow_multiline_step = "true";
+  try {
+    const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+    const spec = createDocument([
+      "# Checkout",
+      "",
+      "## Buy",
+      "* first step",
+      "____",
+      "* teardown step",
+    ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+    const steps = createDocument([
+      "package steps",
+      "import com.thoughtworks.gauge.Step",
+      "class Steps {",
+      "  @Step(\"first step\")",
+      "  fun first() {}",
+      "  @Step(\"teardown step\")",
+      "  fun teardown() {}",
+      "}",
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+    const documents = [spec, steps];
+
+    assert.deepEqual(
+      provider.provideDiagnostics(spec, documents).map((entry) => entry.message),
+      [],
+    );
+  } finally {
+    if (originalAllowMultilineStep === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultilineStep;
+    }
+  }
+});
