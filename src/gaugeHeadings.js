@@ -1,5 +1,10 @@
 "use strict";
 
+// references/gauge/parser/lex.go isDataTable matches
+// /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
+// keyword and the colon. Verified against the real parser.
+const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
+
 function trimmedHashText(line) {
   return String(line || "").trimStart();
 }
@@ -113,8 +118,7 @@ function isLegacyHeadingText(line) {
   const lower = text.toLowerCase();
   return !lower.startsWith("tags:")
     && !lower.startsWith("tags :")
-    && !lower.startsWith("table:")
-    && !lower.startsWith("table :");
+    && !DATA_TABLE_KEYWORD_PATTERN.test(text);
 }
 
 function legacyHeadingKind(line, nextLine) {

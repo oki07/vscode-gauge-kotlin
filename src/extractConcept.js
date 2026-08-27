@@ -1,5 +1,10 @@
 "use strict";
 
+// references/gauge/parser/lex.go isDataTable matches
+// /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
+// keyword and the colon. Verified against the real parser.
+const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
+
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { allowMultilineStep } = require("./stepDefinitionProvider");
@@ -210,8 +215,7 @@ function isGaugeSyntaxBoundary(text) {
     || line.startsWith("#")
     || line.toLowerCase().startsWith("tags:")
     || line.toLowerCase().startsWith("tags :")
-    || line.toLowerCase().startsWith("table:")
-    || line.toLowerCase().startsWith("table :")
+    || DATA_TABLE_KEYWORD_PATTERN.test(line)
     || isTableLine(line)
     || isDocStringFenceLine(line)
     || /^={3,}\s*$/.test(line)

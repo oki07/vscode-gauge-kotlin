@@ -466,7 +466,12 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
   }
 });
 
-test("GaugeDynamicArgumentCompletionProvider requires Gauge table keyword spacing for external CSV headers", () => {
+// references/gauge/parser/lex.go isDataTable matches
+// /^\s*[tT][aA][bB][lL][eE]\s*:/, so the keyword is case insensitive and any run
+// of whitespace may precede the colon. Verified against the real parser:
+// "table  : data.csv" and "table\t: data.csv" both parse as an external data
+// table.
+test("GaugeDynamicArgumentCompletionProvider accepts any Gauge table keyword spacing for external CSV headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const reads = [];
@@ -490,8 +495,8 @@ test("GaugeDynamicArgumentCompletionProvider requires Gauge table keyword spacin
 
   const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
 
-  assert.deepEqual(labels(items), []);
-  assert.deepEqual(reads, []);
+  assert.deepEqual(labels(items), ["one", "two"]);
+  assert.deepEqual(reads, [{ encoding: "utf8", filename: "/workspace/gauge/specs/csv.csv" }]);
 });
 
 test("GaugeDynamicArgumentCompletionProvider suggests spec dynamic step arguments inside dynamic arguments", () => {

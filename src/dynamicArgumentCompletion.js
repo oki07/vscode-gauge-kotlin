@@ -1,5 +1,10 @@
 "use strict";
 
+// references/gauge/parser/lex.go isDataTable matches
+// /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
+// keyword and the colon. Verified against the real parser.
+const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
+
 const { isLegacyHeadingText } = require("./gaugeHeadings");
 
 const nodeFs = require("node:fs");
@@ -432,8 +437,7 @@ function isTagContinuationBoundary(line) {
     || text.startsWith("//")
     || text.toLowerCase().startsWith("tags:")
     || text.toLowerCase().startsWith("tags :")
-    || text.toLowerCase().startsWith("table:")
-    || text.toLowerCase().startsWith("table :")
+    || DATA_TABLE_KEYWORD_PATTERN.test(text)
     || isTableLine(text)
     || isDocStringFenceLine(text)
     || isTeardownLine(text)
@@ -672,7 +676,7 @@ function snippetString(vscode, value) {
 }
 
 function externalDataTablePath(line) {
-  const match = /^\s*table[ \t\f]?:\s*(.+?)\s*$/i.exec(String(line || ""));
+  const match = /^\s*table\s*:\s*(.+?)\s*$/i.exec(String(line || ""));
   return match ? match[1].trim() : undefined;
 }
 
@@ -921,8 +925,7 @@ function isGaugeSyntaxBoundary(line) {
     || text.startsWith("#")
     || text.toLowerCase().startsWith("tags:")
     || text.toLowerCase().startsWith("tags :")
-    || text.toLowerCase().startsWith("table:")
-    || text.toLowerCase().startsWith("table :")
+    || DATA_TABLE_KEYWORD_PATTERN.test(text)
     || isTableLine(text)
     || isDocStringFenceLine(text)
     || /^={3,}\s*$/.test(text)

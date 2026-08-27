@@ -138,6 +138,11 @@ function createCodeLens(vscode, range, command) {
     : { range, command };
 }
 
+// references/gauge/parser/lex.go isDataTable matches
+// /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
+// keyword and the colon. Verified against the real parser.
+const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
+
 function isTableLine(line) {
   const text = String(line || "").trim();
   return text.startsWith("|");
@@ -159,8 +164,7 @@ function isGaugeSyntaxBoundary(line) {
     || text.startsWith("#")
     || text.toLowerCase().startsWith("tags:")
     || text.toLowerCase().startsWith("tags :")
-    || text.toLowerCase().startsWith("table:")
-    || text.toLowerCase().startsWith("table :")
+    || DATA_TABLE_KEYWORD_PATTERN.test(text)
     || isTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
@@ -375,7 +379,7 @@ function hasSpecificationDataTable(document, specificationLine) {
 
 function isExternalDataTableLine(line) {
   const text = String(line || "").trim().toLowerCase();
-  return text.startsWith("table:") || text.startsWith("table :");
+  return DATA_TABLE_KEYWORD_PATTERN.test(text);
 }
 
 // Gauge's lexer emits no token for a blank line following a step

@@ -1867,3 +1867,28 @@ test("GaugeCodeLensProvider preserves live fallback scan error topology", async 
     assert.equal(provider.activeOperations.size, 0);
   }
 });
+
+// references/gauge/parser/lex.go isDataTable matches /^\s*[tT][aA][bB][lL][eE]\s*:/,
+// so any run of whitespace may sit between the keyword and the colon. Verified
+// against the real parser: "table  : data.csv" and "table\t: data.csv" both parse
+// as an external data table ("Could not resolve table. File data.csv doesn't
+// exist."), while the extension only knew "table:" and "table :".
+test("GaugeCodeLensProvider accepts any whitespace before the data table colon", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  const provider = new GaugeCodeLensProvider();
+
+  for (const keyword of ["table: ./users.csv", "table : ./users.csv", "table  : ./users.csv", "table\t: ./users.csv"]) {
+    const document = createDocument([
+      "# Checkout",
+      keyword,
+      "",
+      "## Successful checkout",
+      "* Pay",
+    ].join("\n"));
+    assert.deepEqual(
+      provider.provideCodeLenses(document).map((lens) => lens.command.title),
+      ["Run Scenario", "Debug Scenario", "Run Spec", "Debug Spec", "Run in parallel"],
+      `for ${JSON.stringify(keyword)}`,
+    );
+  }
+});
