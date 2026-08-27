@@ -3958,7 +3958,10 @@ function duplicateScenarioDiagnostics(vscode, text) {
   const diagnostics = [];
   const seen = new Map();
   const lines = text.split("\n");
-  let inDocString = false;
+  // A doc string is a `"""` fence on the line after a step, closed by a second
+  // fence. Toggling on any `"""` let a stray or unmatched fence silence every
+  // diagnostic after it.
+  const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
   let hasEmptySpecHeading = false;
@@ -3968,11 +3971,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   let currentScenario;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
-      continue;
-    }
-    if (inDocString) {
+    if (docStringLines.has(line)) {
       continue;
     }
     if (!firstContentRange && rawLine.trim()) {
@@ -4103,16 +4102,12 @@ function tableHeaderMessages(cells) {
 function tableHeaderDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let inTableBlock = false;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    if (docStringLines.has(line)) {
       inTableBlock = false;
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
     if (!isGaugeTableRow(rawLine)) {
@@ -4894,6 +4889,24 @@ function docStringEndLineAfterStep(lines, stepLine) {
     }
   }
   return undefined;
+}
+
+// The closed, step adjacent doc string rule, shared by the spec level
+// diagnostics below. A `"""` that does not open a closed block after a step is
+// ordinary text.
+function closedSpecDocStringLines(lines) {
+  const result = new Set();
+  for (let stepLine = 0; stepLine < lines.length; stepLine += 1) {
+    const endLine = docStringEndLineAfterStep(lines, stepLine);
+    if (endLine === undefined) {
+      continue;
+    }
+    for (let line = stepLine + 1; line <= endLine; line += 1) {
+      result.add(line);
+    }
+    stepLine = endLine;
+  }
+  return result;
 }
 
 function conceptHashHeading(rawLine, lineNumber) {

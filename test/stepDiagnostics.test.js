@@ -8428,3 +8428,38 @@ test("GaugeStepDiagnosticsProvider ends a multiline step at a short legacy under
     }
   }
 });
+
+// A doc string is a `"""` fence on the line after a step, closed by a second
+// fence (references/gauge/parser/stepParser.go processStep). Toggling on any
+// `"""` meant a stray or unmatched fence anywhere in the file silenced every
+// duplicate-scenario and table-header diagnostic after it.
+test("GaugeStepDiagnosticsProvider keeps diagnosing after a fence that is not a doc string", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const spec = createDocument([
+    "# Checkout",
+    "\"\"\"",
+    "",
+    "## Buy",
+    "* a step",
+    "",
+    "## Buy",
+    "* a step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const steps = createDocument([
+    "package steps",
+    "import com.thoughtworks.gauge.Step",
+    "class Steps {",
+    "  @Step(\"a step\")",
+    "  fun step() {}",
+    "}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const documents = [spec, steps];
+
+  const messages = provider.provideDiagnostics(spec, documents).map((entry) => entry.message);
+
+  assert.ok(
+    messages.some((message) => message.startsWith("Duplicate scenario definition")),
+    messages.join(" | "),
+  );
+});

@@ -5,7 +5,10 @@
 // keyword and the colon. Verified against the real parser.
 const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
 
-const { isLegacyHeadingText } = require("./gaugeHeadings");
+const {
+  closedDocStringLines,
+  isLegacyHeadingText,
+} = require("./gaugeHeadings");
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
@@ -1326,9 +1329,13 @@ function usedStepRecordsFromDocument(document, options = {}) {
   const lines = document.getText().split(/\r?\n/);
   const entries = [];
   const multiline = Boolean(options.allowMultilineStep);
+  // A `"""` block on the line after a step is that step's multi-line argument.
+  // Its payload is data, so a payload line that looks like a step must not be
+  // offered as a used step.
+  const docStringLines = closedDocStringLines(lines);
   for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
     const line = lines[lineNumber] || "";
-    if (!isStepLine(line)) {
+    if (docStringLines.has(lineNumber) || !isStepLine(line)) {
       continue;
     }
     if (lineNumber === options.currentLine && !options.includeCurrentLine) {

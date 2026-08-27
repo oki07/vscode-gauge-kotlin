@@ -3694,3 +3694,30 @@ test("GaugeDynamicArgumentCompletionProvider disposal settles every active reque
     assert.equal(cancellation.listenerCount(), 0);
   }
 });
+
+// A `"""` block on the line after a step is that step's multi-line argument and
+// its payload is data. A payload line that looks like a step must not be offered
+// as a used-step completion.
+test("GaugeDynamicArgumentCompletionProvider does not offer steps from a doc string payload", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Buy",
+    "* Send payload",
+    "\"\"\"",
+    "* payload that looks like a step",
+    "\"\"\"",
+    "* ",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec");
+
+  const items = provider.provideCompletionItems(document, new vscode.Position(7, 2));
+
+  assert.equal(
+    labels(items).includes("payload that looks like a step"),
+    false,
+    labels(items).join(" | "),
+  );
+});
