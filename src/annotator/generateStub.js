@@ -21,8 +21,72 @@ const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
 const DISPOSED_OPERATION = Symbol("disposed generate stub operation");
 
+const KOTLIN_FILE_PATTERN = /\.kts?$/i;
+const GAUGE_STEP_IMPORT = "import com.thoughtworks.gauge.Step";
+
 function getVscode(vscode) {
   return vscode || require("vscode");
+}
+
+function isKotlinImplementationFile(implementationFilePath) {
+  return KOTLIN_FILE_PATTERN.test(String(implementationFilePath || ""));
+}
+
+function classNameForFile(pathModule, implementationFilePath) {
+  const base = pathModule.basename(String(implementationFilePath || ""));
+  const name = base.replace(KOTLIN_FILE_PATTERN, "");
+  return name || "StepImplementation";
+}
+
+// gauge-java answers gauge/putStubImpl by parsing the target with JavaParser
+// (references/gauge-java .../connection/StubImplementationCodeProcessor.java).
+// Kotlin source is not valid Java, so an existing .kt file yields an empty
+// ParseResult and the processor throws on orElseThrow, and a new file gets Java
+// class scaffolding. This mirrors the same two branches for Kotlin: fill an
+// empty file with a class, otherwise insert before the closing brace of the
+// last top-level declaration, which is where gauge-java puts it for Java.
+function kotlinStubInsertion(existingText, stubCode, className) {
+  const text = String(existingText || "");
+  if (text.trim() === "") {
+    return {
+      line: 0,
+      character: 0,
+      newText: `${GAUGE_STEP_IMPORT}\n\nclass ${className} {\n${stubCode}\n}\n`,
+    };
+  }
+  const lines = text.split(/\r?\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index].trim() === "}" && !/^\s/.test(lines[index])) {
+      return { line: index, character: 0, newText: `\n${stubCode}\n` };
+    }
+  }
+  const trailingNewline = text.endsWith("\n") ? "" : "\n";
+  return {
+    line: lines.length - 1,
+    character: lines[lines.length - 1].length,
+    newText: `${trailingNewline}\n${stubCode}\n`,
+  };
+}
+
+function createStubWorkspaceEdit(vscode, implementationFilePath, insertion) {
+  const start = typeof vscode.Position === "function"
+    ? new vscode.Position(insertion.line, insertion.character)
+    : { line: insertion.line, character: insertion.character };
+  const range = typeof vscode.Range === "function"
+    ? new vscode.Range(start, start)
+    : { start, end: start };
+  const uri = vscode.Uri && typeof vscode.Uri.file === "function"
+    ? vscode.Uri.file(implementationFilePath)
+    : { fsPath: implementationFilePath };
+  const textEdit = vscode.TextEdit && typeof vscode.TextEdit.insert === "function"
+    ? vscode.TextEdit.insert(start, insertion.newText)
+    : { range, newText: insertion.newText };
+  if (typeof vscode.WorkspaceEdit !== "function") {
+    return { replacements: [{ uri, range, newText: insertion.newText }] };
+  }
+  const edit = new vscode.WorkspaceEdit();
+  edit.set(uri, [textEdit]);
+  return edit;
 }
 
 function createGenerateStubOperation() {
@@ -355,12 +419,69 @@ class GenerateStubCommandProvider {
     if (selectedCode === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
     }
+    if (isKotlinImplementationFile(implementationFilePath)) {
+      return this.writeKotlinStub(operation, implementationFilePath, selectedCode);
+    }
     return this.generateInFile(
       operation,
       ADD_STUB_REQUEST,
       { implementationFilePath, codes: [selectedCode] },
       projectClient.client,
     );
+  }
+
+  async writeKotlinStub(operation, implementationFilePath, stubCode) {
+    const existingText = this.callSyncForOperation(
+      operation,
+      () => this.readImplementationFile(implementationFilePath),
+    );
+    if (existingText === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    const insertion = this.callSyncForOperation(
+      operation,
+      () => kotlinStubInsertion(
+        existingText,
+        stubCode,
+        classNameForFile(this.pathModule, implementationFilePath),
+      ),
+    );
+    if (insertion === DISPOSED_OPERATION) {
+      return DISPOSED_OPERATION;
+    }
+    try {
+      const workspaceEdit = this.callSyncForOperation(
+        operation,
+        () => createStubWorkspaceEdit(this.vscode, implementationFilePath, insertion),
+      );
+      if (workspaceEdit === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      const workspaceEditor = this.callSyncForOperation(
+        operation,
+        () => this.workspaceEditorFactory(workspaceEdit, operation),
+      );
+      if (workspaceEditor === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      return await this.callForOperation(operation, () => workspaceEditor.applyChanges());
+    } catch (reason) {
+      if (this.operationStopped(operation)) {
+        return DISPOSED_OPERATION;
+      }
+      return this.handleErrorForOperation(operation, reason);
+    }
+  }
+
+  readImplementationFile(implementationFilePath) {
+    if (!this.fileSystem || typeof this.fileSystem.readFileSync !== "function") {
+      return "";
+    }
+    try {
+      return String(this.fileSystem.readFileSync(implementationFilePath, "utf8") || "");
+    } catch (_error) {
+      return "";
+    }
   }
 
   async generateConceptStubForOperation(operation, conceptInfo) {

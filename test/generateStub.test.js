@@ -154,7 +154,166 @@ function createFakeVscode(overrides = {}) {
   };
 }
 
-test("GenerateStubCommandProvider writes a selected step stub through Gauge LSP", async () => {
+// gauge/putStubImpl is answered by gauge-java's StubImplementationCodeProcessor,
+// which parses the target with JavaParser
+// (references/gauge-java/src/main/java/com/thoughtworks/gauge/connection/StubImplementationCodeProcessor.java).
+// Kotlin source is not valid Java, so parsing an existing .kt file yields an
+// empty ParseResult and the processor throws on orElseThrow: the quick fix fails
+// with no edit. For a new file it writes Java class scaffolding instead. The
+// extension already generates the Kotlin stub text itself, so it places it too.
+test("GenerateStubCommandProvider writes Kotlin stubs without Gauge LSP", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const requests = [];
+  const appliedEdits = [];
+  const { commands, vscode } = createFakeVscode();
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const fileSystem = {
+    existsSync() {
+      return true;
+    },
+    readFileSync() {
+      return [
+        "package steps",
+        "",
+        "import com.thoughtworks.gauge.Step",
+        "",
+        "class Steps {",
+        "    @Step(\"an existing step\")",
+        "    fun existing() {",
+        "    }",
+        "}",
+        "",
+      ].join("\n");
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method, params) {
+      requests.push({ method, params });
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get() {
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("    @Step(\"a new step\")\n    fun implementation() {\n    }");
+
+  assert.deepEqual(requests.map((entry) => entry.method), ["gauge/getImplFiles"]);
+  assert.equal(appliedEdits.length, 1);
+  const [[uri, edits]] = appliedEdits[0].entries();
+  assert.equal(uri.fsPath, "/workspace/src/test/kotlin/Steps.kt");
+  assert.equal(edits.length, 1);
+  // Inserted before the closing brace of the last top-level class, which is
+  // where gauge-java places it for Java.
+  assert.deepEqual({ ...edits[0].range.start }, { line: 8, character: 0 });
+  assert.deepEqual({ ...edits[0].range.end }, { line: 8, character: 0 });
+  assert.equal(
+    edits[0].newText,
+    "\n    @Step(\"a new step\")\n    fun implementation() {\n    }\n",
+  );
+});
+
+test("GenerateStubCommandProvider scaffolds a new Kotlin implementation file", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const appliedEdits = [];
+  const { commands, vscode } = createFakeVscode();
+  const project = {
+    root() {
+      return "/workspace";
+    },
+  };
+  const fileSystem = {
+    existsSync() {
+      return true;
+    },
+    readFileSync() {
+      return "";
+    },
+  };
+  const client = {
+    protocol2CodeConverter: {
+      asWorkspaceEdit(edit) {
+        return Promise.resolve({ converted: edit });
+      },
+    },
+    sendRequest(method) {
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+  const clients = {
+    get() {
+      return { project, client };
+    },
+  };
+
+  new GenerateStubCommandProvider(clients, {
+    fileSystem,
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("    @Step(\"a new step\")\n    fun implementation() {\n    }");
+
+  assert.equal(appliedEdits.length, 1);
+  assert.equal(
+    appliedEdits[0].entries()[0][1][0].newText,
+    [
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "class Steps {",
+      "    @Step(\"a new step\")",
+      "    fun implementation() {",
+      "    }",
+      "}",
+      "",
+    ].join("\n"),
+  );
+});
+
+// Java implementation files keep the Gauge LSP path: gauge-java's JavaParser
+// based writer handles them, and this extension has no reason to reimplement it.
+test("GenerateStubCommandProvider writes a selected Java step stub through Gauge LSP", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const requests = [];
   const appliedEdits = [];
@@ -173,7 +332,7 @@ test("GenerateStubCommandProvider writes a selected step stub through Gauge LSP"
     sendRequest(method, params) {
       requests.push({ method, params });
       if (method === "gauge/getImplFiles") {
-        return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+        return Promise.resolve(["/workspace/src/test/java/Steps.java"]);
       }
       if (method === "gauge/putStubImpl") {
         return Promise.resolve({ changes: [] });
@@ -207,13 +366,13 @@ test("GenerateStubCommandProvider writes a selected step stub through Gauge LSP"
   assert.deepEqual(quickPicks[0], [
     { label: "New File", description: "Create a new file", value: "New File" },
     { label: "Copy To Clipboard", description: "", value: "Copy To Clipboard" },
-    { label: "Steps.kt", description: "src/test/kotlin", value: "/workspace/src/test/kotlin/Steps.kt" },
+    { label: "Steps.java", description: "src/test/java", value: "/workspace/src/test/java/Steps.java" },
   ]);
   assert.equal(requests[0].method, "gauge/getImplFiles");
   assert.deepEqual(requests[1], {
     method: "gauge/putStubImpl",
     params: {
-      implementationFilePath: "/workspace/src/test/kotlin/Steps.kt",
+      implementationFilePath: "/workspace/src/test/java/Steps.java",
       codes: ["fun step() {}"],
     },
   });
@@ -289,19 +448,18 @@ test("GenerateStubCommandProvider avoids duplicate method names in selected Kotl
     "",
   ].join("\n"));
 
-  assert.deepEqual(requests[1], {
-    method: "gauge/putStubImpl",
-    params: {
-      implementationFilePath: "/workspace/src/test/kotlin/Steps.kt",
-      codes: [[
-        "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
-        "fun implementation1(arg0: Any) {",
-        "}",
-        "",
-      ].join("\n")],
-    },
-  });
-  assert.deepEqual(appliedEdits, [{ converted: { changes: [] } }]);
+  assert.deepEqual(requests.map((entry) => entry.method), ["gauge/getImplFiles"]);
+  assert.equal(appliedEdits.length, 1);
+  // The file has no top-level closing brace, so the stub is appended.
+  assert.equal(
+    appliedEdits[0].entries()[0][1][0].newText,
+    `\n${[
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
+      "fun implementation1(arg0: Any) {",
+      "}",
+      "",
+    ].join("\n")}\n`,
+  );
 });
 
 test("GenerateStubCommandProvider avoids duplicate method names in selected Java files", async () => {
@@ -611,13 +769,7 @@ test("GenerateStubCommandProvider creates missing files before applying generate
       value: "src/test/kotlin/Steps.kt",
     },
   ]);
-  assert.deepEqual(requests[1], {
-    method: "gauge/putStubImpl",
-    params: {
-      implementationFilePath: filename,
-      codes: ["fun generatedStep() {}"],
-    },
-  });
+  assert.deepEqual(requests.map((entry) => entry.method), ["gauge/getImplFiles"]);
   assert.deepEqual(madeDirectories, [
     { directory: "/workspace/src/test/kotlin", options: { recursive: true } },
   ]);
@@ -630,7 +782,13 @@ test("GenerateStubCommandProvider creates missing files before applying generate
   ]);
   assert.deepEqual(openedDocuments, [filename]);
   assert.deepEqual(shownDocuments[0].options.selection.start, new vscode.Position(0, 0));
-  assert.deepEqual(appliedEdits[0].entries(), [[{ fsPath: filename }, textEdits]]);
+  // The file was created empty, so the Kotlin scaffold fills it.
+  assert.equal(appliedEdits[0].entries()[0][0].fsPath, filename);
+  assert.equal(
+    appliedEdits[0].entries()[0][1][0].newText,
+    "import com.thoughtworks.gauge.Step\n\nclass NewSteps {\nfun generatedStep() {}\n}\n",
+  );
+  assert.equal(textEdits.length, 1);
 });
 
 test("GenerateStubCommandProvider creates missing Kotlin files before requesting generated edits", async () => {
@@ -1243,7 +1401,7 @@ test("GenerateStubCommandProvider detaches generated edit stages on disposal", a
         sendRequest(method) {
           requestMethods.push(method);
           if (method === "gauge/getImplFiles") {
-            return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+            return Promise.resolve(["/workspace/src/test/java/Steps.java"]);
           }
           if (stage === "request") {
             entered.resolve();
@@ -1341,7 +1499,7 @@ test("GenerateStubCommandProvider stops the default workspace editor after dispo
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
 
   for (const stage of ["open", "show", "apply"]) {
-    const filename = "/workspace/src/test/kotlin/Steps.kt";
+    const filename = "/workspace/src/test/java/Steps.java";
     const fake = createFakeVscode({
       quickPickSelection: {
         label: "Steps.kt",
@@ -1478,7 +1636,7 @@ test("GenerateStubCommandProvider preserves live generated-edit failures and rel
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
 
   for (const stage of ["request", "converter", "factory", "apply"]) {
-    const filename = "/workspace/src/test/kotlin/Steps.kt";
+    const filename = "/workspace/src/test/java/Steps.java";
     const fake = createFakeVscode({
       quickPickSelection: {
         label: "Steps.kt",
@@ -1639,13 +1797,13 @@ test("GenerateStubCommandProvider stops synchronous disposal reentrancy at opera
 
   for (const boundary of ["source", "request", "factory", "newFileFs", "workspaceFs"]) {
     const filename = boundary === "newFileFs"
-      ? "/workspace/src/test/kotlin/NewSteps.kt"
-      : "/workspace/src/test/kotlin/Steps.kt";
+      ? "/workspace/src/test/java/NewSteps.java"
+      : "/workspace/src/test/java/Steps.java";
     const fake = createFakeVscode({
-      inputBoxValue: "src/test/kotlin/NewSteps.kt",
+      inputBoxValue: "src/test/java/NewSteps.java",
       quickPickSelection: boundary === "newFileFs"
         ? { label: "New File", description: "Create a new file", value: "New File" }
-        : { label: "Steps.kt", description: "src/test/kotlin", value: filename },
+        : { label: "Steps.java", description: "src/test/java", value: filename },
     });
     const sources = [];
     const boundaryError = new Error(`disposed during ${boundary}`);
