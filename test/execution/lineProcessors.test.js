@@ -36,6 +36,29 @@ test("ReportEventProcessor stores html report paths from machine-readable output
   assert.deepEqual(calls, ["/workspace/reports/html-report/index.html"]);
 });
 
+// The test above builds the JSON with JavaScript's JSON.stringify, which leaves
+// ">" alone. Gauge encodes with Go's encoding/json (references/gauge/logger/logger.go
+// json.Marshal), which HTML-escapes ">" to \u003e by default, so the real line is
+//   {"type":"out","message":"Successfully generated html-report to =\u003e /p/..."}
+// and canProcess rejected it before the decode ever ran. Verified by encoding the
+// same struct with Go.
+test("ReportEventProcessor stores html report paths escaped by Go's encoder", () => {
+  const { ReportEventProcessor } = require("../../src/execution/lineProcessors");
+  const calls = [];
+  const processor = new ReportEventProcessor({
+    setReportPath(reportPath) {
+      calls.push(reportPath);
+    },
+  });
+
+  const line = '{"type":"out","message":"Successfully generated html-report to '
+    + '=\\u003e /workspace/reports/html-report/index.html"}';
+
+  assert.equal(processor.canProcess(line), true);
+  processor.process(line);
+  assert.deepEqual(calls, ["/workspace/reports/html-report/index.html"]);
+});
+
 test("ReportEventProcessor ignores unrelated output", () => {
   const { ReportEventProcessor } = require("../../src/execution/lineProcessors");
   const calls = [];

@@ -5,8 +5,14 @@ class BaseProcessor {
     this.eventPrefix = prefix;
   }
 
+  // Gauge encodes machine-readable output with Go's encoding/json
+  // (references/gauge/logger/logger.go json.Marshal), which HTML-escapes ">" to
+  // \u003e, so a raw JSON line does not contain a prefix like
+  // "... to => ". Decode first, then match.
   canProcess(lineText) {
-    return lineText.includes(this.eventPrefix);
+    const text = String(lineText === undefined || lineText === null ? "" : lineText);
+    return text.includes(this.eventPrefix)
+      || String(machineReadableOutputText(text) || "").includes(this.eventPrefix);
   }
 }
 
