@@ -244,7 +244,15 @@ function createGaugeProcessRunner(options = {}) {
       child.on("close", (code) => {
         finishProcess(code === null || code === undefined ? exitCode : code);
       });
-      child.on("error", () => {
+      // A spawn failure is the one outcome with no output of its own: the
+      // child never wrote to stdout or stderr, so without this the user sees
+      // only "Error: Tests failed." for a missing gauge, gradle or mvn, or for
+      // a cwd that does not exist.
+      child.on("error", (error) => {
+        channel.appendErrBuf(
+          `Error: Failed to start '${command.command || (command.tool && command.tool.command) || "the build tool"}'.`
+          + ` ${(error && error.message) || error}\n`,
+        );
         finishProcess(1);
       });
     });

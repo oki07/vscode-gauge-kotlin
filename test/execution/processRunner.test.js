@@ -404,6 +404,38 @@ test("process runner reports failed exits", async () => {
   assert.equal(outputChannel.lines.at(-1), "Error: Tests failed.");
 });
 
+// A spawn failure is the one process outcome that carries no output at all:
+// nothing reaches stdout or stderr, so discarding the error event leaves the
+// user with a bare "Error: Tests failed." for a missing executable or a bad cwd.
+test("process runner reports the spawn failure that produced no output", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const outputChannel = new FakeOutputChannel();
+  const runner = createGaugeProcessRunner({
+    outputChannel,
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gradle",
+    args: ["test-compile"],
+    cwd: "/workspace",
+  });
+
+  const spawnError = new Error("spawn gradle ENOENT");
+  spawnError.code = "ENOENT";
+  spawnError.path = "gradle";
+  child.emit("error", spawnError);
+
+  assert.equal(await run, false);
+  assert.deepEqual(outputChannel.lines.slice(-2), [
+    "Error: Failed to start 'gradle'. spawn gradle ENOENT",
+    "Error: Tests failed.",
+  ]);
+});
+
 test("process runner cancel reports an aborted run after process group termination", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

@@ -32,6 +32,7 @@ const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
 const SHOW_REPORT_COMMAND = "gauge.report.html";
 const STOP_EXECUTION_COMMAND = "gauge.stopExecution";
 const EXECUTING_CONTEXT = "gauge:executing";
+const NO_REPORT_MESSAGE = "No Gauge run has produced a report in this workspace yet.";
 const EXECUTION_METADATA = Symbol("executionMetadata");
 const EXECUTION_SEQUENCE = Symbol("executionSequence");
 const COMMAND_FLAG_KEYS = [
@@ -1531,8 +1532,18 @@ function createGaugeExecutionController(options = {}) {
     if (disposed) {
       return undefined;
     }
+    // The command is in the palette whenever Gauge is active, with no guard on
+    // having run anything. references/gauge-vscode hands its unset report path
+    // straight to Uri.file, which turns "you have not run anything yet" into a
+    // raw TypeError in the error toast.
+    const reportPath = getReportPath();
+    if (!reportPath) {
+      return vscode.window.showErrorMessage(
+        `Can't open html report. ${NO_REPORT_MESSAGE}`,
+      );
+    }
     try {
-      const result = await waitForPreparation(opener(getReportPath()));
+      const result = await waitForPreparation(opener(reportPath));
       return result === disposedPreparation ? undefined : result;
     } catch (error) {
       if (disposed) {

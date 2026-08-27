@@ -4257,6 +4257,7 @@ test("executor settles a pending report open when disposed", async () => {
     },
   });
 
+  controller.setReportPath("/workspace/reports/html-report/index.html");
   let reportOutcome;
   const report = controller.openReport();
   report.then((value) => {
@@ -4292,6 +4293,7 @@ test("executor normalizes a report opened in the disposal turn", async () => {
     },
   });
 
+  controller.setReportPath("/workspace/reports/html-report/index.html");
   const report = controller.openReport();
   await openEntered.promise;
   releaseOpen.resolve(true);
@@ -4318,6 +4320,7 @@ test("executor suppresses a report failure in the disposal turn", async () => {
     },
   });
 
+  controller.setReportPath("/workspace/reports/html-report/index.html");
   const report = controller.openReport();
   await openEntered.promise;
   rejectOpen(new Error("disposed report open failed"));
@@ -5245,6 +5248,31 @@ test("report command shows an error when opening the html report fails", async (
   await controller.handleCommand("gauge.report.html");
 
   assert.deepEqual(errors, ["Can't open html report. Error: denied"]);
+});
+
+// gauge.report.html sits in the command palette whenever Gauge is active, with
+// no guard on having run anything. references/gauge-vscode passes its unset
+// report path straight into Uri.file, so the user gets a raw Node TypeError.
+test("report command explains that no run has produced a report yet", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { vscode, errors } = createFakeVscode();
+  const opened = [];
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    opener(reportPath) {
+      opened.push(reportPath);
+      return Promise.resolve(undefined);
+    },
+  });
+
+  await controller.handleCommand("gauge.report.html");
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(errors, [
+    "Can't open html report. No Gauge run has produced a report in this workspace yet.",
+  ]);
 });
 
 test("debug node executes with JVM debug env and starts debugger on runner readiness", async () => {
