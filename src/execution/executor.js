@@ -1033,7 +1033,11 @@ function createGaugeExecutionController(options = {}) {
       }
       result = await activeRun;
       activeRun = undefined;
-      if (testUi && !activeRunUserAborted) {
+      // A Test UI run does not ask for --machine-readable, but the user's
+      // launch.json may. When it does, the event stream has already published a
+      // result for every scenario, and replaying last_run_result on top of that
+      // publishes each of them a second time.
+      if (testUi && !activeRunUserAborted && !sawExecutionTestEvent) {
         let resultEvents = [];
         try {
           resultEvents = getNewLastRunResultEvents(projectRoot, previousResultStamp) || [];
@@ -1043,7 +1047,7 @@ function createGaugeExecutionController(options = {}) {
         for (const event of resultEvents) {
           emitExecutionEvent(event);
         }
-        if (resultEvents.length === 0 && !sawExecutionTestEvent) {
+        if (resultEvents.length === 0) {
           emitUnexpectedEndEvents(result === true, projectRoot);
         }
       } else if (option["machine-readable"] && !sawExecutionTestEvent && !activeRunUserAborted) {

@@ -4683,6 +4683,77 @@ test("Test UI run publishes leaf events from the saved Gauge result", async () =
   assert.deepEqual(events, resultEvents);
 });
 
+// A Test UI run does not ask for --machine-readable, but the user's launch.json
+// may. When it does, MachineReadableEventProcessor already published a result for
+// every scenario from the event stream, and replaying last_run_result on top
+// published each of them a second time.
+test("Test UI run does not replay saved results the event stream already published", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const events = [];
+  const reads = [];
+  const { vscode } = createFakeVscode();
+
+  let controller;
+  controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    executionEventSink(event) {
+      events.push(event);
+    },
+    lastRunResultStamp() {
+      return "before";
+    },
+    readNewLastRunResultEvents(projectRoot, stamp) {
+      reads.push([projectRoot, stamp]);
+      return [
+        {
+          type: "testFinished",
+          id: "/workspace/specs/example.spec:3",
+          parentId: "/workspace/specs/example.spec",
+          name: "Passing",
+          duration: 42,
+        },
+      ];
+    },
+    async runner(command, hooks) {
+      const processLine = (command && command.processOutputLine)
+        || (hooks && hooks.processOutputLine)
+        || controller.processOutputLine;
+      processLine(JSON.stringify({
+        type: "scenarioStart",
+        id: "/workspace/specs/example.spec:3",
+        parentId: "/workspace/specs/example.spec",
+        name: "Passing",
+      }));
+      processLine(JSON.stringify({
+        type: "scenarioEnd",
+        id: "/workspace/specs/example.spec:3",
+        parentId: "/workspace/specs/example.spec",
+        name: "Passing",
+        result: { status: "pass", time: 42 },
+      }));
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all", undefined, {
+    "machine-readable": true,
+    "simple-console": false,
+    testUi: true,
+  });
+
+  assert.deepEqual(reads, []);
+  assert.deepEqual(
+    events.filter((event) => event.type === "testFinished").map((event) => event.id),
+    ["/workspace/specs/example.spec:3"],
+  );
+});
+
 test("executor shows the last execution status in the status bar", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const statusRequests = [];
