@@ -8308,7 +8308,11 @@ const {
 } = require("./workspaceDocumentStore");
 
 const JAVA_FILE_PATTERN = /\.java$/i;
-const KOTLIN_FILE_PATTERN = /\.kts?$/i;
+// A Kotlin script is not a step implementation source: gauge-java builds its
+// registry from the compiled test classpath and the Kotlin Gradle plugin does not
+// compile build.gradle.kts into it. Every workspace glob in the product is
+// "**/*.kt", so a .kts file could never be discovered unopened either.
+const KOTLIN_FILE_PATTERN = /\.kt$/i;
 const CONCEPT_FILE_PATTERN = /\.cpt$/i;
 const SPEC_FILE_PATTERN = /\.(?:spec|md)$/i;
 const MARKDOWN_FILE_PATTERN = /\.md$/i;

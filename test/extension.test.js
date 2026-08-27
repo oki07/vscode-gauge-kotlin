@@ -264,6 +264,11 @@ function createFakeVscode(overrides = {}) {
         }
         if (section === "editor") {
           return {
+            get(key) {
+              return key === "semanticTokenColorCustomizations"
+                ? overrides.semanticTokenColorCustomizations
+                : undefined;
+            },
             update(key, value, target) {
               editorUpdates.push({ key, value, target });
               return Promise.resolve(undefined);
@@ -3187,6 +3192,11 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
         specification: { foreground: "#66d9ef" },
         scenario: { foreground: "#66d9ef" },
         gaugeComment: { foreground: "#cccccc" },
+        // The teardown separator is a comment line to Gauge
+        // (references/gauge-vscode/src/semanticTokensProvider.ts colours it
+        // through gaugeComment), so it follows the same setting rather than
+        // rendering unthemed.
+        teardownIdentifier: { foreground: "#cccccc" },
         disabledStep: { foreground: "#228549" },
       },
     },
@@ -4810,6 +4820,7 @@ test("activation skips the global semantic color write when rules are unchanged"
     desiredRules[key] = { foreground: undefined };
   }
   desiredRules.gaugeComment = { foreground: undefined };
+  desiredRules.teardownIdentifier = { foreground: undefined };
   fakeVscode.workspace.getConfiguration = (section) => {
     if (section === "editor") {
       return {
@@ -4865,4 +4876,61 @@ test("activation skips the global semantic color write when rules are unchanged"
   });
 
   assert.deepEqual(editorUpdates, []);
+});
+
+// The write replaced the whole editor.semanticTokenColorCustomizations object at
+// global scope, so any rule the user had for another language, and any sibling
+// key such as "enabled" or a "[theme]" section, was silently discarded on every
+// activation.
+test("activation preserves unrelated semantic token color customizations", () => {
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const existing = {
+    enabled: true,
+    "[Monokai]": { rules: { "variable.readonly": "#ff0000" } },
+    rules: {
+      "class.declaration": { foreground: "#123456" },
+      step: { foreground: "#000000" },
+    },
+  };
+  const { editorUpdates, fakeVscode } = createFakeVscode({
+    semanticTokenColorCustomizations: existing,
+    workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+  });
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled() {
+          return true;
+        },
+        isGaugeVersionGreaterOrEqual() {
+          return true;
+        },
+      };
+    },
+    semanticTokensLegend: {},
+    showWelcomeNotification() {},
+    GaugeWorkspace: class FakeGaugeWorkspace {
+      dispose() {}
+    },
+    SpecNodeProvider: class FakeSpecNodeProvider {
+      dispose() {}
+    },
+    projectFactory: {
+      isGaugeProject() {
+        return true;
+      },
+      getGaugeRootFromFilePath() {
+        return "/workspace";
+      },
+    },
+  });
+
+  assert.equal(editorUpdates.length, 1);
+  const written = editorUpdates[0].value;
+  assert.equal(written.enabled, true);
+  assert.deepEqual(written["[Monokai]"], { rules: { "variable.readonly": "#ff0000" } });
+  assert.deepEqual(written.rules["class.declaration"], { foreground: "#123456" });
+  assert.equal(written.rules.step.foreground, "#a6e22e");
 });

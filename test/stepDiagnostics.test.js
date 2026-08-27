@@ -8369,3 +8369,22 @@ test("GaugeStepDiagnosticsProvider ends a multiline step at the teardown marker"
     }
   }
 });
+
+// A Kotlin script is not a step implementation source. gauge-java builds its
+// registry from the compiled test classpath, and the Kotlin Gradle plugin does
+// not compile build.gradle.kts into it. Every workspace glob in the product is
+// "**/*.kt", and gaugeReference and renameProvider both match /\.kt$/, so
+// accepting .kts here made an open build.gradle.kts a step source that no
+// unopened counterpart could ever be.
+test("GaugeStepDiagnosticsProvider does not treat a Kotlin script as a step source", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const script = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "@Step(\"Say <what> to <who>\")",
+    "fun say(what: String) {}",
+  ].join("\n"), "plaintext", "/workspace/gauge/build.gradle.kts");
+
+  assert.equal(provider.shouldDiagnose(script), false);
+  assert.deepEqual(provider.provideDiagnostics(script, [script]), []);
+});

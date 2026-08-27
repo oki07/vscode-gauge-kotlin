@@ -782,6 +782,12 @@ function updateGaugeSemanticTokenColors(vscode) {
     rules[key] = { foreground: gaugeConfig.get(key) };
   }
   rules.gaugeComment = { foreground: gaugeConfig.get("comment") };
+  // The teardown separator is a comment line to Gauge: its own provider colours
+  // "____" through gaugeComment (references/gauge-vscode/src/semanticTokensProvider.ts).
+  // This extension emits a distinct token type for it, which had no rule at all,
+  // so the separator rendered in the plain editor foreground with no setting to
+  // change it.
+  rules.teardownIdentifier = { foreground: gaugeConfig.get("comment") };
   const editorConfig = vscode.workspace.getConfiguration("editor");
   const current = typeof editorConfig.get === "function"
     ? editorConfig.get("semanticTokenColorCustomizations")
@@ -789,9 +795,20 @@ function updateGaugeSemanticTokenColors(vscode) {
   if (semanticTokenRulesEqual(current && current.rules, rules)) {
     return undefined;
   }
+  // Merge rather than replace. This setting is global and shared: a wholesale
+  // write discarded the user's rules for every other language, and any sibling
+  // key such as "enabled" or a "[theme]" section, on every activation.
+  const currentCustomizations = current && typeof current === "object" && !Array.isArray(current)
+    ? current
+    : {};
+  const currentRules = currentCustomizations.rules
+    && typeof currentCustomizations.rules === "object"
+    && !Array.isArray(currentCustomizations.rules)
+    ? currentCustomizations.rules
+    : {};
   return editorConfig.update(
     "semanticTokenColorCustomizations",
-    { rules },
+    { ...currentCustomizations, rules: { ...currentRules, ...rules } },
     vscode.ConfigurationTarget && vscode.ConfigurationTarget.Global,
   );
 }

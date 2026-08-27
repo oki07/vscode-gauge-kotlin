@@ -84,6 +84,26 @@ class GaugeJavaProjectConfig {
     this.createDotProjectFile(this.pathModule.join(this.projectRoot, ".project"));
   }
 
+  // A Kotlin Gauge project runs on the gauge-java runner, so its manifest
+  // language is "java" and this generator runs for it. Declaring src/test/java
+  // alone left a JDT based Java extension with nothing to resolve in a project
+  // whose sources live in src/test/kotlin.
+  kotlinTestSourceEntries() {
+    const relative = "src/test/kotlin";
+    try {
+      if (
+        this.fileSystem
+        && typeof this.fileSystem.existsSync === "function"
+        && this.fileSystem.existsSync(this.pathModule.join(this.projectRoot, "src", "test", "kotlin"))
+      ) {
+        return [{ kind: "src", path: relative }];
+      }
+    } catch (_error) {
+      return [];
+    }
+    return [];
+  }
+
   defaultClassPath(javaVersion) {
     return [
       {
@@ -92,6 +112,7 @@ class GaugeJavaProjectConfig {
           + `org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-${javaVersion}`,
       },
       { kind: "src", path: "src/test/java" },
+      ...this.kotlinTestSourceEntries(),
       { kind: "output", path: "gauge_bin" },
     ];
   }
