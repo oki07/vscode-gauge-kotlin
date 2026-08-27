@@ -875,10 +875,11 @@ function createCommandHandler(command, vscode, executionController, options = {}
         return (options.formatDocument || formatActiveGaugeDocument)(vscode, options);
       case "gauge.toggle.lineComment":
         return (options.toggleLineComment || toggleGaugeLineComment)(vscode, options);
-      case "gauge.stopExecution":
-        return notify(vscode, "No Gauge execution is currently running.");
       default:
-        return notify(vscode, "Gauge Kotlin command is not implemented yet.");
+        // Unreachable: the registration loop only reaches this handler for the
+        // four cases above. Everything else in GAUGE_COMMANDS is claimed by
+        // EXECUTION_COMMANDS, PROVIDER_COMMANDS or the specification provider.
+        return undefined;
     }
   };
 }

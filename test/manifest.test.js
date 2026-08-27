@@ -195,53 +195,13 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     assert.equal(fs.existsSync(path.join(root, iconPath)), true);
   }
 
-  assert.deepEqual(manifest.contributes.iconThemes, [
-    {
-      id: "gauge-kotlin-icons",
-      label: "Gauge Kotlin Icons",
-      path: "./resources/gauge-icon-theme.json",
-    },
-  ]);
-  const iconThemePath = path.join(root, manifest.contributes.iconThemes[0].path);
-  const iconTheme = JSON.parse(fs.readFileSync(iconThemePath, "utf8"));
-  assert.deepEqual(iconTheme.fileExtensions, {
-    spec: "_gauge_spec",
-    cpt: "_gauge_concept",
-  });
-  assert.deepEqual(iconTheme.languageIds, {
-    gauge: "_gauge_spec",
-    "gauge-concept": "_gauge_concept",
-  });
-  assert.equal(
-    iconTheme.iconDefinitions._gauge_spec.iconPath,
-    "../images/gauge-file-dark.svg",
-  );
-  assert.equal(
-    iconTheme.iconDefinitions._gauge_concept.iconPath,
-    "../images/gauge-file-dark.svg",
-  );
-  assert.equal(
-    iconTheme.iconDefinitions._gauge_spec_light.iconPath,
-    "../images/gauge-file-light.svg",
-  );
-  assert.equal(
-    iconTheme.iconDefinitions._gauge_concept_light.iconPath,
-    "../images/gauge-file-light.svg",
-  );
-  for (const definition of Object.values(iconTheme.iconDefinitions)) {
-    assert.equal(
-      fs.existsSync(path.resolve(path.dirname(iconThemePath), definition.iconPath)),
-      true,
-    );
-  }
-  assert.deepEqual(iconTheme.light.fileExtensions, {
-    spec: "_gauge_spec_light",
-    cpt: "_gauge_concept_light",
-  });
-  assert.deepEqual(iconTheme.light.languageIds, {
-    gauge: "_gauge_spec_light",
-    "gauge-concept": "_gauge_concept_light",
-  });
+  // No file icon theme is contributed. A VS Code icon theme owns every icon in
+  // the Explorer, so a theme that defines only spec and cpt icons leaves every
+  // other file and folder blank the moment a user selects it. The Gauge file
+  // icons ship through the language contributions above instead, which apply
+  // without taking the rest of the Explorer over.
+  assert.equal(manifest.contributes.iconThemes, undefined);
+  assert.equal(fs.existsSync(path.join(root, "resources", "gauge-icon-theme.json")), false);
 
   const commandIds = manifest.contributes.commands.map((entry) => entry.command);
   assert.deepEqual(commandIds, [
@@ -266,6 +226,16 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "gauge.showReferences.atCursor",
     "gauge.specexplorer.switchProject",
   ]);
+
+  // `when` is not a field of a commands contribution, so VS Code ignores it
+  // there; references/gauge-vscode/package.json carries one on this command and
+  // it has never had an effect. `enablement` is the field that exists, and
+  // gauge:executing is already maintained by src/execution/executor.js.
+  assert.equal(commandById(manifest, "gauge.stopExecution").when, undefined);
+  assert.equal(commandById(manifest, "gauge.stopExecution").enablement, "gauge:executing");
+  for (const command of manifest.contributes.commands) {
+    assert.equal(command.when, undefined, `${command.command} declares an inert when clause`);
+  }
 
   const commandPaletteIds = manifest.contributes.menus.commandPalette.map(
     (entry) => entry.command,
@@ -297,16 +267,20 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     gaugeEditorWhen,
   );
   assert.equal(commandById(manifest, "gauge.preview").icon, "$(open-preview)");
+  // gauge.format, gauge.extract.concept and gauge.toggle.lineComment are all
+  // registered only once Gauge services start, so all three keybindings carry
+  // the same gauge:activated gate. Without it a keystroke resolves to a command
+  // that does not exist and VS Code reports "command not found".
   assert.deepEqual(manifest.contributes.keybindings, [
     {
       command: "gauge.format",
       key: "ctrl+alt+shift+l",
-      when: gaugeEditorTextFocusWhen,
+      when: activatedGaugeEditorTextFocusWhen,
     },
     {
       command: "gauge.extract.concept",
       key: "ctrl+alt+c",
-      when: gaugeEditorTextFocusWhen,
+      when: activatedGaugeEditorTextFocusWhen,
     },
     {
       command: "gauge.toggle.lineComment",
@@ -315,6 +289,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       when: activatedGaugeEditorTextFocusWhen,
     },
   ]);
+  assert.equal(gaugeEditorTextFocusWhen.length > 0, true);
   assert.deepEqual(manifest.contributes.menus["explorer/context"], [
     {
       command: "gauge.create.specification",
@@ -375,6 +350,14 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.equal(configuration["gauge.specExplorer.enabled"].default, true);
   assert.equal(configuration["gauge.execution.debugPort"].default, 9229);
+  // references/gauge-vscode/package.json declares this as "int", which is not a
+  // JSON Schema type, so VS Code cannot build a Settings UI widget for it and
+  // the port can only be changed by hand-editing settings.json.
+  assert.equal(configuration["gauge.execution.debugPort"].type, "integer");
+  const configurationTypes = new Set(["string", "boolean", "number", "integer", "array", "object"]);
+  for (const [key, schema] of Object.entries(configuration)) {
+    assert.equal(configurationTypes.has(schema.type), true, `${key} has type ${schema.type}`);
+  }
   assert.equal(configuration["gauge.codeLenses.execution"].default, true);
   assert.equal(configuration["gauge.codeLenses.reference"].default, true);
   assert.equal(configuration["gauge.kotlin.template"].default, "gradle");
@@ -1169,19 +1152,27 @@ test("extension manifest preserves the official Gauge configuration schema", () 
   const referenceManifest = readReferencePackageJson();
   const configuration = manifest.contributes.configuration.properties;
   const referenceConfiguration = referenceManifest.contributes.configuration.properties;
+  // gauge.execution.debugPort is the one deliberate divergence: the reference
+  // declares its type as "int", which is not a JSON Schema type, so VS Code
+  // cannot render an editor for it in the Settings UI. Everything else about the
+  // property, including its default and description, still matches.
+  const divergentTypeKeys = new Set(["gauge.execution.debugPort"]);
   const sharedKeys = Object.keys(referenceConfiguration).filter((key) => configuration[key]);
 
+  const withoutDivergentType = (key, schema) => (
+    divergentTypeKeys.has(key)
+      ? { ...comparableConfigurationSchema(schema), type: undefined }
+      : comparableConfigurationSchema(schema)
+  );
+
   assert.deepEqual(
+    Object.fromEntries(sharedKeys.map((key) => [key, withoutDivergentType(key, configuration[key])])),
     Object.fromEntries(
-      sharedKeys.map((key) => [key, comparableConfigurationSchema(configuration[key])]),
-    ),
-    Object.fromEntries(
-      sharedKeys.map((key) => [
-        key,
-        comparableConfigurationSchema(referenceConfiguration[key]),
-      ]),
+      sharedKeys.map((key) => [key, withoutDivergentType(key, referenceConfiguration[key])]),
     ),
   );
+  assert.equal(referenceConfiguration["gauge.execution.debugPort"].type, "int");
+  assert.equal(configuration["gauge.execution.debugPort"].type, "integer");
 });
 
 test("extension manifest preserves official spec explorer command icons", () => {

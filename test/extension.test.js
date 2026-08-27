@@ -1,6 +1,13 @@
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
+
+const extensionSource = fs.readFileSync(
+  path.join(__dirname, "..", "src", "extension.js"),
+  "utf8",
+);
 
 function deferred() {
   let resolve;
@@ -346,6 +353,34 @@ test("activation registers core contributed Gauge commands", () => {
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
   assert.equal(registeredCommands.every((entry) => typeof entry.handler === "function"), true);
+});
+
+// Every contributed command has a real owner: the execution controller, a
+// provider, or a case in the dispatcher. The dispatcher used to end with a
+// "not implemented yet" default and a gauge.stopExecution case that the
+// execution branch above it already claimed, so both were unreachable text
+// promising a user something that was in fact wired up.
+test("activation leaves no command without a handler", () => {
+  const manifest = require("../package.json");
+  const extension = require("../src/extension");
+  const context = { subscriptions: [] };
+  const { fakeVscode, registeredCommands } = createFakeVscode();
+
+  extension.activate(context, fakeVscode);
+
+  const handled = new Set(registeredCommands.map((entry) => entry.command));
+  for (const { command } of manifest.contributes.commands) {
+    // PROVIDER_COMMANDS are registered by their provider once Gauge services
+    // start, which is why every menu entry and keybinding for them is gated on
+    // gauge:activated.
+    assert.equal(
+      handled.has(command) || PROVIDER_COMMANDS.has(command),
+      true,
+      `${command} has no handler`,
+    );
+  }
+  assert.equal(extensionSource.includes("is not implemented yet"), false);
+  assert.equal(extensionSource.includes("No Gauge execution is currently running."), false);
 });
 
 test("activation registers the Gauge terminal command provider", () => {

@@ -117,23 +117,16 @@
         "path": "./syntaxes/gauge-concept.tmLanguage.json"
       }
     ],
-    "iconThemes": [
-      {
-        "id": "gauge-kotlin-icons",
-        "label": "Gauge Kotlin Icons",
-        "path": "./resources/gauge-icon-theme.json"
-      }
-    ],
     "keybindings": [
       {
         "command": "gauge.format",
         "key": "ctrl+alt+shift+l",
-        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md)) && gauge:activated"
       },
       {
         "command": "gauge.extract.concept",
         "key": "ctrl+alt+c",
-        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md))"
+        "when": "editorTextFocus && (editorLangId == gauge || editorLangId == gauge-concept || resourceExtname == .spec || resourceExtname == .cpt || (editorLangId == markdown && resourceExtname == .md)) && gauge:activated"
       },
       {
         "command": "gauge.toggle.lineComment",
@@ -183,7 +176,7 @@
         "command": "gauge.stopExecution",
         "title": "Stop current gauge execution",
         "category": "Gauge",
-        "when": "gauge:executing"
+        "enablement": "gauge:executing"
       },
       {
         "command": "gauge.execute.failed",
@@ -440,7 +433,7 @@
           "description": "When true, communication between vscode and gauge server will be logged."
         },
         "gauge.execution.debugPort": {
-          "type": "int",
+          "type": "integer",
           "default": 9229,
           "description": "Default debug port."
         },
