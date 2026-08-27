@@ -110,6 +110,61 @@ function createFakeVscode(options = {}) {
   };
 }
 
+// The "N reference(s)" lens on a concept heading counts references through the
+// workspace step index, which fills in asynchronously after activation. Without
+// onDidChangeCodeLenses (vscode.d.ts CodeLensProvider) VS Code never re-asks, so
+// the lens keeps whatever count the first pass produced until the user happens
+// to edit the file.
+test("GaugeCodeLensProvider signals a code lens refresh when indexed documents change", () => {
+  const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
+  let listener;
+  let listenerDisposals = 0;
+  const documentStore = {
+    documents: () => [],
+    onDidChangeDocuments(received) {
+      listener = received;
+      return {
+        dispose() {
+          listenerDisposals += 1;
+        },
+      };
+    },
+  };
+  const fired = [];
+  const vscode = createFakeVscode();
+  vscode.EventEmitter = class EventEmitter {
+    constructor() {
+      this.listeners = new Set();
+      this.event = (received) => {
+        this.listeners.add(received);
+        return { dispose: () => this.listeners.delete(received) };
+      };
+    }
+
+    fire(value) {
+      for (const received of [...this.listeners]) {
+        received(value);
+      }
+    }
+
+    dispose() {
+      this.listeners.clear();
+    }
+  };
+  const provider = new GaugeCodeLensProvider({ documentStore, vscode });
+
+  assert.equal(typeof provider.onDidChangeCodeLenses, "function");
+  provider.onDidChangeCodeLenses(() => fired.push("changed"));
+  assert.equal(typeof listener, "function");
+
+  listener({ added: [], removed: [] });
+
+  assert.deepEqual(fired, ["changed"]);
+
+  provider.dispose();
+  assert.equal(listenerDisposals, 1);
+});
+
 test("GaugeCodeLensProvider adds one local execution surface for TestController tests", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();

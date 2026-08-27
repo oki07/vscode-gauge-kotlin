@@ -8,6 +8,7 @@ const MARKDOWN_LANGUAGE = "markdown";
 const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const DEFAULT_COMMENT_COMMAND = "editor.action.commentLine";
+const REFUSED_EDIT_MESSAGE = "The edit was not applied.";
 
 function documentPath(document) {
   return document && document.uri && document.uri.fsPath;
@@ -172,10 +173,19 @@ async function toggleGaugeLineComment(vscode, options = {}) {
       replacementForLine(entry.text, uncomment),
     );
   }
-  return vscode.workspace.applyEdit(edit);
+  const applied = await vscode.workspace.applyEdit(edit);
+  // VS Code refuses an edit whose document moved on under it and reports that by
+  // resolving to false. Toggling silently would leave the user staring at
+  // unchanged text, so say so, matching reportRefusedEdit in
+  // src/annotator/generateStub.js.
+  if (applied === false && typeof vscode.window.showErrorMessage === "function") {
+    vscode.window.showErrorMessage(REFUSED_EDIT_MESSAGE);
+  }
+  return applied;
 }
 
 module.exports = {
   DEFAULT_COMMENT_COMMAND,
+  REFUSED_EDIT_MESSAGE,
   toggleGaugeLineComment,
 };

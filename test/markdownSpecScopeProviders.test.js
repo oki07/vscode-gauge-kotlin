@@ -174,6 +174,39 @@ test("Toggle Gauge Line Comment refuses a README in a Gauge project", () => {
   assert.deepEqual(edits, []);
 });
 
+// VS Code refuses a WorkspaceEdit whose document moved on under it and reports
+// that by resolving applyEdit to false. Toggling silently in that case leaves
+// the user staring at unchanged text, so say the edit was not applied. This is
+// the same contract src/annotator/generateStub.js reportRefusedEdit already
+// gives for the stub edits.
+test("Toggle Gauge Line Comment reports a refused edit", async () => {
+  const { toggleGaugeLineComment } = require("../src/commentCommand");
+  const errors = [];
+  const document = createDocument(SPEC);
+  const vscode = {
+    window: {
+      activeTextEditor: {
+        document,
+        selection: { start: { line: 3, character: 0 }, end: { line: 3, character: 0 } },
+      },
+      showErrorMessage(message) {
+        errors.push(message);
+      },
+      showInformationMessage() {},
+    },
+    workspace: {
+      applyEdit: () => Promise.resolve(false),
+    },
+    WorkspaceEdit: class WorkspaceEdit {
+      replace() {}
+    },
+  };
+
+  await toggleGaugeLineComment(vscode, providerOptions());
+
+  assert.deepEqual(errors, ["The edit was not applied."]);
+});
+
 test("Format refuses a README in a Gauge project", () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
   const provider = new GaugeFormatProvider(providerOptions({

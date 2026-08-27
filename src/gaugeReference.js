@@ -39,6 +39,7 @@ const PROJECT_ROOT_UNKNOWN = "unknown";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const CANCELLED_REFERENCE_OPERATION = Symbol("cancelledReferenceOperation");
+const NO_ACTIVE_FILE_MESSAGE = "No Gauge file is active.";
 
 const {
   GaugeStepDiagnosticsProvider,
@@ -1349,6 +1350,17 @@ class ReferenceProvider {
     );
     if (editor === CANCELLED_REFERENCE_OPERATION) {
       return CANCELLED_REFERENCE_OPERATION;
+    }
+    // The command is reachable from the palette with no editor open, so say so
+    // rather than throwing a TypeError out of editor.selection.
+    if (!editor) {
+      const notification = this.callDetachedForOperation(
+        operation,
+        () => this.vscode.window.showInformationMessage(NO_ACTIVE_FILE_MESSAGE),
+      );
+      return notification === CANCELLED_REFERENCE_OPERATION
+        ? CANCELLED_REFERENCE_OPERATION
+        : false;
     }
     const commandState = this.callSyncForOperation(operation, () => {
       const position = editor.selection.active;

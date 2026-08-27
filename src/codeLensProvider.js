@@ -440,6 +440,38 @@ class GaugeCodeLensProvider {
     this.activeOperations = new Set();
     this.registrationAttempted = false;
     this.registrationDisposable = undefined;
+    this.startCodeLensChangeSignal();
+  }
+
+  // The reference lens counts through the workspace step index, which fills in
+  // asynchronously after activation. VS Code only recomputes lenses when the
+  // provider says they changed (vscode.d.ts CodeLensProvider
+  // onDidChangeCodeLenses), so without this the first count sticks until the
+  // user edits the file.
+  startCodeLensChangeSignal() {
+    this.codeLensChangeEmitter = undefined;
+    this.documentChangeSubscription = undefined;
+    if (
+      !this.vscode
+      || typeof this.vscode.EventEmitter !== "function"
+      || !this.documentStore
+      || typeof this.documentStore.onDidChangeDocuments !== "function"
+    ) {
+      return;
+    }
+    this.codeLensChangeEmitter = new this.vscode.EventEmitter();
+    this.onDidChangeCodeLenses = this.codeLensChangeEmitter.event;
+    try {
+      this.documentChangeSubscription = this.documentStore.onDidChangeDocuments(() => {
+        if (!this.disposed && this.codeLensChangeEmitter) {
+          this.codeLensChangeEmitter.fire();
+        }
+      });
+    } catch (_error) {
+      // A store that refuses listeners leaves the lenses on VS Code's own
+      // document-change refresh, which is the behaviour before this signal.
+      this.documentChangeSubscription = undefined;
+    }
   }
 
   // A Markdown file is a Gauge specification only inside the project's
@@ -486,6 +518,24 @@ class GaugeCodeLensProvider {
         registration.dispose();
       } catch (_error) {
         // Continue releasing provider-owned diagnostics after unregistering fails.
+      }
+    }
+    const documentChangeSubscription = this.documentChangeSubscription;
+    this.documentChangeSubscription = undefined;
+    if (documentChangeSubscription && typeof documentChangeSubscription.dispose === "function") {
+      try {
+        documentChangeSubscription.dispose();
+      } catch (_error) {
+        // Continue releasing provider-owned diagnostics after unsubscribing fails.
+      }
+    }
+    const codeLensChangeEmitter = this.codeLensChangeEmitter;
+    this.codeLensChangeEmitter = undefined;
+    if (codeLensChangeEmitter && typeof codeLensChangeEmitter.dispose === "function") {
+      try {
+        codeLensChangeEmitter.dispose();
+      } catch (_error) {
+        // Continue releasing provider-owned diagnostics after the emitter fails.
       }
     }
     const ownedDiagnosticsProvider = this.ownedDiagnosticsProvider;

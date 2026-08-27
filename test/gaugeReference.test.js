@@ -212,6 +212,23 @@ function createMultiProjectFactory() {
   };
 }
 
+// The command is enabled from the palette with no editor open, so a missing
+// active editor must be reported, not thrown as a raw TypeError from
+// editor.selection.
+test("ReferenceProvider reports a missing active editor", async () => {
+  const { GaugeClients } = require("../src/gaugeClients");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { calls, vscode } = createFakeVscode();
+  vscode.window.activeTextEditor = undefined;
+
+  const provider = new ReferenceProvider(new GaugeClients(), { vscode });
+  const result = await provider.showStepReferencesAtCursor();
+
+  assert.equal(result, false);
+  assert.deepEqual(calls.commands, []);
+  assert.deepEqual(calls.information, ["No Gauge file is active."]);
+});
+
 test("ReferenceProvider shows references for the step at the active cursor", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
