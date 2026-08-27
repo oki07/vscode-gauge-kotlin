@@ -371,3 +371,58 @@ test("ProjectFactory invalidates caches on manifest watcher events", () => {
 
   assert.notEqual(first, second);
 });
+
+// A hand-edited manifest.json with a trailing comma makes every projectFactory
+// caller throw. Each of them catches and treats the folder as "not a Gauge
+// project", so the whole Gauge half of the extension turns itself off with no
+// message at all. Gauge itself refuses to run and says why.
+test("ProjectFactory reports a manifest that is not valid JSON", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const errors = [];
+  const factory = createProjectFactory({
+    fileSystem: createFakeFileSystem({
+      "/workspace/gauge/manifest.json": "{\n  \"Language\": \"java\",\n}\n",
+      "/workspace/gauge/build.gradle.kts": "",
+    }),
+    pathModule: path.posix,
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+          return Promise.resolve(undefined);
+        },
+      },
+    },
+  });
+
+  assert.throws(() => factory.get("/workspace/gauge"));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^Gauge project manifest is not valid JSON: \/workspace\/gauge\/manifest\.json\./);
+
+  // Reported once per project, not once per caller.
+  assert.throws(() => factory.get("/workspace/gauge"));
+  assert.equal(errors.length, 1);
+});
+
+test("ProjectFactory keeps a valid manifest silent", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const errors = [];
+  const factory = createProjectFactory({
+    fileSystem: createFakeFileSystem({
+      "/workspace/gauge/manifest.json": JSON.stringify({ Language: "java" }),
+      "/workspace/gauge/build.gradle.kts": "",
+    }),
+    pathModule: path.posix,
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+          return Promise.resolve(undefined);
+        },
+      },
+    },
+  });
+
+  assert.equal(factory.get("/workspace/gauge").language(), "java");
+  assert.deepEqual(errors, []);
+});

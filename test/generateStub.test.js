@@ -2104,3 +2104,38 @@ test("GenerateStubCommandProvider cancels concurrent step and concept operations
     ],
   });
 });
+
+// applyChanges() already returns false when VS Code refuses the edit - a
+// read-only file, a file changed underneath, a failed create. Dropping that
+// answer left the user with a quick fix that reported success and wrote nothing.
+test("GenerateStubCommandProvider reports a workspace edit VS Code refused", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const { commands, errors, vscode } = createFakeVscode();
+  const project = { root() { return "/workspace"; } };
+  const client = {
+    protocol2CodeConverter: { asWorkspaceEdit: (edit) => Promise.resolve({ converted: edit }) },
+    sendRequest(method) {
+      if (method === "gauge/getImplFiles") {
+        return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+      }
+      throw new Error(`Unexpected ${method}`);
+    },
+  };
+
+  new GenerateStubCommandProvider({ get() { return { project, client }; } }, {
+    fileSystem: { existsSync: () => true, readFileSync: () => "" },
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory() {
+      return { applyChanges: () => Promise.resolve(false) };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("fun step() {}");
+
+  assert.deepEqual(errors, [
+    "Unable to generate implementation. The edit was not applied.",
+  ]);
+  assert.deepEqual(commands.filter((entry) => entry.command === "vscode.open"), []);
+});

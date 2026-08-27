@@ -481,7 +481,11 @@ class GenerateStubCommandProvider {
       if (workspaceEditor === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
       }
-      return await this.callForOperation(operation, () => workspaceEditor.applyChanges());
+      const applied = await this.callForOperation(operation, () => workspaceEditor.applyChanges());
+      if (applied === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      return this.reportRefusedEdit(operation, applied);
     } catch (reason) {
       if (this.operationStopped(operation)) {
         return DISPOSED_OPERATION;
@@ -607,10 +611,14 @@ class GenerateStubCommandProvider {
       if (workspaceEditor === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
       }
-      return await this.callForOperation(
+      const applied = await this.callForOperation(
         operation,
         () => workspaceEditor.applyChanges(),
       );
+      if (applied === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      return this.reportRefusedEdit(operation, applied);
     } catch (reason) {
       if (this.operationStopped(operation)) {
         return DISPOSED_OPERATION;
@@ -915,6 +923,16 @@ class GenerateStubCommandProvider {
       return;
     }
     operation.resolve(value);
+  }
+
+  // applyChanges() answers false when VS Code refuses the edit: a read-only
+  // file, a file changed underneath, a failed create. Dropping that answer left
+  // the user with a quick fix that reported success and wrote nothing.
+  reportRefusedEdit(operation, applied) {
+    if (applied !== false) {
+      return applied;
+    }
+    return this.handleErrorForOperation(operation, "The edit was not applied.");
   }
 
   handleErrorForOperation(operation, reason) {

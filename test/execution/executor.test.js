@@ -4295,7 +4295,7 @@ test("executor settles a pending report open when disposed", async () => {
   const controller = createGaugeExecutionController({
     vscode,
     pathModule: path.posix,
-    fileSystem: { existsSync: () => false },
+    fileSystem: { existsSync: (candidate) => String(candidate).endsWith("index.html") },
     opener() {
       openEntered.resolve();
       return openResult;
@@ -4331,7 +4331,7 @@ test("executor normalizes a report opened in the disposal turn", async () => {
   const controller = createGaugeExecutionController({
     vscode,
     pathModule: path.posix,
-    fileSystem: { existsSync: () => false },
+    fileSystem: { existsSync: (candidate) => String(candidate).endsWith("index.html") },
     opener() {
       openEntered.resolve();
       return releaseOpen.promise;
@@ -4358,7 +4358,7 @@ test("executor suppresses a report failure in the disposal turn", async () => {
   const controller = createGaugeExecutionController({
     vscode,
     pathModule: path.posix,
-    fileSystem: { existsSync: () => false },
+    fileSystem: { existsSync: (candidate) => String(candidate).endsWith("index.html") },
     opener() {
       openEntered.resolve();
       return openResult;
@@ -5228,6 +5228,7 @@ test("report command opens the last generated html report", async () => {
   const controller = createGaugeExecutionController({
     vscode,
     pathModule: path.posix,
+    fileSystem: { existsSync: (candidate) => String(candidate).endsWith("index.html") },
     opener(reportPath) {
       opened.push(reportPath);
       return Promise.resolve(true);
@@ -5262,6 +5263,7 @@ test("report command uses persistent Gauge state", async () => {
         return reportPath;
       },
     },
+    fileSystem: { existsSync: (candidate) => String(candidate).endsWith("index.html") },
     opener(nextReportPath) {
       opened.push(nextReportPath);
       return Promise.resolve(true);
@@ -5284,6 +5286,7 @@ test("report command shows an error when opening the html report fails", async (
   const controller = createGaugeExecutionController({
     vscode,
     pathModule: path.posix,
+    fileSystem: { existsSync: (candidate) => String(candidate).endsWith("index.html") },
     opener() {
       return Promise.reject(new Error("denied"));
     },
@@ -5925,4 +5928,35 @@ test("build file changes invalidate the cached execution classpath", async () =>
   const compiles = buildToolCalls.filter((call) => call.command.includes("test-compile"));
   assert.equal(classpathResolutions.length, 2);
   assert.equal(compiles.length, 2);
+});
+
+// The report path is remembered in workspaceState across sessions, and Gauge
+// deletes reports/ on the next run or the user cleans the project. Handing a
+// vanished path to env.openExternal opens nothing and reports nothing.
+test("report command explains that the remembered report is gone", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { vscode, errors } = createFakeVscode();
+  const opened = [];
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    opener(reportPath) {
+      opened.push(reportPath);
+      return Promise.resolve(undefined);
+    },
+  });
+
+  controller.setReportPath("/workspace/reports/html-report/index.html");
+  await controller.handleCommand("gauge.report.html");
+
+  assert.deepEqual(opened, []);
+  assert.deepEqual(errors, [
+    "Can't open html report. /workspace/reports/html-report/index.html no longer exists.",
+  ]);
 });

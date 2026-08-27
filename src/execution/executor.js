@@ -1545,6 +1545,14 @@ function createGaugeExecutionController(options = {}) {
         `Can't open html report. ${NO_REPORT_MESSAGE}`,
       );
     }
+    // The path is remembered in workspaceState across sessions, and Gauge
+    // replaces reports/ on the next run or the user cleans the project. Handing
+    // a vanished path to env.openExternal opens nothing and reports nothing.
+    if (fileSystem && typeof fileSystem.existsSync === "function" && !fileSystem.existsSync(reportPath)) {
+      return vscode.window.showErrorMessage(
+        `Can't open html report. ${reportPath} no longer exists.`,
+      );
+    }
     try {
       const result = await waitForPreparation(opener(reportPath));
       return result === disposedPreparation ? undefined : result;

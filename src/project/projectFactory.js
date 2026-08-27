@@ -53,6 +53,7 @@ function createProjectFactory(options = {}) {
   };
 
   const projectCache = new Map();
+  const reportedInvalidManifests = new Set();
   const gaugeProjectCache = new Map();
   const rootLookupCache = new Map();
   const rootsDiscoveryCache = new Map();
@@ -308,8 +309,39 @@ function createProjectFactory(options = {}) {
     return roots.sort();
   }
 
+  // A hand-edited manifest.json with a trailing comma makes every caller of
+  // get() throw, and each of them catches and treats the folder as "not a Gauge
+  // project". Without this the whole Gauge half of the extension turns itself
+  // off with no message. Gauge itself refuses to run and says why, so say why.
+  function reportInvalidManifest(root, error) {
+    if (reportedInvalidManifests.has(root)) {
+      return;
+    }
+    reportedInvalidManifests.add(root);
+    const vscodeApi = options.vscode;
+    if (!vscodeApi || !vscodeApi.window || typeof vscodeApi.window.showErrorMessage !== "function") {
+      return;
+    }
+    const manifestFile = pathModule.join(root, GAUGE_MANIFEST_FILE);
+    try {
+      Promise.resolve(vscodeApi.window.showErrorMessage(
+        `Gauge project manifest is not valid JSON: ${manifestFile}.`
+        + ` ${(error && error.message) || error}`,
+      )).catch(() => undefined);
+    } catch (_error) {
+      // A failed notification must not replace the manifest error.
+    }
+  }
+
   function readManifest(root) {
-    return readProjectManifest(fileSystem, pathModule, root);
+    try {
+      return readProjectManifest(fileSystem, pathModule, root);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        reportInvalidManifest(root, error);
+      }
+      throw error;
+    }
   }
 
   function get(root) {
