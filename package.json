@@ -69,7 +69,7 @@
         {
           "id": "gauge:specExplorer",
           "name": "Gauge Specs",
-          "when": "gauge:activated"
+          "when": "gauge:activated && config.gauge.specExplorer.enabled"
         }
       ]
     },
@@ -378,7 +378,7 @@
       "view/title": [
         {
           "command": "gauge.specexplorer.switchProject",
-          "when": "gauge:multipleProjects?",
+          "when": "view == gauge:specExplorer && gauge:multipleProjects?",
           "group": "navigation"
         },
         {

@@ -1295,3 +1295,28 @@ test("Gauge snippets are not contributed to the global Markdown language", () =>
     { language: "gauge-concept", path: "./snippets/gauge.json" },
   ]);
 });
+
+// The tree view must disappear with its setting. gauge:activated no longer
+// depends on gauge.specExplorer.enabled (see the 2026-08-27 spec explorer scope
+// entry in docs/parity-progress.md), so without the config clause the view would
+// render with no data provider registered behind it.
+test("the Gauge Specs view follows its own setting", () => {
+  const manifest = readPackageJson();
+  const view = manifest.contributes.views.test.find((entry) => entry.id === "gauge:specExplorer");
+
+  assert.ok(view);
+  assert.equal(view.when, "gauge:activated && config.gauge.specExplorer.enabled");
+});
+
+// Every view/title entry must name the view it belongs to, or VS Code offers it
+// in the title bar of unrelated views in the same container.
+test("Gauge view title actions are scoped to the Gauge Specs view", () => {
+  const manifest = readPackageJson();
+
+  for (const entry of manifest.contributes.menus["view/title"]) {
+    assert.ok(
+      String(entry.when || "").includes("view == gauge:specExplorer"),
+      `${entry.command} is not scoped to the Gauge Specs view`,
+    );
+  }
+});
