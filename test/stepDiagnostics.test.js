@@ -6681,6 +6681,97 @@ test("GaugeStepDiagnosticsProvider rejects an indented legacy scenario heading i
   );
 });
 
+// The gauge-java runner refuses a step whose text has more than one
+// implementation: ValidateStepProcessor.validateStep answers
+// "Duplicate step implementation found" (ErrorType.DUPLICATE_STEP_IMPLEMENTATION)
+// when registry.hasMultipleImplementations is true. The local index can see this
+// without a daemon, and reporting it as implemented was worse than saying
+// nothing: the step looked resolved right up to the run that failed.
+test("GaugeStepDiagnosticsProvider reports duplicate step implementations", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Say hello",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const firstImplementation = createDocument([
+    "@Step(\"Say hello\")",
+    "fun sayHello() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/A.kt");
+  const secondImplementation = createDocument([
+    "@Step(\"Say hello\")",
+    "fun greet() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/B.kt");
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    firstImplementation,
+    secondImplementation,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Duplicate step implementation found"],
+  );
+  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 3, character: 0 });
+});
+
+// Two @Step annotations on different methods in one file are two registry
+// entries, exactly like two files.
+test("GaugeStepDiagnosticsProvider reports duplicates within one implementation file", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Say hello",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Say hello\")",
+    "fun sayHello() {}",
+    "@Step(\"Say hello\")",
+    "fun greet() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/A.kt");
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    implementation,
+  ]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Duplicate step implementation found"],
+  );
+});
+
+// One method carrying both texts is one registry entry per text, so an alias
+// list must not read as a duplicate.
+test("GaugeStepDiagnosticsProvider accepts a step alias list", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Say hello",
+    "* Greet",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Say hello\", \"Greet\")",
+    "fun sayHello() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/A.kt");
+
+  const diagnostics = provider.provideDiagnostics(specDocument, [
+    specDocument,
+    implementation,
+  ]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
 test("GaugeStepDiagnosticsProvider indexes an indented legacy concept heading", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

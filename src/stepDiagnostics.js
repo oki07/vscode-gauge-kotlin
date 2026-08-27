@@ -42,6 +42,8 @@ const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
 const TEARDOWN_UNDERSCORE_MESSAGE = "Teardown should have at least three underscore characters";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
+// references/gauge-java ValidateStepProcessor.validateStep.
+const DUPLICATE_STEP_IMPLEMENTATION_MESSAGE = "Duplicate step implementation found";
 const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
 const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminated";
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
@@ -9064,6 +9066,7 @@ class GaugeStepDiagnosticsProvider {
     const specScope = this.specScopeFor(document);
     if (isGaugeStepSourceDocument(document, specScope)) {
       const implementedSteps = this.implementedStepTemplates(document, workspaceDocuments);
+      const duplicateSteps = this.duplicateStepTemplates(document, workspaceDocuments);
       const projectRoot = specScope.projectRoot;
       for (const entry of findGaugeSteps(text, {
         allowMultilineStep: allowMultilineStep({
@@ -9094,6 +9097,13 @@ class GaugeStepDiagnosticsProvider {
             range,
             UNDEFINED_STEP_MESSAGE,
             { code: "gauge.undefinedStep", source: "gauge" },
+          ));
+        } else if (duplicateSteps.has(entry.normalized)) {
+          diagnostics.push(createDiagnostic(
+            this.vscode,
+            range,
+            DUPLICATE_STEP_IMPLEMENTATION_MESSAGE,
+            { code: "gauge.duplicateStepImplementation", source: "gauge" },
           ));
         }
       }
@@ -9363,6 +9373,46 @@ class GaugeStepDiagnosticsProvider {
     };
     this.storeTemplatesCache.set(rootKey, entry);
     return entry;
+  }
+
+  // The gauge-java runner refuses a step whose text has more than one
+  // implementation: ValidateStepProcessor.validateStep answers
+  // "Duplicate step implementation found" when
+  // registry.hasMultipleImplementations is true. Count distinct annotation sites
+  // so the same file reaching the scan twice, and an alias list on one method,
+  // both stay single.
+  duplicateStepTemplates(document, workspaceDocuments) {
+    const sites = new Map();
+    for (const candidate of this.stepImplementationDocuments(document, workspaceDocuments)) {
+      if (!isStepImplementationDocument(candidate)) {
+        continue;
+      }
+      let externalConstants;
+      try {
+        externalConstants = this.collectWorkspaceConstants(candidate, workspaceDocuments);
+      } catch (_error) {
+        externalConstants = undefined;
+      }
+      const file = documentPath(candidate) || "";
+      for (const entry of this.stepFunctionsFor(candidate, externalConstants)) {
+        for (const alias of new Set(entry.aliases)) {
+          const template = normalizeStepTemplate(alias);
+          let entries = sites.get(template);
+          if (!entries) {
+            entries = new Set();
+            sites.set(template, entries);
+          }
+          entries.add(`${file}:${entry.annotationStart}`);
+        }
+      }
+    }
+    const duplicates = new Set();
+    for (const [template, entries] of sites) {
+      if (entries.size > 1) {
+        duplicates.add(template);
+      }
+    }
+    return duplicates;
   }
 
   computeImplementedStepTemplates(document, workspaceDocuments) {
@@ -9982,6 +10032,7 @@ function stepImplementationBlockRange(text, entry) {
 module.exports = {
   COLLECTION_NAME,
   GaugeStepDiagnosticsProvider,
+  DUPLICATE_STEP_IMPLEMENTATION_MESSAGE,
   UNDEFINED_STEP_MESSAGE,
   countKotlinParameters,
   countStepParameters,
