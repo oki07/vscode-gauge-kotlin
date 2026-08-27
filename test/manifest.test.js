@@ -141,6 +141,10 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "benchmark:step-parser": "node --expose-gc scripts/benchmark-step-parser.js",
     "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
     bundle: "node scripts/build-extension.js",
+    // main is ./out/extension.js and out/ is gitignored, so a plain
+    // `vsce package` or `vsce publish` would ship a stale or missing bundle
+    // without this hook. `npm run package` builds it explicitly as well.
+    "vscode:prepublish": "npm run bundle",
     typecheck: "node scripts/check-js-syntax.js",
     lint: "node scripts/check-js-syntax.js",
     "test:unit": "node --test",
@@ -1139,6 +1143,49 @@ test("extension package ignores development files while keeping the production b
     assert.ok(!ignored.includes(runtimePattern), `runtime pattern must stay packaged: ${runtimePattern}`);
   }
   assert.equal(manifest.main, "./out/extension.js");
+});
+
+// A user installing this extension sees only the marketplace page: the README,
+// the changelog and the notices. The README used to describe four bullet points
+// of a surface that contributes twenty commands, twenty-seven settings, a tree
+// view, a debugger and three keybindings.
+test("README documents the contributed command and configuration surface", () => {
+  const manifest = readPackageJson();
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+
+  for (const { command } of manifest.contributes.commands) {
+    assert.ok(readme.includes(command), `README does not mention ${command}`);
+  }
+  for (const key of Object.keys(manifest.contributes.configuration.properties)) {
+    assert.ok(readme.includes(key), `README does not mention ${key}`);
+  }
+  for (const keybinding of manifest.contributes.keybindings) {
+    assert.ok(readme.includes(keybinding.key), `README does not mention ${keybinding.key}`);
+  }
+  assert.ok(readme.includes("Gauge Specs"), "README does not mention the tree view");
+  assert.ok(readme.includes("Test Explorer"), "README does not mention Test Explorer support");
+});
+
+test("extension ships a changelog", () => {
+  const changelog = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
+  const manifest = readPackageJson();
+
+  assert.ok(changelog.includes(manifest.version), `CHANGELOG does not mention ${manifest.version}`);
+});
+
+// The bundle is built with esbuild legalComments: "none", so every embedded
+// license header is stripped from the shipped copies of these packages.
+test("third-party notices cover every bundled runtime dependency", () => {
+  const notices = fs.readFileSync(path.join(root, "THIRD_PARTY_NOTICES.md"), "utf8");
+  const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+  const runtimePackages = Object.entries(lock.packages || {})
+    .filter(([name, meta]) => name.startsWith("node_modules/") && !meta.dev)
+    .map(([name]) => name.slice("node_modules/".length));
+
+  assert.ok(runtimePackages.length > 0);
+  for (const name of runtimePackages) {
+    assert.ok(notices.includes(name), `THIRD_PARTY_NOTICES does not list ${name}`);
+  }
 });
 
 test("extension package script requires repository metadata", () => {

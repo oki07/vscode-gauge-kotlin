@@ -53,6 +53,7 @@
     "benchmark:step-parser": "node --expose-gc scripts/benchmark-step-parser.js",
     "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
     "bundle": "node scripts/build-extension.js",
+    "vscode:prepublish": "npm run bundle",
     "typecheck": "node scripts/check-js-syntax.js",
     "lint": "node scripts/check-js-syntax.js",
     "test:unit": "node --test",
