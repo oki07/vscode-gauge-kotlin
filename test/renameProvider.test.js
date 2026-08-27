@@ -2215,6 +2215,46 @@ test("GaugeRenameProvider renames concept headings from concept files by extensi
   );
 });
 
+// gauge-java refuses to refactor a step with more than one implementation:
+// JavaRefactoring.performRefactoringOn answers
+// "Duplicate step implementation found." when registry.hasMultipleImplementations
+// is true, the same guard it applies to aliases. Renaming locally would rewrite
+// one call site and leave the project in a state the runner rejects.
+test("GaugeRenameProvider rejects renames for duplicated Kotlin Step implementations", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const firstImplementation = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/A.kt");
+  const secondImplementation = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"Pay with <amount>\")",
+    "fun payAgain(amount: String) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/B.kt");
+  const vscode = createFakeVscode([specDocument, firstImplementation, secondImplementation]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  await assert.rejects(
+    () => provider.prepareRename(specDocument, new vscode.Position(1, 4)),
+    /Duplicate step implementation found/,
+  );
+  await assert.rejects(
+    () => provider.provideRenameEdits(
+      specDocument,
+      new vscode.Position(1, 4),
+      "Pay with <value>",
+    ),
+    /Duplicate step implementation found/,
+  );
+});
+
 test("GaugeRenameProvider rejects renames for aliased Kotlin Step implementations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

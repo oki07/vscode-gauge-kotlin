@@ -36,6 +36,8 @@ const WORKSPACE_SCAN_FILE_PATTERNS = [
   /\.java$/i,
 ];
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
+// references/gauge-java .../refactor/JavaRefactoring.java.
+const DUPLICATE_STEP_RENAME_ERROR = "Duplicate step implementation found.";
 const PRE_REFACTOR_ERRORS_MESSAGE = "Please fix all errors before refactoring.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
 const CANCELLED_RENAME_OPERATION = Symbol("cancelled rename operation");
@@ -1846,6 +1848,13 @@ class GaugeRenameProvider {
     }
     const implementationDocuments = this.stepImplementationDocuments(documents);
     let sourceImplemented = false;
+    // gauge-java refuses to refactor a step with more than one implementation
+    // (references/gauge-java .../refactor/JavaRefactoring.java answers
+    // "Duplicate step implementation found." when
+    // registry.hasMultipleImplementations is true), the same guard it applies to
+    // aliases. Count distinct annotation sites so a document reaching the scan
+    // twice stays single.
+    const sites = new Set();
     for (const document of implementationDocuments) {
       const entries = await this.stepEntriesFor(
         sourceDocument,
@@ -1856,12 +1865,17 @@ class GaugeRenameProvider {
       if (entries === CANCELLED_RENAME_OPERATION) {
         return CANCELLED_RENAME_OPERATION;
       }
+      const file = documentPath(document) || "";
       for (const entry of entries) {
         if (!stepEntryHasTemplate(entry, step.template)) {
           continue;
         }
         if (entry.aliases.length > 1) {
           throw new Error(ALIASED_STEP_RENAME_ERROR);
+        }
+        sites.add(`${file}:${entry.annotationStart}`);
+        if (sites.size > 1) {
+          throw new Error(DUPLICATE_STEP_RENAME_ERROR);
         }
         sourceImplemented = true;
       }
