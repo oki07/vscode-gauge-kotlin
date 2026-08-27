@@ -116,8 +116,11 @@ test("semantic tokens leave a doc string payload uncoloured", () => {
   provider.provideDocumentSemanticTokens(createDocument(SPEC));
 
   // Lines 5 to 7 are payload: no scenario, step or table token may land there.
+  // They are painted with gaugeComment rather than left bare. Emitting nothing
+  // leaves the TextMate grammar's colouring showing through, which is how a
+  // "## Login" inside a doc string still rendered as a scenario heading.
   const payloadTokens = pushed
     .filter((entry) => entry.line >= 5 && entry.line <= 7)
     .map((entry) => tokenTypes[entry.tokenType]);
-  assert.deepEqual(payloadTokens, []);
+  assert.deepEqual(payloadTokens, ["gaugeComment", "gaugeComment", "gaugeComment"]);
 });

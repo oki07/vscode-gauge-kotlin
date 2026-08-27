@@ -68,6 +68,51 @@ test("GaugeSemanticTokensProvider tokenizes Gauge document elements", () => {
   ]);
 });
 
+// The payload of a step's multi-line argument is opaque data to Gauge, so it must
+// not be coloured as Gauge syntax. Skipping those lines was not enough: emitting
+// no semantic token leaves the TextMate grammar's colouring showing through, so a
+// "## Login" inside a doc string still rendered as a scenario heading and a "* x"
+// as a step. Paint them with gaugeComment, the token type this provider already
+// uses for text that is not Gauge syntax.
+test("GaugeSemanticTokensProvider paints doc string payloads as comments", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const provider = new GaugeSemanticTokensProvider({
+    SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+  });
+  const lines = [
+    "* Post a payload",
+    "\"\"\"",
+    "## Login",
+    "* not a step",
+    "| not | a table |",
+    "\"\"\"",
+    "## Real scenario",
+  ];
+  const document = {
+    getText() {
+      return lines.join("\n");
+    },
+  };
+
+  const tokens = provider.provideDocumentSemanticTokens(document);
+  const named = tokens.map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
+
+  for (const line of [1, 2, 3, 4, 5]) {
+    assert.deepEqual(
+      named.filter((entry) => entry.line === line).map((entry) => entry.type),
+      ["gaugeComment"],
+      `line ${line}`,
+    );
+  }
+  assert.deepEqual(
+    named.filter((entry) => entry.line === 6).map((entry) => entry.type),
+    ["scenario"],
+  );
+});
+
 test("GaugeSemanticTokensProvider tokenizes keyword lines with space before colon", () => {
   const {
     GaugeSemanticTokensProvider,

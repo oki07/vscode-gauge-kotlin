@@ -312,8 +312,15 @@ class GaugeSemanticTokensProvider {
       const line = lines[index];
       const trimmedLine = line.trim();
 
+      // Emitting no token here is not enough: the TextMate grammar still colours
+      // the line, so a "## Login" inside a doc string rendered as a scenario
+      // heading. Paint the fences and the payload with gaugeComment, the type
+      // this provider already uses for text that is not Gauge syntax.
       if (docStringLines.has(index)) {
         tagsContinuation = false;
+        if (line.length > 0) {
+          builder.push(index, 0, line.length, tokenTypes.indexOf("gaugeComment"), 0);
+        }
         index += 1;
         continue;
       }
