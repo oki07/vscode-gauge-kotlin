@@ -105,8 +105,9 @@ function uriPath(uri) {
 }
 
 function isStepLine(line) {
-  const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*";
+  const text = String(line || "");
+  const marker = text.search(/\S/);
+  return marker !== -1 && text[marker] === "*" && text[marker + 1] !== "*";
 }
 
 function isDocStringFenceLine(line) {

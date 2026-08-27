@@ -378,7 +378,10 @@ test("GaugeArgumentCodeActionProvider preserves actions after unterminated docst
   assert.equal(actions[0].edit.replacements[0].newText, "<cart>");
 });
 
-test("GaugeArgumentCodeActionProvider converts arguments on double-star step lines", () => {
+// references/gauge/parser/lex.go: isScenarioHeading rejects a third '#' and
+// isStep rejects a second '*'. Both verified against the real parser through a
+// temporary Go module calling parser.SpecParser.Parse.
+test("GaugeArgumentCodeActionProvider leaves double-star comment lines alone", () => {
   const { GaugeArgumentCodeActionProvider } = require("../src/argumentCodeActions");
   const provider = new GaugeArgumentCodeActionProvider({ vscode: createFakeVscode() });
 
@@ -387,12 +390,7 @@ test("GaugeArgumentCodeActionProvider converts arguments on double-star step lin
     createRange(0, 10),
   );
 
-  assert.equal(actions.length, 1);
-  assert.equal(actions[0].title, "Convert to Dynamic Parameter");
-  const replacement = actions[0].edit.replacements[0];
-  assert.deepEqual({ ...replacement.range.start }, { line: 0, character: 8 });
-  assert.deepEqual({ ...replacement.range.end }, { line: 0, character: 14 });
-  assert.equal(replacement.newText, "<cart>");
+  assert.deepEqual(actions, []);
 });
 
 test("GaugeArgumentCodeActionProvider ignores specification and scenario headings", () => {

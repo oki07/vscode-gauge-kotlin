@@ -581,8 +581,9 @@ function hasLocations(locations) {
 }
 
 function gaugeStepMarker(line) {
-  const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*" ? marker : -1;
+  const text = String(line || "");
+  const marker = text.search(/\S/);
+  return marker !== -1 && text[marker] === "*" && text[marker + 1] !== "*" ? marker : -1;
 }
 
 function isInlineTableLine(line) {

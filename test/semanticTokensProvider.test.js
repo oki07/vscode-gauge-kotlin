@@ -401,7 +401,10 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats triple-hash headings as scenarios", () => {
+// references/gauge/parser/lex.go: isScenarioHeading rejects a third '#' and
+// isStep rejects a second '*'. Both verified against the real parser through a
+// temporary Go module calling parser.SpecParser.Parse.
+test("GaugeSemanticTokensProvider treats triple-hash headings as comments", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -424,11 +427,11 @@ test("GaugeSemanticTokensProvider treats triple-hash headings as scenarios", () 
 
   assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
     [0, "specification"],
-    [1, "scenario"],
+    [1, "gaugeComment"],
   ]);
 });
 
-test("GaugeSemanticTokensProvider treats double-star lines as steps", () => {
+test("GaugeSemanticTokensProvider treats double-star lines as comments", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -447,8 +450,7 @@ test("GaugeSemanticTokensProvider treats double-star lines as steps", () => {
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
   assert.deepEqual(tokens.map((entry) => [entry.line, entry.type]), [
-    [0, "stepMarker"],
-    [0, "step"],
+    [0, "gaugeComment"],
   ]);
 });
 

@@ -1590,7 +1590,9 @@ test("GaugeStepDefinitionProvider skips unopened Step sources resolved to non-Ga
   assert.deepEqual(openedFiles, []);
 });
 
-test("GaugeStepDefinitionProvider ignores headings and resolves double-star step positions", async () => {
+// references/gauge/parser/lex.go isStep rejects a second '*', so "** Bold
+// comment" is a comment and has no definition. Verified against the real parser.
+test("GaugeStepDefinitionProvider ignores headings and double-star comment lines", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Login specification",
@@ -1618,9 +1620,10 @@ test("GaugeStepDefinitionProvider ignores headings and resolves double-star step
     await provider.provideDefinition(specDocument, { line: 0, character: 2 }),
     [],
   );
-  const doubleStarDefinitions = await provider.provideDefinition(specDocument, { line: 4, character: 3 });
-  assert.equal(doubleStarDefinitions.length, 1);
-  assert.equal(doubleStarDefinitions[0].uri, kotlinDocument.uri);
+  assert.deepEqual(
+    await provider.provideDefinition(specDocument, { line: 4, character: 3 }),
+    [],
+  );
 });
 
 test("GaugeStepDefinitionProvider uses the shared document store without workspace scans", async () => {

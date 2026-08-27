@@ -745,7 +745,11 @@ test("GaugeTestController ignores open Gauge documents outside Gauge projects", 
   assert.deepEqual(collectionItems(controller.items), []);
 });
 
-test("GaugeTestController treats triple-hash headings as scenarios", () => {
+// references/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
+// "### Notes" is a comment. Verified against the real parser: a spec whose only
+// "##"-looking line is "### Notes" has zero scenarios, and Gauge reports
+// "Spec should have at least one scenario".
+test("GaugeTestController treats triple-hash headings as comments", () => {
   const { GaugeTestController } = require("../src/testController");
   const document = createDocument([
     "# Checkout",
@@ -761,16 +765,7 @@ test("GaugeTestController treats triple-hash headings as scenarios", () => {
 
   const spec = controller.items.get("/workspace/specs/example.spec");
   assert.equal(spec.label, "Checkout");
-  const scenarios = collectionItems(spec.children);
-  assert.deepEqual(scenarios.map((scenario) => ({
-    id: scenario.id,
-    label: scenario.label,
-  })), [
-    {
-      id: "/workspace/specs/example.spec:3",
-      label: "Notes",
-    },
-  ]);
+  assert.deepEqual(collectionItems(spec.children), []);
 });
 
 test("GaugeTestController ignores headings inside closed step docstrings", () => {

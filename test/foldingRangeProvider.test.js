@@ -89,7 +89,11 @@ test("GaugeFoldingRangeProvider folds legacy underline headings and concepts", (
   ]);
 });
 
-test("GaugeFoldingRangeProvider ignores indented legacy underline headings", () => {
+// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// indented underline is still an underline. Verified against the real parser:
+// "Checkout / \u0020\u0020======== / ## Scenario / * a step" yields spec heading
+// "Checkout" with one scenario.
+test("GaugeFoldingRangeProvider folds indented legacy underline headings", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();
   const specDocument = createDocument([
@@ -111,14 +115,20 @@ test("GaugeFoldingRangeProvider ignores indented legacy underline headings", () 
     "",
   ].join("\n"), "/workspace/specs/concepts/shared.cpt");
 
+  // The legacy fold starts on the underline row, which is where VS Code puts the
+  // chevron for a two-line heading.
   assert.deepEqual(provider.provideFoldingRanges(specDocument), [
+    { start: 1, end: 2 },
     { start: 4, end: 5 },
   ]);
   assert.deepEqual(provider.provideFoldingRanges(conceptDocument), [
+    { start: 1, end: 2 },
     { start: 4, end: 5 },
   ]);
 });
 
+// references/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
+// "### Nested scenario syntax" is a comment. Verified against the real parser.
 test("GaugeFoldingRangeProvider folds only hash headings accepted by the Gauge lexer", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");
   const provider = new GaugeFoldingRangeProvider();
@@ -136,8 +146,7 @@ test("GaugeFoldingRangeProvider folds only hash headings accepted by the Gauge l
 
   assert.deepEqual(provider.provideFoldingRanges(document), [
     { start: 0, end: 1 },
-    { start: 3, end: 4 },
-    { start: 6, end: 7 },
+    { start: 3, end: 7 },
   ]);
 });
 

@@ -174,11 +174,11 @@ function isConceptLegacyUnderlineHeadingText(line) {
 }
 
 function isSpecUnderline(line) {
-  return /^=+$/.test(line);
+  return /^=+$/.test(String(line || "").trim());
 }
 
 function isScenarioUnderline(line) {
-  return /^-+$/.test(line);
+  return /^-+$/.test(String(line || "").trim());
 }
 
 function legacyHeadingAt(lines, line, conceptDocument) {

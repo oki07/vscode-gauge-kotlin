@@ -822,14 +822,21 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers wi
   assert.deepEqual(labels(items), ["user", "role"]);
 });
 
-test("GaugeDynamicArgumentCompletionProvider reads scenario table headers after triple-hash headings", () => {
+// A "### Notes" line is a comment, not a scenario heading
+// (references/gauge/parser/lex.go isScenarioHeading), so the table below it is no
+// longer scenario scoped. Against the real parser this document has no scenario
+// at all and the table becomes the spec data table; the extension's spec data
+// table walk stops at the context step above it, which is recorded as an open
+// item in docs/parity-progress.md. This test keeps its original intent - scenario
+// scoped table headers - by using a real scenario heading.
+test("GaugeDynamicArgumentCompletionProvider reads scenario table headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
   const document = createDocument([
     "# Checkout",
     "* Open cart",
-    "### Notes",
+    "## Notes",
     "| user | role |",
     "| ---- | ---- |",
     "| Bob  | admin |",

@@ -170,6 +170,9 @@ function createWorkspaceSymbolProjectScopeFixture() {
   };
 }
 
+// references/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
+// "### Third scenario" is a comment and gets no symbol. Verified against the
+// real parser.
 test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () => {
   const { GaugeDocumentSymbolProvider } = require("../src/documentSymbolProvider");
   const vscode = createFakeVscode();
@@ -215,15 +218,6 @@ test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () 
       range: {
         start: { line: 4, character: 0 },
         end: { line: 4, character: 17 },
-      },
-    },
-    {
-      name: "### Third scenario",
-      kind: 3,
-      uri: document.uri,
-      range: {
-        start: { line: 7, character: 0 },
-        end: { line: 7, character: 18 },
       },
     },
     {

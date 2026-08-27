@@ -48,11 +48,11 @@ function isHashHeading(line, conceptDocument) {
 }
 
 function isLegacySpecUnderline(line) {
-  return /^=+$/.test(line);
+  return /^=+$/.test(String(line || "").trim());
 }
 
 function isLegacyScenarioUnderline(line) {
-  return /^-+$/.test(line);
+  return /^-+$/.test(String(line || "").trim());
 }
 
 function isTeardown(line) {

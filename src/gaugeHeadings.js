@@ -9,9 +9,11 @@ function isSpecHashHeading(line) {
   return text.startsWith("#") && !text.startsWith("##");
 }
 
+// references/gauge/parser/lex.go isScenarioHeading requires the third character
+// not to be another '#', so "### Sub heading" is a comment, not a scenario.
 function isScenarioHashHeading(line) {
   const text = trimmedHashText(line);
-  return text.startsWith("##");
+  return text.startsWith("##") && !text.startsWith("###");
 }
 
 function isGaugeHashHeading(line) {
@@ -44,9 +46,12 @@ function firstNonWhitespace(line) {
   return index === -1 ? 0 : index;
 }
 
+// references/gauge/parser/lex.go isStep requires the second character not to be
+// another '*', so "**bold text**" is a comment, not a step.
 function isStepLine(line) {
-  const marker = String(line || "").search(/\S/);
-  return marker !== -1 && line[marker] === "*";
+  const text = String(line || "");
+  const marker = text.search(/\S/);
+  return marker !== -1 && text[marker] === "*" && text[marker + 1] !== "*";
 }
 
 function isDocStringFenceLine(line) {
@@ -92,10 +97,14 @@ function legacyHeadingKind(line, nextLine) {
   if (!String(line || "").trim()) {
     return undefined;
   }
-  if (/^=+$/.test(nextLine || "")) {
+  // Gauge compares the trimmed line (references/gauge/parser/lex.go) and
+  // parser/helper.go isUnderline accepts a run of one or more, so a trailing
+  // space must not hide the heading and a single character is enough.
+  const underline = String(nextLine || "").trim();
+  if (/^=+$/.test(underline)) {
     return "specification";
   }
-  if (/^-+$/.test(nextLine || "")) {
+  if (/^-+$/.test(underline)) {
     return "scenario";
   }
   return undefined;
