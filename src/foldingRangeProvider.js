@@ -2,6 +2,7 @@
 
 const {
   closedDocStringLines,
+  isLegacyHeadingText,
   isConceptHashHeading,
   isGaugeHashHeading,
 } = require("./gaugeHeadings");
@@ -61,7 +62,7 @@ function isTeardown(line) {
 }
 
 function hasLegacyHeadingText(line) {
-  return Boolean(line && line.trim());
+  return isLegacyHeadingText(line);
 }
 
 function isConceptLegacyUnderlineHeadingText(line) {

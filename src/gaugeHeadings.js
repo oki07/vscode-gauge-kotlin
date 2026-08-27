@@ -93,8 +93,32 @@ function headingKind(line) {
   return isSpecHashHeading(line) ? "specification" : undefined;
 }
 
+// references/gauge/parser/lex.go reaches its isSpecUnderline branch only after the
+// scenario-heading, spec-heading, tag, table-row and step branches, and there it
+// rewrites the previous token only when isInState(commentScope). So an underline
+// promotes a comment line and nothing else: a step, a tags line, a table row, a
+// doc string fence, a teardown marker and an existing hash heading all keep their
+// own kind. Verified against the real parser.
+function isLegacyHeadingText(line) {
+  const text = String(line || "").trim();
+  if (!text) {
+    return false;
+  }
+  if (text.startsWith("#") || text.startsWith("|") || text === "\"\"\"") {
+    return false;
+  }
+  if (isStepLine(text) || /^_+$/.test(text) || /^[=-]+$/.test(text)) {
+    return false;
+  }
+  const lower = text.toLowerCase();
+  return !lower.startsWith("tags:")
+    && !lower.startsWith("tags :")
+    && !lower.startsWith("table:")
+    && !lower.startsWith("table :");
+}
+
 function legacyHeadingKind(line, nextLine) {
-  if (!String(line || "").trim()) {
+  if (!isLegacyHeadingText(line)) {
     return undefined;
   }
   // Gauge compares the trimmed line (references/gauge/parser/lex.go) and
@@ -137,6 +161,7 @@ function headingMarkers(document) {
 
 module.exports = {
   closedDocStringLines,
+  isLegacyHeadingText,
   headingMarkers,
   isConceptHashHeading,
   isDocStringFenceLine,

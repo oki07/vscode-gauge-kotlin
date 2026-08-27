@@ -219,8 +219,11 @@ function isGaugeSyntaxBoundary(line) {
     || text.toLowerCase().startsWith("table :")
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
-    || /^={3,}\s*$/.test(text)
-    || /^-{3,}\s*$/.test(text)
+    // A heading underline is one or more characters
+    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // step at it either way.
+    || /^=+$/.test(text)
+    || /^-+$/.test(text)
     // The teardown marker: references/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
     || /^_{3,}\s*$/.test(text);

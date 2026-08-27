@@ -8388,3 +8388,43 @@ test("GaugeStepDiagnosticsProvider does not treat a Kotlin script as a step sour
   assert.equal(provider.shouldDiagnose(script), false);
   assert.deepEqual(provider.provideDiagnostics(script, [script]), []);
 });
+
+// A heading underline is one or more characters (references/gauge/parser/helper.go
+// isUnderline), but every isGaugeSyntaxBoundary required three or more. With
+// allow_multiline_step a short underline was therefore a heading to the heading
+// rules and part of the step above it to the step parsers at the same time.
+test("GaugeStepDiagnosticsProvider ends a multiline step at a short legacy underline", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const originalAllowMultilineStep = process.env.allow_multiline_step;
+  process.env.allow_multiline_step = "true";
+  try {
+    const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+    const spec = createDocument([
+      "# Checkout",
+      "",
+      "## Buy",
+      "* a step",
+      "-",
+    ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+    const steps = createDocument([
+      "package steps",
+      "import com.thoughtworks.gauge.Step",
+      "class Steps {",
+      "  @Step(\"a step\")",
+      "  fun step() {}",
+      "}",
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+    const documents = [spec, steps];
+
+    assert.deepEqual(
+      provider.provideDiagnostics(spec, documents).map((entry) => entry.message),
+      [],
+    );
+  } finally {
+    if (originalAllowMultilineStep === undefined) {
+      delete process.env.allow_multiline_step;
+    } else {
+      process.env.allow_multiline_step = originalAllowMultilineStep;
+    }
+  }
+});

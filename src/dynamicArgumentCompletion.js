@@ -1,5 +1,7 @@
 "use strict";
 
+const { isLegacyHeadingText } = require("./gaugeHeadings");
+
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
@@ -196,7 +198,7 @@ function isScenarioHeading(line) {
 }
 
 function hasLegacyHeadingText(line) {
-  return Boolean(String(line || "").trim());
+  return isLegacyHeadingText(line);
 }
 
 function isConceptLegacyHeadingText(line) {
@@ -435,8 +437,11 @@ function isTagContinuationBoundary(line) {
     || isTableLine(text)
     || isDocStringFenceLine(text)
     || isTeardownLine(text)
-    || /^={3,}\s*$/.test(text)
-    || /^-{3,}\s*$/.test(text);
+    // A heading underline is one or more characters
+    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // step at it either way.
+    || /^=+$/.test(text)
+    || /^-+$/.test(text);
 }
 
 function isTagsContext(lines, lineNumber) {

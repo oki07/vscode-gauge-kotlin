@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  isLegacyHeadingText,
   isConceptHashHeading,
   isDocStringFenceLine,
   isGaugeHashHeading,
@@ -166,7 +167,7 @@ function headingStart(line) {
 }
 
 function hasLegacyHeadingText(line) {
-  return Boolean(line && line.trim());
+  return isLegacyHeadingText(line);
 }
 
 function isConceptLegacyUnderlineHeadingText(line) {

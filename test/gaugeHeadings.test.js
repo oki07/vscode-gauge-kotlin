@@ -89,3 +89,30 @@ test("an underline of mixed characters is not a heading", () => {
     [],
   );
 });
+
+// references/gauge/parser/lex.go promotes an underline to a heading only when the
+// previous token was a comment: the isSpecUnderline branch is reached after the
+// scenario-heading, spec-heading, tag, table-row and step branches, and it only
+// rewrites the last token when isInState(commentScope). Verified against the real
+// parser:
+//   "* a step / ----"    -> one scenario with two steps, no new heading
+//   "tags: smoke / ----" -> zero scenarios, "Spec should have at least one scenario"
+//   "| a | b | / ----"   -> one scenario, no new heading
+//   "Just a comment / ----" -> a scenario named "Just a comment"
+test("an underline promotes only a comment line to a heading", () => {
+  const cases = [
+    ["* a step", []],
+    ["tags: smoke", []],
+    ["| a | b |", []],
+    ["\"\"\"", []],
+    ["____", []],
+    ["# Already a heading", [["specification", 0]]],
+    ["Just a comment", [["scenario", 0]]],
+  ];
+
+  for (const [line, expected] of cases) {
+    const markers = headingMarkers(document([line, "----", "* a step"].join("\n")))
+      .map((marker) => [marker.kind, marker.line]);
+    assert.deepEqual(markers, expected, `for ${JSON.stringify(line)}`);
+  }
+});
