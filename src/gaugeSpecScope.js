@@ -110,6 +110,9 @@ function startsWithSegments(segments, prefix) {
 // references/gauge/env/env.go getEnvDir prefers the gauge_env_dir variable and
 // otherwise takes EnvironmentDir from the project manifest, falling back to
 // "env" (github.com/getgauge/common EnvDirectoryName).
+// Read every time rather than memoized. A module level cache would answer with a
+// stale directory after the manifest changed, and the read is one small file
+// beside the properties read that follows it.
 function environmentDirectory(fileSystem, pathModule, projectRoot) {
   const configured = process.env[GAUGE_ENV_DIR_PROPERTY];
   if (configured) {
@@ -285,4 +288,5 @@ module.exports = {
   isMarkdownGaugeSpecFile,
   isMarkdownSpecPath,
   propertiesValue,
+  propertiesValueFor,
 };

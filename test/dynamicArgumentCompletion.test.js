@@ -463,24 +463,20 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
     const items = provider.provideCompletionItems(document, new vscode.Position(4, 13));
 
     assert.deepEqual(labels(items), ["one", "two"]);
-    assert.deepEqual(reads, [
-      {
-        encoding: "utf8",
-        filename: "/workspace/gauge/env/default/default.properties",
-      },
-      {
-        encoding: "utf8",
-        filename: "/workspace/gauge/csv.csv",
-      },
-      {
-        encoding: "utf8",
-        filename: "/workspace/gauge/env/default/default.properties",
-      },
-      {
-        encoding: "utf8",
-        filename: "/workspace/gauge/env/default/default.properties",
-      },
+    // Each property lookup first resolves the environment directory from the
+    // manifest (references/gauge/env/env.go getEnvDir) and then reads the
+    // properties beside it. Deliberately not memoized: a cached directory would
+    // answer stale after the manifest changed.
+    assert.deepEqual(reads.map((entry) => entry.filename), [
+      "/workspace/gauge/manifest.json",
+      "/workspace/gauge/env/default/default.properties",
+      "/workspace/gauge/csv.csv",
+      "/workspace/gauge/manifest.json",
+      "/workspace/gauge/env/default/default.properties",
+      "/workspace/gauge/manifest.json",
+      "/workspace/gauge/env/default/default.properties",
     ]);
+    assert.ok(reads.every((entry) => entry.encoding === "utf8"));
   } finally {
     if (originalDelimiter === undefined) {
       delete process.env.csv_delimiter;

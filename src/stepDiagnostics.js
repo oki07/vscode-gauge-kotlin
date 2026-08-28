@@ -3,10 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { positionAt: indexedPositionAt } = require("./documentPosition");
-const {
-  createMarkdownSpecScope,
-  isMarkdownSpecPath: sharedIsMarkdownSpecPath,
-} = require("./gaugeSpecScope");
+const { createMarkdownSpecScope, isMarkdownSpecPath: sharedIsMarkdownSpecPath, propertiesValueFor } = require("./gaugeSpecScope");
 
 const COLLECTION_NAME = "gauge-kotlin";
 const GAUGE_LANGUAGE = "gauge";
@@ -49,7 +46,6 @@ const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminat
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
 const GAUGE_DATA_DIR_PROPERTY = "gauge_data_dir";
 const CSV_DELIMITER_PROPERTY = "csv_delimiter";
-const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const GAUGE_STEP_ANNOTATION = "com.thoughtworks.gauge.Step";
 const GAUGE_STEP_PACKAGE = "com.thoughtworks.gauge";
 const KOTLIN_FUNCTION_MODIFIERS = new Set([
@@ -3827,18 +3823,12 @@ function boolProperty(value) {
   return undefined;
 }
 
+// Gauge merges every *.properties file in the environment directory and the
+// directory itself is not fixed (references/gauge/env/env.go loadEnvDir,
+// getEnvDir). The rule lives in src/gaugeSpecScope.js so every reader gives the
+// same answer for the same project.
 function projectDefaultProperty(options = {}, key) {
-  const fileSystem = options.fileSystem;
-  if (!fileSystem || typeof fileSystem.readFileSync !== "function" || !options.projectRoot) {
-    return undefined;
-  }
-  const pathModule = options.pathModule || nodePath;
-  try {
-    const filename = pathModule.join(options.projectRoot, ...DEFAULT_ENV_PROPERTIES);
-    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), key);
-  } catch (_error) {
-    return undefined;
-  }
+  return propertiesValueFor(options, key);
 }
 
 function allowMultilineStep(options = {}) {

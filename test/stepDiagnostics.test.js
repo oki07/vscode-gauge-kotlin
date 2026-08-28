@@ -6772,6 +6772,51 @@ test("GaugeStepDiagnosticsProvider accepts a step alias list", () => {
   assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
+// Every property reader must follow Gauge's own rule: loadEnvDir merges every
+// *.properties file in the environment directory
+// (references/gauge/env/env.go). allow_multiline_step put in java.properties -
+// the very file the bundled Kotlin template writes - was ignored.
+test("GaugeStepDiagnosticsProvider reads allow_multiline_step from any properties file", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const files = {
+    "/workspace/gauge/manifest.json": JSON.stringify({ Language: "java" }),
+    "/workspace/gauge/env/default/default.properties": "gauge_reports_dir = reports\n",
+    "/workspace/gauge/env/default/java.properties": "allow_multiline_step = true\n",
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: {
+      existsSync: (filename) => files[filename] !== undefined,
+      readdirSync: () => ["default.properties", "java.properties"],
+      readFileSync(filename) {
+        if (files[filename] === undefined) {
+          throw new Error(`Missing ${filename}`);
+        }
+        return files[filename];
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+      isGaugeProject: () => true,
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Confirm the order",
+    "  for the customer",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Confirm the order for the customer\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
 test("GaugeStepDiagnosticsProvider indexes an indented legacy concept heading", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

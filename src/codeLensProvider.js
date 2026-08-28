@@ -18,7 +18,7 @@ const {
 } = require("./stepDiagnostics");
 const { superStepAliasesForEntry } = require("./gaugeReference");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
-const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
 
 const RUN_COMMAND = "gauge.execute";
 const DEBUG_COMMAND = "gauge.debug";
@@ -37,7 +37,6 @@ const STEP_IMPLEMENTATION_WORKSPACE_PATTERNS = ["**/*.kt", "**/*.java"];
 const GAUGE_REFERENCE_FILE_PATTERN = /\.(spec|cpt|md)$/i;
 const STEP_IMPLEMENTATION_FILE_PATTERN = /\.(kt|java)$/i;
 const ALLOW_MULTILINE_STEP_PROPERTY = "allow_multiline_step";
-const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const CANCELLED_CODE_LENS_OPERATION = Symbol("cancelledCodeLensOperation");
 
 function getVscode(vscode) {
@@ -309,18 +308,12 @@ function boolProperty(value) {
   return undefined;
 }
 
+// Gauge merges every *.properties file in the environment directory and the
+// directory itself is not fixed (references/gauge/env/env.go loadEnvDir,
+// getEnvDir). The rule lives in src/gaugeSpecScope.js so every reader gives the
+// same answer for the same project.
 function projectDefaultProperty(options = {}, key) {
-  const fileSystem = options.fileSystem;
-  if (!fileSystem || typeof fileSystem.readFileSync !== "function" || !options.projectRoot) {
-    return undefined;
-  }
-  const pathModule = options.pathModule || nodePath;
-  try {
-    const filename = pathModule.join(options.projectRoot, ...DEFAULT_ENV_PROPERTIES);
-    return propertiesValue(fileSystem.readFileSync(filename, "utf8"), key);
-  } catch (_error) {
-    return undefined;
-  }
+  return propertiesValueFor(options, key);
 }
 
 function allowMultilineStep(options = {}) {
