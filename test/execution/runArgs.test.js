@@ -19,9 +19,16 @@ test("buildRunArgs.forGauge ignores other args when repeat flag is set", () => {
   );
 });
 
-test("buildRunArgs.forGauge keeps Test UI flags for failed and repeat runs", () => {
+test("buildRunArgs.forGauge drops flags Gauge refuses on a rerun", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
+  // Gauge tolerates only a fixed set of extra flags on a rerun:
+  // overrideRerunFlags = {verbose, simple-console, machine-readable, dir,
+  // log-level} (references/gauge/cmd/run.go:72). hide-suggestion is not among
+  // them, so handleConflictingParams (run.go:278-291) counts it and answers
+  // "Invalid Command. Usage: gauge run --failed", which exit() turns into
+  // os.Exit(1). The Test UI always sets hide-suggestion
+  // (TEST_UI_RUN_FLAGS), so Run Failed and Run Repeat never ran anything.
   assert.deepEqual(
     buildRunArgs.forGauge("my.spec:123", {
       failed: true,
@@ -29,7 +36,7 @@ test("buildRunArgs.forGauge keeps Test UI flags for failed and repeat runs", () 
       "machine-readable": true,
       tags: "should be ignored",
     }),
-    ["run", "--failed", "--hide-suggestion", "--machine-readable"],
+    ["run", "--failed", "--machine-readable"],
   );
   assert.deepEqual(
     buildRunArgs.forGauge("my.spec:123", {
@@ -38,7 +45,7 @@ test("buildRunArgs.forGauge keeps Test UI flags for failed and repeat runs", () 
       "machine-readable": true,
       tags: "should be ignored",
     }),
-    ["run", "--repeat", "--hide-suggestion", "--machine-readable"],
+    ["run", "--repeat", "--machine-readable"],
   );
 });
 
@@ -222,7 +229,7 @@ test("buildRunArgs.forGradle ignores other args when repeat flag is set", () => 
   );
 });
 
-test("buildRunArgs.forGradle keeps Test UI flags for failed and repeat runs", () => {
+test("buildRunArgs.forGradle drops flags Gauge refuses on a rerun", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
   assert.equal(
@@ -232,7 +239,7 @@ test("buildRunArgs.forGradle keeps Test UI flags for failed and repeat runs", ()
       "machine-readable": true,
       tags: "should be ignored",
     }).join(" "),
-    "clean gauge -PadditionalFlags=--failed --hide-suggestion --machine-readable",
+    "clean gauge -PadditionalFlags=--failed --machine-readable",
   );
   assert.equal(
     buildRunArgs.forGradle("my.spec:123", {
@@ -241,7 +248,7 @@ test("buildRunArgs.forGradle keeps Test UI flags for failed and repeat runs", ()
       "machine-readable": true,
       tags: "should be ignored",
     }).join(" "),
-    "clean gauge -PadditionalFlags=--repeat --hide-suggestion --machine-readable",
+    "clean gauge -PadditionalFlags=--repeat --machine-readable",
   );
 });
 
@@ -357,7 +364,7 @@ test("buildRunArgs.forMaven ignores other args when repeat flag is set", () => {
   );
 });
 
-test("buildRunArgs.forMaven keeps Test UI flags for failed and repeat runs", () => {
+test("buildRunArgs.forMaven drops flags Gauge refuses on a rerun", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
   assert.equal(
@@ -367,7 +374,7 @@ test("buildRunArgs.forMaven keeps Test UI flags for failed and repeat runs", () 
       "machine-readable": true,
       tags: "should be ignored",
     }).join(" "),
-    "-q clean compile test-compile gauge:execute -Dflags=--failed,--hide-suggestion,--machine-readable",
+    "-q clean compile test-compile gauge:execute -Dflags=--failed,--machine-readable",
   );
   assert.equal(
     buildRunArgs.forMaven("my.spec:123", {
@@ -376,7 +383,7 @@ test("buildRunArgs.forMaven keeps Test UI flags for failed and repeat runs", () 
       "machine-readable": true,
       tags: "should be ignored",
     }).join(" "),
-    "-q clean compile test-compile gauge:execute -Dflags=--repeat,--hide-suggestion,--machine-readable",
+    "-q clean compile test-compile gauge:execute -Dflags=--repeat,--machine-readable",
   );
 });
 

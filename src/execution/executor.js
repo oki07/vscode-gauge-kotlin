@@ -698,6 +698,17 @@ function unexpectedEndEvents(passed, projectRoot) {
   ];
 }
 
+function isScenarioTarget(target) {
+  return typeof target === "string" && /:\d+$/.test(target);
+}
+
+function namesScenarioLines(spec) {
+  if (Array.isArray(spec)) {
+    return spec.length > 0 && spec.every(isScenarioTarget);
+  }
+  return isScenarioTarget(spec);
+}
+
 function getScenarioSpecPath(executionIdentifier) {
   if (!/:\d+$/.test(executionIdentifier)) {
     return executionIdentifier;
@@ -1007,7 +1018,12 @@ function createGaugeExecutionController(options = {}) {
       if (launchExecutionOption.args) {
         option.args = launchExecutionOption.args;
       }
-      if (typeof spec === "string" && /:\d+$/.test(spec)) {
+      // A scenario target names an explicit line, so a tags, scenario or
+      // retry-only filter from the launch configuration must not narrow it
+      // further. The Test UI batches a multi-selection into an array, and
+      // leaving the filters on made Gauge discard the very scenarios the user
+      // picked.
+      if (namesScenarioLines(spec)) {
         option.tags = null;
         option.scenario = null;
         option["retry-only"] = null;

@@ -20,8 +20,12 @@ const processExecutionAttributes = new Set([
   "processEnv",
 ]);
 const SPEC_FILE_DELIMITER = "||";
+// Exactly references/gauge/cmd/run.go overrideRerunFlags. Gauge counts any other
+// flag set alongside --failed or --repeat in handleConflictingParams and answers
+// "Invalid Command. Usage: gauge run --failed", which exit() turns into
+// os.Exit(1). hide-suggestion used to be in this list, and because the Test UI
+// always sets it, Run Failed and Run Repeat never ran anything.
 const RERUN_FLAG_KEYS = [
-  "hide-suggestion",
   "machine-readable",
   "verbose",
   "simple-console",

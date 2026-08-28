@@ -1656,13 +1656,13 @@ test("failed and repeat execution accept command flags for Test UI events", asyn
   assert.deepEqual(calls, [
     {
       command: "gauge",
-      args: ["run", "--failed", "--hide-suggestion", "--machine-readable"],
+      args: ["run", "--failed", "--machine-readable"],
       cwd: "/workspace",
       status: "/workspace/failed scenarios",
     },
     {
       command: "gauge",
-      args: ["run", "--repeat", "--hide-suggestion", "--machine-readable"],
+      args: ["run", "--repeat", "--machine-readable"],
       cwd: "/workspace",
       status: "/workspace/previous run",
     },
@@ -1704,7 +1704,7 @@ test("failed execution uses the provided project root without prompting", async 
   assert.deepEqual(calls, [
     {
       command: "gauge",
-      args: ["run", "--failed", "--hide-suggestion", "--machine-readable"],
+      args: ["run", "--failed", "--machine-readable"],
       cwd: "/workspace/admin",
       status: "/workspace/admin/failed scenarios",
     },
@@ -1746,7 +1746,7 @@ test("repeat execution uses the provided project root without prompting", async 
   assert.deepEqual(calls, [
     {
       command: "gauge",
-      args: ["run", "--repeat", "--hide-suggestion", "--machine-readable"],
+      args: ["run", "--repeat", "--machine-readable"],
       cwd: "/workspace/admin",
       status: "/workspace/admin/previous run",
     },
@@ -1926,6 +1926,54 @@ test("execute node resolves Windows drive-letter spec paths to the matching work
       cwd: projectRoot,
       status: spec,
     },
+  ]);
+});
+
+// A scenario target names an explicit line, so a tags, scenario or retry-only
+// filter from the launch configuration must not narrow it further. The guard
+// only recognised a single string, but the Test UI batches a multi-selection
+// into an ARRAY (canBatchSpecificationTargets returns true for
+// targets.length > 1), so selecting two scenarios sent
+// "run --tags smoke a.spec:12 a.spec:20" and Gauge filtered both chosen
+// scenarios away, running nothing.
+test("executor clears launch filters for a batch of scenario targets", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const commands = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  vscode.workspace.getConfiguration = (section) => ({
+    get: (key) => {
+      if (section === "launch" && key === "configurations") {
+        return [{ type: "gauge", request: "test", tags: "smoke" }];
+      }
+      return undefined;
+    },
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    async runner(command) {
+      commands.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand(
+    "gauge.execute.specification",
+    { file: "/workspace/gauge/specs/a.spec:12" },
+    [
+      { fsPath: "/workspace/gauge/specs/a.spec:12" },
+      { fsPath: "/workspace/gauge/specs/a.spec:20" },
+    ],
+  );
+
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].args.includes("--tags"), false);
+  assert.deepEqual(commands[0].args.slice(-2), [
+    "/workspace/gauge/specs/a.spec:12",
+    "/workspace/gauge/specs/a.spec:20",
   ]);
 });
 
