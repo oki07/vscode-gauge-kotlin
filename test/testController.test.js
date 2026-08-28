@@ -279,6 +279,44 @@ function createCancellationToken() {
 // Gauge's JSON events into the sink. ensureRun creates a TestRun for them, but
 // with no run context nothing ever calls run.end, so the Test Results view kept
 // spinning after Gauge exited and the cancellation listener leaked with it.
+// A suite-scoped result event carries the project root in its id
+// (src/execution/lastRunResult.js suiteHookEvents uses `${projectRoot}::hook:...`,
+// src/execution/executor.js unexpectedEndEvents uses `${projectRoot}::result:...`).
+// Falling back to included[0] hung a second project's Before Suite failure under
+// a specification belonging to the FIRST project, while the project that
+// actually failed showed nothing.
+test("GaugeTestController attributes a suite failure to its own project", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.currentRequest = {
+    include: [
+      { id: "/w/projA/specs/a.spec" },
+      { id: "/w/projB/specs/b.spec" },
+    ],
+  };
+
+  assert.equal(
+    gaugeTests.parentIdForEvent({
+      type: "testFailed",
+      id: "/w/projB::hook:before-suite",
+      parentId: "suite",
+      resultOnly: true,
+    }),
+    "/w/projB/specs/b.spec",
+  );
+  assert.equal(
+    gaugeTests.parentIdForEvent({
+      type: "testFailed",
+      id: "/w/projA::result:failed",
+      parentId: "suite",
+      resultOnly: true,
+    }),
+    "/w/projA/specs/a.spec",
+  );
+});
+
 test("GaugeTestController ends a run it created outside the Test Explorer", () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, vscode } = createFakeVscode();

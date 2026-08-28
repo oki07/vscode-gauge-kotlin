@@ -1100,7 +1100,14 @@ class GaugeWorkspace {
   }
 
   async stopServerFor(folder) {
-    const projectClient = this.clientsMap.get(folder);
+    // GaugeClients.get resolves by containment, so asking with a folder that is
+    // not itself a project root hands back the ENCLOSING project's client.
+    // Stopping that would take down a project the user still has open, so only a
+    // client whose own root is this folder may be stopped.
+    const enclosing = this.clientsMap.get(folder);
+    const projectClient = enclosing && enclosing.project.root() === folder
+      ? enclosing
+      : undefined;
     const projectRoot = projectClient ? projectClient.project.root() : folder;
     this.cancelServerStart(projectRoot);
     if (!projectClient) {

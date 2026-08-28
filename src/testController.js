@@ -446,6 +446,14 @@ function projectRootsForGroups(groups) {
     });
 }
 
+// Suite-scoped result ids are built as `${projectRoot}::<kind>:<name>`
+// (src/execution/lastRunResult.js, src/execution/executor.js).
+function suiteEventProjectRoot(event) {
+  const id = event && typeof event.id === "string" ? event.id : "";
+  const separator = id.indexOf("::");
+  return separator > 0 ? id.slice(0, separator) : undefined;
+}
+
 class GaugeTestController {
   constructor(options = {}) {
     this.vscode = getVscode(options.vscode);
@@ -1825,6 +1833,18 @@ class GaugeTestController {
       const descendant = included.find((item) => item.id.startsWith(`${parentId}:`));
       if (descendant) {
         return descendant.id;
+      }
+    }
+    // A suite-scoped result names its project root in the event id
+    // (src/execution/lastRunResult.js suiteHookEvents and
+    // src/execution/executor.js unexpectedEndEvents both build
+    // `${projectRoot}::...`). Falling straight to included[0] hung one project's
+    // suite failure under another project's specification.
+    const projectRoot = suiteEventProjectRoot(event);
+    if (projectRoot) {
+      const owned = included.find((item) => item.id.startsWith(`${projectRoot}/`));
+      if (owned) {
+        return owned.id;
       }
     }
     return included[0].id;

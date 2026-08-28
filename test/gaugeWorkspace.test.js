@@ -940,6 +940,24 @@ test("GaugeWorkspace does not install a runner accepted after startup ownership 
   }
 });
 
+// GaugeClients.get resolves by containment - it returns the nearest project that
+// HAS the file. Removing a workspace folder that is not itself a Gauge project
+// but sits inside one therefore handed back the enclosing project's client, and
+// stopServerFor stopped it: the surviving project lost references, rename, stub
+// generation and its spec index until the window was reloaded.
+test("GaugeWorkspace keeps the enclosing project running when a nested folder is removed", async () => {
+  const created = createEmptyKotlinWorkspace();
+  await created.workspace.ready();
+  await created.workspace.startServerFor("/workspace/gauge");
+  const client = created.clients.get("/workspace/gauge");
+  assert.ok(client);
+
+  await created.workspace.stopServerFor("/workspace/gauge/sub/docs");
+
+  assert.equal(created.clients.get("/workspace/gauge") !== undefined, true);
+  assert.notEqual(client.client.stopped, true);
+});
+
 test("GaugeWorkspace ignores an old runner install prompt after same-root restart", async () => {
   const promptEntered = [deferred(), deferred()];
   const promptResponse = [deferred(), deferred()];

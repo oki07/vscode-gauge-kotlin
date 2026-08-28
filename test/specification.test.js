@@ -262,6 +262,71 @@ test("createSpecification honours gauge_specs_dir without a language client", as
   assert.equal(writes.has("/project/features/Login.spec"), true);
 });
 
+// With a folder chosen from the Explorer the target is already decided:
+// selectSpecDirectory returns options.specDir verbatim and the project root is
+// never used. Asking "Choose a project" was therefore a question with no effect,
+// and pressing Escape on it aborted the command with the wrong message.
+test("createSpecification does not ask for a project when a folder was chosen", async () => {
+  const { createSpecification } = require("../src/specification");
+  const writes = new Map();
+  const quickPicks = [];
+
+  const vscode = {
+    Position: class Position {
+      constructor(line, character) {
+        this.line = line;
+        this.character = character;
+      }
+    },
+    Range: class Range {
+      constructor(start, end) {
+        this.start = start;
+        this.end = end;
+      }
+    },
+    workspace: {
+      workspaceFolders: [
+        { uri: { fsPath: "/workspace/shop" } },
+        { uri: { fsPath: "/workspace/admin" } },
+      ],
+      getConfiguration: () => ({ get: () => false }),
+      openTextDocument: async (filename) => ({ filename }),
+    },
+    window: {
+      showQuickPick(items, options) {
+        quickPicks.push({ items, options });
+        return Promise.resolve(undefined);
+      },
+      showInputBox: async () => "Checkout",
+      showTextDocument: async () => {},
+      showErrorMessage(message) {
+        throw new Error(message);
+      },
+    },
+  };
+
+  await createSpecification({
+    vscode,
+    fileSystem: {
+      existsSync: () => false,
+      promises: {
+        async mkdir() {},
+        async writeFile(filename, content) {
+          writes.set(filename, content);
+        },
+      },
+    },
+    pathModule: path.posix,
+    eol: "\n",
+    date: "2026-06-26",
+    user: "Ada",
+    specDir: "/workspace/admin/specs/checkout",
+  });
+
+  assert.deepEqual(quickPicks, []);
+  assert.equal(writes.has("/workspace/admin/specs/checkout/Checkout.spec"), true);
+});
+
 test("createSpecification asks for project and spec directory when multiple choices exist", async () => {
   const { createSpecification } = require("../src/specification");
   const writes = new Map();

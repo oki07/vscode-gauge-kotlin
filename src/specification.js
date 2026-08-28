@@ -310,6 +310,13 @@ async function selectProjectRoot(vscode, pathModule, options = {}, operation) {
   if (options.projectRoot) {
     return options.projectRoot;
   }
+  // A folder chosen from the Explorer already decides the target:
+  // selectSpecDirectory returns an absolute specDir verbatim and never consults
+  // the project root. Asking "Choose a project" there was a question with no
+  // effect, and Escaping it aborted the command with the wrong message.
+  if (options.specDir && pathModule.isAbsolute(options.specDir)) {
+    return options.specDir;
+  }
 
   const configuredProjects = typeof options.getProjects === "function"
     ? callSyncForOperation(operation, options.getProjects)
