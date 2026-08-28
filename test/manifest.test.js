@@ -565,22 +565,18 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.equal(conceptGrammar.scopeName, "text.gauge.concept");
   assert.equal(conceptGrammar.path, "./syntaxes/gauge-concept.tmLanguage.json");
 
-  assert.deepEqual(manifest.contributes.snippets, [
-    {
-      language: "gauge",
-      path: "./snippets/gauge.json",
-    },
-    {
-      language: "gauge-concept",
-      path: "./snippets/gauge.json",
-    },
-  ]);
+  // No contributes.snippets. src/gaugeSnippetCompletion.js registers the same
+  // snippets/gauge.json at runtime, and a manifest contribution for the gauge and
+  // gauge-concept languages fires alongside it, so every snippet was offered
+  // twice in a .spec or .cpt. The runtime provider is the single source because
+  // it is the only one that can apply the gauge_specs_dir rule to Markdown
+  // specifications, which a language-keyed contribution cannot express.
+  assert.equal(manifest.contributes.snippets, undefined);
 
   for (const relativePath of [
     language.configuration,
     grammar.path,
     conceptGrammar.path,
-    ...manifest.contributes.snippets.map((entry) => entry.path),
   ]) {
     assert.equal(fs.existsSync(path.join(root, relativePath)), true, relativePath);
   }
@@ -607,8 +603,9 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     ],
   });
 
+  // The file src/gaugeSnippetCompletion.js requires directly.
   const snippets = JSON.parse(
-    fs.readFileSync(path.join(root, manifest.contributes.snippets[0].path), "utf8"),
+    fs.readFileSync(path.join(root, "snippets", "gauge.json"), "utf8"),
   );
   const snippetPrefixes = Object.values(snippets).map((entry) => entry.prefix);
   assert.deepEqual(snippetPrefixes, [
@@ -1291,13 +1288,15 @@ test("extension manifest drops the Gauge recommended settings surface", () => {
 // `sce`, `cpt` and the table snippets into every Markdown file the user ever
 // opens, in any repository. Gauge Markdown specifications get them from
 // GaugeSnippetCompletionProvider instead, which is scoped to Gauge projects.
-test("Gauge snippets are not contributed to the global Markdown language", () => {
+// Snippets are contributed at runtime only, by src/gaugeSnippetCompletion.js. A
+// manifest contribution for gauge and gauge-concept fired alongside it, so every
+// snippet appeared twice in a .spec or .cpt; and a contribution can only key on a
+// language, so it could never apply the gauge_specs_dir rule that keeps Gauge
+// snippets out of a README.
+test("Gauge snippets are contributed once, at runtime", () => {
   const manifest = readPackageJson();
 
-  assert.deepEqual(manifest.contributes.snippets, [
-    { language: "gauge", path: "./snippets/gauge.json" },
-    { language: "gauge-concept", path: "./snippets/gauge.json" },
-  ]);
+  assert.equal(manifest.contributes.snippets, undefined);
 });
 
 // The tree view must disappear with its setting. gauge:activated no longer

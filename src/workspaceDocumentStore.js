@@ -299,6 +299,19 @@ class WorkspaceDocumentStore {
       if (!listen("onDidCloseTextDocument", (document) => this.handleDocumentClose(document))) {
         return false;
       }
+      // The initial findFiles runs once at start(). A folder added afterwards
+      // brings existing specs and Kotlin sources with it, and the file system
+      // watcher only reports create/change/delete, so those files would stay
+      // invisible to every local index until one of them was touched.
+      if (!listen("onDidChangeWorkspaceFolders", (event) => {
+        if (event && Array.isArray(event.added) && event.added.length === 0) {
+          return undefined;
+        }
+        // Returned so a caller can await the rescan. VS Code ignores it.
+        return this.rescanWorkspace();
+      })) {
+        return false;
+      }
       if (this.disposed || typeof workspace.createFileSystemWatcher !== "function") {
         return !this.disposed;
       }
@@ -373,6 +386,15 @@ class WorkspaceDocumentStore {
     }
     this.scanComplete = true;
     this.notifyChange(undefined);
+  }
+
+  rescanWorkspace() {
+    if (this.disposed) {
+      return Promise.resolve(undefined);
+    }
+    const scan = this.scanWorkspace();
+    this.pendingRescan = scan;
+    return scan.catch(() => undefined);
   }
 
   start() {

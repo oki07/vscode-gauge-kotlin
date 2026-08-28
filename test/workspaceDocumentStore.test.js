@@ -83,7 +83,7 @@ function createFakeWatcher(glob) {
 function createFakeVscode(options = {}) {
   const state = {
     findFilesCalls: [],
-    listeners: { open: [], change: [], close: [] },
+    listeners: { open: [], change: [], close: [], folders: [] },
     uriFileCalls: [],
     watchers: [],
   };
@@ -121,6 +121,10 @@ function createFakeVscode(options = {}) {
       const watcher = createFakeWatcher(glob);
       state.watchers.push(watcher);
       return watcher;
+    },
+    onDidChangeWorkspaceFolders(listener) {
+      state.listeners.folders.push(listener);
+      return { dispose() {} };
     },
   };
   return { vscode: { Uri, workspace }, state };
@@ -160,6 +164,42 @@ test("WorkspaceDocumentStore scans the workspace once and reads files from disk"
   assert.equal(byPath.get("/ws/src/Steps.kt").getText(), "package steps\n");
   assert.equal(byPath.get("/ws/specs/login.spec").languageId, "gauge");
   assert.equal(isWorkspaceStepImplementationScanComplete(documents), true);
+});
+
+// The initial findFiles runs once at start(). A folder added to the workspace
+// afterwards brings existing specs and Kotlin sources with it, and the file
+// system watcher only reports create/change/delete, so those files stayed
+// invisible to every local index until one of them was touched: their steps read
+// as undefined and their concepts as missing.
+test("WorkspaceDocumentStore scans a workspace folder added after it started", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/specs/login.spec": "# Login\n",
+  };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem({
+      ...files,
+      "/added/src/More.kt": "package more\n",
+    }),
+    vscode,
+  });
+
+  await store.start();
+  assert.equal(state.findFilesCalls.length, 1);
+  assert.equal(state.listeners.folders.length, 1);
+
+  vscode.workspace.findFiles = async (pattern) => {
+    state.findFilesCalls.push(pattern);
+    return [{ fsPath: "/ws/specs/login.spec" }, { fsPath: "/added/src/More.kt" }];
+  };
+  await state.listeners.folders[0]({ added: [{ uri: { fsPath: "/added" } }], removed: [] });
+
+  assert.equal(state.findFilesCalls.length, 2);
+  assert.deepEqual(
+    store.documents().map((entry) => entry.uri.fsPath).sort(),
+    ["/added/src/More.kt", "/ws/specs/login.spec"],
+  );
 });
 
 test("WorkspaceDocumentStore gives unopened definition targets real VS Code file URIs", async () => {

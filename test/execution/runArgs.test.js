@@ -1,6 +1,23 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+// gauge sets NoOptDefVal on --sort (references/gauge/cmd/run.go:143-145), so
+// pflag reads a separated "--sort random" as --sort=alpha plus a positional
+// "random", which gauge then treats as a spec path. The value has to be attached.
+test("buildRunArgs.forGauge attaches the sort value to its flag", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec", { sort: "random", "hide-suggestion": false, "simple-console": false }),
+    ["run", "--sort=random", "my.spec"],
+  );
+  // A bare --sort is what pflag's NoOptDefVal exists for, so keep it bare.
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec", { sort: true, "hide-suggestion": false, "simple-console": false }),
+    ["run", "--sort", "my.spec"],
+  );
+});
+
 test("buildRunArgs.forGauge ignores other args when failed flag is set", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
@@ -134,9 +151,12 @@ test("buildRunArgs.forGauge preserves boolean sort launch compatibility", () => 
     buildRunArgs.forGauge(null, { sort: true }),
     ["run", "--hide-suggestion", "--simple-console", "--sort"],
   );
+  // --sort carries a pflag NoOptDefVal, so its value must be attached
+  // (references/gauge/cmd/run.go:143-145). --random-seed has none and keeps the
+  // separated form.
   assert.deepEqual(
     buildRunArgs.forGauge(null, { sort: "random", "random-seed": 4 }),
-    ["run", "--hide-suggestion", "--simple-console", "--sort", "random", "--random-seed", "4"],
+    ["run", "--hide-suggestion", "--simple-console", "--sort=random", "--random-seed", "4"],
   );
 });
 

@@ -549,16 +549,6 @@
         }
       }
     },
-    "snippets": [
-      {
-        "language": "gauge",
-        "path": "./snippets/gauge.json"
-      },
-      {
-        "language": "gauge-concept",
-        "path": "./snippets/gauge.json"
-      }
-    ],
     "debuggers": [
       {
         "type": "gauge",

@@ -32,6 +32,8 @@ const RERUN_FLAG_KEYS = [
   "dir",
   "log-level",
 ];
+// references/gauge/cmd/run.go sets NoOptDefVal only on --sort.
+const NO_OPT_DEFAULT_FLAG_KEYS = new Set(["sort"]);
 const explicitFalseBooleanFlags = new Set([
   "install-plugins",
 ]);
@@ -113,7 +115,13 @@ function flagTokens(key, value) {
     return [flag(key), value.join(",")];
   }
   if (typeof value === "string" || typeof value === "number") {
-    return [flag(key), `${value}`];
+    // A flag with a pflag NoOptDefVal must carry its value attached: pflag reads
+    // a separated "--sort random" as --sort=alpha plus a positional "random",
+    // which gauge then treats as a spec path
+    // (references/gauge/cmd/run.go:143-145).
+    return NO_OPT_DEFAULT_FLAG_KEYS.has(key)
+      ? [`${flag(key)}=${value}`]
+      : [flag(key), `${value}`];
   }
   return [];
 }

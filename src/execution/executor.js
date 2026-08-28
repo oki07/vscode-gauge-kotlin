@@ -29,6 +29,9 @@ const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 const { createLspRequestOwner } = require("./lspRequestOwner");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
+// Deliberately not a metadata callback name: ending a debug session must not
+// reach the Test UI as a cancellation.
+const DEBUG_SESSION_ENDED = "onDebugSessionEnded";
 // references/gauge/execution/execute.go executionStatusFile, common.DotGauge.
 const EXECUTION_STATUS_DIRECTORY = ".gauge";
 const EXECUTION_STATUS_FILE = "executionStatus.json";
@@ -1071,8 +1074,21 @@ function createGaugeExecutionController(options = {}) {
           return undefined;
         }
         if (typeof activeDebugger.registerStopDebugger === "function") {
+          // This fires on the NORMAL end of a debug run too: gauge kills the
+          // runner (references/gauge/execution/simpleExecution.go
+          // stopAllPlugins), the JVM exits, and VS Code terminates the session
+          // while gauge is still polling Alive() and printing its summary. Stop
+          // the run, but do not report it as cancelled: that told the Test UI the
+          // whole run was cancelled and its per-project loop then skipped every
+          // remaining project silently.
           activeDebuggerSessionSubscription = activeDebugger.registerStopDebugger(() => {
-            cancelExecutionRequest(request, false);
+            // Still preparing means the session never came up, so the run really
+            // is cancelled. Once it is under way, termination is the normal end.
+            cancelExecutionRequest(
+              request,
+              false,
+              request.phase === "preparing" ? "onCancelled" : DEBUG_SESSION_ENDED,
+            );
           });
           if (request.cancelRequested) {
             disposeActiveDebuggerSessionSubscription();

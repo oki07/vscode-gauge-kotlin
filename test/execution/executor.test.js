@@ -1942,6 +1942,54 @@ test("execute node resolves Windows drive-letter spec paths to the matching work
 // `sce.InSpan(line + 1)` is true. The at-cursor branch handled that shape;
 // Run Scenarios did not, and chooseAndExecuteScenario returns undefined for a
 // non-array, so the command silently did nothing.
+// A debug session terminates on the NORMAL end of a run: gauge kills the runner
+// (references/gauge/execution/simpleExecution.go stopAllPlugins), the JVM exits,
+// and VS Code fires onDidTerminateDebugSession while gauge is still polling
+// Alive() and printing its summary. Reporting that as onCancelled told the Test
+// UI the whole run was cancelled, and its per-project loop then skipped every
+// remaining project silently.
+test("executor does not report a debug run as cancelled when its session ends", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const lifecycle = [];
+  let stopCallback;
+  const { vscode } = createFakeVscode();
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    debuggerFactory() {
+      return {
+        addDebugEnv: (env) => Promise.resolve(env || {}),
+        registerStopDebugger(callback) {
+          stopCallback = callback;
+          return { dispose() {} };
+        },
+        stopDebugger() {},
+      };
+    },
+    async runner() {
+      stopCallback();
+      return true;
+    },
+  });
+
+  await controller.handleCommandWithMetadata(
+    "gauge.specexplorer.debugNode",
+    {
+      onCancelled: () => lifecycle.push("cancelled"),
+      onStart: () => lifecycle.push("start"),
+      onSuperseded: () => lifecycle.push("superseded"),
+    },
+    {
+      file: "/workspace/specs/example.spec",
+      executionIdentifier: "/workspace/specs/example.spec:9",
+    },
+    { debug: true },
+  );
+
+  assert.deepEqual(lifecycle, ["start"]);
+});
+
 test("executor runs a single scenario response from Run Scenarios", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const commands = [];

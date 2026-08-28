@@ -498,7 +498,10 @@ class DependencyStepIndex {
       if (this.disposed) {
         return undefined;
       }
-      await this.scanArchive(archive, async (_fileName, data) => {
+      // A classpath routinely holds jars this process cannot open: a truncated
+      // download, a permission-denied artifact, a native jar. One of them must
+      // not throw away every other dependency's steps.
+      await this.scanArchiveSafely(archive, async (_fileName, data) => {
         if (this.disposed) {
           return;
         }
@@ -533,6 +536,14 @@ class DependencyStepIndex {
       return undefined;
     }
     return { classpathKey, entriesByTemplate };
+  }
+
+  async scanArchiveSafely(archive, visit) {
+    try {
+      await this.scanArchive(archive, visit);
+    } catch (_error) {
+      // Skipping one archive keeps the rest of the classpath indexed.
+    }
   }
 
   invalidationSnapshot(root) {

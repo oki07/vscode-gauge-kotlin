@@ -231,6 +231,35 @@ test("DependencyStepIndex resolves indexed dependency methods to virtual declara
   );
 });
 
+// A classpath routinely holds jars this process cannot open: a truncated
+// download, a permission-denied artifact, a native jar. scanJarArchive rejects on
+// yauzl.open failure, and the per-archive await was unguarded, so one such jar
+// threw away the whole index - every dependency step went undefined - and
+// buildCurrentIndex kept rebuilding it.
+test("DependencyStepIndex indexes the rest of the classpath past an unreadable jar", async () => {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const archiveScans = [];
+  const index = new DependencyStepIndex({
+    async classpathProvider() {
+      return ["/repo/broken.jar", "/repo/playtest-http.jar"];
+    },
+    async scanArchive(archivePath, visit) {
+      archiveScans.push(archivePath);
+      if (archivePath === "/repo/broken.jar") {
+        throw new Error("end of central directory record signature not found");
+      }
+      await visit("steps/RequestSteps.class", dependencyStepClass());
+    },
+    fileSystem: { existsSync: () => true },
+    vscode: createFakeVscode(),
+  });
+
+  await index.refresh("/workspace/gauge");
+
+  assert.deepEqual(archiveScans, ["/repo/broken.jar", "/repo/playtest-http.jar"]);
+  assert.deepEqual([...index.stepTemplates("/workspace/gauge")], ["Send the {}"]);
+});
+
 test("DependencyStepIndex gets classpath from the asynchronous environment service", async () => {
   const { DependencyStepIndex } = require("../src/dependencyStepIndex");
   const project = {
@@ -624,12 +653,15 @@ test("DependencyStepIndex suppresses scan failures after disposal", async () => 
   assert.equal(index.indices.size, 0);
   assert.equal(index.pending.size, 0);
 
+  // A live failure still surfaces. The vehicle is classpath resolution rather
+  // than a single archive: an unreadable jar is skipped on purpose so it cannot
+  // throw away every other dependency's steps.
   const liveIndex = new DependencyStepIndex({
-    classpathProvider: async () => ["/repo/playtest-http.jar"],
-    fileSystem: { existsSync: () => true },
-    async scanArchive() {
+    classpathProvider: async () => {
       throw new Error("live dependency scan failed");
     },
+    fileSystem: { existsSync: () => true },
+    async scanArchive() {},
     vscode: createFakeVscode(),
   });
   await assert.rejects(
