@@ -306,19 +306,33 @@ class Command {
   }
 
   spawn(args = [], options = {}) {
-    return childProcess.spawn(
-      this.command,
+    return this.processApi().spawn(
+      this.commandForSpawnType(),
       this.argsForSpawnType(args),
       { ...options, ...this.defaultSpawnOptions },
     );
   }
 
   spawnSync(args = [], options = {}) {
-    return childProcess.spawnSync(
-      this.command,
+    return this.processApi().spawnSync(
+      this.commandForSpawnType(),
       this.argsForSpawnType(args),
       { ...options, ...this.defaultSpawnOptions },
     );
+  }
+
+  processApi() {
+    return this.childProcess || childProcess;
+  }
+
+  // With shell: true the shell splits the command line on spaces, so a launcher
+  // under a path like "C:\Program Files\..." never spawns unless it is quoted.
+  // Arguments were already quoted; the command itself was not.
+  commandForSpawnType() {
+    if (!this.shellMode || !this.command.includes(" ")) {
+      return this.command;
+    }
+    return `"${this.command}"`;
   }
 
   argsForSpawnType(args) {

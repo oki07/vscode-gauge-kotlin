@@ -622,8 +622,13 @@ class ProjectInitializer {
         });
       } catch (error) {
         cancellationDisposable.dispose();
+        // A partly written scaffold is worse than none: the leftover
+        // manifest.json makes the next attempt answer "Given location is already
+        // a Gauge Project", so the user cannot retry with the same name.
+        // cleanupOperationDirectory only removes a directory this operation
+        // created (operation.directoryOwned).
+        this.cleanupOperationDirectory(operation);
         if (this.operationStopped(operation)) {
-          this.cleanupOperationDirectory(operation);
           progressHandler.neutral();
           return;
         }

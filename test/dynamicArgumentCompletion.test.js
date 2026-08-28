@@ -144,6 +144,54 @@ function createMultiProjectFactory() {
   };
 }
 
+// Gauge parses a """ block as the preceding step's single special_string
+// argument - data, not syntax - so no step or parameter exists at a position
+// inside it. Offering completions there let one silently rewrite the payload.
+test("GaugeDynamicArgumentCompletionProvider offers nothing inside a doc string", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "| user |",
+    "| ---- |",
+    "| Bob  |",
+    "",
+    "## Scenario",
+    "* Post a payload",
+    "\"\"\"",
+    "* not a step <u>",
+    "\"\"\"",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideCompletionItems(document, new vscode.Position(8, 16)),
+    [],
+  );
+});
+
+// references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+// bold line is a comment. isStepLine in this same file already encodes that;
+// stepCompletionRange did not, so accepting a completion on "**bold**" rewrote
+// the comment into a step.
+test("GaugeDynamicArgumentCompletionProvider offers nothing on a Markdown bold line", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Real step",
+    "**bold**",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideCompletionItems(document, new vscode.Position(4, 6)),
+    [],
+  );
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers inside dynamic arguments", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -1822,13 +1870,18 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Mar
   assert.equal(items[0].insertText.value, "Log in as \"${0:user}\"");
 });
 
-test("GaugeDynamicArgumentCompletionProvider completes double-star step lines", async () => {
+// A step whose text begins with "*" is written "* * Log in as <user>": the
+// marker, then the text. "** Log" is a comment, because
+// references/gauge/parser/lex.go isStep requires text[1] != '*'. Verified
+// against the real parser - "** Log" yields no step, "* * Log in as <u>" yields
+// the step "* Log in as {}".
+test("GaugeDynamicArgumentCompletionProvider completes a step whose text starts with a star", async () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
   const specDocument = createDocument([
     "# Checkout",
     "",
-    "** Log",
+    "* * Log",
   ].join("\n"), "/workspace/gauge/specs/example.spec");
   const kotlinDocument = createDocument([
     "import com.thoughtworks.gauge.Step",
@@ -1846,7 +1899,7 @@ test("GaugeDynamicArgumentCompletionProvider completes double-star step lines", 
     },
   });
 
-  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 6));
+  const items = await provider.provideCompletionItems(specDocument, new vscode.Position(2, 7));
 
   assert.deepEqual(labels(items), ["* Log in as <user>"]);
   assert.equal(items[0].detail, "step");

@@ -32,6 +32,50 @@ function portableCommandCandidates(CLI, command) {
   return CLI.getCommandCandidates(command).filter((entry) => entry.cmdSuffix !== ".exe");
 }
 
+// A .bat or .cmd launcher is spawned with shell: true, and the shell splits the
+// command line on spaces. Arguments were quoted but the command itself was not,
+// so a gauge.executablePath under "C:\\Program Files\\..." never spawned and the
+// extension reported "Gauge executable not found!" for a valid path.
+test("Command quotes a shell mode command that contains spaces", () => {
+  const { Command } = require("../src/cli");
+  const spawns = [];
+  const command = new Command("C:\\Program Files\\gauge\\bin\\gauge.bat", "", true);
+  command.childProcess = {
+    spawn(file, args, options) {
+      spawns.push({ file, args, options });
+      return new EventEmitter();
+    },
+  };
+
+  command.spawn(["--version"]);
+
+  assert.deepEqual(spawns, [
+    {
+      file: "\"C:\\Program Files\\gauge\\bin\\gauge.bat\"",
+      args: ["--version"],
+      options: { shell: true },
+    },
+  ]);
+});
+
+// A command with no spaces must stay unquoted: quoting it unconditionally would
+// break a plain "gauge.bat" on shells that treat the quotes literally.
+test("Command leaves a shell mode command without spaces alone", () => {
+  const { Command } = require("../src/cli");
+  const spawns = [];
+  const command = new Command("gauge.bat", "", true);
+  command.childProcess = {
+    spawn(file) {
+      spawns.push(file);
+      return new EventEmitter();
+    },
+  };
+
+  command.spawn([]);
+
+  assert.deepEqual(spawns, ["gauge.bat"]);
+});
+
 test("CLI reports installed plugins and plugin versions", () => {
   const cli = createCli();
 

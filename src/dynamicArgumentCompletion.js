@@ -247,6 +247,23 @@ function isConceptHeadingAt(lines, lineNumber) {
   return isConceptHeading(lines[lineNumber] || "") || isLegacyConceptHeadingAt(lines, lineNumber);
 }
 
+// Walks up only as far as the nearest fence, step or heading, so this stays a
+// nearby-lines read like every other completion context check. A `"""` opens a
+// doc string only when a step sits directly above it; meeting a closing fence
+// first means the cursor is below the block, not inside it.
+function isInsideDocString(document, lineNumber) {
+  for (let line = lineNumber - 1; line >= 0; line -= 1) {
+    const text = documentLineText(document, line);
+    if (isDocStringFenceLine(text)) {
+      return line > 0 && isStepLine(documentLineText(document, line - 1));
+    }
+    if (isStepLine(text) || String(text || "").trim().startsWith("#")) {
+      return false;
+    }
+  }
+  return false;
+}
+
 function isStepLine(line) {
   const text = String(line || "");
   const marker = text.search(/\S/);
@@ -378,9 +395,12 @@ function isThenable(value) {
 
 function stepCompletionRange(line, position) {
   const markerStart = String(line || "").search(/\S/);
+  // references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+  // bold line is a comment, not a step.
   if (
     markerStart === -1
     || line[markerStart] !== "*"
+    || line[markerStart + 1] === "*"
     || position.character <= markerStart
   ) {
     return undefined;
@@ -2014,6 +2034,11 @@ class GaugeDynamicArgumentCompletionProvider {
     const line = document.lineAt(position.line).text;
     if (!this.isCompletionOperationActive(operation)) {
       return CANCELLED_COMPLETION;
+    }
+    // Gauge parses a """ block as the preceding step's single special_string
+    // argument - data, not syntax - so nothing can be completed inside one.
+    if (isInsideDocString(document, position.line)) {
+      return [];
     }
     const tagRange = isDocumentTagsContext(document, position.line)
       ? tagCompletionRange(line, position)

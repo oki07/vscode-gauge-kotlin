@@ -1770,6 +1770,49 @@ test("ProjectInitializer preserves live synchronous spawn failures", async () =>
 
 // The bundled templates are what a new user's project starts from, so their
 // defaults are the extension's defaults.
+// A partly written scaffold is worse than none: the leftover manifest.json makes
+// the same command answer "Given location is already a Gauge Project" on the next
+// try, so the user cannot retry with the same name. The directory is only removed
+// when this operation created it (operation.directoryOwned).
+test("ProjectInitializer removes a directory it created when the scaffold fails", async () => {
+  const { ProjectInitializer } = require("../src/init/projectInit");
+  const { registered, vscode } = createFakeVscode();
+  const removed = [];
+  let writes = 0;
+
+  new ProjectInitializer({
+    cli: {
+      isGaugeInstalled: () => true,
+      gaugeCommand: () => ({
+        spawnSync: () => ({ stdout: Buffer.from("[]") }),
+      }),
+    },
+    env: { PATH: "/bin" },
+    fileSystem: {
+      existsSync: () => false,
+      mkdirSync() {},
+      writeFileSync() {
+        writes += 1;
+        if (writes > 1) {
+          throw new Error("ENOSPC: no space left on device");
+        }
+      },
+      rmSync(dirname) {
+        removed.push(dirname);
+      },
+    },
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = registered.find((entry) => entry.command === "gauge.createProject");
+  // The command surfaces the failure; what matters here is that it does not leave
+  // the half-written project behind.
+  await command.handler().catch(() => undefined);
+
+  assert.deepEqual(removed, ["/workspace/shop"]);
+});
+
 test("bundled templates keep Gauge's own environment defaults", () => {
   const {
     listBundledKotlinTemplates,
