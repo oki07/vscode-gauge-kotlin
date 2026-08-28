@@ -1948,6 +1948,35 @@ test("execute node resolves Windows drive-letter spec paths to the matching work
 // Alive() and printing its summary. Reporting that as onCancelled told the Test
 // UI the whole run was cancelled, and its per-project loop then skipped every
 // remaining project silently.
+// src/project/projectFactory.js builds a GradleProject only when a root build
+// script is present (GRADLE_BUILD_FILES). A wrapper script alone - a multi-module
+// repo whose root holds only settings.gradle.kts - is a plain Gauge project, so
+// accepting it here handed Gradle plugin arguments to a command that cannot use
+// them and no specification ran.
+test("executor does not treat a bare Gradle wrapper as a Gradle project", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const commands = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync: (filename) => filename === "/workspace/gauge/gradlew",
+    },
+    async runner(command) {
+      commands.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.specification.all");
+
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].args[0], "run");
+});
+
 test("executor does not report a debug run as cancelled when its session ends", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const lifecycle = [];

@@ -281,7 +281,12 @@ function detectProjectKind(projectRoot, fileSystem, pathModule) {
     && fileSystem.existsSync(pathModule.join(projectRoot, relativePath))
   );
 
-  if (exists("build.gradle.kts") || exists("build.gradle") || exists("gradlew")) {
+  // A root build script, matching GRADLE_BUILD_FILES in
+  // src/project/projectFactory.js. A wrapper script alone - a multi-module repo
+  // whose root holds only settings.gradle.kts - is a plain Gauge project there,
+  // so accepting it here handed Gradle plugin arguments to a command that cannot
+  // use them.
+  if (exists("build.gradle.kts") || exists("build.gradle")) {
     return "gradle";
   }
   if (exists("pom.xml")) {
