@@ -274,6 +274,34 @@ function createCancellationToken() {
   };
 }
 
+// A run started outside the Test Explorer - from the Spec Explorer, or from the
+// palette with "machine-readable" in the launch configuration - still streams
+// Gauge's JSON events into the sink. ensureRun creates a TestRun for them, but
+// with no run context nothing ever calls run.end, so the Test Results view kept
+// spinning after Gauge exited and the cancellation listener leaked with it.
+test("GaugeTestController ends a run it created outside the Test Explorer", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { calls, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  const disposable = gaugeTests.register();
+  const sink = gaugeTests.createExecutionEventSink();
+  sink({
+    type: "suiteStarted",
+    id: "/workspace/specs/example.spec",
+    name: "Checkout",
+    location: "gauge:///workspace/specs/example.spec:1",
+  });
+  sink({ type: "suiteFinished" });
+
+  const kinds = calls.map((entry) => entry[0]);
+  assert.equal(kinds.filter((kind) => kind === "run").length, 1);
+  assert.equal(kinds.includes("end"), true);
+  assert.equal(gaugeTests.runTokenDisposables.size, 0);
+
+  disposable.dispose();
+});
+
 test("GaugeTestController maps execution events into VS Code TestRun calls", () => {
   const { GaugeTestController } = require("../src/testController");
   const { calls, controller, vscode } = createFakeVscode();

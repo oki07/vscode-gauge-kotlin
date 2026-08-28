@@ -36,6 +36,33 @@ function createChildProcess() {
   return child;
 }
 
+// Gauge output is UTF-8 and a step name, a tag or a failure message can hold
+// multi-byte characters. A chunk boundary can split one of those sequences, and
+// Buffer.prototype.toString on the raw chunk turns each half into a replacement
+// character. StringDecoder exists for exactly this and the chunk emitter beside
+// this one already uses it.
+test("process runner decodes multi-byte output split across chunks", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const processedLines = [];
+  const runner = createGaugeProcessRunner({
+    outputChannel: new FakeOutputChannel(),
+    processOutputLine(lineText) {
+      processedLines.push(lineText);
+    },
+    spawn: () => child,
+  });
+
+  const run = runner({ command: "gauge", args: ["run"], cwd: "/workspace" });
+  const payload = Buffer.from("Specification: \u2713 done\n", "utf8");
+  child.stdout.emit("data", payload.subarray(0, 16));
+  child.stdout.emit("data", payload.subarray(16));
+  child.emit("exit", 0);
+  await run;
+
+  assert.deepEqual(processedLines, ["Specification: \u2713 done\n"]);
+});
+
 test("process runner spawns Gauge and routes stdout through output and line processors", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

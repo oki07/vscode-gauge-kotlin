@@ -1936,6 +1936,54 @@ test("execute node resolves Windows drive-letter spec paths to the matching work
 // targets.length > 1), so selecting two scenarios sent
 // "run --tags smoke a.spec:12 a.spec:20" and Gauge filtered both chosen
 // scenarios away, running nothing.
+// gauge/scenarios answers with a single ScenarioInfo rather than a list whenever
+// a scenario's span covers the requested line: getScenarioAt in
+// references/gauge/api/lang/customResponses.go returns `info` as soon as
+// `sce.InSpan(line + 1)` is true. The at-cursor branch handled that shape;
+// Run Scenarios did not, and chooseAndExecuteScenario returns undefined for a
+// non-array, so the command silently did nothing.
+test("executor runs a single scenario response from Run Scenarios", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const commands = [];
+  const picks = [];
+  const { vscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  vscode.window.showQuickPick = (items) => {
+    picks.push(items);
+    return Promise.resolve(items[0]);
+  };
+  vscode.window.activeTextEditor = {
+    document: { uri: { fsPath: "/workspace/gauge/specs/a.spec" } },
+    selection: { active: { line: 1, character: 0 } },
+  };
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: { existsSync: () => false },
+    scenariosProvider: () => Promise.resolve({
+      heading: "Successful checkout",
+      executionIdentifier: "/workspace/gauge/specs/a.spec:2",
+      lineNo: 2,
+    }),
+    async runner(command) {
+      commands.push(command);
+      return true;
+    },
+  });
+
+  await controller.handleCommand("gauge.execute.scenarios");
+
+  assert.deepEqual(picks.map((items) => items.map((item) => item.label)), [
+    ["Successful checkout"],
+  ]);
+  assert.equal(commands.length, 1);
+  assert.equal(
+    commands[0].args.includes("/workspace/gauge/specs/a.spec:2"),
+    true,
+  );
+});
+
 test("executor clears launch filters for a batch of scenario targets", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const commands = [];

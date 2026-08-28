@@ -1926,6 +1926,18 @@ class GaugeTestController {
     }
   }
 
+  endContextlessRun(run) {
+    if (!run || this.activeRunContext || this.currentRun !== run) {
+      return;
+    }
+    this.currentRun = undefined;
+    this.currentRequest = undefined;
+    this.releaseRunTokenCancellation(run);
+    if (typeof run.end === "function") {
+      run.end();
+    }
+  }
+
   handleExecutionEvent(event) {
     if (this.disposed || !event || !event.type) {
       return;
@@ -1951,6 +1963,10 @@ class GaugeTestController {
         break;
       }
       case "suiteFinished":
+        // A run started outside the Test Explorer has no run context, so nothing
+        // else will ever end it: the Test Results view keeps spinning after
+        // Gauge exits and the cancellation listener leaks. Close it here.
+        this.endContextlessRun(run);
         break;
       case "testFinished": {
         const attemptEvent = this.resolveAttemptEvent(event);

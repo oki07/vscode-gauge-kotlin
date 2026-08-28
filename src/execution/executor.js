@@ -1565,8 +1565,16 @@ function createGaugeExecutionController(options = {}) {
       return cancelUnstartedExecution(flags);
     }
 
-    if (atCursor && !Array.isArray(scenarios)) {
-      return executeScenarioIdentifier(scenarios.executionIdentifier, flags);
+    // gauge/scenarios answers with a single ScenarioInfo rather than a list
+    // whenever a scenario's span covers the requested line
+    // (references/gauge/api/lang/customResponses.go getScenarioAt returns `info`
+    // as soon as `sce.InSpan(line + 1)` is true). Only the at-cursor branch
+    // handled that shape, so Run Scenarios silently did nothing.
+    if (!Array.isArray(scenarios)) {
+      if (atCursor) {
+        return executeScenarioIdentifier(scenarios.executionIdentifier, flags);
+      }
+      return chooseAndExecuteScenario(scenarios ? [scenarios] : [], flags);
     }
     return chooseAndExecuteScenario(scenarios, flags);
   }

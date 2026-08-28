@@ -21,10 +21,15 @@ function createDefaultOutputChannel(vscode) {
   };
 }
 
+// Decode with StringDecoder, not chunk.toString(): Gauge output is UTF-8 and a
+// multi-byte sequence split across a chunk boundary becomes two replacement
+// characters otherwise. createUtf8Emitter below already does this.
 function createLineEmitter(callback) {
+  const decoder = new StringDecoder("utf8");
   let accumulated = "";
   return function emitLines(chunk) {
-    const parts = `${accumulated}${chunk.toString()}`.split(/\r?\n/);
+    const value = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    const parts = `${accumulated}${decoder.write(value)}`.split(/\r?\n/);
     accumulated = parts.pop();
     for (const line of parts) {
       callback(`${line}\n`);
