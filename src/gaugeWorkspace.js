@@ -7,7 +7,7 @@ const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
 const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
 const { GaugeClients } = require("./gaugeClients");
-const { configuredSpecDirs } = require("./gaugeSpecScope");
+const { configuredSpecDirs, markdownIsASpecExtension } = require("./gaugeSpecScope");
 const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
 const { MavenProject } = require("./project/mavenProject");
 const { createProjectFactory } = require("./project/projectFactory");
@@ -1173,6 +1173,16 @@ class GaugeWorkspace {
   // client), and gauge-java builds its step registry by reflection at runner
   // start rather than from synchronised document text.
   markdownSpecSelectors(projectRoot) {
+    const scopeOptions = {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot,
+    };
+    // A project that narrows gauge_spec_file_extensions to ".spec" is saying its
+    // Markdown is documentation, so it must not reach the daemon either.
+    if (!markdownIsASpecExtension(scopeOptions)) {
+      return [];
+    }
     return configuredSpecDirs({
       fileSystem: this.fileSystem,
       pathModule: this.pathModule,

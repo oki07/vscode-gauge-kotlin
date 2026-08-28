@@ -345,6 +345,27 @@ function createEmptyKotlinWorkspace(LanguageClient = FakeLanguageClient) {
 // A project that moved its specifications with gauge_specs_dir must have the
 // Markdown arm follow, or Gauge specs written as Markdown lose every language
 // feature the daemon provides.
+// A project that narrows gauge_spec_file_extensions to ".spec" is saying its
+// Markdown is documentation (references/gauge/env/env.go GaugeSpecFileExtensions,
+// references/gauge/util/fileUtils.go IsValidSpecExtension). Offering those files
+// to the daemon anyway would put its Run Spec lenses back on them.
+test("GaugeWorkspace drops the Markdown selector when gauge_spec_file_extensions excludes it", () => {
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const workspace = Object.create(GaugeWorkspace.prototype);
+  workspace.pathModule = path.posix;
+  workspace.fileSystem = {
+    readdirSync: () => ["default.properties"],
+    readFileSync(filename) {
+      if (filename === "/workspace/gauge/env/default/default.properties") {
+        return "gauge_spec_file_extensions = .spec\n";
+      }
+      throw new Error(`Missing ${filename}`);
+    },
+  };
+
+  assert.deepEqual(workspace.markdownSpecSelectors("/workspace/gauge"), []);
+});
+
 test("GaugeWorkspace scopes the Markdown selector to a configured gauge_specs_dir", () => {
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
   const workspace = Object.create(GaugeWorkspace.prototype);

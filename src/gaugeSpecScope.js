@@ -287,6 +287,7 @@ module.exports = {
   gaugeProjectRootForFile,
   isMarkdownGaugeSpecFile,
   isMarkdownSpecPath,
+  markdownIsASpecExtension,
   propertiesValue,
   propertiesValueFor,
 };
