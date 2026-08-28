@@ -7,6 +7,7 @@ const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
 const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
 const { GaugeClients } = require("./gaugeClients");
+const { configuredSpecDirs } = require("./gaugeSpecScope");
 const { GaugeWorkspaceFeature } = require("./gaugeWorkspaceFeature");
 const { MavenProject } = require("./project/mavenProject");
 const { createProjectFactory } = require("./project/projectFactory");
@@ -1171,13 +1172,33 @@ class GaugeWorkspace {
   // implementation documents to stepImplementationValuesAt without touching the
   // client), and gauge-java builds its step registry by reflection at runner
   // start rather than from synchronised document text.
+  markdownSpecSelectors(projectRoot) {
+    return configuredSpecDirs({
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot,
+    }).map((segments) => ({
+      scheme: "file",
+      language: MARKDOWN_LANGUAGE,
+      pattern: `${projectRoot}/${segments.join("/")}/**/*.md`,
+    }));
+  }
+
   clientOptionsFor(project, folder) {
     const documentSelector = [
       { scheme: "file", language: GAUGE_LANGUAGE, pattern: `${project.root()}/**/*` },
       { scheme: "file", language: GAUGE_CONCEPT_LANGUAGE, pattern: `${project.root()}/**/*` },
       { scheme: "file", pattern: `${project.root()}/**/*.spec` },
       { scheme: "file", pattern: `${project.root()}/**/*.cpt` },
-      { scheme: "file", language: MARKDOWN_LANGUAGE, pattern: `${project.root()}/**/*.md` },
+      // Scope the Markdown arm to the configured gauge_specs_dir. The daemon
+      // classifies a document by extension alone
+      // (references/gauge/util/fileUtils.go IsValidSpecExtension, default list
+      // ".spec, .md") and advertises CodeLensProvider
+      // (references/gauge/api/lang/capabilities.go), so a bare "**/*.md" put the
+      // daemon's Run Spec and Debug Spec lenses on any README in the project,
+      // and an unparseable one made it answer with an error. The rule lives in
+      // src/gaugeSpecScope.js so every surface gives the same answer.
+      ...this.markdownSpecSelectors(project.root()),
     ];
     return {
       documentSelector,
