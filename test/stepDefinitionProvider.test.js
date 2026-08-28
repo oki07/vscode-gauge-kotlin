@@ -170,6 +170,46 @@ function createRegistrationVscode() {
   };
 }
 
+// The inline table follows the step's LAST line. hasInlineTableAfterStep was
+// asked from the FIRST line, where the next non-blank line is a continuation, so
+// a multi-line step with a table never got the <table> suffix: diagnostics and
+// CodeLens reported it implemented (stepDiagnostics advances to the end line
+// before the same check) while F12 answered nothing. The real parser sides with
+// diagnostics: with allow_multiline_step the table is that step's argument.
+test("stepTextAt appends the table of a multi-line step", () => {
+  const { stepTextAt } = require("../src/stepDefinitionProvider");
+  const lines = [
+    "# Checkout",
+    "## Buy",
+    "* Pay the total amount",
+    "  for the customer",
+    "| a | b |",
+    "| 1 | 2 |",
+  ];
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/checkout.spec" },
+    get lineCount() {
+      return lines.length;
+    },
+    lineAt(line) {
+      return { text: lines[line] };
+    },
+    getText() {
+      return lines.join("\n");
+    },
+  };
+
+  assert.equal(
+    stepTextAt(document, { line: 2 }, { allowMultilineStep: true }),
+    "Pay the total amount for the customer {}",
+  );
+  assert.equal(
+    stepTextAt(document, { line: 3 }, { allowMultilineStep: true }),
+    "Pay the total amount for the customer {}",
+  );
+});
+
 test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

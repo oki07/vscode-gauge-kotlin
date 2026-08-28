@@ -122,6 +122,55 @@ function createCancellation() {
   };
 }
 
+// The formatter shells out to "gauge format", which rewrites the file on disk,
+// and then replaces the whole document with what it reads back. If the user
+// types while the CLI is running, that replacement discards the new text. VS
+// Code protects its own formatting API by version, but gauge.format applies the
+// edits directly (src/extension.js formatActiveGaugeDocument), so the provider
+// has to check (vscode.d.ts TextDocument.version).
+test("GaugeFormatProvider drops its edit when the document changed during formatting", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  const document = createDocument([
+    "# Checkout",
+    "* Pay",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  document.version = 1;
+  document.save = () => Promise.resolve(true);
+
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand: () => ({
+        spawn() {
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          process.nextTick(() => {
+            child.emit("exit", 0);
+            child.emit("close", 0);
+          });
+          return child;
+        },
+      }),
+    },
+    fileSystem: {
+      readFileSync() {
+        // gauge format has finished; the user typed while it ran.
+        document.version = 2;
+        return Buffer.from("# Checkout\n\n* Pay\n");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    vscode: createFakeVscode(),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(document);
+
+  assert.equal(document.version, 2, "the format path must have run");
+  assert.deepEqual(edits, []);
+});
+
 test("GaugeFormatProvider returns full document edits from gauge format output", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
 

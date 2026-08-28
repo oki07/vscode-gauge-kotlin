@@ -528,6 +528,15 @@ class GaugeFormatProvider {
       return [];
     }
 
+    // gauge format rewrites the file on disk and the result replaces the whole
+    // document, so an edit typed while the CLI runs would be discarded. VS Code
+    // guards its own formatting API by version, but gauge.format applies these
+    // edits directly (src/extension.js formatActiveGaugeDocument).
+    const versionBeforeFormat = document.version;
+    const documentChanged = () => (
+      versionBeforeFormat !== undefined && document.version !== versionBeforeFormat
+    );
+
     if (typeof document.save === "function") {
       try {
         await document.save();
@@ -605,7 +614,7 @@ class GaugeFormatProvider {
     if (cancellationRequested(token)) {
       return [];
     }
-    if (formatted === document.getText()) {
+    if (formatted === document.getText() || documentChanged()) {
       return [];
     }
     const edit = createTextEdit(

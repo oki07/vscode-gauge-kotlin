@@ -297,6 +297,17 @@ function multilineStepLineAt(document, lineNumber) {
   return undefined;
 }
 
+function multilineStepEndLine(document, lineNumber) {
+  let endLine = lineNumber;
+  for (let nextLine = lineNumber + 1; nextLine < documentLineCount(document); nextLine += 1) {
+    if (isGaugeSyntaxBoundary(documentLine(document, nextLine))) {
+      break;
+    }
+    endLine = nextLine;
+  }
+  return endLine;
+}
+
 function multilineStepText(document, lineNumber) {
   const line = documentLine(document, lineNumber);
   const marker = stepMarkerIndex(line);
@@ -304,12 +315,9 @@ function multilineStepText(document, lineNumber) {
     return "";
   }
   const lines = [line.slice(marker + 1).trim()];
-  for (let nextLine = lineNumber + 1; nextLine < documentLineCount(document); nextLine += 1) {
-    const nextText = documentLine(document, nextLine);
-    if (isGaugeSyntaxBoundary(nextText)) {
-      break;
-    }
-    lines.push(nextText.trim());
+  const endLine = multilineStepEndLine(document, lineNumber);
+  for (let nextLine = lineNumber + 1; nextLine <= endLine; nextLine += 1) {
+    lines.push(documentLine(document, nextLine).trim());
   }
   return lines.join(" ").trim();
 }
@@ -430,7 +438,14 @@ function stepTextCandidatesAt(document, position, options = {}) {
   if (!stepText) {
     return [];
   }
-  if (hasInlineTableAfterStep(document, lineNumber)) {
+  // The table follows the step's LAST line. Asking from the first line found a
+  // continuation line instead, so a multi-line step with a table never got the
+  // <table> suffix and Go to Definition answered nothing while every other
+  // surface reported the step implemented.
+  const stepEndLine = options.allowMultilineStep
+    ? multilineStepEndLine(document, lineNumber)
+    : lineNumber;
+  if (hasInlineTableAfterStep(document, stepEndLine)) {
     stepText = `${stepText} <table>`;
   }
   const normalized = normalizeStepTemplate(stepText);
