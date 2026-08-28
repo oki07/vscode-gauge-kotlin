@@ -4058,6 +4058,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
         ));
       }
       hasSpecHeading = true;
+      inTeardown = false;
       continue;
     }
 
@@ -4084,6 +4085,11 @@ function duplicateScenarioDiagnostics(vscode, text) {
     if (heading === undefined) {
       continue;
     }
+    // A scenario heading ends the teardown scope:
+    // references/gauge/parser/convert.go scenarioConverter calls
+    // retainStates(state, specScope), which drops tearDownScope. Without this
+    // every scenario after a "____" reported as empty.
+    inTeardown = false;
     if (!hasSpecHeading) {
       diagnostics.push(createDiagnostic(
         vscode,
@@ -4765,8 +4771,11 @@ function dynamicStepParameters(text) {
     if (closeIndex === -1) {
       return parameters;
     }
+    // An empty <> is still a parameter to Gauge and its lookup fails, so it must
+    // not be dropped: the real parser answers "Dynamic parameter <> could not be
+    // resolved" (references/gauge/parser/stepParser.go).
     const parameter = text.slice(openIndex + 1, closeIndex).trim();
-    if (parameter && !SPECIAL_PARAMETER_PATTERN.test(parameter)) {
+    if (!SPECIAL_PARAMETER_PATTERN.test(parameter)) {
       parameters.push(parameter);
     }
     openIndex = findDynamicParameterStart(text, closeIndex + 1);
@@ -5247,7 +5256,9 @@ function findGaugeSteps(text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     const marker = rawLine.search(/\S/);
-    if (marker === -1 || rawLine[marker] !== "*") {
+    // references/gauge/parser/lex.go isStep requires text[0] == '*' and
+    // text[1] != '*', so a Markdown bold line is a comment.
+    if (marker === -1 || rawLine[marker] !== "*" || rawLine[marker + 1] === "*") {
       continue;
     }
 
@@ -5348,7 +5359,7 @@ function duplicateConceptDiagnostics(vscode, document, conceptDocuments) {
 function isTopLevelConceptStep(line) {
   const text = String(line || "");
   const marker = text.search(/\S/);
-  if (marker === -1 || text[marker] !== "*") {
+  if (marker === -1 || text[marker] !== "*" || text[marker + 1] === "*") {
     return false;
   }
   return Boolean(text.slice(marker + 1).trim());
@@ -5548,6 +5559,12 @@ function conceptTableDiagnostics(vscode, text) {
     if (isTopLevelConceptStep(rawLine)) {
       tableBelongsToStep = true;
       inInvalidTable = false;
+      continue;
+    }
+    // A blank line, or a step's doc string, does not end the step's scope:
+    // Gauge's lexer emits no token for a blank line after a step, so a table
+    // below one still attaches to it.
+    if (!rawLine.trim() || isDocStringFenceLine(rawLine)) {
       continue;
     }
     if (isTopLevelTableLine(rawLine)) {

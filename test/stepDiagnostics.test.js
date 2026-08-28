@@ -6288,6 +6288,8 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     conceptDocument,
   ]);
 
+  // "** Markdown bullet" is a comment, not a step: lex.go isStep requires
+  // text[1] != '*'. Verified against the real parser.
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.message),
     [
@@ -6295,7 +6297,6 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
       "Undefined Step",
       "Undefined Step",
       "Step should not be blank",
-      "Undefined Step",
       "Dynamic parameter <amount> could not be resolved",
     ],
   );
@@ -6305,10 +6306,10 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   assert.deepEqual({ ...diagnostics[1].range.end }, { line: 3, character: 14 });
   assert.deepEqual({ ...diagnostics[2].range.start }, { line: 4, character: 0 });
   assert.deepEqual({ ...diagnostics[2].range.end }, { line: 4, character: 15 });
-  assert.deepEqual({ ...diagnostics[4].range.start }, { line: 8, character: 0 });
-  assert.deepEqual({ ...diagnostics[4].range.end }, { line: 8, character: 18 });
-  assert.deepEqual({ ...diagnostics[5].range.start }, { line: 2, character: 0 });
-  assert.deepEqual({ ...diagnostics[5].range.end }, { line: 2, character: 19 });
+  // Index 4 is now the dynamic parameter diagnostic: the "** Markdown bullet"
+  // line no longer produces an Undefined Step.
+  assert.deepEqual({ ...diagnostics[4].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[4].range.end }, { line: 2, character: 19 });
 });
 
 test("GaugeStepDiagnosticsProvider resolves multiline Gauge steps when project allows them", () => {
@@ -6902,6 +6903,125 @@ test("GaugeStepDiagnosticsProvider treats an upper case special type as unknown"
   assert.equal(
     messages.includes("Dynamic parameter <FILE:present.txt> could not be resolved"),
     true,
+  );
+});
+
+// A scenario heading ends the teardown scope: references/gauge/parser/convert.go
+// scenarioConverter calls retainStates(state, specScope), which drops
+// tearDownScope. Verified against the real parser - both inputs below parse
+// ok=true with every scenario holding its own step.
+// references/gauge/parser/lex.go isStep requires text[0] == '*' && text[1] != '*',
+// so a Markdown bold line is a comment. Verified against the real parser: this
+// input is ok=true with one step. Every other surface already guards this;
+// findGaugeSteps did not, so "**bold**" drew a false Undefined Step.
+// Gauge's lexer emits no token for a blank line after a step, so a table below
+// one still attaches to it - the rule src/stepDiagnostics.js
+// inlineTableLineAfterStep already records. The concept table check dropped the
+// step scope on the blank line and reported "Table doesn't belong to any step"
+// on a concept the real parser accepts.
+test("GaugeStepDiagnosticsProvider keeps a concept table attached across a blank line", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "",
+    "|quantity|",
+    "|--------|",
+    "|2       |",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const implementation = createDocument([
+    "@Step(\"Confirm order <table>\")",
+    "fun confirm(rows: Table) {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider treats a Markdown bold line as a comment", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Spec",
+    "",
+    "## Sc",
+    "* real step",
+    "**bold**",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/a.spec");
+  const implementation = createDocument([
+    "@Step(\"real step\")",
+    "fun real() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+// An empty dynamic parameter is still a parameter to Gauge, and the lookup fails:
+// the real parser answers ok=false with "Dynamic parameter <> could not be
+// resolved". Dropping it left the whole specification looking clean while
+// `gauge run` never got past parsing.
+test("GaugeStepDiagnosticsProvider reports an empty dynamic parameter", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Spec",
+    "",
+    "## Sc",
+    "* say <>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/a.spec");
+  const implementation = createDocument([
+    "@Step(\"say <x>\")",
+    "fun say(x: String) {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message),
+    ["Dynamic parameter <> could not be resolved"],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider ends the teardown scope at a scenario heading", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const implementation = createDocument([
+    "@Step(\"real step\")",
+    "fun real() {}",
+  ].join("\n"));
+
+  const teardownFirst = createDocument([
+    "# Spec",
+    "____",
+    "## Sc",
+    "* real step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/a.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(teardownFirst, [teardownFirst, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+
+  const scenarioAfterTeardown = createDocument([
+    "# Spec",
+    "## A",
+    "* real step",
+    "____",
+    "* real step",
+    "## B",
+    "* real step",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/b.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(scenarioAfterTeardown, [scenarioAfterTeardown, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
   );
 });
 
