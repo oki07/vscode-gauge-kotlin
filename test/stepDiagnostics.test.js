@@ -1496,7 +1496,14 @@ test("GaugeStepDiagnosticsProvider respects Step wildcard imports", () => {
   );
 });
 
-test("GaugeStepDiagnosticsProvider ignores ambiguous Step wildcard imports", () => {
+// The runner resolves steps by reflection, not by imports:
+// references/gauge-java StepsScanner.scan calls
+// reflections.getMethodsAnnotatedWith(Step.class). So once the Gauge package is
+// imported by wildcard, a bare @Step is the Gauge one - a second unrelated
+// wildcard says nothing. Counting wildcards instead dropped every @Step in a
+// file that also imported java.util.*, which is common, and every step it
+// implemented then read as undefined.
+test("GaugeStepDiagnosticsProvider keeps Step wildcard imports beside other wildcards", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const ambiguousDocument = createDocument([
@@ -1514,7 +1521,12 @@ test("GaugeStepDiagnosticsProvider ignores ambiguous Step wildcard imports", () 
     "fun gauge() {}",
   ].join("\n"));
 
-  assert.deepEqual(provider.provideDiagnostics(ambiguousDocument), []);
+  assert.deepEqual(
+    provider.provideDiagnostics(ambiguousDocument).map((diagnostic) => diagnostic.message),
+    [
+      "Parameter count mismatch(found [0] expected [1]) with step annotation : \"Ambiguous <value>\". ",
+    ],
+  );
   assert.deepEqual(
     provider.provideDiagnostics(explicitGaugeDocument).map((diagnostic) => diagnostic.message),
     [
@@ -6997,6 +7009,63 @@ test("GaugeStepDiagnosticsProvider rejects an indented hash scenario heading in 
   );
 });
 
+// An unmatched fence is an ordinary comment token that DOES end a step's scope
+// (references/gauge/parser/lex.go extractMultilineContent returns found=false
+// and consumes nothing), so the table below it belongs to nothing. Only a closed
+// block is the step's argument. Verified against the real concept parser, which
+// reports this and accepts the closed-block form.
+test("GaugeStepDiagnosticsProvider reports a concept table after an unmatched fence", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "\"\"\"",
+    "|quantity|",
+    "|--------|",
+    "|2       |",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  assert.equal(
+    provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message)
+      .includes("Table doesn't belong to any step"),
+    true,
+  );
+});
+
+// A closed doc string is consumed as the step's argument, so the table below it
+// still belongs to that step. The real concept parser accepts this file.
+test("GaugeStepDiagnosticsProvider keeps a concept table attached across a doc string", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "\"\"\"",
+    "some payload",
+    "\"\"\"",
+    "|quantity|",
+    "|--------|",
+    "|2       |",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const implementation = createDocument([
+    "@Step(\"Confirm order <table>\")",
+    "fun confirm(rows: Table) {}",
+  ].join("\n"));
+
+  assert.equal(
+    provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message)
+      .includes("Table doesn't belong to any step"),
+    false,
+  );
+});
+
 test("GaugeStepDiagnosticsProvider keeps a concept table attached across a blank line", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -7015,6 +7084,67 @@ test("GaugeStepDiagnosticsProvider keeps a concept table attached across a blank
 
   assert.deepEqual(
     provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+// previousLineBounds returned {start: 1, end: 0} for a file whose first character
+// is a newline, so the property-accessor walk re-entered with the same bounds
+// forever and the Kotlin scan never returned - freezing every feature that runs
+// it. A step file that starts with a blank line and carries a use-site accessor
+// annotation is ordinary Kotlin.
+test("GaugeStepDiagnosticsProvider scans a Kotlin file that starts with a blank line", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* hi",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "@get:Rule",
+    "val rule = 1",
+    "class Steps {",
+    "@Step(\"hi\")",
+    "fun hi() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+// A second wildcard import says nothing about where Step comes from. Counting
+// wildcards instead of asking whether one of them is the Gauge package dropped
+// every @Step in a file that also imported java.util.*, so every step it
+// implemented read as undefined.
+test("GaugeStepDiagnosticsProvider keeps Step annotations beside another wildcard import", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* hi",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "import com.thoughtworks.gauge.*",
+    "import java.util.*",
+    "class Steps {",
+    "@Step(\"hi\")",
+    "fun hi() {}",
+    "}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
       .map((diagnostic) => diagnostic.message),
     [],
   );

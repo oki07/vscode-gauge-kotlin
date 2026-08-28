@@ -144,6 +144,34 @@ function createMultiProjectFactory() {
   };
 }
 
+// A doc string payload is arbitrary text, so a payload line that looks like a
+// step must not make the CLOSING fence read as an opening one. That mistake
+// killed every completion on the step after such a block.
+test("GaugeDynamicArgumentCompletionProvider completes after a doc string whose payload looks like a step", () => {
+  const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
+  const vscode = createFakeVscode();
+  const provider = new GaugeDynamicArgumentCompletionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "| user |",
+    "| ---- |",
+    "| Bob  |",
+    "",
+    "## Scenario",
+    "* Post a payload",
+    "\"\"\"",
+    "notes:",
+    "* first bullet",
+    "\"\"\"",
+    "* Login as <",
+  ].join("\n"));
+
+  assert.deepEqual(
+    labels(provider.provideCompletionItems(document, new vscode.Position(11, 12))),
+    ["user"],
+  );
+});
+
 // Gauge parses a """ block as the preceding step's single special_string
 // argument - data, not syntax - so no step or parameter exists at a position
 // inside it. Offering completions there let one silently rewrite the payload.

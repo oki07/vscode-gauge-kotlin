@@ -5559,6 +5559,7 @@ function isTopLevelTableLine(line) {
 function conceptTableDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
+  const docStringLines = closedSpecDocStringLines(lines);
   let tableBelongsToStep = false;
   let inInvalidTable = false;
   for (let line = 0; line < lines.length; line += 1) {
@@ -5568,10 +5569,13 @@ function conceptTableDiagnostics(vscode, text) {
       inInvalidTable = false;
       continue;
     }
-    // A blank line, or a step's doc string, does not end the step's scope:
-    // Gauge's lexer emits no token for a blank line after a step, so a table
-    // below one still attaches to it.
-    if (!rawLine.trim() || isDocStringFenceLine(rawLine)) {
+    // A blank line does not end the step's scope: Gauge's lexer emits no token
+    // for a blank line after a step, so a table below one still attaches to it.
+    // A CLOSED doc string is consumed as the step's argument and does not end it
+    // either, but an unmatched fence is an ordinary comment token that DOES end
+    // the scope (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only closed blocks may be skipped.
+    if (!rawLine.trim() || docStringLines.has(line)) {
       continue;
     }
     if (isTopLevelTableLine(rawLine)) {
@@ -6144,8 +6148,11 @@ function previousLineBounds(text, lineStart) {
     return undefined;
   }
   const end = lineStart - 1;
-  const start = text.lastIndexOf("\n", Math.max(0, end - 1)) + 1;
-  return { end, start };
+  const start = end === 0 ? 0 : text.lastIndexOf("\n", end - 1) + 1;
+  // A file whose first character is a newline used to yield {start: 1, end: 0},
+  // and the caller re-entered with the same bounds forever, hanging the scan and
+  // with it every feature that runs it.
+  return start > end ? undefined : { end, start };
 }
 
 function lineIndent(line) {
@@ -7678,8 +7685,10 @@ function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNam
         && stepImports.wildcards.has(GAUGE_STEP_PACKAGE)
       );
   }
+  // Another wildcard import says nothing about where Step comes from. Counting
+  // them dropped every @Step in a file that also imported java.util.*.
   if (normalizedName === "Step" && stepImports.wildcards.size > 0) {
-    return stepImports.wildcards.size === 1 && stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
+    return stepImports.wildcards.has(GAUGE_STEP_PACKAGE);
   }
   return normalizedName === "Step";
 }

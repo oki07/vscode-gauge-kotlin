@@ -247,21 +247,31 @@ function isConceptHeadingAt(lines, lineNumber) {
   return isConceptHeading(lines[lineNumber] || "") || isLegacyConceptHeadingAt(lines, lineNumber);
 }
 
-// Walks up only as far as the nearest fence, step or heading, so this stays a
-// nearby-lines read like every other completion context check. A `"""` opens a
-// doc string only when a step sits directly above it; meeting a closing fence
-// first means the cursor is below the block, not inside it.
-function isInsideDocString(document, lineNumber) {
+// A doc string payload is arbitrary text: a payload line can look like a step,
+// a table or a heading, so no purely local rule can decide this. Do the cheap
+// thing first - walk up to the nearest heading looking for a fence at all - and
+// only when one is in view pay for the authoritative scan, which pairs fences
+// from the top of the document. Specs without doc strings, which is nearly all
+// of them, never read beyond the nearby lines the completion tests require.
+function hasDocStringFenceAbove(document, lineNumber) {
   for (let line = lineNumber - 1; line >= 0; line -= 1) {
     const text = documentLineText(document, line);
     if (isDocStringFenceLine(text)) {
-      return line > 0 && isStepLine(documentLineText(document, line - 1));
+      return true;
     }
-    if (isStepLine(text) || String(text || "").trim().startsWith("#")) {
+    if (String(text || "").trim().startsWith("#")) {
       return false;
     }
   }
   return false;
+}
+
+function isInsideDocString(document, lineNumber) {
+  if (!hasDocStringFenceAbove(document, lineNumber)) {
+    return false;
+  }
+  const text = typeof document.getText === "function" ? document.getText() : "";
+  return closedDocStringLines(text.split(/\r?\n/)).has(lineNumber);
 }
 
 function isStepLine(line) {
