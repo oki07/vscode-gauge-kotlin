@@ -125,24 +125,26 @@ class SpecNodeProvider {
     this.clientGeneration = 0;
     this.disposed = false;
     this.initialActivationPending = false;
-    this.treeViewEnabled = isSpecExplorerEnabled(this.vscode);
     this.onDidChangeTreeDataEmitter = new this.vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
     setCommandContext(this.vscode, ACTIVATED_CONTEXT, false);
-    // gauge.specExplorer.enabled owns the tree view only. The client activation
-    // below also owns gauge:activated, which gates the whole Gauge command
-    // surface, so it has to run either way. references/gauge-vscode keeps both
-    // behind the setting because its manifest gates only the palette entries
-    // and the view itself on that key.
-    if (this.treeViewEnabled) {
-      addDisposable(
-        this.disposables,
-        this.vscode.window.registerTreeDataProvider(SPEC_EXPLORER_VIEW, this),
-      );
-      this.registerRefreshListeners();
-      this.registerCommands();
-    }
+    // gauge.specExplorer.enabled owns the tree view only, and package.json
+    // already gates the view on "config.gauge.specExplorer.enabled", a key VS
+    // Code re-evaluates live. Sampling the setting here as well left a user who
+    // turned it back on with a view that reappeared permanently empty - no
+    // TreeDataProvider had ever been registered - and toolbar buttons that
+    // answered "command not found", until the window was reloaded.
+    //
+    // So register unconditionally and let the manifest decide what is visible.
+    // The client activation below owns gauge:activated, which gates the whole
+    // Gauge command surface, and has to run either way.
+    addDisposable(
+      this.disposables,
+      this.vscode.window.registerTreeDataProvider(SPEC_EXPLORER_VIEW, this),
+    );
+    this.registerRefreshListeners();
+    this.registerCommands();
     this.registerProjectChangeListener();
     const initialFolder = this.gaugeWorkspace.getDefaultFolder();
     this.activeFolder = initialFolder;
@@ -198,7 +200,10 @@ class SpecNodeProvider {
   }
 
   async getChildren(element) {
-    if (this.disposed || !this.treeViewEnabled) {
+    // Read the setting now rather than caching it: VS Code re-evaluates the
+    // view's "config." when clause live, so a cached answer went stale the
+    // moment the user changed it.
+    if (this.disposed || !isSpecExplorerEnabled(this.vscode)) {
       return [];
     }
     if (this.initialActivationPending) {

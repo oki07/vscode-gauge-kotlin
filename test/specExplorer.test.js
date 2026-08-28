@@ -1554,9 +1554,21 @@ test("SpecNodeProvider activates the Gauge command context when spec explorer is
     { command: "setContext", key: "gauge:activated", value: false },
     { command: "setContext", key: "gauge:activated", value: true },
   ]);
-  assert.deepEqual(treeProviders, []);
-  assert.deepEqual(commands, []);
-  assert.deepEqual(watcherListeners, []);
+  // The tree data provider, the commands and the refresh listeners are all
+  // registered regardless. The manifest gates the view itself on
+  // "config.gauge.specExplorer.enabled", a key VS Code re-evaluates live, so
+  // sampling the setting once here left a user who turned it back on with a view
+  // that reappeared permanently empty and toolbar buttons that answered
+  // "command not found" until the window was reloaded.
+  assert.deepEqual(treeProviders.map((entry) => entry.viewId), ["gauge:specExplorer"]);
+  assert.deepEqual(commands.map((entry) => entry.command).sort(), [
+    "gauge.open",
+    "gauge.specexplorer.debugNode",
+    "gauge.specexplorer.runAllActiveProjectSpecs",
+    "gauge.specexplorer.runNode",
+    "gauge.specexplorer.switchProject",
+  ]);
+  assert.equal(watcherListeners.length > 0, true);
 });
 
 test("SpecNodeProvider serves no tree nodes when spec explorer is disabled", async () => {
@@ -1574,7 +1586,9 @@ test("SpecNodeProvider serves no tree nodes when spec explorer is disabled", asy
   });
   await provider.ready();
 
-  assert.deepEqual(treeProviders, []);
+  // The provider is registered either way; the manifest hides the view. What the
+  // setting still owns at runtime is the answer to getChildren, read live.
+  assert.deepEqual(treeProviders.map((entry) => entry.viewId), ["gauge:specExplorer"]);
   assert.deepEqual(await provider.getChildren(), []);
 });
 
