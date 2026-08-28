@@ -78,6 +78,50 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
   });
 });
 
+// The runner builds its suggested annotation from the PARAMETERIZED step value:
+// references/gauge-java ValidateStepProcessor formats @Step("%s") from
+// getStepValue().getParameterizedStepValue(). Verified against the real parser -
+// ExtractStepValueAndParams on `Pay with "100"` gives
+// value="Pay with {}", parameterized="Pay with <100>".
+//
+// Keeping the static literal instead produced an annotation the runner registers
+// as `Pay with "100` (StepsUtil rewrites only <...>, Util.trimQuotes strips the
+// trailing quote), which can never match `Pay with {}`. Worse, the extension's own
+// index normalizes both to `Pay with {}`, so the Undefined Step diagnostic
+// cleared and the editor said the step was implemented while `gauge run` still
+// reported it missing.
+test("GaugeStepCodeActionProvider parameterizes static arguments in the stub", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with \"100\"",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 16),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.equal(actions[0].title, CREATE_STEP_IMPLEMENTATION_TITLE);
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: CREATE_STEP_IMPLEMENTATION_TITLE,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"Pay with <100>\")\nfun implementation(arg0: Any) {\n}\n",
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider leaves runner-authored diagnostics to Gauge LSP", () => {
   const { GaugeStepCodeActionProvider } = require("../src/stepCodeActions");
   const vscode = createFakeVscode();

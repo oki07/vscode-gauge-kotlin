@@ -6817,6 +6817,171 @@ test("GaugeStepDiagnosticsProvider reads allow_multiline_step from any propertie
   assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
+// Gauge's lexer only consumes a doc string when a CLOSING fence is found:
+// references/gauge/parser/lex.go calls extractMultilineContent, which returns
+// found=false and consumes nothing when unterminated. So an unmatched """ is
+// just a line, and everything after it is still lexed. Verified against the real
+// parser: this input reports "Teardown should have at least three underscore
+// characters" and "Dynamic parameter <amount> could not be resolved" with the
+// fence unmatched exactly as it does with the fence closed.
+//
+// Ten scanners toggled a boolean on every fence, so one stray """ turned the
+// doc-string state on for the rest of the file and silently dropped every later
+// diagnostic.
+// Gauge attributes every step after "____" to the spec teardown, not to the
+// scenario above it, so a scenario whose only steps sit below the marker is
+// empty. Verified against the real parser: "# Checkout / ## Buy / ____ /
+// * clean up" reports "Scenario should have at least one step" on line 2, while
+// "# Checkout / ## Buy / * say hello / ____ / * clean up" parses ok=true.
+// A <file:>/<table:> parameter on a STEP was dropped before any check ran - only
+// table cells were validated. Verified against the real parser:
+// "* read <file:missing.txt>" reports "Dynamic parameter <file:missing.txt>
+// could not be resolved".
+test("GaugeStepDiagnosticsProvider reports a missing step special parameter file", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: { existsSync: () => false },
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+      isGaugeProject: () => true,
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "## Buy",
+    "* read <file:missing.txt>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"read <x>\")",
+    "fun read(x: String) {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message),
+    ["Dynamic parameter <file:missing.txt> could not be resolved"],
+  );
+});
+
+// Gauge's resolver map is keyed by the exact lowercase type
+// (references/gauge/parser/resolver.go initializePredefinedResolvers, and
+// getStepArg looks the trimmed type up verbatim), so <FILE:...> is not a known
+// special parameter at all. The real parser answers with the unknown-type
+// warning and the unresolved error even when the file exists.
+test("GaugeStepDiagnosticsProvider treats an upper case special type as unknown", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({
+    fileSystem: { existsSync: () => true },
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+      isGaugeProject: () => true,
+    },
+    vscode: createFakeVscode(),
+  });
+  const document = createDocument([
+    "# Checkout",
+    "## Buy",
+    "* read <FILE:present.txt>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"read <x>\")",
+    "fun read(x: String) {}",
+  ].join("\n"));
+
+  const messages = provider
+    .provideDiagnostics(document, [document, implementation])
+    .map((diagnostic) => diagnostic.message);
+
+  assert.equal(
+    messages.includes(
+      "Could not resolve special param type <FILE:present.txt>. Treating it as dynamic param.",
+    ),
+    true,
+  );
+  assert.equal(
+    messages.includes("Dynamic parameter <FILE:present.txt> could not be resolved"),
+    true,
+  );
+});
+
+test("GaugeStepDiagnosticsProvider does not count teardown steps as scenario steps", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Buy",
+    "____",
+    "* clean up",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"clean up\")",
+    "fun cleanUp() {}",
+  ].join("\n"));
+
+  const messages = provider
+    .provideDiagnostics(document, [document, implementation])
+    .map((diagnostic) => diagnostic.message);
+
+  assert.deepEqual(messages, ["Scenario should have at least one step"]);
+});
+
+// A scenario with its own step before the marker is complete.
+test("GaugeStepDiagnosticsProvider accepts a scenario followed by a teardown", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Buy",
+    "* say hello",
+    "____",
+    "* clean up",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"say hello\")",
+    "fun hello() {}",
+    "@Step(\"clean up\")",
+    "fun cleanUp() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider keeps diagnosing after an unmatched doc string fence", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Buy",
+    "* say hello",
+    "\"\"\"",
+    "* pay <amount>",
+    "tags: a",
+    "tags: b",
+    "__",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"say hello\")",
+    "fun hello() {}",
+    "@Step(\"pay <amount>\")",
+    "fun pay(amount: String) {}",
+  ].join("\n"));
+
+  const messages = provider
+    .provideDiagnostics(document, [document, implementation])
+    .map((diagnostic) => diagnostic.message);
+
+  assert.equal(messages.includes("Dynamic parameter <amount> could not be resolved"), true);
+  assert.equal(
+    messages.includes("Teardown should have at least three underscore characters"),
+    true,
+  );
+});
+
 test("GaugeStepDiagnosticsProvider indexes an indented legacy concept heading", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

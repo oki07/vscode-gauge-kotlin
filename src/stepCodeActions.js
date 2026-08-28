@@ -3,7 +3,11 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
-const { countStepParameters, UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
+const {
+  countStepParameters,
+  parameterizedStepValue,
+  UNDEFINED_STEP_MESSAGE,
+} = require("./stepDiagnostics");
 const { allowMultilineStep } = require("./stepDefinitionProvider");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
@@ -355,8 +359,11 @@ function stepStubCode(stepText, methodName = "implementation", implicitParameter
     { length: countStepParameters(stepText) + implicitParameterCount },
     (_entry, index) => `arg${index}: Any`,
   ).join(", ");
+  // The annotation carries the parameterized step value, the same shape the
+  // runner suggests. A static literal left verbatim registers as `Pay with "100`
+  // in the gauge-java registry and can never match `Pay with {}`.
   return [
-    `@com.thoughtworks.gauge.Step(${kotlinStringLiteral(stepText)})`,
+    `@com.thoughtworks.gauge.Step(${kotlinStringLiteral(parameterizedStepValue(stepText))})`,
     `fun ${methodName}(${params}) {`,
     "}",
     "",
@@ -369,7 +376,7 @@ function javaStepStubCode(stepText, methodName = "implementation", implicitParam
     (_entry, index) => `Object arg${index}`,
   ).join(", ");
   return [
-    `@com.thoughtworks.gauge.Step(${JSON.stringify(stepText)})`,
+    `@com.thoughtworks.gauge.Step(${JSON.stringify(parameterizedStepValue(stepText))})`,
     `public void ${methodName}(${params}) {`,
     "}",
     "",

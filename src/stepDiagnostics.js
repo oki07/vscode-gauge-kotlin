@@ -3522,6 +3522,39 @@ function countStepParameters(stepText) {
   return count;
 }
 
+// The runner builds its suggested annotation from the parameterized step value,
+// where every argument - static or dynamic - is written as <value>:
+// references/gauge-java ValidateStepProcessor formats @Step("%s") from
+// getStepValue().getParameterizedStepValue(). Verified against the real parser:
+// ExtractStepValueAndParams on `Pay with "100"` gives `Pay with <100>`, and on
+// `Mix "a b" and <c>` gives `Mix <a b> and <c>`. An escaped quote is not an
+// argument and stays verbatim, which falls out of the same scan.
+function parameterizedStepValue(stepText) {
+  const text = String(stepText || "");
+  let result = "";
+  let index = 0;
+
+  while (index < text.length) {
+    const dynamicStart = findDynamicParameterStart(text, index);
+    const staticStart = findStaticParameterStart(text, index);
+    const parameter = findNextStepParameter(dynamicStart, staticStart);
+    if (!parameter) {
+      break;
+    }
+    const closeIndex = parameter.type === "dynamic"
+      ? findDynamicParameterEnd(text, parameter.openIndex)
+      : findStaticParameterEnd(text, parameter.openIndex);
+    if (closeIndex === -1) {
+      break;
+    }
+    result += text.slice(index, parameter.openIndex);
+    result += `<${text.slice(parameter.openIndex + 1, closeIndex)}>`;
+    index = closeIndex + 1;
+  }
+
+  return result + text.slice(index);
+}
+
 function findNextStepParameter(dynamicStart, staticStart) {
   if (dynamicStart === -1 && staticStart === -1) {
     return undefined;
@@ -3965,6 +3998,11 @@ function pushScenarioWithoutStepDiagnostic(vscode, diagnostics, scenario) {
   }
 }
 
+// references/gauge/parser/lex.go isTearDown: a run of three or more underscores.
+function isTeardownMarkerLine(line) {
+  return /^_{3,}\s*$/.test(String(line || "").trim());
+}
+
 function duplicateScenarioDiagnostics(vscode, text) {
   const diagnostics = [];
   const seen = new Map();
@@ -3981,6 +4019,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   let firstSpecHeadingRange;
   let firstContentRange;
   let currentScenario;
+  let inTeardown = false;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     if (docStringLines.has(line)) {
@@ -4022,7 +4061,16 @@ function duplicateScenarioDiagnostics(vscode, text) {
       continue;
     }
 
-    if (currentScenario && isGaugeStepLine(rawLine)) {
+    // Gauge attributes every step after the teardown marker to the spec
+    // teardown, not to the scenario above it, so those steps must not satisfy
+    // "Scenario should have at least one step". Verified against the real
+    // parser: a scenario whose only steps sit below "____" is reported empty.
+    if (isTeardownMarkerLine(rawLine)) {
+      inTeardown = true;
+      continue;
+    }
+
+    if (currentScenario && !inTeardown && isGaugeStepLine(rawLine)) {
       currentScenario.hasStep = true;
       continue;
     }
@@ -4154,7 +4202,7 @@ function isGaugeTableSeparatorRow(line) {
 function dataTableWithoutRowDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecHeading = false;
   let inScenario = false;
   let pendingDataTable;
@@ -4171,12 +4219,11 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       flushPendingDataTable();
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
 
@@ -4350,16 +4397,15 @@ function externalDataTableLocation(line) {
 function externalDataTableScopeDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecHeading = false;
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
-      continue;
-    }
-    if (inDocString) {
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       continue;
     }
 
@@ -4394,14 +4440,13 @@ function externalDataTableScopeDiagnostics(vscode, text, options = {}) {
 function tableLocationDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
-      continue;
-    }
-    if (inDocString) {
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       continue;
     }
 
@@ -4456,16 +4501,15 @@ function tableFileParameterDiagnostics(vscode, text, options = {}) {
   }
 
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let inTableBlock = false;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       inTableBlock = false;
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
     if (!isGaugeTableRow(rawLine)) {
@@ -4519,19 +4563,18 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
   const lines = text.split("\n");
   let specHeaders = new Set();
   let scenarioHeaders = new Set();
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let inScenario = false;
   let sectionHasStep = false;
   let tableBlock;
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       tableBlock = undefined;
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
 
@@ -4607,7 +4650,7 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
 function multipleDataTableDiagnostics(vscode, text, options = {}) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let inScenario = false;
   let sectionHasStep = false;
   let specHasDataTable = false;
@@ -4616,12 +4659,11 @@ function multipleDataTableDiagnostics(vscode, text, options = {}) {
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       inTableBlock = false;
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
 
@@ -4724,7 +4766,7 @@ function dynamicStepParameters(text) {
       return parameters;
     }
     const parameter = text.slice(openIndex + 1, closeIndex).trim();
-    if (parameter && !/^(?:file|table)\s*:/i.test(parameter)) {
+    if (parameter && !SPECIAL_PARAMETER_PATTERN.test(parameter)) {
       parameters.push(parameter);
     }
     openIndex = findDynamicParameterStart(text, closeIndex + 1);
@@ -4732,22 +4774,77 @@ function dynamicStepParameters(text) {
   return parameters;
 }
 
+// Gauge's resolver map is keyed by the exact lowercase type
+// (references/gauge/parser/resolver.go initializePredefinedResolvers, and
+// getStepArg looks the trimmed type up verbatim), so <FILE:...> is not a known
+// special parameter at all.
+const SPECIAL_PARAMETER_PATTERN = /^(?:file|table)\s*:/;
+
+// A <file:>/<table:> parameter on a step is resolved by reading the named file
+// (references/gauge/parser/resolver.go), so a missing one is an unresolved
+// parameter. Only table cells were checked before, so a step reference was
+// silently accepted and the spec then failed to parse at run time.
+function specialStepParameters(text) {
+  const found = [];
+  let openIndex = findDynamicParameterStart(text, 0);
+  while (openIndex !== -1) {
+    const closeIndex = findDynamicParameterEnd(text, openIndex);
+    if (closeIndex === -1) {
+      return found;
+    }
+    const parameter = text.slice(openIndex + 1, closeIndex).trim();
+    const match = /^(?:file|table)\s*:\s*(.*)$/.exec(parameter);
+    if (match) {
+      found.push({ location: match[1].trim(), parameter });
+    }
+    openIndex = findDynamicParameterStart(text, closeIndex + 1);
+  }
+  return found;
+}
+
+function specialStepParameterDiagnostics(vscode, text, options = {}) {
+  const diagnostics = [];
+  const fileSystem = options.fileSystem;
+  if (!fileSystem || typeof fileSystem.existsSync !== "function") {
+    return diagnostics;
+  }
+  const lines = text.split("\n");
+  const docStringLines = closedSpecDocStringLines(lines);
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    if (docStringLines.has(line) || !isGaugeStepLine(rawLine)) {
+      continue;
+    }
+    for (const special of specialStepParameters(rawLine)) {
+      const filename = resolveExternalTablePath(special.location, options);
+      if (filename === undefined || fileSystem.existsSync(filename)) {
+        continue;
+      }
+      diagnostics.push(createDiagnostic(
+        vscode,
+        lineContentRange(vscode, rawLine, line),
+        unresolvedDynamicParameterMessage(special.parameter),
+      ));
+    }
+  }
+  return diagnostics;
+}
+
 function isUnknownSpecialParameter(parameter) {
-  return /:/.test(parameter) && !/^(?:file|table)\s*:/i.test(parameter);
+  return /:/.test(parameter) && !SPECIAL_PARAMETER_PATTERN.test(parameter);
 }
 
 function unknownSpecialStepParameterDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  // An unmatched fence is just a line to Gauge's lexer
+  // (references/gauge/parser/lex.go extractMultilineContent returns found=false
+  // and consumes nothing), so only a closed pair is payload.
+  const docStringLines = closedSpecDocStringLines(lines);
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
-      continue;
-    }
-    if (inDocString || !isGaugeStepLine(rawLine)) {
+    if (docStringLines.has(line) || !isGaugeStepLine(rawLine)) {
       continue;
     }
     for (const parameter of dynamicStepParameters(rawLine)) {
@@ -4779,19 +4876,18 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
   const lines = text.split("\n");
   const specHeaders = new Set();
   let scenarioHeaders = new Set();
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let inScenario = false;
   let scenarioHasStep = false;
   let inTableBlock = false;
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       inTableBlock = false;
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
 
@@ -4869,14 +4965,13 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
 function teardownMarkerDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
-      continue;
-    }
-    if (inDocString) {
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       continue;
     }
 
@@ -4897,7 +4992,7 @@ function teardownMarkerDiagnostics(vscode, text) {
 function repeatedTagDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
-  let inDocString = false;
+  const docStringLines = closedSpecDocStringLines(lines);
   let inScenario = false;
   let specTagsDefined = false;
   let scenarioTagsDefined = false;
@@ -4905,12 +5000,11 @@ function repeatedTagDiagnostics(vscode, text) {
 
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (isDocStringFenceLine(rawLine)) {
-      inDocString = !inDocString;
+    // An unmatched fence is just a line to Gauge's lexer
+    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // found=false and consumes nothing), so only a closed pair is payload.
+    if (docStringLines.has(line)) {
       previousWasTag = false;
-      continue;
-    }
-    if (inDocString) {
       continue;
     }
 
@@ -9122,6 +9216,11 @@ class GaugeStepDiagnosticsProvider {
           projectRoot: this.gaugeProjectRoot(document),
         }));
         diagnostics.push(...unknownSpecialStepParameterDiagnostics(this.vscode, text));
+        diagnostics.push(...specialStepParameterDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
         diagnostics.push(...dynamicStepParameterDiagnostics(this.vscode, text, {
           fileSystem: this.fileSystem,
           pathModule: this.pathModule,
@@ -10026,6 +10125,7 @@ module.exports = {
   UNDEFINED_STEP_MESSAGE,
   countKotlinParameters,
   countStepParameters,
+  parameterizedStepValue,
   findConceptHeadings,
   findJavaStepFunctions,
   findStepFunctions,
