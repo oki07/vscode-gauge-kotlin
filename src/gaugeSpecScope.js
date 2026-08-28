@@ -21,7 +21,12 @@ const GAUGE_SPECS_DIRECTORY = "specs";
 const GAUGE_SPECS_DIR_PROPERTY = "gauge_specs_dir";
 const GAUGE_SPEC_FILE_EXTENSIONS_PROPERTY = "gauge_spec_file_extensions";
 const MARKDOWN_EXTENSION = ".md";
-const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
+const DEFAULT_ENV_DIRECTORY = "env";
+const DEFAULT_ENV_NAME = "default";
+const DEFAULT_ENV_FILE = "default.properties";
+const PROPERTIES_EXTENSION = ".properties";
+const GAUGE_ENV_DIR_PROPERTY = "gauge_env_dir";
+const GAUGE_MANIFEST_FILE = "manifest.json";
 const MARKDOWN_FILE_PATTERN = /\.md$/i;
 
 function isEscapedAt(text, index) {
@@ -102,6 +107,38 @@ function startsWithSegments(segments, prefix) {
     && prefix.every((segment, index) => segment === segments[index]);
 }
 
+// references/gauge/env/env.go getEnvDir prefers the gauge_env_dir variable and
+// otherwise takes EnvironmentDir from the project manifest, falling back to
+// "env" (github.com/getgauge/common EnvDirectoryName).
+function environmentDirectory(fileSystem, pathModule, projectRoot) {
+  const configured = process.env[GAUGE_ENV_DIR_PROPERTY];
+  if (configured) {
+    return configured;
+  }
+  try {
+    const manifest = JSON.parse(
+      String(fileSystem.readFileSync(pathModule.join(projectRoot, GAUGE_MANIFEST_FILE), "utf8")),
+    );
+    if (manifest && typeof manifest.EnvironmentDir === "string" && manifest.EnvironmentDir.trim()) {
+      return manifest.EnvironmentDir.trim();
+    }
+  } catch (_error) {
+    // A missing or damaged manifest leaves the default directory name, which is
+    // what Gauge itself falls back to.
+  }
+  return DEFAULT_ENV_DIRECTORY;
+}
+
+// Gauge loads every *.properties file in the environment directory, not just
+// default.properties: references/gauge/env/env.go loadEnvDir collects them with
+// common.FindFilesInDir(envDirPath, isPropertiesFile) and merges them with
+// properties.MustLoadFiles, where a later file wins. The bundled Kotlin template
+// writes env/default/java.properties beside default.properties.
+//
+// Only the "default" environment is read. Selecting another one is the --env
+// flag (references/gauge/cmd/run.go environmentDefault "default"), which this
+// extension never passes, so no other directory can be in force for a run it
+// starts.
 function propertiesValueFor(options, key) {
   const { projectRoot } = options;
   const fileSystem = options.fileSystem || nodeFs;
@@ -109,17 +146,38 @@ function propertiesValueFor(options, key) {
   if (!projectRoot || typeof fileSystem.readFileSync !== "function") {
     return undefined;
   }
+  const directory = pathModule.join(
+    projectRoot,
+    environmentDirectory(fileSystem, pathModule, projectRoot),
+    DEFAULT_ENV_NAME,
+  );
+  let names;
   try {
-    return propertiesValue(
-      fileSystem.readFileSync(
-        pathModule.join(projectRoot, ...DEFAULT_ENV_PROPERTIES),
-        "utf8",
-      ),
-      key,
-    );
+    names = typeof fileSystem.readdirSync === "function"
+      ? fileSystem.readdirSync(directory)
+      : [DEFAULT_ENV_FILE];
   } catch (_error) {
     return undefined;
   }
+  const propertyFiles = (names || [])
+    .map((entry) => String((entry && entry.name) || entry))
+    .filter((name) => name.toLowerCase().endsWith(PROPERTIES_EXTENSION))
+    .sort();
+  let value;
+  for (const name of propertyFiles) {
+    try {
+      const found = propertiesValue(
+        fileSystem.readFileSync(pathModule.join(directory, name), "utf8"),
+        key,
+      );
+      if (found !== undefined) {
+        value = found;
+      }
+    } catch (_error) {
+      // An unreadable file is skipped, like a file Gauge cannot parse.
+    }
+  }
+  return value;
 }
 
 function configuredSpecDirs(options = {}) {

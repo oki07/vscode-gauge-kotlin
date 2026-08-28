@@ -29,6 +29,95 @@ function properties(content) {
 // default ".spec, .md"), and util.IsValidSpecExtension compares the lowercased
 // extension against that list. A project that narrows the list to ".spec" is
 // saying its Markdown is documentation, so no Gauge decoration belongs on it.
+// Gauge loads EVERY *.properties file in the environment directory, not just
+// default.properties: references/gauge/env/env.go loadEnvDir collects them with
+// common.FindFilesInDir(envDirPath, isPropertiesFile) and merges them with
+// properties.MustLoadFiles, where a later file wins. The bundled Kotlin template
+// itself writes env/default/java.properties beside default.properties.
+test("configuredSpecDirs reads every properties file in the environment directory", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+  const files = {
+    "/workspace/gauge/env/default/default.properties": "gauge_reports_dir = reports\n",
+    "/workspace/gauge/env/default/java.properties": "gauge_specs_dir = features\n",
+  };
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["default.properties", "java.properties", "notes.txt"],
+        readFileSync(filename) {
+          if (files[filename] === undefined) {
+            throw new Error(`Missing ${filename}`);
+          }
+          return files[filename];
+        },
+      },
+    }),
+    [["features"]],
+  );
+});
+
+// properties.MustLoadFiles merges in order, so the last file to define a key
+// wins.
+test("configuredSpecDirs lets the last properties file win", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+  const files = {
+    "/workspace/gauge/env/default/a.properties": "gauge_specs_dir = first\n",
+    "/workspace/gauge/env/default/b.properties": "gauge_specs_dir = second\n",
+  };
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["b.properties", "a.properties"],
+        readFileSync: (filename) => {
+          if (files[filename] === undefined) {
+            throw new Error(`Missing ${filename}`);
+          }
+          return files[filename];
+        },
+      },
+    }),
+    [["second"]],
+  );
+});
+
+// The environment directory itself is not fixed: references/gauge/env/env.go
+// getEnvDir prefers the gauge_env_dir variable and otherwise takes
+// EnvironmentDir from the project manifest.
+test("configuredSpecDirs honours a manifest EnvironmentDir", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+  const files = {
+    "/workspace/gauge/manifest.json": JSON.stringify({
+      Language: "java",
+      EnvironmentDir: "environments",
+    }),
+    "/workspace/gauge/environments/default/default.properties": "gauge_specs_dir = features\n",
+  };
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["default.properties"],
+        readFileSync: (filename) => {
+          if (files[filename] === undefined) {
+            throw new Error(`Missing ${filename}`);
+          }
+          return files[filename];
+        },
+      },
+    }),
+    [["features"]],
+  );
+});
+
+
 test("isMarkdownGaugeSpecFile honours a narrowed gauge_spec_file_extensions", () => {
   const { isMarkdownGaugeSpecFile } = require("../src/gaugeSpecScope");
   const options = {
@@ -90,13 +179,19 @@ test("markdown spec scope follows every configured gauge_specs_dir", () => {
   assert.equal(isMarkdownSpecPath("/workspace/gauge/specs/c.md", scope), false);
 });
 
+// The point is that the scope resolves once and every later file reuses it, not
+// the absolute count: resolving now also reads the manifest to find the
+// environment directory (references/gauge/env/env.go getEnvDir).
 test("markdown spec scope reads the project properties at most once", () => {
-  let reads = 0;
+  let propertyReads = 0;
   const scope = createMarkdownSpecScope({
     fileSystem: {
-      readFileSync() {
-        reads += 1;
-        return "gauge_specs_dir = anotherSpecDir\n";
+      readFileSync(filename) {
+        if (String(filename).endsWith(".properties")) {
+          propertyReads += 1;
+          return "gauge_specs_dir = anotherSpecDir\n";
+        }
+        throw new Error(`Missing ${filename}`);
       },
     },
     pathModule: path.posix,
@@ -107,7 +202,7 @@ test("markdown spec scope reads the project properties at most once", () => {
     isMarkdownSpecPath(`/workspace/gauge/anotherSpecDir/${file}`, scope);
   }
 
-  assert.equal(reads, 1);
+  assert.equal(propertyReads, 1);
 });
 
 test("markdown spec scope keeps the default directory name without a project", () => {
