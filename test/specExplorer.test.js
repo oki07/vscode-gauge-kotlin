@@ -59,8 +59,11 @@ function createFakeVscode(overrides = {}) {
         this.end = end;
       }
     },
+    // vscode.d.ts TreeItemCollapsibleState: None = 0, Collapsed = 1, Expanded = 2.
     TreeItemCollapsibleState: {
+      None: 0,
       Collapsed: 1,
+      Expanded: 2,
     },
     Uri: {
       file(filename) {
@@ -285,6 +288,70 @@ test("SpecNodeProvider populates specifications and scenarios from Gauge LSP", a
     "gauge/specs",
     "gauge/scenarios",
   ]);
+});
+
+// gauge/scenarios answers with a single ScenarioInfo, not a list, whenever a
+// scenario's span covers the requested line: references/gauge/api/lang/customResponses.go
+// getScenarioAt returns `info` as soon as `sce.InSpan(line + 1)` is true. The
+// explorer always asks at position (1, 1), so a specification whose first
+// scenario heading sits on line 2 - "# Spec" then "## Scenario" - gets a bare
+// object back and `values.map` throws. src/testController.js already normalizes
+// this exact response.
+test("SpecNodeProvider accepts a single scenario response from Gauge LSP", async () => {
+  const { Scenario, SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  client.sendRequest = (method) => {
+    if (method === "gauge/specs") {
+      return Promise.resolve([
+        { heading: "Checkout", executionIdentifier: "/workspace/gauge/specs/checkout.spec" },
+      ]);
+    }
+    if (method === "gauge/scenarios") {
+      return Promise.resolve({
+        heading: "Successful checkout",
+        executionIdentifier: "/workspace/gauge/specs/checkout.spec:2",
+        lineNo: 2,
+      });
+    }
+    return Promise.resolve([]);
+  };
+  const { vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    pathModule: path.posix,
+    setTimeout: () => ({ unref() {} }),
+    vscode,
+  });
+  await provider.ready();
+
+  const specs = await provider.getChildren();
+  const scenarios = await provider.getChildren(specs[0]);
+
+  assert.equal(scenarios.length, 1);
+  assert.ok(scenarios[0] instanceof Scenario);
+  assert.equal(scenarios[0].label, "Successful checkout");
+  assert.equal(scenarios[0].lineNo, 2);
+});
+
+// A scenario has no children. Leaving it Collapsed drew an expand chevron on
+// every scenario row, and getChildren falls through to getSpecifications for any
+// element that is not a specification, so expanding one inserted a full copy of
+// the project's specifications underneath it, each expandable again.
+test("SpecNodeProvider renders scenarios as leaves", async () => {
+  const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+  const client = createFakeClient();
+  const { vscode } = createFakeVscode();
+  const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+    pathModule: path.posix,
+    setTimeout: () => ({ unref() {} }),
+    vscode,
+  });
+  await provider.ready();
+
+  const specs = await provider.getChildren();
+  const scenarios = await provider.getChildren(specs[0]);
+
+  assert.equal(scenarios[0].collapsibleState, 0);
+  assert.deepEqual(await provider.getChildren(scenarios[0]), []);
 });
 
 test("SpecNodeProvider registers explorer commands without Test UI flags", async () => {

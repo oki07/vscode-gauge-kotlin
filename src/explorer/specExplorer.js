@@ -38,6 +38,12 @@ function collapsedState(vscode) {
     : 1;
 }
 
+function leafState(vscode) {
+  return vscode.TreeItemCollapsibleState
+    ? vscode.TreeItemCollapsibleState.None
+    : 0;
+}
+
 function setCommandContext(vscode, key, value) {
   if (vscode.commands && typeof vscode.commands.executeCommand === "function") {
     return vscode.commands.executeCommand("setContext", key, value);
@@ -90,6 +96,11 @@ class Spec extends GaugeNode {
 class Scenario extends GaugeNode {
   constructor(label, file, lineNo, vscode) {
     super(label, file, vscode);
+    // A scenario has no children. Left Collapsed it drew an expand chevron on
+    // every scenario row, and getChildren falls through to getSpecifications for
+    // anything that is not a specification, so expanding one inserted a full copy
+    // of the project's specifications underneath it.
+    this.collapsibleState = leafState(vscode || {});
     this.lineNo = lineNo;
     this.executionIdentifier = `${this.file}:${this.lineNo}`;
     this.contextValue = "scenario";
@@ -205,6 +216,9 @@ class SpecNodeProvider {
 
     if (element && element.contextValue === "specification") {
       return this.getScenarios(element);
+    }
+    if (element) {
+      return [];
     }
     return this.getSpecifications();
   }
@@ -336,7 +350,14 @@ class SpecNodeProvider {
       ) {
         return [];
       }
-      return (values || []).map((entry) => new Scenario(
+      // gauge/scenarios answers with a single ScenarioInfo rather than a list
+      // whenever a scenario's span covers the requested line
+      // (references/gauge/api/lang/customResponses.go getScenarioAt returns
+      // `info` as soon as `sce.InSpan(line + 1)` is true). The request always
+      // asks at position (1, 1), so a specification whose first scenario heading
+      // sits on line 2 comes back as a bare object.
+      const entries = Array.isArray(values) ? values : (values ? [values] : []);
+      return entries.map((entry) => new Scenario(
         entry.heading,
         specFileFromExecutionIdentifier(entry.executionIdentifier, entry.lineNo),
         entry.lineNo,
