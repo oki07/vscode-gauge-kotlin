@@ -27,9 +27,13 @@ class GaugeProject {
     this.gaugeConfig = options.gaugeConfig || (
       options.gaugeConfigFactory
         ? options.gaugeConfigFactory()
+        // vscode is what lets GaugeConfig read the gauge.home setting
+        // (readGaugeExtensionSettings). Without it the plugins path fell back to
+        // the default home and the classpath carried no gauge-java plugin jars.
         : new GaugeConfig(process.platform, {
           env: options.env || process.env,
           pathModule: this.pathModule,
+          vscode: options.vscode,
         })
     );
   }

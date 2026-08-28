@@ -46,6 +46,30 @@ function taskVscode(exitCode) {
   };
 }
 
+// gauge.home is the documented "Path to GAUGE_HOME" setting. GaugeConfig reads it
+// through readGaugeExtensionSettings(options.vscode), so a config built without
+// vscode silently falls back to the default home and the classpath ends up with
+// none of the gauge-java plugin jars.
+test("GaugeProject resolves the plugins path from the gauge.home setting", () => {
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  const project = new GaugeProject("/workspace/gauge", { Language: "java" }, {
+    fileSystem: {
+      existsSync: () => true,
+      readdirSync: () => [],
+    },
+    pathModule: path.posix,
+    vscode: {
+      workspace: {
+        getConfiguration: (section) => ({
+          get: (key) => (section === "gauge" && key === "home" ? "/custom/gauge-home" : undefined),
+        }),
+      },
+    },
+  });
+
+  assert.equal(project.gaugeConfig.pluginsPath(), "/custom/gauge-home/plugins");
+});
+
 test("GaugeProject detects files inside the project root", () => {
   const { GaugeProject } = require("../src/project/gaugeProject");
   const project = new GaugeProject("/workspace/gauge", {
