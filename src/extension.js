@@ -975,6 +975,11 @@ function startGaugeServices(context, vscode, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
+  // In production activate() always supplies one; own the fallback anyway so no
+  // path can leave a manifest watcher behind.
+  if (!options.projectFactory && typeof projectFactory.dispose === "function") {
+    context.subscriptions.push(projectFactory);
+  }
   if (!options.gaugeServiceGateResolved) {
     const shouldStart = shouldStartGaugeServices(vscode, projectFactory);
     if (!isExtensionActivationCurrent(options.extensionActivation)) {
@@ -1243,6 +1248,11 @@ function activate(context, vscodeApi, options = {}) {
     pathModule: options.pathModule,
     vscode,
   });
+  // The factory owns a manifest FileSystemWatcher. Without this, deactivate()
+  // left one watcher and three listeners behind per activation cycle.
+  if (!options.projectFactory && typeof projectFactory.dispose === "function") {
+    context.subscriptions.push(projectFactory);
+  }
   const ProjectEnvironmentServiceCtor = options.ProjectEnvironmentService
     || ProjectEnvironmentService;
   const projectEnvironmentService = options.projectEnvironmentService

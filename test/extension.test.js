@@ -351,9 +351,12 @@ test("activation registers core contributed Gauge commands", () => {
         .filter((command) => !PROVIDER_COMMANDS.has(command)),
     ],
   );
+  // The +6 covers the non-command subscriptions activation owns, including the
+  // project factory it creates: that factory holds a manifest FileSystemWatcher
+  // which deactivate() must be able to release.
   assert.equal(
     context.subscriptions.length,
-    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 5
+    manifest.contributes.commands.length - PROVIDER_COMMANDS.size + 6
       + INTERNAL_EXECUTION_COMMANDS.length
       + INTERNAL_PROVIDER_COMMANDS.length,
   );
@@ -4376,6 +4379,66 @@ test("activation gives the execution status provider a file system to check", ()
   capturedController.executionStatusProvider("/workspace/gauge");
 
   assert.deepEqual(checked, ["/workspace/gauge/.gauge/executionStatus.json"]);
+});
+
+// The factory it creates owns a manifest FileSystemWatcher. Without pushing it
+// into context.subscriptions, deactivate() left one watcher and three listeners
+// behind per activation cycle.
+test("activation disposes the project factory it created", () => {
+  const extension = require("../src/extension");
+
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/gauge" } }],
+  });
+  const created = [];
+  const disposals = [];
+  fakeVscode.workspace.createFileSystemWatcher = (glob) => {
+    created.push(glob);
+    return {
+      dispose() {
+        disposals.push(glob);
+      },
+      onDidCreate: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidDelete: () => ({ dispose() {} }),
+    };
+  };
+  const fileSystem = {
+    existsSync: (filename) => filename === "/workspace/gauge/manifest.json",
+    readFileSync: () => JSON.stringify({ Language: "java", Plugins: [] }),
+  };
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled: () => true,
+        isGaugeVersionGreaterOrEqual: () => true,
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    fileSystem,
+    GaugeWorkspace: class GaugeWorkspace {
+      dispose() {}
+    },
+    pathModule: path.posix,
+    semanticTokensLegend: { id: "legend" },
+    showWelcomeNotification() {},
+    SpecNodeProvider: class SpecNodeProvider {
+      dispose() {}
+    },
+  });
+
+  for (const subscription of context.subscriptions) {
+    if (subscription && typeof subscription.dispose === "function") {
+      subscription.dispose();
+    }
+  }
+
+  assert.equal(created.includes("**/manifest.json"), true);
+  assert.equal(disposals.includes("**/manifest.json"), true);
 });
 
 test("activation propagates the default project factory to Gauge providers", () => {

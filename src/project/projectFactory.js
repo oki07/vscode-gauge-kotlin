@@ -77,6 +77,11 @@ function createProjectFactory(options = {}) {
     rootsDiscoveryPending.clear();
   }
 
+  // createFileSystemWatcher returns a Disposable and each onDid* registration
+  // returns another (vscode.d.ts). Keeping them is what lets deactivate() give
+  // the watcher back instead of leaving one behind per activation.
+  const watcherDisposables = [];
+
   function registerManifestWatcher() {
     const workspace = options.vscode && options.vscode.workspace;
     if (!workspace || typeof workspace.createFileSystemWatcher !== "function") {
@@ -85,20 +90,34 @@ function createProjectFactory(options = {}) {
     try {
       const watcher = workspace.createFileSystemWatcher(GAUGE_MANIFEST_GLOB);
       const onEvent = () => invalidate();
-      if (typeof watcher.onDidCreate === "function") {
-        watcher.onDidCreate(onEvent);
+      for (const name of ["onDidCreate", "onDidChange", "onDidDelete"]) {
+        if (typeof watcher[name] === "function") {
+          const subscription = watcher[name](onEvent);
+          if (subscription && typeof subscription.dispose === "function") {
+            watcherDisposables.push(subscription);
+          }
+        }
       }
-      if (typeof watcher.onDidChange === "function") {
-        watcher.onDidChange(onEvent);
-      }
-      if (typeof watcher.onDidDelete === "function") {
-        watcher.onDidDelete(onEvent);
+      if (typeof watcher.dispose === "function") {
+        watcherDisposables.push(watcher);
       }
     } catch (_error) {
       // Root resolution still works without watcher-based invalidation.
     }
   }
   registerManifestWatcher();
+
+  function dispose() {
+    const owned = watcherDisposables.splice(0, watcherDisposables.length);
+    for (const disposable of owned) {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Releasing the rest matters more than one failure.
+      }
+    }
+    invalidate();
+  }
 
   function exists(relativeRoot, filename) {
     return fileSystem.existsSync(pathModule.join(relativeRoot, filename));
@@ -429,6 +448,7 @@ function createProjectFactory(options = {}) {
   return {
     get,
     findGaugeProjectRoots,
+    dispose,
     findGaugeProjectRootsAsync,
     getGaugeRootFromFilePath,
     getProjectByFilepath,

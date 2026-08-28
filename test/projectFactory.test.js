@@ -48,6 +48,46 @@ function createFakeFileSystem(entries) {
   };
 }
 
+// createFileSystemWatcher returns a Disposable and each onDid* registration
+// returns another (vscode.d.ts). None of them was kept, so every activate() left
+// a manifest watcher and three listeners behind that deactivate() could not
+// release.
+test("ProjectFactory releases its manifest watcher on disposal", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const disposals = [];
+  const watcher = {
+    dispose() {
+      disposals.push("watcher");
+    },
+    onDidCreate() {
+      return { dispose() { disposals.push("create"); } };
+    },
+    onDidChange() {
+      return { dispose() { disposals.push("change"); } };
+    },
+    onDidDelete() {
+      return { dispose() { disposals.push("delete"); } };
+    },
+  };
+  const factory = createProjectFactory({
+    fileSystem: createFakeFileSystem({}),
+    pathModule: path.posix,
+    vscode: {
+      workspace: {
+        createFileSystemWatcher() {
+          return watcher;
+        },
+      },
+    },
+  });
+
+  assert.equal(typeof factory.dispose, "function");
+  factory.dispose();
+  factory.dispose();
+
+  assert.deepEqual(disposals.sort(), ["change", "create", "delete", "watcher"]);
+});
+
 test("ProjectFactory detects Gauge projects by manifest", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
   const factory = createProjectFactory({
