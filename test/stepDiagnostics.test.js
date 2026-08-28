@@ -6969,6 +6969,74 @@ test("GaugeStepDiagnosticsProvider reports a circular concept across three files
   );
 });
 
+// A doc string is the step's argument, so markdown inside it is content, not
+// syntax. Verified against new(parser.ConceptParser).Parse: both files below
+// parse with no errors and one concept.
+test("GaugeStepDiagnosticsProvider ignores headings inside a concept doc string", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const implementation = createDocument([
+    "@Step(\"Post the notes\")",
+    "fun post() {}",
+  ].join("\n"));
+
+  for (const payload of [["## Highlights"], ["Underlined", "----------"]]) {
+    const conceptDocument = createDocument([
+      "# Publish release notes",
+      "* Post the notes",
+      "\"\"\"",
+      ...payload,
+      "\"\"\"",
+    ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/notes.cpt");
+
+    assert.deepEqual(
+      provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+        .map((diagnostic) => diagnostic.message),
+      [],
+      payload.join(" / "),
+    );
+  }
+});
+
+// An underline promotes the line above only when that line is a comment:
+// references/gauge/parser/lex.go rewrites the previous token only when
+// isInState(currentState, commentScope). A step line followed by a rule of "="
+// is not a concept heading, and a hash heading followed by dashes is not a
+// scenario heading.
+test("GaugeStepDiagnosticsProvider treats a rule under a step or heading as a comment", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const implementation = createDocument([
+    "@Step(\"enter credentials\")",
+    "fun enter() {}",
+    "@Step(\"go home\")",
+    "fun home() {}",
+  ].join("\n"));
+
+  const afterStep = createDocument([
+    "# Login concept",
+    "* enter credentials",
+    "===================",
+    "* go home",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/login.cpt");
+  assert.deepEqual(
+    provider.provideDiagnostics(afterStep, [afterStep, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+
+  const afterHeading = createDocument([
+    "# Login concept",
+    "---------------",
+    "* enter credentials",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/login2.cpt");
+  assert.deepEqual(
+    provider.provideDiagnostics(afterHeading, [afterHeading, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider accepts a triple hash heading in a concept", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

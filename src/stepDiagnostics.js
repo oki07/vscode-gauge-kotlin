@@ -5191,8 +5191,14 @@ function conceptLegacyHeading(lines, lineNumber) {
   // Gauge compares the trimmed line (references/gauge/parser/lex.go) and
   // parser/helper.go isUnderline accepts a run of one or more, so an indented
   // underline still defines a concept, matching legacyHeadingKind in
-  // src/gaugeHeadings.js.
-  if (textStart === -1 || !/^=+$/.test(underline.trim())) {
+  // src/gaugeHeadings.js. The line above must also be heading TEXT: lex.go
+  // rewrites the previous token only when it is a comment, so a step line
+  // followed by a rule of "=" is not a concept heading.
+  if (
+    textStart === -1
+    || !isLegacyHeadingText(rawLine)
+    || !/^=+$/.test(underline.trim())
+  ) {
     return undefined;
   }
   const text = rawLine.slice(textStart).trimEnd();
@@ -5450,10 +5456,23 @@ function isLegacyScenarioUnderline(line) {
 function legacyScenarioHeadingDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
+  // A doc string is the step's argument, so markdown inside it is content.
+  // And an underline promotes the line above only when that line is a comment
+  // (references/gauge/parser/lex.go rewrites the previous token only when
+  // isInState(currentState, commentScope)), which is what isLegacyHeadingText
+  // encodes: a step line, a table row, a fence, tags or "table:" is not a
+  // heading, and neither is a line that is already a hash heading.
+  const docStringLines = closedSpecDocStringLines(lines);
   for (let line = 0; line < lines.length - 1; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     const start = rawLine.search(/\S/);
-    if (start === -1 || !isLegacyScenarioUnderline(lines[line + 1].replace(/\r$/, ""))) {
+    if (
+      start === -1
+      || docStringLines.has(line)
+      || !isLegacyHeadingText(rawLine)
+      || rawLine.trim().startsWith("#")
+      || !isLegacyScenarioUnderline(lines[line + 1].replace(/\r$/, ""))
+    ) {
       continue;
     }
     diagnostics.push(createDiagnostic(
@@ -5472,9 +5491,11 @@ function legacyScenarioHeadingDiagnostics(vscode, text) {
 function hashScenarioHeadingDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
+  // A doc string is the step's argument, so a "##" inside it is content.
+  const docStringLines = closedSpecDocStringLines(lines);
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
-    if (!isHashScenarioHeading(rawLine)) {
+    if (docStringLines.has(line) || !isHashScenarioHeading(rawLine)) {
       continue;
     }
     diagnostics.push(createDiagnostic(
