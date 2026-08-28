@@ -165,6 +165,16 @@ function isStepLine(text) {
   return /^\s*\*(?!\*)\s*\S.*$/.test(text);
 }
 
+function tableStartLineAfterStep(document, startLine) {
+  for (let line = startLine; line < document.lineCount; line += 1) {
+    const text = lineText(document, line);
+    if (text.trim()) {
+      return isTableStartLine(text) ? line : undefined;
+    }
+  }
+  return undefined;
+}
+
 function isTableLine(text) {
   return /^\s*\|.*$/.test(text);
 }
@@ -351,12 +361,20 @@ function buildExtractSelection(document, selection, options = {}) {
     let nextLine = docString ? docString.endLine + 1 : stepEndLine + 1;
     if (docString) {
       block.push(...docString.lines);
-    } else if (nextLine < document.lineCount && isTableStartLine(lineText(document, nextLine))) {
-      while (nextLine < document.lineCount && isTableLine(lineText(document, nextLine))) {
-        const tableLine = lineText(document, nextLine).trim();
-        tableLines.push(tableLine);
-        block.push(tableLine);
-        nextLine += 1;
+    } else {
+      // Gauge's lexer emits no token for a blank line after a step, so a table
+      // below one still attaches to it. src/stepDiagnostics.js
+      // inlineTableLineAfterStep records the same rule, verified against
+      // parser.SpecParser.Parse.
+      const tableStart = tableStartLineAfterStep(document, nextLine);
+      if (tableStart !== undefined) {
+        nextLine = tableStart;
+        while (nextLine < document.lineCount && isTableLine(lineText(document, nextLine))) {
+          const tableLine = lineText(document, nextLine).trim();
+          tableLines.push(tableLine);
+          block.push(tableLine);
+          nextLine += 1;
+        }
       }
     }
 
@@ -753,6 +771,15 @@ function appendUniqueParameters(target, parameters) {
   }
 }
 
+function finalConceptHeading(document, extraction, conceptName) {
+  try {
+    const sourceText = typeof document.getText === "function" ? document.getText() : "";
+    return buildParameterizedExtraction(extraction, conceptName, detectEol(sourceText)).conceptName;
+  } catch (_error) {
+    return undefined;
+  }
+}
+
 function buildParameterizedExtraction(extraction, conceptName, eol) {
   const tables = tableParameterMap(extraction.steps);
   const sourceTables = [];
@@ -861,7 +888,21 @@ function normalizeConceptFilePath(file, projectRoot, pathModule) {
   const withExtension = extension ? trimmed : `${trimmed}.cpt`;
   const parsed = pathModule.parse(withExtension);
   const projectRelative = parsed.root ? withExtension.slice(parsed.root.length) : withExtension;
-  return pathModule.join(projectRoot, projectRelative);
+  const resolved = pathModule.join(projectRoot, projectRelative);
+  // Stripping the root forces the path project-relative, but join resolves "..",
+  // so "../evil.cpt" still escaped. Gauge only reads concepts under the project
+  // (references/gauge/util/util.go), so a file outside it is invisible to Gauge
+  // and written somewhere the user did not ask for.
+  return isInsideProject(resolved, projectRoot, pathModule) ? resolved : ESCAPES_PROJECT;
+}
+
+const ESCAPES_PROJECT = Symbol("concept path escapes the project");
+
+function isInsideProject(candidate, projectRoot, pathModule) {
+  const relative = pathModule.relative(projectRoot, candidate);
+  return Boolean(relative)
+    && !relative.startsWith("..")
+    && !pathModule.isAbsolute(relative);
 }
 
 function documentPath(document) {
@@ -1039,10 +1080,14 @@ class ExtractConceptCommandProvider {
         return undefined;
       }
 
+      // Compare the heading that will actually be written: it appends the
+      // step's dynamic parameters, so checking the name the user typed let the
+      // same extraction through twice and wrote a duplicate concept.
       const available = await this.ensureConceptNameAvailable(
         operation,
         conceptName,
         conceptFile.knownFiles || [],
+        finalConceptHeading(editor.document, extraction, conceptName),
       );
       if (available === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
@@ -1165,11 +1210,13 @@ class ExtractConceptCommandProvider {
     if (conceptPath === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
     }
-    if (!conceptPath) {
+    if (!conceptPath || conceptPath === ESCAPES_PROJECT) {
       if (input && input.trim()) {
         const shown = await this.showErrorForOperation(
           operation,
-          "Concept file path must end with .cpt.",
+          conceptPath === ESCAPES_PROJECT
+            ? "Concept file path must stay inside the Gauge project."
+            : "Concept file path must end with .cpt.",
         );
         if (shown === DISPOSED_OPERATION) {
           return DISPOSED_OPERATION;
@@ -1184,10 +1231,12 @@ class ExtractConceptCommandProvider {
     };
   }
 
-  async ensureConceptNameAvailable(operation, conceptName, conceptFiles) {
+  async ensureConceptNameAvailable(operation, conceptName, conceptFiles, writtenHeading) {
     const wanted = this.callSyncForOperation(
       operation,
-      () => normalizeConceptHeading(parameterizedConceptName(conceptName)),
+      () => normalizeConceptHeading(
+        writtenHeading || parameterizedConceptName(conceptName),
+      ),
     );
     if (wanted === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;

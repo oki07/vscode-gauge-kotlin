@@ -473,6 +473,38 @@ test("buildExtractSelection expands inline table selections to their owning Gaug
   });
 });
 
+// Gauge's lexer emits no token for a blank line after a step, so the table still
+// attaches to it: src/stepDiagnostics.js inlineTableLineAfterStep records the
+// same rule, verified against parser.SpecParser.Parse. Extract to Concept
+// required the table on the very next line, so a blank line made it drop the
+// table and produce a concept step with no argument.
+test("buildExtractSelection keeps a table separated from its step by a blank line", () => {
+  const { buildExtractSelection } = require("../src/extractConcept");
+  const document = createDocument([
+    "# Checkout",
+    "* Login as <user>",
+    "",
+    "  | item | count |",
+    "  | book | 1     |",
+  ].join("\n"));
+
+  const extraction = buildExtractSelection(document, {
+    start: { line: 1, character: 0 },
+    end: { line: 4, character: 18 },
+  });
+
+  assert.deepEqual(extraction.steps, [
+    {
+      tableLines: [
+        "| item | count |",
+        "| book | 1     |",
+      ],
+      text: "* Login as <user>",
+    },
+  ]);
+  assert.equal(extraction.endLine, 4);
+});
+
 test("buildExtractSelection rejects table selections without an owning Gauge step", () => {
   const { buildExtractSelection } = require("../src/extractConcept");
   const document = createDocument([
@@ -1824,6 +1856,52 @@ test("ExtractConceptCommandProvider rejects new concept files without cpt extens
   assert.deepEqual(errors, ["Concept file path must end with .cpt."]);
 });
 
+// normalizeConceptFilePath strips a leading root to force the path
+// project-relative, but pathModule.join then resolves "..", so "../evil.cpt"
+// landed outside the Gauge project. Gauge only reads concepts under the project
+// (references/gauge/util/util.go), so such a file is both invisible to Gauge and
+// written somewhere the user did not ask for.
+test("ExtractConceptCommandProvider keeps a new concept file inside the project", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {},
+    document,
+    inputResponses: ["Shared login", "../../outside.cpt"],
+    quickPickSelection: {
+      label: "New File",
+      description: "Create a new concept file",
+      value: "New File",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests, []), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(appliedEdits, []);
+  assert.deepEqual(errors, ["Concept file path must stay inside the Gauge project."]);
+});
+
 test("ExtractConceptCommandProvider rejects selections that include non-step text", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const document = createDocument([
@@ -1890,6 +1968,57 @@ test("ExtractConceptCommandProvider rejects duplicate concept names", async () =
     selection: {
       start: { line: 3, character: 0 },
       end: { line: 3, character: 7 },
+    },
+  });
+
+  new ExtractConceptCommandProvider(createClients(requests), {
+    pathModule: path.posix,
+    vscode,
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.extract.concept");
+  await command.handler();
+
+  assert.deepEqual(errors, [
+    "Concept `Shared login` already present",
+  ]);
+  assert.deepEqual(appliedEdits, []);
+});
+
+// The heading actually written appends the step's dynamic parameters, so
+// extracting "Shared login" from "* Login as <user>" writes
+// "# Shared login <user>". The guard compared the name before that append, so
+// the same extraction a second time saw no match and wrote a second
+// "# Shared login <user>" - which Gauge rejects with "Duplicate concept
+// definition found" (references/gauge/parser).
+test("ExtractConceptCommandProvider rejects a duplicate once parameters are appended", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const requests = [];
+  const document = createDocument([
+    "# Checkout",
+    "",
+    "## Success",
+    "* Login as <user>",
+  ].join("\n"));
+  const {
+    appliedEdits,
+    commands,
+    errors,
+    vscode,
+  } = createFakeVscode({
+    conceptDocuments: {
+      "/workspace/gauge/specs/concepts.cpt": "# Shared login <user>\n* Login as <user>\n",
+    },
+    document,
+    inputResponses: ["Shared login"],
+    quickPickSelection: {
+      label: "concepts.cpt",
+      description: "specs",
+      value: "/workspace/gauge/specs/concepts.cpt",
+    },
+    selection: {
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 17 },
     },
   });
 
