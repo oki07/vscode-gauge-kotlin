@@ -972,11 +972,15 @@ test("GaugeUnusedReferenceDiagnosticsProvider fades the whole unreferenced conce
   const {
     GaugeUnusedReferenceDiagnosticsProvider,
   } = require("../src/unusedReferenceDiagnosticsProvider");
+  // A concept heading is a single "#". Verified against
+  // parser.CreateConceptsDictionary: "## Reuse checkout" in a .cpt reports
+  // "Scenario Heading is not allowed in concept file" and defines no concept, so
+  // the previous fixture was not a valid concept file.
   const document = createDocument([
-    "## Reuse checkout <user>",
+    "# Reuse checkout <user>",
     "* Prepare cart",
     "",
-    "  ## Unused concept",
+    "  # Unused concept",
     "* Prepare cart",
     "* Ship order",
     "",

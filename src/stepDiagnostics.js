@@ -5136,8 +5136,11 @@ function closedSpecDocStringLines(lines) {
   return result;
 }
 
+// A concept heading is a single "#": "##" is a scenario heading, which Gauge
+// rejects in a concept file, and "###" is neither - verified against
+// parser.CreateConceptsDictionary, where "### x" yields no concept and no error.
 function conceptHashHeading(rawLine, lineNumber) {
-  const match = /^([ \t]*)(#+)([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
+  const match = /^([ \t]*)(#(?!#))([ \t]*)(.*?)[ \t]*$/.exec(rawLine);
   if (!match) {
     return undefined;
   }
@@ -5205,8 +5208,12 @@ function findConceptHeadings(text) {
   return headings;
 }
 
+// Gauge compares the trimmed line and "###" is a concept heading, not a
+// scenario: this is isScenarioHashHeading in src/gaugeHeadings.js. Testing /^##/
+// on the untrimmed line flagged a "### heading" the real parser accepts and
+// missed an indented "  ##" it rejects.
 function isHashScenarioHeading(line) {
-  return /^##/.test(String(line || "").replace(/\r$/, ""));
+  return isScenarioHashHeadingLine(String(line || "").replace(/\r$/, ""));
 }
 
 function findConceptDefinitionHeadings(text) {
@@ -5722,7 +5729,22 @@ function conceptCircularReferenceDiagnostics(vscode, document, conceptDocuments)
   if (!filename) {
     return [];
   }
-  const dictionary = conceptDictionary(uniqueConceptDocuments(document, conceptDocuments));
+  // Order the documents the same way whichever one is being diagnosed. The cycle
+  // walk reports the two references that close the loop, and starting it at the
+  // document under inspection guaranteed that document was the entry point and
+  // therefore never one of the two - so a cycle spanning three files was
+  // reported in no file at all.
+  const documents = uniqueConceptDocuments(document, conceptDocuments)
+    .slice()
+    .sort((left, right) => {
+      const leftPath = documentPath(left) || "";
+      const rightPath = documentPath(right) || "";
+      if (leftPath === rightPath) {
+        return 0;
+      }
+      return leftPath < rightPath ? -1 : 1;
+    });
+  const dictionary = conceptDictionary(documents);
   return circularConceptErrors(dictionary)
     .filter((error) => sameDocumentPath(error.filename, filename))
     .map((error) => createDiagnostic(

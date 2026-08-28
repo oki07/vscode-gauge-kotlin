@@ -6919,6 +6919,84 @@ test("GaugeStepDiagnosticsProvider treats an upper case special type as unknown"
 // inlineTableLineAfterStep already records. The concept table check dropped the
 // step scope on the blank line and reported "Table doesn't belong to any step"
 // on a concept the real parser accepts.
+// isScenarioHashHeading in src/gaugeHeadings.js trims the line and rejects
+// "###". The concept copy tested /^##/ on the untrimmed line, so it flagged a
+// "### heading" the real parser accepts and missed an indented "  ##" the real
+// parser rejects. Verified against parser.CreateConceptsDictionary: the first
+// gives errors=0, the second "Scenario Heading is not allowed in concept file".
+// A cycle spanning three files is still a circular reference. Verified against
+// parser.CreateConceptsDictionary with a.cpt -> b.cpt -> cc.cpt -> a.cpt: it
+// reports two errors, in cc.cpt and b.cpt. The extension reported none in any
+// file, so the project looked clean and gauge refused to load the concepts.
+test("GaugeStepDiagnosticsProvider reports a circular concept across three files", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const first = createDocument([
+    "# A step",
+    "* B",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/a.cpt");
+  const second = createDocument([
+    "# B",
+    "* C step",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/b.cpt");
+  const third = createDocument([
+    "# C step",
+    "* A step",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/cc.cpt");
+  const documents = [first, second, third];
+
+  const reported = documents.flatMap((document) => {
+    const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+    return provider.provideDiagnostics(document, documents)
+      .map((diagnostic) => diagnostic.message);
+  });
+
+  assert.equal(
+    reported.filter((message) => message.startsWith("Circular reference found in concept.")).length
+      > 0,
+    true,
+  );
+});
+
+test("GaugeStepDiagnosticsProvider accepts a triple hash heading in a concept", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "### not a scenario",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+test("GaugeStepDiagnosticsProvider rejects an indented hash scenario heading in a concept", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+    "  ## indented",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/shared.cpt");
+  const implementation = createDocument([
+    "@Step(\"Confirm order\")",
+    "fun confirm() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message),
+    ["Scenario Heading is not allowed in concept file"],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider keeps a concept table attached across a blank line", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
