@@ -19,6 +19,8 @@ const nodePath = require("node:path");
 
 const GAUGE_SPECS_DIRECTORY = "specs";
 const GAUGE_SPECS_DIR_PROPERTY = "gauge_specs_dir";
+const GAUGE_SPEC_FILE_EXTENSIONS_PROPERTY = "gauge_spec_file_extensions";
+const MARKDOWN_EXTENSION = ".md";
 const DEFAULT_ENV_PROPERTIES = ["env", "default", "default.properties"];
 const MARKDOWN_FILE_PATTERN = /\.md$/i;
 
@@ -100,24 +102,29 @@ function startsWithSegments(segments, prefix) {
     && prefix.every((segment, index) => segment === segments[index]);
 }
 
-function configuredSpecDirs(options = {}) {
+function propertiesValueFor(options, key) {
   const { projectRoot } = options;
-  let configured = process.env[GAUGE_SPECS_DIR_PROPERTY];
   const fileSystem = options.fileSystem || nodeFs;
   const pathModule = options.pathModule || nodePath;
-  if (!configured && projectRoot && typeof fileSystem.readFileSync === "function") {
-    try {
-      configured = propertiesValue(
-        fileSystem.readFileSync(
-          pathModule.join(projectRoot, ...DEFAULT_ENV_PROPERTIES),
-          "utf8",
-        ),
-        GAUGE_SPECS_DIR_PROPERTY,
-      );
-    } catch (_error) {
-      configured = undefined;
-    }
+  if (!projectRoot || typeof fileSystem.readFileSync !== "function") {
+    return undefined;
   }
+  try {
+    return propertiesValue(
+      fileSystem.readFileSync(
+        pathModule.join(projectRoot, ...DEFAULT_ENV_PROPERTIES),
+        "utf8",
+      ),
+      key,
+    );
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function configuredSpecDirs(options = {}) {
+  const configured = process.env[GAUGE_SPECS_DIR_PROPERTY]
+    || propertiesValueFor(options, GAUGE_SPECS_DIR_PROPERTY);
   const directories = String(configured || "")
     .split(",")
     .map((entry) => pathSegments(entry.trim()))
@@ -176,16 +183,38 @@ function gaugeProjectRootForFile(file, projectFactory) {
 }
 
 // Convenience for the providers that answer one document at a time.
+// Gauge decides which extensions count as specifications from
+// gauge_spec_file_extensions (references/gauge/env/env.go
+// GaugeSpecFileExtensions, default ".spec, .md"), and
+// util.IsValidSpecExtension compares the lowercased extension against that
+// list. Narrowing it to ".spec" is a project saying its Markdown is
+// documentation, so no Gauge decoration belongs on it.
+function markdownIsASpecExtension(options = {}) {
+  const configured = process.env[GAUGE_SPEC_FILE_EXTENSIONS_PROPERTY]
+    || propertiesValueFor(options, GAUGE_SPEC_FILE_EXTENSIONS_PROPERTY);
+  if (!configured) {
+    return true;
+  }
+  return String(configured)
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .includes(MARKDOWN_EXTENSION);
+}
+
 function isMarkdownGaugeSpecFile(file, options = {}) {
   if (!MARKDOWN_FILE_PATTERN.test(String(file || ""))) {
+    return false;
+  }
+  const projectRoot = options.projectRoot !== undefined
+    ? options.projectRoot
+    : gaugeProjectRootForFile(file, options.projectFactory);
+  if (!markdownIsASpecExtension({ ...options, projectRoot })) {
     return false;
   }
   return isMarkdownSpecPath(file, createMarkdownSpecScope({
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
-    projectRoot: options.projectRoot !== undefined
-      ? options.projectRoot
-      : gaugeProjectRootForFile(file, options.projectFactory),
+    projectRoot,
   }));
 }
 

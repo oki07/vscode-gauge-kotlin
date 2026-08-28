@@ -24,6 +24,48 @@ function properties(content) {
   };
 }
 
+// Gauge decides which extensions count as specifications from
+// gauge_spec_file_extensions (references/gauge/env/env.go GaugeSpecFileExtensions,
+// default ".spec, .md"), and util.IsValidSpecExtension compares the lowercased
+// extension against that list. A project that narrows the list to ".spec" is
+// saying its Markdown is documentation, so no Gauge decoration belongs on it.
+test("isMarkdownGaugeSpecFile honours a narrowed gauge_spec_file_extensions", () => {
+  const { isMarkdownGaugeSpecFile } = require("../src/gaugeSpecScope");
+  const options = {
+    pathModule: path.posix,
+    projectRoot: "/workspace/gauge",
+    fileSystem: {
+      readFileSync(filename) {
+        if (filename === "/workspace/gauge/env/default/default.properties") {
+          return "gauge_spec_file_extensions = .spec\n";
+        }
+        throw new Error(`Missing ${filename}`);
+      },
+    },
+  };
+
+  assert.equal(isMarkdownGaugeSpecFile("/workspace/gauge/specs/checkout.md", options), false);
+});
+
+test("isMarkdownGaugeSpecFile keeps Markdown when the list still names it", () => {
+  const { isMarkdownGaugeSpecFile } = require("../src/gaugeSpecScope");
+  const options = {
+    pathModule: path.posix,
+    projectRoot: "/workspace/gauge",
+    fileSystem: {
+      readFileSync(filename) {
+        if (filename === "/workspace/gauge/env/default/default.properties") {
+          return "gauge_spec_file_extensions = .spec, .md\n";
+        }
+        throw new Error(`Missing ${filename}`);
+      },
+    },
+  };
+
+  assert.equal(isMarkdownGaugeSpecFile("/workspace/gauge/specs/checkout.md", options), true);
+});
+
+
 test("markdown spec scope defaults to the specs directory", () => {
   const scope = createMarkdownSpecScope({
     fileSystem: { readFileSync() { throw new Error("absent"); } },
