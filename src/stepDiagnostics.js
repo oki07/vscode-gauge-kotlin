@@ -3966,10 +3966,14 @@ function isScenarioLegacyUnderline(line) {
   return /^-+\s*$/.test(String(line || "").trim());
 }
 
+// Rejects a STEP line, not merely a line starting with "*": a step is "*"
+// followed by something other than "*" (references/gauge/parser/lex.go isStep),
+// so "**S**" is ordinary text and a valid legacy heading. This is the rule
+// isLegacyHeadingText in src/gaugeHeadings.js already applies.
 function isLegacyHeadingText(line) {
   const text = String(line || "").trim();
   return Boolean(text)
-    && !text.startsWith("*")
+    && !isGaugeStepLine(text)
     && !text.startsWith("|")
     && !isGaugeTagKeywordLine(text)
     && !/^table\s*:/i.test(text);
@@ -4211,6 +4215,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
   const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecHeading = false;
   let inScenario = false;
+  let sawDataTable = false;
   let pendingDataTable;
   const flushPendingDataTable = () => {
     if (pendingDataTable && !pendingDataTable.hasDataRow) {
@@ -4242,6 +4247,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       flushPendingDataTable();
       hasSpecHeading = true;
       inScenario = false;
+      sawDataTable = false;
       continue;
     }
 
@@ -4250,6 +4256,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
     if (scenarioHeading) {
       flushPendingDataTable();
       inScenario = true;
+      sawDataTable = false;
       continue;
     }
 
@@ -4259,11 +4266,22 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
     }
 
     if (!pendingDataTable) {
+      // Gauge discards a second spec level table as a comment and never
+      // validates it - it only warns "Multiple data table present, ignoring
+      // table" - so it must not also be checked for data rows.
+      if (sawDataTable) {
+        pendingDataTable = { hasDataRow: true, ignored: true };
+        continue;
+      }
+      sawDataTable = true;
       pendingDataTable = {
         hasDataRow: false,
         range: lineContentRange(vscode, rawLine, line),
         sawSeparator: false,
       };
+      continue;
+    }
+    if (pendingDataTable.ignored) {
       continue;
     }
 
@@ -5106,6 +5124,12 @@ function isDocStringFenceLine(line) {
 }
 
 function docStringEndLineAfterStep(lines, stepLine) {
+  // The fence must follow a STEP. Without this any line followed by `"""` opened
+  // a phantom block, so the steps inside it vanished and every spec diagnostic
+  // in between was skipped.
+  if (!isGaugeStepLine(lines[stepLine])) {
+    return undefined;
+  }
   const fenceLine = stepLine + 1;
   if (!isDocStringFenceLine(lines[fenceLine])) {
     return undefined;

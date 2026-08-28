@@ -1976,11 +1976,14 @@ test("GaugeRenameProvider keeps workspace documents within the source Gauge proj
   ]);
 });
 
-test("GaugeRenameProvider prepares rename on double-star step lines", async () => {
+// A step whose text begins with "*" is written "* * Bold comment": the marker,
+// then the text. "** Bold comment" is a comment, because
+// references/gauge/parser/lex.go isStep requires text[1] != '*'.
+test("GaugeRenameProvider prepares rename on a step whose text starts with a star", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
-    "** Bold comment",
+    "* * Bold comment",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const kotlinDocument = createDocument([
     "import com.thoughtworks.gauge.Step",
@@ -1991,10 +1994,10 @@ test("GaugeRenameProvider prepares rename on double-star step lines", async () =
   const vscode = createFakeVscode([specDocument, kotlinDocument]);
   const provider = new GaugeRenameProvider({ vscode });
 
-  const prepared = await provider.prepareRename(specDocument, new vscode.Position(1, 3));
+  const prepared = await provider.prepareRename(specDocument, new vscode.Position(1, 4));
 
-  assert.deepEqual({ ...prepared.range.start }, { line: 1, character: 1 });
-  assert.deepEqual({ ...prepared.range.end }, { line: 1, character: 15 });
+  assert.deepEqual({ ...prepared.range.start }, { line: 1, character: 2 });
+  assert.deepEqual({ ...prepared.range.end }, { line: 1, character: 16 });
 });
 
 test("GaugeRenameProvider preserves inline table step identity when renaming", async () => {
@@ -2220,6 +2223,24 @@ test("GaugeRenameProvider renames concept headings from concept files by extensi
 // "Duplicate step implementation found." when registry.hasMultipleImplementations
 // is true, the same guard it applies to aliases. Renaming locally would rewrite
 // one call site and leave the project in a state the runner rejects.
+// references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+// bold line is a comment. F2 offered to rename it and accepting rewrote the
+// comment into a Gauge step.
+test("GaugeRenameProvider refuses to rename a Markdown bold line", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "**bold note**",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const vscode = createFakeVscode([specDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  assert.equal(
+    await provider.prepareRename(specDocument, new vscode.Position(1, 4)),
+    undefined,
+  );
+});
+
 test("GaugeRenameProvider rejects renames for duplicated Kotlin Step implementations", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([

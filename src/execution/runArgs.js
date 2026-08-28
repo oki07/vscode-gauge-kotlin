@@ -34,6 +34,8 @@ const RERUN_FLAG_KEYS = [
 ];
 // references/gauge/cmd/run.go sets NoOptDefVal only on --sort.
 const NO_OPT_DEFAULT_FLAG_KEYS = new Set(["sort"]);
+// references/gauge/cmd/run.go registers these as repeatable string slices.
+const REPEATABLE_FLAG_KEYS = new Set(["scenario"]);
 const explicitFalseBooleanFlags = new Set([
   "install-plugins",
 ]);
@@ -112,6 +114,17 @@ function flagTokens(key, value) {
     return value ? [flag(key)] : [];
   }
   if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+    // An empty array is the default VS Code's launch.json IntelliSense inserts,
+    // and emitting "--scenario \"\"" makes Gauge filter every scenario away.
+    if (value.length === 0) {
+      return [];
+    }
+    // pflag registers --scenario as a repeatable string slice
+    // (references/gauge/cmd/run.go), so a comma joined value reads as one
+    // scenario heading and matches nothing.
+    if (REPEATABLE_FLAG_KEYS.has(key)) {
+      return value.flatMap((entry) => [flag(key), entry]);
+    }
     return [flag(key), value.join(",")];
   }
   if (typeof value === "string" || typeof value === "number") {

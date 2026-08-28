@@ -4,6 +4,38 @@ const test = require("node:test");
 // gauge sets NoOptDefVal on --sort (references/gauge/cmd/run.go:143-145), so
 // pflag reads a separated "--sort random" as --sort=alpha plus a positional
 // "random", which gauge then treats as a spec path. The value has to be attached.
+// package.json declares "default": [] for scenario and env, which is exactly what
+// VS Code's launch.json IntelliSense inserts. Emitting the flag with an empty
+// value made Gauge filter every scenario away and run nothing.
+test("buildRunArgs.forGauge drops an empty array launch attribute", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec", {
+      scenario: [],
+      "hide-suggestion": false,
+      "simple-console": false,
+    }),
+    ["run", "my.spec"],
+  );
+});
+
+// references/gauge/cmd/run.go:158 registers --scenario with StringArrayVar, so it
+// is repeatable. Comma joining made Gauge read the whole string as one scenario
+// heading, which matches nothing.
+test("buildRunArgs.forGauge repeats a scenario flag per name", () => {
+  const { buildRunArgs } = require("../../src/execution/runArgs");
+
+  assert.deepEqual(
+    buildRunArgs.forGauge("my.spec", {
+      scenario: ["first name", "second name"],
+      "hide-suggestion": false,
+      "simple-console": false,
+    }),
+    ["run", "--scenario", "first name", "--scenario", "second name", "my.spec"],
+  );
+});
+
 test("buildRunArgs.forGauge attaches the sort value to its flag", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 

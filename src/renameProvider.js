@@ -452,7 +452,10 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines, options = {}) {
     ? sourceLines[startLine]
     : documentLine(document, startLine)).replace(/\r$/, "");
   const marker = line.search(/\S/);
-  if (marker === -1 || line[marker] !== "*") {
+  // references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+  // bold line is a comment. Without this F2 offered to rename it and rewrote the
+  // comment into a step.
+  if (marker === -1 || line[marker] !== "*" || line[marker + 1] === "*") {
     return undefined;
   }
 
