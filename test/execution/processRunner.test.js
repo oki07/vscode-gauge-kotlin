@@ -44,6 +44,49 @@ function createChildProcess() {
 // A spawn failure writes to the output channel, but a Test UI run keeps that
 // channel hidden (reveal: command.forwardOutput !== true) and streams into the
 // Test Results panel instead, so the user saw an unexplained failure.
+// package.json activates on onLanguage:kotlin and onLanguage:java, so the
+// extension activates in any Kotlin or Java project. The runner is constructed
+// unconditionally by activate(), before the gate that decides whether this is a
+// Gauge workspace, and the channel was created eagerly and never disposed - so
+// an unrelated project got a permanent empty "Gauge Execution" entry in the
+// Output panel. gauge-vscode creates it inside GaugeExecutor, which only exists
+// after extension.ts has returned early for non-Gauge workspaces.
+test("process runner creates its output channel only when it first runs", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const created = [];
+  const disposed = [];
+  const vscode = {
+    window: {
+      createOutputChannel(name) {
+        const channel = {
+          name,
+          appendLine() {},
+          clear() {},
+          show() {},
+          dispose() {
+            disposed.push(name);
+          },
+        };
+        created.push(channel);
+        return channel;
+      },
+    },
+  };
+
+  const runner = createGaugeProcessRunner({
+    vscode,
+    pathModule: path.posix,
+    spawn() {
+      return createChildProcess();
+    },
+  });
+
+  assert.deepEqual(created, []);
+
+  runner.dispose();
+  assert.deepEqual(disposed, []);
+});
+
 test("process runner explains a spawn failure to a Test UI run", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

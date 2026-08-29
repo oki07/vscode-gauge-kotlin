@@ -4278,6 +4278,76 @@ test("activation does not start Gauge services for an unrelated manifest.json", 
   assert.equal(workspaceCreated, false);
 });
 
+// package.json activates on onLanguage:kotlin and onLanguage:java, so the
+// extension is already running in any Kotlin project. The gate then declines and
+// was never re-evaluated, so "gauge init" in that same folder brought up nothing
+// at all - no diagnostics, no CodeLens, no Test Explorer - until the user
+// reloaded the window, with no hint that a reload was what was missing.
+test("activation starts Gauge services when a manifest appears later", async () => {
+  const extension = require("../src/extension");
+
+  let workspaceCreated = 0;
+  const context = { subscriptions: [] };
+  const { fakeVscode } = createFakeVscode({
+    workspaceFolders: [{ uri: { fsPath: "/workspace/app" } }],
+  });
+  const createListeners = [];
+  fakeVscode.workspace.createFileSystemWatcher = () => ({
+    dispose() {},
+    onDidCreate(listener) {
+      createListeners.push(listener);
+      return { dispose() {} };
+    },
+    onDidChange: () => ({ dispose() {} }),
+    onDidDelete: () => ({ dispose() {} }),
+  });
+  let hasManifest = false;
+  const fileSystem = {
+    existsSync: (filename) => hasManifest && filename === "/workspace/app/manifest.json",
+    readFileSync: () => JSON.stringify({ Language: "java", Plugins: [] }),
+  };
+
+  extension.activate(context, fakeVscode, {
+    createCli() {
+      return {
+        isGaugeInstalled: () => true,
+        isGaugeVersionGreaterOrEqual: () => true,
+      };
+    },
+    createExecutionController() {
+      return { handleCommand() {} };
+    },
+    fileSystem,
+    GaugeWorkspace: class GaugeWorkspace {
+      constructor() {
+        workspaceCreated += 1;
+      }
+
+      dispose() {}
+    },
+    pathModule: path.posix,
+    semanticTokensLegend: { id: "legend" },
+    showWelcomeNotification() {},
+    SpecNodeProvider: class SpecNodeProvider {
+      dispose() {}
+    },
+  });
+
+  // The gate's nested-project probe is asynchronous, so the retry watcher is
+  // registered a tick later.
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(workspaceCreated, 0);
+  assert.ok(createListeners.length > 0);
+
+  hasManifest = true;
+  for (const listener of createListeners) {
+    listener({ fsPath: "/workspace/app/manifest.json" });
+  }
+
+  assert.equal(workspaceCreated, 1);
+});
+
 // The nested discovery path has the same exposure: a monorepo whose only
 // manifest.json belongs to a web app must not start the Gauge service stack.
 test("activation does not start Gauge services for a nested unrelated manifest.json", async () => {

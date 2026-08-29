@@ -163,10 +163,15 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.equal(fs.existsSync(path.join(root, "package-lock.json")), true);
   assert.equal(fs.existsSync(path.join(root, manifest.icon)), true);
 
+  // "workspaceContains:manifest.json" matches the workspace root only. This
+  // extension discovers nested Gauge projects, and a Markdown specification has
+  // no language of its own, so opening only a .md spec in a workspace whose
+  // manifest sits one directory down activated nothing at all.
   assert.deepEqual(manifest.activationEvents, [
     "onCommand:gauge.createProject",
     "onCommand:gauge.preview",
     "workspaceContains:manifest.json",
+    "workspaceContains:**/manifest.json",
     "onLanguage:gauge",
     "onLanguage:gauge-concept",
     "onLanguage:kotlin",

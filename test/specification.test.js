@@ -327,6 +327,56 @@ test("createSpecification does not ask for a project when a folder was chosen", 
   assert.equal(writes.has("/workspace/admin/specs/checkout/Checkout.spec"), true);
 });
 
+// The Explorer "New Gauge Specification" menu passes the folder the user right
+// clicked on straight through as specDir, with none of the gauge_specs_dir
+// checking the quick-pick path applies. Gauge only reads specifications from the
+// directories named by gauge_specs_dir (references/gauge/util/util.go
+// GetSpecDirs), so a specification created in src/ or docs/ is invisible to
+// every Gauge command and the user is given no hint why.
+test("createSpecification refuses a folder outside the project spec dirs", async () => {
+  const { createSpecification } = require("../src/specification");
+  const writes = new Map();
+  const errors = [];
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/workspace/shop" } }],
+      getConfiguration: () => ({ get: () => false }),
+      openTextDocument: async (filename) => ({ filename }),
+    },
+    window: {
+      showQuickPick: async () => undefined,
+      showInputBox: async () => "Checkout",
+      showTextDocument: async () => {},
+      showErrorMessage(message) {
+        errors.push(message);
+      },
+    },
+  };
+
+  await createSpecification({
+    vscode,
+    fileSystem: {
+      existsSync: () => false,
+      promises: {
+        async mkdir() {},
+        async writeFile(filename, content) {
+          writes.set(filename, content);
+        },
+      },
+    },
+    pathModule: path.posix,
+    eol: "\n",
+    date: "2026-06-26",
+    user: "Ada",
+    projects: ["/workspace/shop"],
+    specDir: "/workspace/shop/src/main/kotlin",
+  });
+
+  assert.deepEqual([...writes.keys()], []);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /Gauge does not read specifications from \/workspace\/shop\/src\/main\/kotlin\./);
+});
+
 test("createSpecification asks for project and spec directory when multiple choices exist", async () => {
   const { createSpecification } = require("../src/specification");
   const writes = new Map();

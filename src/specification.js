@@ -4,7 +4,7 @@ const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
 
-const { configuredSpecDirs } = require("./gaugeSpecScope");
+const { configuredConceptDirs, configuredSpecDirs } = require("./gaugeSpecScope");
 
 const SPEC_DIRS_REQUEST = "gauge/specDirs";
 const CREATE_SPECIFICATION_COMMAND = "gauge.create.specification";
@@ -310,14 +310,6 @@ async function selectProjectRoot(vscode, pathModule, options = {}, operation) {
   if (options.projectRoot) {
     return options.projectRoot;
   }
-  // A folder chosen from the Explorer already decides the target:
-  // selectSpecDirectory returns an absolute specDir verbatim and never consults
-  // the project root. Asking "Choose a project" there was a question with no
-  // effect, and Escaping it aborted the command with the wrong message.
-  if (options.specDir && pathModule.isAbsolute(options.specDir)) {
-    return options.specDir;
-  }
-
   const configuredProjects = typeof options.getProjects === "function"
     ? callSyncForOperation(operation, options.getProjects)
     : options.projects;
@@ -325,6 +317,15 @@ async function selectProjectRoot(vscode, pathModule, options = {}, operation) {
     return DISPOSED_CREATION;
   }
   const projectRoots = configuredProjects || getWorkspaceRoots(vscode);
+  // A folder chosen from the Explorer already decides the target, so asking
+  // "Choose a project" there was a question with no effect and Escaping it
+  // aborted the command with the wrong message. The project is the root that
+  // contains the folder; without one there is nothing to check its scope
+  // against, and the folder stands in for the project as it always did.
+  if (options.specDir && pathModule.isAbsolute(options.specDir)) {
+    return projectRoots.find((root) => isInsideDirectory(pathModule, root, options.specDir))
+      || options.specDir;
+  }
   if (projectRoots.length === 0) {
     return undefined;
   }
@@ -437,6 +438,7 @@ async function createGaugeFile(options, descriptor) {
 
     const targetDir = await selectSpecDirectory(vscode, pathModule, projectRoot, {
       ...options,
+      descriptor,
       specDirPlaceHolder: descriptor.directoryPlaceholder,
     }, operation);
     if (targetDir === DISPOSED_CREATION || operationStopped(operation)) {
@@ -545,13 +547,56 @@ async function createConcept(options = {}) {
   return createGaugeFile(options, CONCEPT_DESCRIPTOR);
 }
 
+function isInsideDirectory(pathModule, directory, candidate) {
+  const relative = pathModule.relative(directory, candidate);
+  return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
+}
+
+// The Explorer menu passes the folder the user right clicked on straight
+// through, with none of the checking the quick-pick path applies. Gauge only
+// reads specifications from the directories named by gauge_specs_dir
+// (references/gauge/util/util.go GetSpecDirs), so a file created outside them is
+// invisible to every Gauge command with no hint why.
+function isInsideProjectSpecDirs(pathModule, projectRoot, target, options, descriptor) {
+  const scope = {
+    fileSystem: options.fileSystem,
+    pathModule,
+    projectRoot,
+  };
+  const directories = descriptor && descriptor.kind === "concept"
+    ? configuredConceptDirs(scope)
+    : configuredSpecDirs(scope);
+  return directories.some((segments) => isInsideDirectory(
+    pathModule,
+    pathModule.join(projectRoot, segments.join(pathModule.sep || "/")),
+    target,
+  ));
+}
+
 async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}, operation) {
   if (options.specDir) {
-    return callSyncForOperation(operation, () => (
+    const target = callSyncForOperation(operation, () => (
       pathModule.isAbsolute(options.specDir)
         ? options.specDir
         : pathModule.join(projectRoot, options.specDir)
     ));
+    if (target === DISPOSED_CREATION || operationStopped(operation)) {
+      return target;
+    }
+    // projectRoot falls back to the folder itself when it belongs to no known
+    // project, and then there is no gauge_specs_dir to judge it against.
+    if (
+      projectRoot !== target
+      && !isInsideProjectSpecDirs(pathModule, projectRoot, target, options, options.descriptor)
+    ) {
+      return callForOperation(operation, () => showGenerationError(
+        vscode,
+        (options.descriptor && options.descriptor.kind) || "specification",
+        `Gauge does not read specifications from ${target}.`
+        + " Choose a folder inside gauge_specs_dir.",
+      )) === DISPOSED_CREATION ? DISPOSED_CREATION : undefined;
+    }
+    return target;
   }
 
   const relativeSpecDirs = options.specDirsProvider

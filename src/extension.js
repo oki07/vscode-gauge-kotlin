@@ -54,6 +54,7 @@ const {
 
 const MINIMUM_SUPPORTED_GAUGE_VERSION = "0.9.6";
 const DIRECT_DEBUG_CONFIGURATION_ERROR = "Starting with the Gauge debug configuration is not supported. Please use the 'Gauge' commands instead.";
+const GAUGE_MANIFEST_GLOB = "**/manifest.json";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const JAVA_LANGUAGE = "java";
@@ -966,6 +967,66 @@ function observeDetachedNotification(showNotification) {
   }
 }
 
+// The activation events include onLanguage:kotlin and onLanguage:java, so the
+// extension is already running in any Kotlin project. When the gate declines
+// there is no second activation event to bring the Gauge stack up: "gauge init"
+// in that folder, or adding a Gauge folder to the workspace, produced nothing at
+// all until the window was reloaded. Watch for the manifest instead.
+function watchForGaugeProject(context, vscode, options, retry) {
+  const workspace = vscode.workspace;
+  if (!workspace) {
+    return;
+  }
+  let started = false;
+  const disposables = [];
+  const stop = () => {
+    for (const disposable of disposables.splice(0, disposables.length)) {
+      try {
+        disposable.dispose();
+      } catch (_error) {
+        // Releasing the rest matters more than one failure.
+      }
+    }
+  };
+  const attempt = () => {
+    if (started || !isExtensionActivationCurrent(options.extensionActivation)) {
+      return;
+    }
+    started = true;
+    stop();
+    // The gate runs again from the top: retry() re-reads the manifest through a
+    // factory whose caches the manifest watcher has already invalidated.
+    try {
+      retry();
+    } catch (_error) {
+      started = false;
+    }
+  };
+  const own = (disposable) => {
+    if (disposable && typeof disposable.dispose === "function") {
+      disposables.push(disposable);
+    }
+  };
+  try {
+    if (typeof workspace.createFileSystemWatcher === "function") {
+      const watcher = workspace.createFileSystemWatcher(GAUGE_MANIFEST_GLOB);
+      own(watcher);
+      if (watcher && typeof watcher.onDidCreate === "function") {
+        own(watcher.onDidCreate(() => attempt()));
+      }
+      if (watcher && typeof watcher.onDidChange === "function") {
+        own(watcher.onDidChange(() => attempt()));
+      }
+    }
+    if (typeof workspace.onDidChangeWorkspaceFolders === "function") {
+      own(workspace.onDidChangeWorkspaceFolders(() => attempt()));
+    }
+  } catch (_error) {
+    // Without a watcher the user still has Reload Window.
+  }
+  context.subscriptions.push({ dispose: stop });
+}
+
 function startGaugeServices(context, vscode, options = {}) {
   if (!isExtensionActivationCurrent(options.extensionActivation)) {
     return undefined;
@@ -986,23 +1047,31 @@ function startGaugeServices(context, vscode, options = {}) {
       return undefined;
     }
     if (!shouldStart) {
+      const retry = () => startGaugeServices(context, vscode, { ...options, projectFactory });
       if (typeof projectFactory.findGaugeProjectRootsAsync !== "function") {
+        watchForGaugeProject(context, vscode, options, retry);
         return undefined;
       }
       return waitForExtensionActivation(
         options.extensionActivation,
         shouldStartGaugeServicesAsync(vscode, projectFactory, options.extensionActivation),
-      ).then((shouldStartAsync) => (
-        shouldStartAsync !== STOPPED_EXTENSION_ACTIVATION
-          && isExtensionActivationCurrent(options.extensionActivation)
-          && shouldStartAsync
-          ? startGaugeServices(context, vscode, {
-            ...options,
-            gaugeServiceGateResolved: true,
-            projectFactory,
-          })
-          : undefined
-      ));
+      ).then((shouldStartAsync) => {
+        if (
+          shouldStartAsync === STOPPED_EXTENSION_ACTIVATION
+          || !isExtensionActivationCurrent(options.extensionActivation)
+        ) {
+          return undefined;
+        }
+        if (!shouldStartAsync) {
+          watchForGaugeProject(context, vscode, options, retry);
+          return undefined;
+        }
+        return startGaugeServices(context, vscode, {
+          ...options,
+          gaugeServiceGateResolved: true,
+          projectFactory,
+        });
+      });
     }
   }
 

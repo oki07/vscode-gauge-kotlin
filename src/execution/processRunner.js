@@ -155,12 +155,24 @@ function createGaugeProcessRunner(options = {}) {
   const processOutputChunk = options.processOutputChunk || (() => {});
   const gaugeEnvOptions = { vscode, gaugeHome: options.gaugeHome };
   const baseEnv = envWithGaugeHome(options.env || process.env, gaugeEnvOptions);
-  const outputChannel = options.outputChannel || createDefaultOutputChannel(vscode);
+  // Created on the first run, not at construction. activate() builds the
+  // execution controller unconditionally - before the gate that decides whether
+  // this is a Gauge workspace - so an eager channel put a permanent empty
+  // "Gauge Execution" entry in the Output panel of every Kotlin or Java project.
+  let outputChannel = options.outputChannel;
+  let ownedOutputChannel;
+  const resolveOutputChannel = () => {
+    if (!outputChannel) {
+      ownedOutputChannel = createDefaultOutputChannel(vscode);
+      outputChannel = ownedOutputChannel;
+    }
+    return outputChannel;
+  };
   const platform = options.platform || process.platform;
   const processTree = options.processTree || loadProcessTree();
   const killProcess = options.killProcess || process.kill;
 
-  return function runGaugeProcess(command) {
+  function runGaugeProcess(command) {
     let child;
     let aborted = false;
     let settle;
@@ -173,7 +185,7 @@ function createGaugeProcessRunner(options = {}) {
       // Gauge reveals its execution channel on every run. Runs that forward
       // their output to the Test Results panel keep it hidden so the test UI
       // stays in front.
-      const channel = new OutputChannel(outputChannel, initial, command.cwd, {
+      const channel = new OutputChannel(resolveOutputChannel(), initial, command.cwd, {
         pathModule,
         reveal: command.forwardOutput !== true,
       });
@@ -279,7 +291,18 @@ function createGaugeProcessRunner(options = {}) {
     };
 
     return run;
+  }
+
+  // Only a channel this runner created is its to release.
+  runGaugeProcess.dispose = () => {
+    if (ownedOutputChannel && typeof ownedOutputChannel.dispose === "function") {
+      ownedOutputChannel.dispose();
+    }
+    ownedOutputChannel = undefined;
+    outputChannel = options.outputChannel;
   };
+
+  return runGaugeProcess;
 }
 
 module.exports = {

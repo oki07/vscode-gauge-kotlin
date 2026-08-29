@@ -963,6 +963,7 @@ function createGaugeExecutionController(options = {}) {
       { fs: fileSystem, pathModule },
     ));
 
+  const ownsRunner = !options.runner;
   const runner = options.runner || createGaugeProcessRunner({
     vscode,
     pathModule,
@@ -1859,6 +1860,13 @@ function createGaugeExecutionController(options = {}) {
         }
       }
       ownedRequestProviders.clear();
+      if (ownsRunner && typeof runner.dispose === "function") {
+        try {
+          runner.dispose();
+        } catch (_error) {
+          // Continue terminal cleanup for the remaining controller resources.
+        }
+      }
       latestScheduledExecutionSequence = ++nextExecutionSequence;
       if (pendingExecutionRequest) {
         notifyExecutionRequest(pendingExecutionRequest, "onCancelled");
