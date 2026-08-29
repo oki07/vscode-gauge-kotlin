@@ -75,6 +75,35 @@ function createProjectFactory() {
   };
 }
 
+// referenceCount counts only step references, but referenceLocations returned
+// every entry including the concept's own heading, so the lens said N and the
+// peek showed N+1 - and an unused concept faded as "no references" still opened
+// a peek pointing at itself.
+test("WorkspaceStepIndex peeks the same references it counts", async () => {
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const conceptDocument = createDocument([
+    "# Shared checkout",
+    "* Confirm order",
+  ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "gauge-concept");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* Shared checkout",
+  ].join("\n"), "/workspace/gauge/specs/checkout.spec", "gauge");
+  const store = new FakeDocumentStore([conceptDocument, specDocument]);
+  const index = new WorkspaceStepIndex({
+    documentStore: store,
+    projectFactory: createProjectFactory(),
+    vscode: { workspace: { textDocuments: [specDocument] } },
+  });
+
+  const count = await index.referenceCount(conceptDocument, "Shared checkout");
+  const locations = await index.referenceLocations(conceptDocument, "Shared checkout");
+
+  assert.equal(locations.length, count);
+});
+
 test("WorkspaceStepIndex shares completion, definition, and reference analysis", async () => {
   const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
   const constants = createDocument([

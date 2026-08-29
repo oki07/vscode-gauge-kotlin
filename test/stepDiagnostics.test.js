@@ -7341,6 +7341,36 @@ test("GaugeStepDiagnosticsProvider validates the first spec table wherever it ap
 // (references/gauge/parser/lex.go), so it is a comment and an underline below it
 // promotes it. And isTableRow requires a trailing "|" too, so "| id | name" is a
 // comment as well. Verified against the real parser, which reports both.
+// Gauge produces NO concept for a heading with a static parameter: verified
+// against parser.CreateConceptsDictionary, where "# pay with \"card\"" yields
+// concepts=0 plus "Concept heading can have only Dynamic Parameters". Indexing
+// it anyway made the calling step look resolved while gauge run reports it
+// missing.
+test("GaugeStepDiagnosticsProvider does not index a rejected concept heading", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## Scenario",
+    "* pay with \"card\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# pay with \"card\"",
+    "* do it",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/pay.cpt");
+  const implementation = createDocument([
+    "@Step(\"do it\")",
+    "fun doIt() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(specDocument, [specDocument, conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message),
+    ["Undefined Step"],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider promotes comment lines an underline follows", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

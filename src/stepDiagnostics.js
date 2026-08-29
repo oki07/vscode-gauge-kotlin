@@ -9668,6 +9668,14 @@ class GaugeStepDiagnosticsProvider {
     }
     for (const candidate of conceptDocuments) {
       for (const heading of findConceptHeadings(candidate.getText())) {
+        // Gauge produces no concept for a heading with a static parameter
+        // (verified against parser.CreateConceptsDictionary, which answers
+        // concepts=0 plus "Concept heading can have only Dynamic Parameters"),
+        // so indexing it would make the calling step look resolved while
+        // gauge run reports it missing.
+        if (findStaticParameterStart(heading.text, 0) !== -1) {
+          continue;
+        }
         templates.add(heading.normalized);
       }
     }

@@ -110,6 +110,16 @@ function addMapEntry(map, key, value) {
   map.get(key).push(value);
 }
 
+function isStepReferenceEntry(entry) {
+  return !entry.kind || entry.kind === "step";
+}
+
+function stepReferenceLocations(state, template) {
+  return (state.referenceEntriesByTemplate.get(normalizedKey(template)) || [])
+    .filter(isStepReferenceEntry)
+    .map((entry) => entry.location);
+}
+
 class WorkspaceStepIndex {
   constructor(options = {}) {
     this.documentStore = options.documentStore;
@@ -517,6 +527,11 @@ class WorkspaceStepIndex {
     });
   }
 
+  // A concept shadows an implementation of the same text: Gauge substitutes the
+  // concept when it builds the specification
+  // (references/gauge/gauge/specification.go ProcessConceptStepsFrom), so the
+  // Kotlin function is never executed for that step and navigating to it would
+  // send the user to dead code.
   async definitionEntries(sourceDocument, templates) {
     const state = await this.snapshotFor(sourceDocument);
     const steps = [];
@@ -526,7 +541,7 @@ class WorkspaceStepIndex {
       steps.push(...(state.stepDefinitionsByTemplate.get(key) || []));
       concepts.push(...(state.conceptDefinitionsByTemplate.get(key) || []));
     }
-    return steps.length > 0 ? steps : concepts;
+    return concepts.length > 0 ? concepts : steps;
   }
 
   async stepEntriesForDocument(sourceDocument, targetDocument = sourceDocument) {
@@ -557,19 +572,20 @@ class WorkspaceStepIndex {
   async referenceCount(sourceDocument, template) {
     const state = await this.snapshotFor(sourceDocument);
     const entries = state.referenceEntriesByTemplate.get(normalizedKey(template)) || [];
-    return entries.filter((entry) => !entry.kind || entry.kind === "step").length;
+    return entries.filter(isStepReferenceEntry).length;
   }
 
+  // Peek the same entries referenceCount counts. Including the concept's own
+  // heading made the "N reference(s)" lens open a peek of N+1, and an unused
+  // concept faded as having none still opened a peek pointing at itself.
   async referenceLocations(sourceDocument, template) {
     const state = await this.snapshotFor(sourceDocument);
-    return (state.referenceEntriesByTemplate.get(normalizedKey(template)) || [])
-      .map((entry) => entry.location);
+    return stepReferenceLocations(state, template);
   }
 
   async referenceLocationsForPath(sourcePath, template) {
     const state = await this.snapshotForPath(sourcePath);
-    return (state.referenceEntriesByTemplate.get(normalizedKey(template)) || [])
-      .map((entry) => entry.location);
+    return stepReferenceLocations(state, template);
   }
 
   async tagEntries(sourceDocument) {
