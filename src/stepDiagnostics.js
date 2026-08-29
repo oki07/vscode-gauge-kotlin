@@ -5450,6 +5450,9 @@ function duplicateConceptDiagnostics(vscode, document, conceptDocuments) {
   const headingsByTemplate = new Map();
   for (const candidate of documents) {
     for (const heading of findConceptDefinitionHeadings(candidate.getText())) {
+      if (!isAcceptedConceptHeading(heading)) {
+        continue;
+      }
       if (!headingsByTemplate.has(heading.normalized)) {
         headingsByTemplate.set(heading.normalized, []);
       }
@@ -5498,6 +5501,13 @@ function conceptHasStep(lines, startLine, endLine) {
   return false;
 }
 
+// A heading Gauge discards builds no concept, so the rules that apply to concepts
+// - needing a step, and clashing with another definition - cannot apply to it.
+function isAcceptedConceptHeading(heading) {
+  return !hasStaticStepParameter(heading.text)
+    && specialConceptHeadingParameter(heading.text) === undefined;
+}
+
 function conceptWithoutStepDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
@@ -5505,7 +5515,8 @@ function conceptWithoutStepDiagnostics(vscode, text) {
   for (let index = 0; index < headings.length; index += 1) {
     const heading = headings[index];
     const nextLine = headings[index + 1] ? headings[index + 1].start.line : lines.length;
-    if (conceptHasStep(lines, heading.start.line + 1, nextLine)) {
+    if (!isAcceptedConceptHeading(heading)
+      || conceptHasStep(lines, heading.start.line + 1, nextLine)) {
       continue;
     }
     diagnostics.push(createDiagnostic(
@@ -5517,14 +5528,18 @@ function conceptWithoutStepDiagnostics(vscode, text) {
   return diagnostics;
 }
 
-// A heading opens a concept scope even when its value is empty - the real parser
-// reports nothing for "#" followed by a step - but a heading Gauge rejects for a
-// static parameter opens nothing, so the steps below it are outside a concept.
-// Verified against parser.CreateConceptsDictionary, which answers both
-// "Concept heading can have only Dynamic Parameters" and "Step is not defined
-// inside a concept heading" for `# C "x"` with a step under it.
-function conceptScopeHeadingLine(text) {
+// Gauge closes the concept scope at EVERY heading and reopens it only when the
+// heading parsed cleanly: references/gauge/parser/conceptParser.go resets
+// currentState to initial after processConceptHeading and skips
+// addStates(conceptScope) whenever the heading produced errors. So a rejected
+// heading later in the file puts the steps under it outside a concept again.
+//
+// A heading is rejected when it carries a static argument or an unresolvable
+// special parameter. An empty value is fine - the real parser reports nothing
+// for "#" followed by a step.
+function conceptHeadingScopes(text) {
   const lines = text.split("\n");
+  const scopes = [];
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     const isHash = isGaugeHashHeadingLine(rawLine) && !isHashScenarioHeading(rawLine);
@@ -5534,19 +5549,29 @@ function conceptScopeHeadingLine(text) {
       continue;
     }
     const value = isHash ? hashHeadingValue(rawLine, 1) : rawLine.trim();
-    if (hasStaticStepParameter(value)) {
-      continue;
-    }
-    return line;
+    const rejected = hasStaticStepParameter(value)
+      || specialConceptHeadingParameter(value) !== undefined;
+    scopes.push({ line, rejected });
   }
-  return Infinity;
+  return scopes;
+}
+
+function conceptScopeOpenAt(scopes, line) {
+  let open = false;
+  for (const scope of scopes) {
+    if (scope.line > line) {
+      break;
+    }
+    open = !scope.rejected;
+  }
+  return open;
 }
 
 function stepsOutsideConceptDiagnostics(vscode, text) {
   const diagnostics = [];
-  const firstHeadingLine = conceptScopeHeadingLine(text);
+  const scopes = conceptHeadingScopes(text);
   for (const entry of findGaugeSteps(text)) {
-    if (!entry.text || entry.start.line >= firstHeadingLine) {
+    if (!entry.text || conceptScopeOpenAt(scopes, entry.start.line)) {
       continue;
     }
     diagnostics.push(createDiagnostic(
@@ -5722,11 +5747,15 @@ function conceptTableDiagnostics(vscode, text) {
   const docStringLines = closedSpecDocStringLines(lines);
   let tableBelongsToStep = false;
   let inInvalidTable = false;
+  let inTableBlock = false;
+  let sawTableBlock = false;
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     if (isTopLevelConceptStep(rawLine)) {
       tableBelongsToStep = true;
       inInvalidTable = false;
+      inTableBlock = false;
+      sawTableBlock = false;
       continue;
     }
     // A blank line does not end the step's scope: Gauge's lexer emits no token
@@ -5736,9 +5765,17 @@ function conceptTableDiagnostics(vscode, text) {
     // the scope (references/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only closed blocks may be skipped.
     if (!rawLine.trim() || docStringLines.has(line)) {
+      inTableBlock = false;
       continue;
     }
+    // Gauge attaches only the FIRST table to the step, so a second one separated
+    // from it belongs to nothing. Verified against the real concept parser.
     if (isTopLevelTableLine(rawLine)) {
+      if (sawTableBlock && !inTableBlock) {
+        tableBelongsToStep = false;
+      }
+      sawTableBlock = true;
+      inTableBlock = true;
       if (!tableBelongsToStep && !inInvalidTable) {
         diagnostics.push(createDiagnostic(
           vscode,
@@ -5755,6 +5792,7 @@ function conceptTableDiagnostics(vscode, text) {
     }
     tableBelongsToStep = false;
     inInvalidTable = false;
+    inTableBlock = false;
   }
   return diagnostics;
 }

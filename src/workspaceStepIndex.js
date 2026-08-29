@@ -23,7 +23,10 @@ const {
   isConceptDocument,
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
-const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+const {
+  isConceptPathInScope,
+  isMarkdownGaugeSpecFile,
+} = require("./gaugeSpecScope");
 
 const GAUGE_REFERENCE_FILE_PATTERN = /\.(?:cpt|md|spec)$/i;
 
@@ -292,7 +295,15 @@ class WorkspaceStepIndex {
     if (isStepImplementationDocument(document)) {
       record.stepEntries = await Promise.resolve(this.stepEntriesProvider(document, documents, root));
     }
-    if (isConceptDocument(document)) {
+    // gauge_concepts_dir narrows where Gauge reads concepts from
+    // (references/gauge/util/fileUtils.go GetConceptFiles), and a concept
+    // shadows an implementation, so indexing one Gauge never reads would send Go
+    // to Definition away from the Kotlin function that actually runs.
+    if (isConceptDocument(document) && isConceptPathInScope(documentPath(document), {
+      fileSystem: this.fileSystem,
+      pathModule: this.pathModule,
+      projectRoot: root,
+    })) {
       record.concepts = findConceptHeadings(document.getText());
     }
     if (isGaugeReferenceDocument(document, this.markdownScopeOptions())) {

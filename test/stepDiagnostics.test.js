@@ -6659,13 +6659,20 @@ test("GaugeStepDiagnosticsProvider reports unresolved special concept heading pa
   ]);
 
   assert.deepEqual(
-    diagnostics.map((diagnostic) => diagnostic.message),
+    diagnostics.map((diagnostic) => diagnostic.message).sort(),
     [
+      // A heading Gauge rejects opens no concept scope, so the step under it is
+      // outside one. Verified against parser.CreateConceptsDictionary, which
+      // reports both - see test/fixtures/concept-parity.json.
       "Dynamic parameter <table:users.csv> could not be resolved",
+      "Step is not defined inside a concept heading",
     ],
   );
-  assert.deepEqual({ ...diagnostics[0].range.start }, { line: 0, character: 2 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 0, character: 35 });
+  const headingDiagnostic = diagnostics.find(
+    (diagnostic) => diagnostic.message.startsWith("Dynamic parameter"),
+  );
+  assert.deepEqual({ ...headingDiagnostic.range.start }, { line: 0, character: 2 });
+  assert.deepEqual({ ...headingDiagnostic.range.end }, { line: 0, character: 35 });
 });
 
 // Gauge compares the trimmed line (references/gauge/parser/lex.go) and

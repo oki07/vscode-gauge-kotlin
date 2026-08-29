@@ -210,5 +210,58 @@
     "parserErrors": [
       "Dynamic parameter <> could not be resolved"
     ]
+  },
+  {
+    "label": "valid then rejected heading",
+    "text": "# A <x>\n* a\n\n# Login as \"admin\"\n* b\n\n# B <y>\n* a\n",
+    "parserErrors": [
+      "Concept heading can have only Dynamic Parameters",
+      "Step is not defined inside a concept heading"
+    ]
+  },
+  {
+    "label": "valid then rejected legacy",
+    "text": "# A <x>\n* a\n\nBad \"x\"\n=====\n* b\n",
+    "parserErrors": [
+      "Concept heading can have only Dynamic Parameters",
+      "Step is not defined inside a concept heading"
+    ]
+  },
+  {
+    "label": "valid then special param heading",
+    "text": "# A <x>\n* a\n\n# Bad <file:x.txt>\n* b\n",
+    "parserErrors": [
+      "Dynamic parameter <file:x.txt> could not be resolved",
+      "Step is not defined inside a concept heading"
+    ]
+  },
+  {
+    "label": "rejected heading no steps",
+    "text": "# A <x>\n* a\n\n# Login as \"admin\"\n",
+    "parserErrors": [
+      "Concept heading can have only Dynamic Parameters"
+    ]
+  },
+  {
+    "label": "rejected heading first no steps",
+    "text": "# Login as \"admin\"\n\n# A <x>\n* a\n",
+    "parserErrors": [
+      "Concept heading can have only Dynamic Parameters"
+    ]
+  },
+  {
+    "label": "duplicate with rejected",
+    "text": "# A <x>\n* a\n# A \"y\"\n* b\n",
+    "parserErrors": [
+      "Concept heading can have only Dynamic Parameters",
+      "Step is not defined inside a concept heading"
+    ]
+  },
+  {
+    "label": "two tables blank between",
+    "text": "# C\n* a\n|x|\n|-|\n|1|\n\n|y|\n|-|\n|2|\n",
+    "parserErrors": [
+      "Table doesn't belong to any step"
+    ]
   }
 ]
