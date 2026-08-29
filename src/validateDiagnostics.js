@@ -79,8 +79,15 @@ function createDiagnostic(vscode, range, message, error) {
   return diagnostic;
 }
 
+// references/gauge/validation/validate.go StepValidationError.Error formats
+// "<file>:<lineNo> <message> => '<lineText>'", so the step's own text is part of
+// this line. The file part must be LAZY: a greedy match let a ":<digits> "
+// inside the step text - a URL port, a clock time - win over the real line
+// number, and the diagnostic landed on a phantom file at a phantom line while
+// the real spec showed nothing. A Windows "C:\..." drive letter is safe because
+// the colon there is not followed by digits and whitespace.
 function parseGaugeValidateError(line) {
-  const match = /^(\S+)\s+(.+):(\d+):?\s+(.*)$/.exec(String(line || "").trim());
+  const match = /^(\S+)\s+(.+?):(\d+):?\s+(.*)$/.exec(String(line || "").trim());
   if (!match) {
     return undefined;
   }

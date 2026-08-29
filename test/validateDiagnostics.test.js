@@ -881,6 +881,34 @@ test("parseGaugeValidateErrors accepts optional colon separators", () => {
   ]);
 });
 
+// references/gauge/validation/validate.go StepValidationError.Error formats
+// "<file>:<lineNo> <message> => '<lineText>'", so the step's own text is part of
+// the line. A greedy (.+) let a ":<digits> " inside that text - a URL port, a
+// clock time - win over the real line number, so the diagnostic landed on a
+// phantom file at a phantom line and the real spec showed nothing at all.
+test("parseGaugeValidateErrors is not fooled by a port inside the step text", () => {
+  const { parseGaugeValidateErrors } = require("../src/validateDiagnostics");
+
+  assert.deepEqual(parseGaugeValidateErrors([
+    "ValidationError /workspace/gauge/specs/example.spec:5 Step implementation not found"
+    + " => 'open http://localhost:8080 and log in'",
+    "ValidationError C:\\workspace\\specs\\example.spec:12 Duplicate step => 'at 10:30 do it'",
+  ].join("\n")), [
+    {
+      type: "ValidationError",
+      fileName: "/workspace/gauge/specs/example.spec",
+      lineNumber: 5,
+      message: "Step implementation not found => 'open http://localhost:8080 and log in'",
+    },
+    {
+      type: "ValidationError",
+      fileName: "C:\\workspace\\specs\\example.spec",
+      lineNumber: 12,
+      message: "Duplicate step => 'at 10:30 do it'",
+    },
+  ]);
+});
+
 function createScopedValidateFixture(options = {}) {
   const state = {
     deletes: [],

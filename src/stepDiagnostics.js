@@ -3534,6 +3534,15 @@ function countStepParameters(stepText) {
 // ExtractStepValueAndParams on `Pay with "100"` gives `Pay with <100>`, and on
 // `Mix "a b" and <c>` gives `Mix <a b> and <c>`. An escaped quote is not an
 // argument and stays verbatim, which falls out of the same scan.
+// The braces Gauge reserves must be written "\\{" in the spec and arrive at the
+// runner unescaped: the real parser gives "* cost is \\{5\\}" the step value
+// "cost is {5}" (probed). Emitting the raw spec text into the annotation - and
+// then escaping the backslash again for Kotlin - registered "cost is \\{5\\}",
+// which the runner can never match.
+function unescapeStepLiteral(text) {
+  return String(text || "").replace(/\\([{}])/g, "$1");
+}
+
 function parameterizedStepValue(stepText) {
   const text = String(stepText || "");
   let result = "";
@@ -3552,12 +3561,12 @@ function parameterizedStepValue(stepText) {
     if (closeIndex === -1) {
       break;
     }
-    result += text.slice(index, parameter.openIndex);
+    result += unescapeStepLiteral(text.slice(index, parameter.openIndex));
     result += `<${text.slice(parameter.openIndex + 1, closeIndex)}>`;
     index = closeIndex + 1;
   }
 
-  return result + text.slice(index);
+  return result + unescapeStepLiteral(text.slice(index));
 }
 
 // A concept heading may carry only dynamic parameters
@@ -3717,6 +3726,25 @@ function findBlankGaugeSteps(text) {
   }
 
   return entries;
+}
+
+// A @Step annotation is not spec text WHERE THE REGISTRY IS CONCERNED.
+// references/gauge-java scan/RegistryMethodVisitor keys the registry on
+// StepsUtil.getStepText, which is the whole of what the runner does to it:
+//   parameterizedStepText.replaceAll("(<.*?>)", "{}")
+// so a quoted run stays literal, and "{" and "}" are ordinary characters rather
+// than the spec's reserved ones. Applying the spec grammar here reported steps
+// implemented that the runner cannot find, and dropped annotations with braces
+// out of the index entirely.
+//
+// The parameter-count diagnostic deliberately keeps the SPEC grammar: the
+// IntelliJ plugin this message comes from resolves the annotation through the
+// Gauge API (references/intellij-gauge-plugin SpecPsiImplUtil.getStepValueFor ->
+// StepUtil.getStepValue), not through StepsUtil.
+const ANNOTATION_PARAMETER_PATTERN = /<.*?>/g;
+
+function annotationStepTemplate(alias) {
+  return String(alias || "").replace(ANNOTATION_PARAMETER_PATTERN, "{}");
 }
 
 function normalizeStepTemplate(text) {
@@ -9580,7 +9608,7 @@ class GaugeStepDiagnosticsProvider {
       const end = positionAt(text, entry.parameterEnd, document);
       const range = createRange(this.vscode, start, end);
       for (const alias of entry.aliases) {
-        const template = normalizeStepTemplate(alias);
+        const template = annotationStepTemplate(alias);
         const inlineParameters = countStepParameters(alias);
         const expected = inlineParameters + (stepUsage.docString.has(template) ? 1 : 0);
         if (
@@ -9809,7 +9837,7 @@ class GaugeStepDiagnosticsProvider {
       const file = documentPath(candidate) || "";
       for (const entry of this.stepFunctionsFor(candidate, externalConstants)) {
         for (const alias of new Set(entry.aliases)) {
-          const template = normalizeStepTemplate(alias);
+          const template = annotationStepTemplate(alias);
           let entries = sites.get(template);
           if (!entries) {
             entries = new Set();
@@ -9862,7 +9890,7 @@ class GaugeStepDiagnosticsProvider {
       }
       for (const entry of this.stepFunctionsFor(candidate, externalConstants)) {
         for (const alias of entry.aliases) {
-          templates.add(normalizeStepTemplate(alias));
+          templates.add(annotationStepTemplate(alias));
         }
       }
     }

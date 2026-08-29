@@ -4952,7 +4952,12 @@ test("GaugeStepDiagnosticsProvider reports Gauge step parser errors", () => {
     "* Pay \\{card\\}",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const implementation = createDocument([
-    "@Step(\"Pay \\\\{card\\\\}\")",
+    // The runner registers what the annotation LITERALLY says
+    // (references/gauge-java RegistryMethodVisitor keys on
+    // StepsUtil.getStepText, which leaves braces alone), and the spec value for
+    // "* Pay \\{card\\}" is "Pay {card}" (probed). So the annotation must not
+    // carry the spec's escapes.
+    "@Step(\"Pay {card}\")",
     "fun payLiteral() {}",
   ].join("\n"));
 
@@ -5756,6 +5761,53 @@ test("GaugeStepDiagnosticsProvider agrees with the quick fix on an unclosed tabl
   const implementation = createDocument([
     "@Step(\"Pay the total amount\")",
     "fun pay() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
+// The annotation is not spec text. references/gauge-java StepsUtil.getStepText
+// only does replaceAll("(<.*?>)", "{}"), so a quoted run inside the annotation
+// stays literal and the registry key is `the user "admin" logs in`. Applying the
+// SPEC grammar here made it `the user {} logs in`, which matches the spec step,
+// so the editor reported the step implemented - and then suppressed the runner's
+// correct "Step implementation not found".
+test("GaugeStepDiagnosticsProvider does not treat a quoted literal in an annotation as a parameter", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Login",
+    "## Scenario",
+    "* the user \"admin\" logs in",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/login.spec");
+  const implementation = createDocument([
+    "@Step(\"the user \\\"admin\\\" logs in\")",
+    "fun login() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), ["Undefined Step"]);
+});
+
+// StepsUtil.getStepText performs no escape processing, so "{" and "}" are
+// ordinary characters in an annotation. The spec grammar rejects them as
+// reserved and dropped the whole entry from the index, so a step whose value
+// legitimately contains braces - written "\\{5\\}" in the spec - was reported
+// undefined even though the implementation was right there.
+test("GaugeStepDiagnosticsProvider keeps an annotation containing braces in the index", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Costs",
+    "## Scenario",
+    "* cost is \\{5\\}",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/costs.spec");
+  const implementation = createDocument([
+    "@Step(\"cost is {5}\")",
+    "fun cost() {}",
   ].join("\n"));
 
   const diagnostics = provider.provideDiagnostics(document, [document, implementation]);

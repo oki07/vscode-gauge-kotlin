@@ -383,6 +383,32 @@ test("GenerateStubCommandProvider inserts into the class, not a trailing top-lev
   assert.equal(insertion.character, 0);
 });
 
+// Counting braces without knowing about string literals, char literals and
+// comments made a "}" inside a string close the class early, so the stub landed
+// inside a function body again - the exact failure the brace counter replaced.
+test("GenerateStubCommandProvider ignores braces inside strings and comments", () => {
+  const { kotlinStubInsertion } = require("../src/annotator/generateStub");
+  const text = [
+    "package example",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class Steps {",
+    "    @Step(\"a step\")",
+    "    fun aStep() {",
+    "        println(\"}\")  // closes nothing }",
+    "        val c = '}'",
+    "        /* } */",
+    "    }",
+    "}",
+    "",
+  ].join("\n");
+
+  const insertion = kotlinStubInsertion(text, "    @Step(\"new\")\n    fun n() {\n    }", "Steps");
+
+  assert.equal(insertion.line, 11);
+});
+
 test("GenerateStubCommandProvider scaffolds a new Kotlin implementation file", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const appliedEdits = [];

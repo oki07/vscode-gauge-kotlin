@@ -71,12 +71,75 @@ function classNameForFile(pathModule, implementationFilePath) {
 // class, interface or object - the member container gauge-java inserts into.
 const KOTLIN_TYPE_DECLARATION = /(^|\s)(class|interface|object)\s/;
 
+// A brace inside a string, a char literal or a comment is not a brace. Counting
+// them closed the class early and put the stub back inside a function body.
+// Kotlin's own escapes and raw strings are handled; string templates are not,
+// but a "${...}" nests balanced braces either way.
+function stripKotlinNonCode(line, state) {
+  let result = "";
+  let index = 0;
+  while (index < line.length) {
+    const character = line[index];
+    if (state.blockComment) {
+      if (character === "*" && line[index + 1] === "/") {
+        state.blockComment = false;
+        index += 2;
+        continue;
+      }
+      index += 1;
+      continue;
+    }
+    if (state.rawString) {
+      if (line.startsWith("\"\"\"", index)) {
+        state.rawString = false;
+        index += 3;
+        continue;
+      }
+      index += 1;
+      continue;
+    }
+    if (state.string) {
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === state.string) {
+        state.string = undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (line.startsWith("//", index)) {
+      break;
+    }
+    if (line.startsWith("/*", index)) {
+      state.blockComment = true;
+      index += 2;
+      continue;
+    }
+    if (line.startsWith("\"\"\"", index)) {
+      state.rawString = true;
+      index += 3;
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      state.string = character;
+      index += 1;
+      continue;
+    }
+    result += character;
+    index += 1;
+  }
+  return result;
+}
+
 function lastTopLevelTypeClosingLine(lines) {
   let depth = 0;
   let openedType = false;
   let closingLine;
+  const state = { blockComment: false, rawString: false, string: undefined };
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
+    const line = stripKotlinNonCode(lines[index], state);
     if (depth === 0 && KOTLIN_TYPE_DECLARATION.test(line)) {
       openedType = true;
     }

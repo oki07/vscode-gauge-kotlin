@@ -355,6 +355,43 @@ test("GaugeStepCodeActionProvider ignores Gauge LSP stub code outside step lines
 // "public void implementation(Object arg0)" into every Kotlin project, which
 // does not compile there. The source layout is the signal that can tell them
 // apart.
+// The braces Gauge reserves are written "\\{" in the spec and reach the runner
+// unescaped: the real parser gives "* cost is \\{5\\}" the value "cost is {5}",
+// and the registry key is whatever the annotation literally says
+// (references/gauge-java RegistryMethodVisitor -> StepsUtil.getStepText, which
+// leaves braces alone). Emitting the raw spec text and then escaping the
+// backslash again for Kotlin registered "cost is \\{5\\}", which the runner can
+// never match - and the editor stayed green about it.
+test("GaugeStepCodeActionProvider resolves Gauge brace escapes in the generated annotation", () => {
+  const {
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Costs",
+    "* cost is \\{5\\}",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 16),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.deepEqual(actions[0].command, {
+    command: GENERATE_STEP_STUB,
+    title: actions[0].command.title,
+    arguments: [
+      "@com.thoughtworks.gauge.Step(\"cost is {5}\")\nfun implementation() {\n}\n",
+    ],
+  });
+});
+
 test("GaugeStepCodeActionProvider creates a Kotlin step implementation quick fix for Kotlin sources", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
