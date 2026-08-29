@@ -298,6 +298,76 @@ test("GaugeRenameProvider uses the shared workspace step index", async () => {
   ]);
 });
 
+// Gauge's own refactorer keeps each usage's arguments: refactor.go
+// createOrderOfArgs maps new-parameter index -> old-parameter index, and
+// step.go getArgsInOrder applies it per usage ("if value != -1 { arg =
+// step.Args[value] }"). Writing the typed text over every usage instead threw
+// away the arguments each usage actually had: a static "gauge"/"3" became the
+// template's <word>/<expectedCount>, which the real parser then rejects with
+// "Dynamic parameter <word> could not be resolved", and a table-driven usage
+// lost its binding to its own columns.
+test("GaugeRenameProvider keeps each usage's own arguments", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Vowels",
+    "",
+    "## One",
+    "",
+    "* The word \"gauge\" has \"3\" vowels.",
+    "",
+    "## Many",
+    "",
+    "   |word |count|",
+    "   |-----|-----|",
+    "   |gauge|3    |",
+    "",
+    "* The word <word> has <count> vowels.",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/vowels.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"The word <word> has <expectedCount> vowels.\")",
+    "fun count(word: String, expectedCount: Int) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const specEdits = async (document, position, newName) => {
+    const edit = await provider.provideRenameEdits(document, position, newName);
+    return edit.replacements
+      .filter((replacement) => replacement.uri.fsPath.endsWith("vowels.spec"))
+      .map((replacement) => ({ line: replacement.range.start.line, newText: replacement.newText }));
+  };
+
+  // From the Kotlin side the rename box pre-fills with the annotation, so both
+  // templates spell their parameters the same way and every usage keeps its own.
+  assert.deepEqual(
+    await specEdits(
+      kotlinDocument,
+      new vscode.Position(2, 20),
+      "The word <word> contains <expectedCount> vowels.",
+    ),
+    [
+      { line: 4, newText: "The word \"gauge\" contains \"3\" vowels." },
+      { line: 12, newText: "The word <word> contains <count> vowels." },
+    ],
+  );
+
+  // From the spec side it pre-fills with that usage's own text. The other usage
+  // must still keep ITS arguments rather than inherit this one's.
+  assert.deepEqual(
+    await specEdits(
+      specDocument,
+      new vscode.Position(4, 4),
+      "The word \"gauge\" contains \"3\" vowels.",
+    ),
+    [
+      { line: 4, newText: "The word \"gauge\" contains \"3\" vowels." },
+      { line: 12, newText: "The word <word> contains <count> vowels." },
+    ],
+  );
+});
+
 test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge client is available", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -1438,6 +1508,10 @@ test("GaugeRenameProvider renames Kotlin constants from constant-backed Step ann
       },
     },
   );
+  // The usage keeps its own argument. Probed with the real refactorer
+  // (refactor.go createOrderOfArgs + specification.go RenameSteps): the order
+  // map is {0:0} and the renamed step is `Sign in as {} || [static:alice]`.
+  // Writing the annotation text over the usage destroyed "alice".
   assert.deepEqual(
     edit.replacements.map((replacement) => ({
       file: replacement.uri.fsPath,
@@ -1454,7 +1528,7 @@ test("GaugeRenameProvider renames Kotlin constants from constant-backed Step ann
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Sign in as <user>",
+        newText: "Sign in as \"alice\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/steps/StepText.kt",
@@ -1659,6 +1733,10 @@ test("GaugeRenameProvider renames Java constants from constant-backed Step annot
       },
     },
   );
+  // The usage keeps its own argument. Probed with the real refactorer
+  // (refactor.go createOrderOfArgs + specification.go RenameSteps): the order
+  // map is {0:0} and the renamed step is `Sign in as {} || [static:alice]`.
+  // Writing the annotation text over the usage destroyed "alice".
   assert.deepEqual(
     edit.replacements.map((replacement) => ({
       file: replacement.uri.fsPath,
@@ -1675,7 +1753,7 @@ test("GaugeRenameProvider renames Java constants from constant-backed Step annot
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Sign in as <user>",
+        newText: "Sign in as \"alice\"",
       },
       {
         file: "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java",

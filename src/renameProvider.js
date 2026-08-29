@@ -389,8 +389,82 @@ function implementationStepName(value, hasInlineTable, options = {}) {
   return result;
 }
 
-function gaugeReplacementName(value, hasInlineTable) {
-  return hasInlineTable ? removeInlineTableSuffix(value) : value;
+// The verbatim source of every parameter slot, delimiters and escaping intact,
+// so a usage's own argument can be spliced into the new text unchanged.
+function stepParameterSlots(text) {
+  const slots = [];
+  let index = 0;
+  while (index < text.length) {
+    const parameter = nextStepParameter(text, index);
+    if (!parameter) {
+      break;
+    }
+    const end = findStepParameterEnd(text, parameter.start, parameter.closeCharacter);
+    if (end === -1) {
+      break;
+    }
+    slots.push({
+      start: parameter.start,
+      end,
+      raw: text.slice(parameter.start, end + 1),
+    });
+    index = end + 1;
+  }
+  return slots;
+}
+
+// references/gauge/refactor/refactor.go createOrderOfArgs: for each parameter of
+// the NEW step, the index of the identical parameter in the OLD step, or -1.
+// Matching is by the parameter's own text, and each old parameter is claimed
+// once so a repeated name does not map twice.
+function createOrderOfArgs(oldName, newName) {
+  const oldSlots = stepParameterSlots(oldName);
+  const claimed = new Set();
+  return stepParameterSlots(newName).map((slot) => {
+    const index = oldSlots.findIndex((candidate, candidateIndex) => (
+      !claimed.has(candidateIndex) && candidate.raw === slot.raw
+    ));
+    if (index !== -1) {
+      claimed.add(index);
+    }
+    return index;
+  });
+}
+
+// references/gauge/gauge/step.go getArgsInOrder: each usage keeps the argument it
+// already had, moved to wherever that parameter now sits. A parameter with no
+// counterpart in the old step keeps whatever the user typed. Writing the typed
+// text over every usage instead discarded each usage's arguments: a static
+// "gauge" became the template's <word>, which the parser then cannot resolve,
+// and a table-driven usage lost its binding to its own columns.
+function gaugeUsageReplacementName(newName, usageText, orderMap) {
+  if (!usageText || !orderMap || orderMap.length === 0) {
+    return newName;
+  }
+  const usageSlots = stepParameterSlots(usageText);
+  const newSlots = stepParameterSlots(newName);
+  if (newSlots.length !== orderMap.length) {
+    return newName;
+  }
+  let result = "";
+  let index = 0;
+  for (let slot = 0; slot < newSlots.length; slot += 1) {
+    const source = orderMap[slot];
+    const replacement = source !== -1 && usageSlots[source]
+      ? usageSlots[source].raw
+      : newSlots[slot].raw;
+    result += newName.slice(index, newSlots[slot].start) + replacement;
+    index = newSlots[slot].end + 1;
+  }
+  return result + newName.slice(index);
+}
+
+function gaugeReplacementName(value, hasInlineTable, options = {}) {
+  const text = hasInlineTable ? removeInlineTableSuffix(value) : value;
+  if (!options.orderMap || !options.usageText) {
+    return text;
+  }
+  return gaugeUsageReplacementName(text, options.usageText, options.orderMap);
 }
 
 function kotlinReplacementName(value, hasInlineTable, options = {}) {
@@ -2024,7 +2098,12 @@ class GaugeRenameProvider {
     return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
-  addGaugeRenames(edit, document, template, newName, operation) {
+  addGaugeRenames(edit, document, template, newName, operation, oldName) {
+    // Built once from the two templates: each usage then keeps the argument it
+    // already had, moved to wherever that parameter now sits.
+    const orderMap = oldName
+      ? createOrderOfArgs(removeInlineTableSuffix(oldName), removeInlineTableSuffix(newName))
+      : undefined;
     const lines = documentLines(document);
     const allowMultiline = this.allowsMultilineStep(document);
     const docStringLines = closedDocStringLines(lines);
@@ -2042,7 +2121,10 @@ class GaugeRenameProvider {
           () => edit.replace(
             document.uri,
             step.range,
-            gaugeReplacementName(newName, step.hasInlineTable),
+            gaugeReplacementName(newName, step.hasInlineTable, {
+              orderMap,
+              usageText: step.text,
+            }),
           ),
         );
         if (replaced === CANCELLED_RENAME_OPERATION) {
@@ -2436,7 +2518,14 @@ class GaugeRenameProvider {
       if (isGaugeDocument(candidate)) {
         const renamed = this.callSyncForOperation(
           operation,
-          () => this.addGaugeRenames(edit, candidate, step.template, newName, operation),
+          () => this.addGaugeRenames(
+            edit,
+            candidate,
+            step.template,
+            newName,
+            operation,
+            step.text,
+          ),
         );
         if (renamed === CANCELLED_RENAME_OPERATION) {
           return CANCELLED_RENAME_OPERATION;
