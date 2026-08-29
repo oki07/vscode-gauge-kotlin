@@ -392,6 +392,11 @@ class WorkspaceDocumentStore {
     if (this.disposed) {
       return Promise.resolve(undefined);
     }
+    // The scan is not complete again until it finishes. Leaving the flag set
+    // told every consumer the index was authoritative, so specs in the folder
+    // just added were diagnosed against an empty step set and every step showed
+    // as undefined until the rescan caught up.
+    this.scanComplete = false;
     const scan = this.scanWorkspace();
     this.pendingRescan = scan;
     return scan.catch(() => undefined);

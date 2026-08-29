@@ -9900,18 +9900,60 @@ class GaugeStepDiagnosticsProvider {
       }
       lines.get(message).add(start.line);
     }
-    this.publishedLines.set(file, lines);
+    this.publishedLines.set(file, { lines, version: document.version });
   }
 
   publishedDiagnosticLines(document, message) {
     if (this.disposed) {
       return undefined;
     }
-    const lines = this.publishedLines.get(documentPath(document));
-    if (!lines) {
+    const entry = this.publishedLines.get(documentPath(document));
+    if (!entry) {
       return undefined;
     }
-    return lines.get(String(message || "")) || new Set();
+    // Publishing is debounced, so after an edit this cache still describes the
+    // previous text while the daemon has already answered for the new one.
+    // Answering from a stale cache showed the same error twice, once from each
+    // collection, so recompute for the current text instead. A daemon publish is
+    // infrequent, unlike a keystroke, so this stays off the hot path.
+    if (
+      document
+      && document.version !== undefined
+      && entry.version !== undefined
+      && document.version !== entry.version
+    ) {
+      const current = this.currentDiagnosticLines(document);
+      if (current) {
+        return current.get(String(message || "")) || new Set();
+      }
+      return undefined;
+    }
+    return entry.lines.get(String(message || "")) || new Set();
+  }
+
+  currentDiagnosticLines(document) {
+    if (!this.documentStore || typeof this.documentStore.documents !== "function") {
+      return undefined;
+    }
+    let diagnostics;
+    try {
+      diagnostics = this.provideDiagnostics(document, this.documentStore.documents());
+    } catch (_error) {
+      return undefined;
+    }
+    const lines = new Map();
+    for (const diagnostic of diagnostics || []) {
+      const start = diagnostic && diagnostic.range && diagnostic.range.start;
+      if (!start || typeof start.line !== "number") {
+        continue;
+      }
+      const message = String(diagnostic.message || "");
+      if (!lines.has(message)) {
+        lines.set(message, new Set());
+      }
+      lines.get(message).add(start.line);
+    }
+    return lines;
   }
 
   addWorkspaceDocument(documents, seenPaths, candidate) {

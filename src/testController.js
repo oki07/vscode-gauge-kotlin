@@ -1275,6 +1275,10 @@ class GaugeTestController {
     if (this.activeRunContext) {
       this.finishRunContext(this.activeRunContext);
     }
+    // A run created outside the Test Explorer has no context, so nothing else
+    // ends it. Overwriting currentRun below would leave it open for the rest of
+    // the session with its cancellation listener still registered.
+    this.endContextlessRun(this.currentRun);
     this.activeRunContext = context;
     this.prepareTestRun(context.request);
     this.currentRun = context.run;
