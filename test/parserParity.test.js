@@ -119,3 +119,67 @@ test("diagnostics agree with the real Gauge parser across the parity corpus", ()
   }
   assert.deepEqual(mismatches, []);
 });
+
+// The concept half of the same corpus. Ground truth is
+// parser.CreateConceptsDictionary against a temporary project holding the file,
+// which is what the extension's concept diagnostics have to match.
+const conceptCorpus = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "fixtures", "concept-parity.json"), "utf8"),
+);
+
+function conceptMessages(text) {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const concept = createDocument(
+    text,
+    "gauge-concept",
+    "/workspace/gauge/specs/concepts/c.cpt",
+  );
+  const implementation = createDocument(
+    IMPLEMENTATIONS,
+    "kotlin",
+    "/workspace/gauge/src/test/kotlin/Steps.kt",
+  );
+  const documents = [concept, implementation];
+  const provider = new GaugeStepDiagnosticsProvider({
+    documentStore: {
+      documents: () => documents,
+      onDidChangeDocuments: () => ({ dispose() {} }),
+      start() {},
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    fileSystem: {
+      existsSync: () => false,
+      readFileSync() {
+        throw new Error("no project properties");
+      },
+      readdirSync() {
+        throw new Error("no environment directory");
+      },
+    },
+    pathModule: path.posix,
+    vscode: createVscode(),
+  });
+  return provider
+    .provideDiagnostics(concept, documents)
+    .map((diagnostic) => diagnostic.message)
+    .filter((message) => !IGNORED_MESSAGES.has(message))
+    .filter((message) => !message.startsWith("Could not resolve special param"))
+    .filter((message) => !message.startsWith("Circular reference found"))
+    .sort();
+}
+
+test("concept diagnostics agree with the real Gauge concept parser", () => {
+  assert.ok(conceptCorpus.length >= 30, "the concept corpus must stay broad");
+  const mismatches = [];
+  for (const entry of conceptCorpus) {
+    const actual = conceptMessages(entry.text);
+    const expected = [...entry.parserErrors].sort();
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      mismatches.push({ label: entry.label, expected, actual });
+    }
+  }
+  assert.deepEqual(mismatches, []);
+});

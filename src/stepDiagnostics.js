@@ -5517,10 +5517,34 @@ function conceptWithoutStepDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+// A heading opens a concept scope even when its value is empty - the real parser
+// reports nothing for "#" followed by a step - but a heading Gauge rejects for a
+// static parameter opens nothing, so the steps below it are outside a concept.
+// Verified against parser.CreateConceptsDictionary, which answers both
+// "Concept heading can have only Dynamic Parameters" and "Step is not defined
+// inside a concept heading" for `# C "x"` with a step under it.
+function conceptScopeHeadingLine(text) {
+  const lines = text.split("\n");
+  for (let line = 0; line < lines.length; line += 1) {
+    const rawLine = lines[line].replace(/\r$/, "");
+    const isHash = isGaugeHashHeadingLine(rawLine) && !isHashScenarioHeading(rawLine);
+    const isLegacy = isLegacyHeadingText(rawLine)
+      && /^=+$/.test(String(lines[line + 1] || "").replace(/\r$/, "").trim());
+    if (!isHash && !isLegacy) {
+      continue;
+    }
+    const value = isHash ? hashHeadingValue(rawLine, 1) : rawLine.trim();
+    if (hasStaticStepParameter(value)) {
+      continue;
+    }
+    return line;
+  }
+  return Infinity;
+}
+
 function stepsOutsideConceptDiagnostics(vscode, text) {
   const diagnostics = [];
-  const headings = findConceptDefinitionHeadings(text);
-  const firstHeadingLine = headings.length > 0 ? headings[0].start.line : Infinity;
+  const firstHeadingLine = conceptScopeHeadingLine(text);
   for (const entry of findGaugeSteps(text)) {
     if (!entry.text || entry.start.line >= firstHeadingLine) {
       continue;
@@ -9424,6 +9448,11 @@ class GaugeStepDiagnosticsProvider {
         diagnostics.push(...conceptSpecialParameterDiagnostics(this.vscode, text));
         diagnostics.push(...conceptStepDynamicParameterDiagnostics(this.vscode, text));
         diagnostics.push(...conceptTableDiagnostics(this.vscode, text));
+        diagnostics.push(...specialStepParameterDiagnostics(this.vscode, text, {
+          fileSystem: this.fileSystem,
+          pathModule: this.pathModule,
+          projectRoot: this.gaugeProjectRoot(document),
+        }));
         diagnostics.push(...conceptCircularReferenceDiagnostics(
           this.vscode,
           document,

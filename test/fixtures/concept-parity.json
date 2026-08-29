@@ -1,0 +1,214 @@
+[
+  {
+    "label": "simple",
+    "text": "# C\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "no steps",
+    "text": "# C\n",
+    "parserErrors": [
+      "Concept should have at least one step"
+    ]
+  },
+  {
+    "label": "dynamic param",
+    "text": "# C <x>\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "two params",
+    "text": "# C <x> <y>\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "static param",
+    "text": "# C \"x\"\n* a\n",
+    "parserErrors": [
+      "Concept heading can have only Dynamic Parameters",
+      "Step is not defined inside a concept heading"
+    ]
+  },
+  {
+    "label": "quoted inside dynamic",
+    "text": "# C <the \"x\">\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "legacy heading",
+    "text": "C\n=\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "legacy indented",
+    "text": "  C\n  ===\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "legacy trailing ws",
+    "text": "C\n===   \n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "hash scenario",
+    "text": "# C\n* a\n## S\n",
+    "parserErrors": [
+      "Scenario Heading is not allowed in concept file"
+    ]
+  },
+  {
+    "label": "triple hash",
+    "text": "# C\n* a\n### notes\n",
+    "parserErrors": []
+  },
+  {
+    "label": "indented hash scenario",
+    "text": "# C\n* a\n  ## S\n",
+    "parserErrors": [
+      "Scenario Heading is not allowed in concept file"
+    ]
+  },
+  {
+    "label": "step before heading",
+    "text": "* a\n# C\n* b\n",
+    "parserErrors": [
+      "Step is not defined inside a concept heading"
+    ]
+  },
+  {
+    "label": "docstring",
+    "text": "# C\n* a\n\"\"\"\np\n\"\"\"\n",
+    "parserErrors": []
+  },
+  {
+    "label": "docstring with hash",
+    "text": "# C\n* a\n\"\"\"\n## X\n\"\"\"\n",
+    "parserErrors": []
+  },
+  {
+    "label": "docstring unmatched",
+    "text": "# C\n* a\n\"\"\"\n|x|\n",
+    "parserErrors": [
+      "Table doesn't belong to any step"
+    ]
+  },
+  {
+    "label": "table after step",
+    "text": "# C\n* a\n|x|\n|-|\n|1|\n",
+    "parserErrors": []
+  },
+  {
+    "label": "table blank then",
+    "text": "# C\n* a\n\n|x|\n|-|\n|1|\n",
+    "parserErrors": []
+  },
+  {
+    "label": "table no step",
+    "text": "# C\n|x|\n|-|\n|1|\n",
+    "parserErrors": [
+      "Table doesn't belong to any step",
+      "Concept should have at least one step"
+    ]
+  },
+  {
+    "label": "bold line",
+    "text": "# C\n* a\n**bold**\n",
+    "parserErrors": []
+  },
+  {
+    "label": "star star only",
+    "text": "# C\n**bold**\n",
+    "parserErrors": [
+      "Concept should have at least one step"
+    ]
+  },
+  {
+    "label": "two concepts",
+    "text": "# A\n* a\n# B\n* b\n",
+    "parserErrors": []
+  },
+  {
+    "label": "duplicate concepts",
+    "text": "# A\n* a\n# A\n* b\n",
+    "parserErrors": [
+      "Duplicate concept definition found",
+      "Duplicate concept definition found"
+    ]
+  },
+  {
+    "label": "tags line",
+    "text": "# C\ntags: x\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "teardown marker",
+    "text": "# C\n* a\n____\n* b\n",
+    "parserErrors": []
+  },
+  {
+    "label": "crlf",
+    "text": "# C\r\n* a\r\n",
+    "parserErrors": []
+  },
+  {
+    "label": "no trailing newline",
+    "text": "# C\n* a",
+    "parserErrors": []
+  },
+  {
+    "label": "unicode",
+    "text": "# 概念 <値>\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "empty heading",
+    "text": "#\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "blank first line",
+    "text": "\n# C\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "step with star text",
+    "text": "# C\n* * a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "rule after step",
+    "text": "# C\n* a\n=====\n",
+    "parserErrors": []
+  },
+  {
+    "label": "rule after heading",
+    "text": "# C\n-----\n* a\n",
+    "parserErrors": []
+  },
+  {
+    "label": "unclosed table row",
+    "text": "# C\n* a\n| x | y\n=====\n",
+    "parserErrors": [
+      "Concept should have at least one step"
+    ]
+  },
+  {
+    "label": "nested concept call",
+    "text": "# A\n* B\n# B\n* c\n",
+    "parserErrors": []
+  },
+  {
+    "label": "special file param",
+    "text": "# C\n* a <file:missing.txt>\n",
+    "parserErrors": [
+      "Dynamic parameter <file:missing.txt> could not be resolved"
+    ]
+  },
+  {
+    "label": "empty dynamic",
+    "text": "# C\n* a <>\n",
+    "parserErrors": [
+      "Dynamic parameter <> could not be resolved"
+    ]
+  }
+]
