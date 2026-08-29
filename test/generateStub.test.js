@@ -409,6 +409,81 @@ test("GenerateStubCommandProvider ignores braces inside strings and comments", (
   assert.equal(insertion.line, 11);
 });
 
+// The insertion point and the non-colliding function name were computed from
+// fs.readFileSync while the edit was applied to the OPEN document, which the
+// quick fix never saves. So the second stub was placed and named against a
+// stale copy of the file: it landed at the pre-first-stub brace and reused the
+// name the first stub had already taken.
+test("GenerateStubCommandProvider reads the open buffer, not the file on disk", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const appliedEdits = [];
+  const { commands, vscode } = createFakeVscode();
+  const diskText = [
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class Steps {",
+    "}",
+  ].join("\n");
+  // The buffer already carries a stub the user has not saved.
+  const bufferText = [
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class Steps {",
+    "",
+    "    @Step(\"first step\")",
+    "    fun implementation() {",
+    "    }",
+    "}",
+  ].join("\n");
+  const bufferDocument = {
+    languageId: "kotlin",
+    uri: { fsPath: "/workspace/src/test/kotlin/Steps.kt", path: "/workspace/src/test/kotlin/Steps.kt" },
+    fileName: "/workspace/src/test/kotlin/Steps.kt",
+    getText: () => bufferText,
+  };
+  vscode.workspace.textDocuments = [bufferDocument];
+
+  new GenerateStubCommandProvider({
+    get() {
+      return {
+        project: { root: () => "/workspace" },
+        client: {
+          sendRequest(method) {
+            if (method === "gauge/getImplFiles") {
+              return Promise.resolve(["/workspace/src/test/kotlin/Steps.kt"]);
+            }
+            return Promise.resolve({ changes: [] });
+          },
+        },
+      };
+    },
+  }, {
+    fileSystem: {
+      readFileSync: () => diskText,
+    },
+    pathModule: path.posix,
+    vscode,
+    workspaceEditorFactory(edit) {
+      return {
+        applyChanges() {
+          appliedEdits.push(edit);
+          return Promise.resolve(undefined);
+        },
+      };
+    },
+  });
+
+  const command = commands.find((entry) => entry.command === "gauge.generate.step");
+  await command.handler("    @Step(\"second step\")\n    fun implementation() {\n    }");
+
+  assert.equal(appliedEdits.length, 1);
+  const [[, edits]] = appliedEdits[0].entries();
+  // Line 7 is the class brace in the BUFFER; on disk it is line 3.
+  assert.equal(edits[0].range.start.line, 7);
+  // The buffer already has "implementation", so the new one must not collide.
+  assert.match(edits[0].newText, /fun implementation1\(/);
+});
+
 test("GenerateStubCommandProvider scaffolds a new Kotlin implementation file", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const appliedEdits = [];

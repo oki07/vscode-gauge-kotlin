@@ -4091,6 +4091,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecElements = false;
   let hasOnlyStepContent = true;
+  let sawStepLine = false;
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
   let hasEmptySpecHeading = false;
@@ -4110,8 +4111,19 @@ function duplicateScenarioDiagnostics(vscode, text) {
     if (hasSpecHeading && rawLine.trim()) {
       hasSpecElements = true;
     }
+    // A blank line BEFORE the first step is content too: Gauge's lexer emits a
+    // comment token for it, so the specification is no longer "only steps".
+    // Probed across eleven shapes: "\n* a" and "\n\n* a" answer "Spec heading not
+    // found", while "* a", "* a\n\n* b" and "* a\n\n" answer "Spec does not have
+    // any elements" - a blank after the first step does not count.
+    if (!hasSpecHeading && !rawLine.trim() && !sawStepLine) {
+      hasOnlyStepContent = false;
+    }
     if (!hasSpecHeading && rawLine.trim() && !isGaugeStepLine(rawLine)) {
       hasOnlyStepContent = false;
+    }
+    if (isGaugeStepLine(rawLine)) {
+      sawStepLine = true;
     }
 
     const nextLine = lines[line + 1] === undefined
@@ -4223,9 +4235,15 @@ function duplicateScenarioDiagnostics(vscode, text) {
     // answers "Spec does not have any elements" rather than "Spec heading not
     // found". Verified against the real parser: "* a" alone gives the first
     // message, while prose, a table or a tags line gives the second.
+    //
+    // Gauge anchors both at the FIRST line, not the first non-blank one: a
+    // leading blank line is already a token. Probed: "\n* a" reports line 1.
+    const firstLine = lines[0] === undefined ? "" : lines[0].replace(/\r$/, "");
     diagnostics.unshift(createDiagnostic(
       vscode,
-      firstContentRange,
+      firstLine.trim()
+        ? lineContentRange(vscode, firstLine, 0)
+        : createRange(vscode, { line: 0, character: 0 }, { line: 0, character: 0 }),
       hasOnlyStepContent ? SPEC_EMPTY_MESSAGE : SPEC_HEADING_NOT_FOUND_MESSAGE,
     ));
   }

@@ -603,7 +603,28 @@ class GenerateStubCommandProvider {
     }
   }
 
+  // The edit is applied to the OPEN document and this command never saves it, so
+  // reading from disk computed the insertion point and the non-colliding
+  // function name against a stale copy: a second stub landed at the brace the
+  // first one had already moved, and reused the name it had already taken.
+  openDocumentText(implementationFilePath) {
+    const documents = (this.vscode && this.vscode.workspace
+      && this.vscode.workspace.textDocuments) || [];
+    for (const document of documents) {
+      const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
+        || (document && document.fileName);
+      if (file === implementationFilePath && typeof document.getText === "function") {
+        return String(document.getText());
+      }
+    }
+    return undefined;
+  }
+
   readImplementationFile(implementationFilePath) {
+    const open = this.openDocumentText(implementationFilePath);
+    if (open !== undefined) {
+      return open;
+    }
     if (!this.fileSystem || typeof this.fileSystem.readFileSync !== "function") {
       return "";
     }
@@ -845,6 +866,10 @@ class GenerateStubCommandProvider {
   }
 
   implementationFileText(implementationFilePath) {
+    const open = this.openDocumentText(implementationFilePath);
+    if (open !== undefined) {
+      return open;
+    }
     if (!this.fileSystem || typeof this.fileSystem.readFileSync !== "function") {
       return undefined;
     }

@@ -419,7 +419,7 @@
   },
   {
     "label": "unicode heading",
-    "text": "# 仕様\n\n## シナリオ\n* a\n",
+    "text": "# \u4ed5\u69d8\n\n## \u30b7\u30ca\u30ea\u30aa\n* a\n",
     "parserErrors": [],
     "parserErrorLines": []
   },
@@ -509,5 +509,75 @@
     "text": "# Spec\n* a\ntags: t\n|h|\n\n## Sc\n* a\n",
     "parserErrors": [],
     "parserErrorLines": []
+  },
+  {
+    "label": "blank then step",
+    "text": "\n* a\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "blank then prose then step",
+    "text": "\nprose\n* a\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "two blanks then step",
+    "text": "\n\n* a\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "step blank step",
+    "text": "* a\n\n* b\n",
+    "parserErrors": [
+      "Spec does not have any elements"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "step then blank",
+    "text": "* a\n\n",
+    "parserErrors": [
+      "Spec does not have any elements"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "step then prose",
+    "text": "* a\nprose\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "tags first",
+    "text": "tags: a\n* a\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
   }
 ]
