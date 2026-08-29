@@ -7287,8 +7287,97 @@ test("GaugeStepDiagnosticsProvider keeps a dynamic parameter exactly as written"
   );
 });
 
-// A second spec heading already fails the file, and the real parser reports
-// nothing more about the tables under it.
+// Gauge keeps the FIRST spec level table wherever it appears and discards any
+// later one. Verified against the real parser: when only the second heading
+// carries a table it is still validated, and when the first heading already has
+// one the second is only warned about. A scenario may still have its own table,
+// so the two scopes are tracked separately.
+test("GaugeStepDiagnosticsProvider validates the first spec table wherever it appears", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const implementation = createDocument([
+    "@Step(\"a\")",
+    "fun a() {}",
+  ].join("\n"));
+
+  const underSecondHeading = createDocument([
+    "# Spec One",
+    "",
+    "# Spec Two",
+    "",
+    "| id | name |",
+    "",
+    "## Scenario",
+    "* a",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/a.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(underSecondHeading, [underSecondHeading, implementation])
+      .map((diagnostic) => diagnostic.message)
+      .sort(),
+    ["Data table should have at least 1 data row", "Multiple spec headings found in same file"],
+  );
+
+  // A scenario level table is not the spec data table and the real parser does
+  // not apply the data-row rule to it, so the spec table above must not make it
+  // look like a duplicate either.
+  const scenarioKeepsItsOwn = createDocument([
+    "# Spec",
+    "|a|b|",
+    "|-|-|",
+    "|1|2|",
+    "",
+    "## Scenario",
+    "|c|d|",
+    "* a",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/c.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(scenarioKeepsItsOwn, [scenarioKeepsItsOwn, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+// "###" is neither a spec nor a scenario heading to the lexer
+// (references/gauge/parser/lex.go), so it is a comment and an underline below it
+// promotes it. And isTableRow requires a trailing "|" too, so "| id | name" is a
+// comment as well. Verified against the real parser, which reports both.
+test("GaugeStepDiagnosticsProvider promotes comment lines an underline follows", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const implementation = createDocument([
+    "@Step(\"a\")",
+    "fun a() {}",
+  ].join("\n"));
+
+  const conceptDocument = createDocument([
+    "# Shared",
+    "* a",
+    "### notes",
+    "----",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/s.cpt");
+  assert.equal(
+    provider.provideDiagnostics(conceptDocument, [conceptDocument, implementation])
+      .map((diagnostic) => diagnostic.message)
+      .includes("Scenario Heading is not allowed in concept file"),
+    true,
+  );
+
+  const unclosedRow = createDocument([
+    "# S",
+    "",
+    "## Sc",
+    "* a",
+    "| id | name",
+    "=====",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/d.spec");
+  assert.equal(
+    provider.provideDiagnostics(unclosedRow, [unclosedRow, implementation])
+      .map((diagnostic) => diagnostic.message)
+      .includes("Multiple spec headings found in same file"),
+    true,
+  );
+});
+
 test("GaugeStepDiagnosticsProvider stops table checks after a second spec heading", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

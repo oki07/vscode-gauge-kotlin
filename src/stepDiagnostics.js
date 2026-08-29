@@ -3970,11 +3970,23 @@ function isScenarioLegacyUnderline(line) {
 // followed by something other than "*" (references/gauge/parser/lex.go isStep),
 // so "**S**" is ordinary text and a valid legacy heading. This is the rule
 // isLegacyHeadingText in src/gaugeHeadings.js already applies.
+// references/gauge/parser/lex.go isTableRow requires BOTH a leading and a
+// trailing "|", so "| id | name" with the closing pipe forgotten is a comment
+// and an underline below it promotes it to a heading.
+function isGaugeTableRowLine(text) {
+  return text.length > 1 && text.startsWith("|") && text.endsWith("|");
+}
+
+function isGaugeHashHeadingLine(line) {
+  const text = String(line || "").trim();
+  return /^#(?!#)/.test(text) || /^##(?!#)/.test(text);
+}
+
 function isLegacyHeadingText(line) {
   const text = String(line || "").trim();
   return Boolean(text)
     && !isGaugeStepLine(text)
-    && !text.startsWith("|")
+    && !isGaugeTableRowLine(text)
     && !isGaugeTagKeywordLine(text)
     && !/^table\s*:/i.test(text);
 }
@@ -4215,7 +4227,10 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
   const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecHeading = false;
   let inScenario = false;
-  let sawDataTable = false;
+  // Tracked separately: Gauge keeps the first SPEC level table for the whole
+  // file, while each scenario may have its own.
+  let sawSpecDataTable = false;
+  let sawScenarioDataTable = false;
   let pendingDataTable;
   const flushPendingDataTable = () => {
     if (pendingDataTable && !pendingDataTable.hasDataRow) {
@@ -4245,15 +4260,14 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
     if (specHeading) {
       flushPendingDataTable();
-      // A second spec heading already fails the file with "Multiple spec
-      // headings found in same file", and the real parser reports nothing more
-      // about the tables under it.
-      if (hasSpecHeading) {
-        return diagnostics;
-      }
+      // A second spec heading does not start a new specification for table
+      // adoption: Gauge keeps the FIRST spec level table wherever it appears and
+      // discards any later one. Verified against the real parser - when only the
+      // second heading carries a table it is still validated, and when the first
+      // heading already has one the second is only warned about. So sawDataTable
+      // must survive the heading.
       hasSpecHeading = true;
       inScenario = false;
-      sawDataTable = false;
       continue;
     }
 
@@ -4262,7 +4276,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
     if (scenarioHeading) {
       flushPendingDataTable();
       inScenario = true;
-      sawDataTable = false;
+      sawScenarioDataTable = false;
       continue;
     }
 
@@ -4275,11 +4289,15 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       // Gauge discards a second spec level table as a comment and never
       // validates it - it only warns "Multiple data table present, ignoring
       // table" - so it must not also be checked for data rows.
-      if (sawDataTable) {
+      if (inScenario ? sawScenarioDataTable : sawSpecDataTable) {
         pendingDataTable = { hasDataRow: true, ignored: true };
         continue;
       }
-      sawDataTable = true;
+      if (inScenario) {
+        sawScenarioDataTable = true;
+      } else {
+        sawSpecDataTable = true;
+      }
       pendingDataTable = {
         hasDataRow: false,
         range: lineContentRange(vscode, rawLine, line),
@@ -5479,7 +5497,11 @@ function legacyScenarioHeadingDiagnostics(vscode, text) {
       start === -1
       || docStringLines.has(line)
       || !isLegacyHeadingText(rawLine)
-      || rawLine.trim().startsWith("#")
+      // Only a real hash heading is already a heading. "###" is neither a spec
+      // nor a scenario heading to the lexer
+      // (references/gauge/parser/lex.go isSpecHeading / isScenarioHeading), so
+      // it is a comment and an underline below it does promote it.
+      || isGaugeHashHeadingLine(rawLine)
       || !isLegacyScenarioUnderline(lines[line + 1].replace(/\r$/, ""))
     ) {
       continue;
