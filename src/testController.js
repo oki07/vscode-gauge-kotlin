@@ -1830,6 +1830,16 @@ class GaugeTestController {
       return parentId;
     }
     if (parentId) {
+      // A data-table row id is "<spec>:<line>_<row>"
+      // (src/execution/lineProcessors.js tableIdentifier), so it names the
+      // scenario that owns it. Without this every selected scenario's rows were
+      // parented under the FIRST selected scenario and the rest showed nothing.
+      const owner = included.find((item) => (
+        event.id === item.id || String(event.id || "").startsWith(`${item.id}_`)
+      ));
+      if (owner) {
+        return owner.id;
+      }
       const descendant = included.find((item) => item.id.startsWith(`${parentId}:`));
       if (descendant) {
         return descendant.id;
@@ -1930,8 +1940,24 @@ class GaugeTestController {
     }
     if (typeof run.passed === "function") {
       run.passed(item, event.duration);
+      // Gauge exits 0 when a retry passes, so the scenario passed. Later
+      // attempts land on synthetic result-only children, so the item the user
+      // actually sees would otherwise stay red for a scenario Gauge reports as
+      // passed.
+      this.passLogicalItem(run, event);
     }
     return "passed";
+  }
+
+  passLogicalItem(run, event) {
+    const logicalId = event && event.logicalId;
+    if (!logicalId || logicalId === event.id) {
+      return;
+    }
+    const logicalItem = this.items.get(logicalId);
+    if (logicalItem && typeof run.passed === "function") {
+      run.passed(logicalItem, event.duration);
+    }
   }
 
   showNotification(event) {
