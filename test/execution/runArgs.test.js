@@ -371,12 +371,20 @@ test("buildRunArgs.forGradle forwards launch args through additionalFlags", () =
   );
 });
 
-test("buildRunArgs.forGradle joins multiple spec targets with the Gauge delimiter", () => {
+// Gauge takes multiple targets as separate ARGUMENTS. Verified against the real
+// CLI: `gauge run "specs/a.spec||specs/b.spec"` answers "Specs directory ... does
+// not exist.", and so do the space- and comma-joined forms, while
+// `gauge run specs/a.spec specs/b.spec` runs both. A build-tool run has to put
+// its targets in ONE property value, so it cannot take more than one - the Test
+// Explorer no longer batches for Gradle or Maven (see canBatchSpecificationTargets).
+// Joining anyway produced a property value that runs NOTHING, so this asserts the
+// first target is used and the rest are not silently glued on.
+test("buildRunArgs.forGradle does not glue multiple spec targets into one path", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
   assert.equal(
     buildRunArgs.forGradle(["specs/a.spec", "specs/features"], { tags: "smoke" }).join(" "),
-    "clean gauge -Ptags=smoke -PadditionalFlags=--hide-suggestion --simple-console -PspecsDir=specs/a.spec||specs/features",
+    "clean gauge -Ptags=smoke -PadditionalFlags=--hide-suggestion --simple-console -PspecsDir=specs/a.spec",
   );
 });
 
@@ -506,12 +514,20 @@ test("buildRunArgs.forMaven forwards launch args through flags", () => {
   );
 });
 
-test("buildRunArgs.forMaven joins multiple spec targets with the Gauge delimiter", () => {
+// Gauge takes multiple targets as separate ARGUMENTS. Verified against the real
+// CLI: `gauge run "specs/a.spec||specs/b.spec"` answers "Specs directory ... does
+// not exist.", and so do the space- and comma-joined forms, while
+// `gauge run specs/a.spec specs/b.spec` runs both. A build-tool run has to put
+// its targets in ONE property value, so it cannot take more than one - the Test
+// Explorer no longer batches for Gradle or Maven (see canBatchSpecificationTargets).
+// Joining anyway produced a property value that runs NOTHING, so this asserts the
+// first target is used and the rest are not silently glued on.
+test("buildRunArgs.forMaven does not glue multiple spec targets into one path", () => {
   const { buildRunArgs } = require("../../src/execution/runArgs");
 
   assert.equal(
     buildRunArgs.forMaven(["specs/a.spec", "specs/features"], { tags: "smoke" }).join(" "),
-    "-q clean compile test-compile gauge:execute -Dtags=smoke -Dflags=--hide-suggestion,--simple-console -DspecsDir=specs/a.spec||specs/features",
+    "-q clean compile test-compile gauge:execute -Dtags=smoke -Dflags=--hide-suggestion,--simple-console -DspecsDir=specs/a.spec",
   );
 });
 

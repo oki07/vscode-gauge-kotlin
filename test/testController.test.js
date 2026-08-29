@@ -598,6 +598,23 @@ test("GaugeTestController keeps retry attempts distinct for repeated scenario id
 // on disk. Opening the diff re-keyed the Test Explorer items to the revision's
 // content, and closing it pruned the items of the real file, which is still
 // open. Only "file" documents may drive discovery.
+// Gauge takes multiple targets as separate ARGUMENTS, never as one delimited
+// string: verified against the real CLI, where
+// `gauge run "specs/a.spec||specs/b.spec"` (and the same with a space or a
+// comma) answers "Specs directory ... does not exist." while
+// `gauge run specs/a.spec specs/b.spec` runs both. A Gradle or Maven run has to
+// put its targets in ONE property value, so a multi-item selection in a Kotlin
+// project ran nothing at all. Until the delimiter each build plugin parses is
+// established, such a selection runs one target at a time.
+test("GaugeTestController runs build-tool targets one at a time", () => {
+  const { canBatchSpecificationTargets } = require("../src/testController");
+
+  assert.equal(canBatchSpecificationTargets(["a.spec", "b.spec"], "gauge"), true);
+  assert.equal(canBatchSpecificationTargets(["a.spec", "b.spec"], "gradle"), false);
+  assert.equal(canBatchSpecificationTargets(["a.spec", "b.spec"], "maven"), false);
+  assert.equal(canBatchSpecificationTargets(["a.spec"], "gradle"), false);
+});
+
 test("GaugeTestController ignores non-file scheme documents", () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, vscode } = createFakeVscode();

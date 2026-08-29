@@ -312,12 +312,23 @@ function isScenarioTarget(target) {
   return /:\d+$/.test(String(target || ""));
 }
 
-// Gauge accepts scenario identifiers ("spec.spec:3") on the same command line
-// as specification paths, so any multi-target selection is one run. One process
-// per target would run Before Suite, After Suite, the JVM and the build tool
-// once per target instead of once per run.
-function canBatchSpecificationTargets(targets) {
-  return targets.length > 1;
+// Gauge accepts scenario identifiers ("spec.spec:3") on the same command line as
+// specification paths, so a multi-target selection is one run and Before Suite,
+// After Suite and the JVM start once instead of once per target.
+//
+// That only holds for the plain CLI, which takes each target as its own
+// ARGUMENT. A Gradle or Maven run has to put them all in ONE property value, and
+// Gauge accepts no delimiter inside a single path: verified against the real
+// CLI, where `gauge run "specs/a.spec||specs/b.spec"` - and the same with a
+// space or a comma - answers "Specs directory ... does not exist." while
+// `gauge run specs/a.spec specs/b.spec` runs both. So a multi-item selection in
+// a Kotlin project ran NOTHING. Until the delimiter each build plugin parses is
+// established from its source, such a selection runs one target at a time.
+function canBatchSpecificationTargets(targets, executionKind) {
+  if (targets.length <= 1) {
+    return false;
+  }
+  return executionKind !== "gradle" && executionKind !== "maven";
 }
 
 function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
@@ -411,6 +422,22 @@ function projectRootForTarget(target, projectRoots, projectFactory) {
     .filter((projectRoot) => isInsideProjectRoot(projectRoot, target))
     .sort((left, right) => right.length - left.length)[0]
     || projectRootFromFactory(projectFactory, target);
+}
+
+// A Gradle or Maven project cannot take more than one target per invocation -
+// see canBatchSpecificationTargets.
+function executionKindForRoot(projectFactory, projectRoot) {
+  if (!projectRoot || !projectFactory || typeof projectFactory.get !== "function") {
+    return undefined;
+  }
+  try {
+    const project = projectFactory.get(projectRoot);
+    return project && typeof project.executionKind === "function"
+      ? project.executionKind()
+      : undefined;
+  } catch (_error) {
+    return undefined;
+  }
 }
 
 function groupedTargetsByKnownProject(targets, clientsMap, projectFactory) {
@@ -1637,7 +1664,13 @@ class GaugeTestController {
           if (runnableTargets.length === 0) {
             return;
           }
-          if (canBatchSpecificationTargets(runnableTargets)) {
+          // The count that decides is the whole selection, as before; a build
+          // tool anywhere in it disqualifies batching, because such a group
+          // would have to join its targets into one property value.
+          const buildToolKind = targetGroups
+            .map((group) => executionKindForRoot(this.projectFactory, group.projectRoot))
+            .find((kind) => kind === "gradle" || kind === "maven");
+          if (canBatchSpecificationTargets(runnableTargets, buildToolKind)) {
             for (const group of targetGroups) {
               if (this.runContextCancelled(context, token)) {
                 break;
@@ -2067,6 +2100,7 @@ class GaugeTestController {
 }
 
 module.exports = {
+  canBatchSpecificationTargets,
   DEFAULT_SCENARIO_REQUEST_CONCURRENCY,
   GaugeTestController,
 };

@@ -19,7 +19,6 @@ const processExecutionAttributes = new Set([
   "cwd",
   "processEnv",
 ]);
-const SPEC_FILE_DELIMITER = "||";
 // Exactly references/gauge/cmd/run.go overrideRerunFlags. Gauge counts any other
 // flag set alongside --failed or --repeat in handleConflictingParams and answers
 // "Invalid Command. Usage: gauge run --failed", which exit() turns into
@@ -156,8 +155,15 @@ function specTargets(spec) {
   return spec ? [spec] : [];
 }
 
+// A build tool passes its targets as ONE property value, and Gauge accepts no
+// delimiter inside a single path: verified against the real CLI, where
+// `gauge run "specs/a.spec||specs/b.spec"` - and the same with a space or a
+// comma - answers "Specs directory ... does not exist." while
+// `gauge run specs/a.spec specs/b.spec` runs both. Gluing them produced a value
+// that runs NOTHING, so the Test Explorer no longer batches for Gradle or Maven
+// (canBatchSpecificationTargets) and only the first target can be honoured here.
 function joinedSpecTargets(spec) {
-  return specTargets(spec).join(SPEC_FILE_DELIMITER);
+  return specTargets(spec)[0] || "";
 }
 
 function joinedEnvironmentNames(env) {
