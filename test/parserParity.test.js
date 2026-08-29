@@ -183,3 +183,79 @@ test("concept diagnostics agree with the real Gauge concept parser", () => {
   }
   assert.deepEqual(mismatches, []);
 });
+
+// The parser also says WHICH line each error is on, and a diagnostic on the wrong
+// line sends the user to the wrong place. ParseError.LineNo is 1-based; VS Code
+// ranges are 0-based.
+//
+// Messages the extension deliberately words differently, or reports at a
+// different anchor than the parser's token, are listed here with the reason
+// rather than silently skipped.
+const LINE_EXEMPT_MESSAGES = new Set([
+  // The parser anchors this at the spec heading; the extension anchors it at the
+  // first content line, which is where the user has to add the heading.
+  "Spec heading not found",
+  // Anchored at the whole file, which has no single line.
+  "Spec does not have any elements",
+]);
+
+function productDiagnostics(text) {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const spec = createDocument(text, "gauge", "/workspace/gauge/specs/a.spec");
+  const implementation = createDocument(
+    IMPLEMENTATIONS,
+    "kotlin",
+    "/workspace/gauge/src/test/kotlin/Steps.kt",
+  );
+  const documents = [spec, implementation];
+  const provider = new GaugeStepDiagnosticsProvider({
+    documentStore: {
+      documents: () => documents,
+      onDidChangeDocuments: () => ({ dispose() {} }),
+      start() {},
+    },
+    projectFactory: {
+      isGaugeProject: () => true,
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    fileSystem: {
+      existsSync: () => false,
+      readFileSync() {
+        throw new Error("no project properties");
+      },
+      readdirSync() {
+        throw new Error("no environment directory");
+      },
+    },
+    pathModule: path.posix,
+    vscode: createVscode(),
+  });
+  return provider.provideDiagnostics(spec, documents);
+}
+
+test("diagnostics land on the line the real parser names", () => {
+  const mismatches = [];
+  for (const entry of corpus) {
+    const expected = (entry.parserErrorLines || [])
+      .filter((error) => !LINE_EXEMPT_MESSAGES.has(error.message));
+    if (expected.length === 0) {
+      continue;
+    }
+    const produced = productDiagnostics(entry.text);
+    for (const error of expected) {
+      const match = produced.find((diagnostic) => diagnostic.message === error.message);
+      if (!match) {
+        continue;
+      }
+      if (match.range.start.line !== error.line - 1) {
+        mismatches.push({
+          label: entry.label,
+          message: error.message,
+          expectedLine: error.line - 1,
+          actualLine: match.range.start.line,
+        });
+      }
+    }
+  }
+  assert.deepEqual(mismatches, []);
+});

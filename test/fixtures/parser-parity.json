@@ -2,59 +2,75 @@
   {
     "label": "ds after step",
     "text": "# S\n\n## Sc\n* a\n\"\"\"\npay\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "ds after heading",
     "text": "# S\n## Sc\n\"\"\"\n* a\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "ds after comment",
     "text": "# S\n\n## Sc\n* a\nprose\n\"\"\"\n* b\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "ds after table row",
     "text": "# S\n\n## Sc\n* a\n|x|\n\"\"\"\n* b\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "ds after blank",
     "text": "# S\n\n## Sc\n* a\n\n\"\"\"\n* b\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "two ds blocks",
     "text": "# S\n\n## Sc\n* a\n\"\"\"\np\n\"\"\"\n* b\n\"\"\"\nq\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "ds unmatched then step",
     "text": "# S\n\n## Sc\n* a\n\"\"\"\n* b\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "legacy bold heading",
     "text": "**S**\n=====\n\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "legacy star star text",
     "text": "**note**\n-----\n# S\n\n## Sc\n* a\n",
     "parserErrors": [
       "Scenario should be defined after the spec heading"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 1,
+        "message": "Scenario should be defined after the spec heading"
+      }
     ]
   },
   {
     "label": "step then equals",
     "text": "# S\n\n## Sc\n* a\n=====\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "step then dashes",
     "text": "# S\n\n## Sc\n* a\n-----\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "star space star heading",
@@ -62,33 +78,53 @@
     "parserErrors": [
       "Spec heading not found",
       "Scenario should be defined after the spec heading"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      },
+      {
+        "line": 4,
+        "message": "Scenario should be defined after the spec heading"
+      }
     ]
   },
   {
     "label": "table row then equals",
     "text": "# S\n|a|\n|-|\n|1|\n=====\n\n## Sc\n* b\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "tags then equals",
     "text": "# S\ntags: x\n=====\n\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "one spec table",
     "text": "# S\n|a|b|\n|-|-|\n|1|2|\n\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "two spec tables",
     "text": "# S\n|a|b|\n|-|-|\n|1|2|\n\n|c|d|\n\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "spec table no rows",
     "text": "# S\n|a|b|\n\n## Sc\n* a\n",
     "parserErrors": [
       "Data table should have at least 1 data row"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 2,
+        "message": "Data table should have at least 1 data row"
+      }
     ]
   },
   {
@@ -96,72 +132,105 @@
     "text": "# S\n|a|b|\n\n|c|d|\n\n## Sc\n* a\n",
     "parserErrors": [
       "Data table should have at least 1 data row"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 2,
+        "message": "Data table should have at least 1 data row"
+      }
     ]
   },
   {
     "label": "spec then scenario table",
     "text": "# S\n|a|b|\n|-|-|\n|1|2|\n\n## Sc\n|c|d|\n|-|-|\n|3|4|\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "scenario table no rows",
     "text": "# S\n\n## Sc\n|c|d|\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "two scenario tables",
     "text": "# S\n\n## Sc\n|c|d|\n|-|-|\n|3|4|\n\n|e|f|\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "table after second spec",
     "text": "# S\n|a|\n|-|\n|1|\n\n# T\n|b|\n\n## Sc\n* a\n",
     "parserErrors": [
       "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 6,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
     "label": "teardown then scenario",
     "text": "# S\n____\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "scenario after teardown",
     "text": "# S\n## A\n* a\n____\n* a\n## B\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "teardown only",
     "text": "# S\n\n## Sc\n* a\n____\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "teardown twice",
     "text": "# S\n\n## A\n* a\n____\n* a\n____\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "bold line after step",
     "text": "# S\n\n## Sc\n* a\n**bold**\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "bold only scenario",
     "text": "# S\n\n## Sc\n**bold**\n",
     "parserErrors": [
       "Scenario should have at least one step"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 3,
+        "message": "Scenario should have at least one step"
+      }
     ]
   },
   {
     "label": "star space star step",
     "text": "# S\n\n## Sc\n* * a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "empty dynamic",
     "text": "# S\n\n## Sc\n* say <>\n",
     "parserErrors": [
       "Dynamic parameter <> could not be resolved"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 4,
+        "message": "Dynamic parameter <> could not be resolved"
+      }
     ]
   },
   {
@@ -169,18 +238,31 @@
     "text": "# S\n\n## Sc\n* say <  >\n",
     "parserErrors": [
       "Dynamic parameter <  > could not be resolved"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 4,
+        "message": "Dynamic parameter <  > could not be resolved"
+      }
     ]
   },
   {
     "label": "quoted angle",
     "text": "# S\n\n## Sc\n* say \"<x>\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "unknown special",
     "text": "# S\n\n## Sc\n* say <foo:bar>\n",
     "parserErrors": [
       "Dynamic parameter <foo:bar> could not be resolved"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 4,
+        "message": "Dynamic parameter <foo:bar> could not be resolved"
+      }
     ]
   },
   {
@@ -189,6 +271,16 @@
     "parserErrors": [
       "Data table should have at least 1 data row",
       "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 5,
+        "message": "Data table should have at least 1 data row"
+      },
+      {
+        "line": 3,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -196,6 +288,12 @@
     "text": "# One\n|a|b|\n|-|-|\n|1|2|\n\n## Sc\n* a\n\n# Two\n|c|d|\n",
     "parserErrors": [
       "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 9,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -203,6 +301,12 @@
     "text": "# Spec One\n\n# Spec Two\n\n| id | name |\n|----|------|\n|1   |x     |\n\n## Scenario\n* a\n",
     "parserErrors": [
       "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 3,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -210,6 +314,12 @@
     "text": "# S\n\n## Sc\n* a\n| id | name\n=====\n",
     "parserErrors": [
       "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 5,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -217,6 +327,12 @@
     "text": "# S\n\n## Sc\n* a\n### notes\n----\n",
     "parserErrors": [
       "Scenario should have at least one step"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 5,
+        "message": "Scenario should have at least one step"
+      }
     ]
   },
   {
@@ -224,28 +340,43 @@
     "text": "# Spec A\n\n## Scn\n* a\n\n# Spec B\n\n|c|d|\n|-|-|\n",
     "parserErrors": [
       "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 6,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
     "label": "equals under hash scenario",
     "text": "# Spec\n## Scenario\n=====\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "hr after blank line",
     "text": "# Spec\n\n## Scenario\n* a\n\n-----\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "escaped pipe header",
     "text": "# Spec\n|a\\|b|\n|-----|\n|1    |\n\n## Sc\n* say <a\\|b>\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "no scenarios",
     "text": "# Spec\n",
     "parserErrors": [
       "Spec does not have any elements"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 1,
+        "message": "Spec does not have any elements"
+      }
     ]
   },
   {
@@ -253,48 +384,67 @@
     "text": "just prose\nmore prose\n",
     "parserErrors": [
       "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
     "label": "no trailing newline",
     "text": "# Spec\n\n## Sc\n* a",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "crlf throughout",
     "text": "# Spec\r\n\r\n## Sc\r\n* a\r\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "step on first line",
     "text": "* a\n",
     "parserErrors": [
       "Spec does not have any elements"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 1,
+        "message": "Spec does not have any elements"
+      }
     ]
   },
   {
     "label": "unicode heading",
     "text": "# 仕様\n\n## シナリオ\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "tags trailing comma",
     "text": "# Spec\ntags: x,\n\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "tags quoted",
     "text": "# Spec\ntags: \"x y\", z\n\n## Sc\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "docstring with fence text",
     "text": "# Spec\n\n## Sc\n* a\n\"\"\"\ncontains \"\"\" inside\n\"\"\"\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   },
   {
     "label": "heading punctuation",
     "text": "# Spec: one, two!\n\n## Sc?\n* a\n",
-    "parserErrors": []
+    "parserErrors": [],
+    "parserErrorLines": []
   }
 ]
