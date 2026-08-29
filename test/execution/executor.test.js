@@ -5529,6 +5529,44 @@ test("execute scenario reports scenario provider failures", async () => {
   assert.deepEqual(calls, []);
 });
 
+// "found some problems in <spec>" sends the user hunting for a parse error that
+// is not there when the real failure is that no language client is running for
+// the file - the server crashed, or the folder resolved to no project. Gauge
+// itself distinguishes the two, and so must the message.
+test("execute scenario reports an unavailable language client as such", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { LANGUAGE_CLIENT_UNAVAILABLE } = require("../../src/execution/scenarioProvider");
+  const calls = [];
+  const { vscode, errors } = createFakeVscode();
+
+  const controller = createGaugeExecutionController({
+    vscode,
+    pathModule: path.posix,
+    fileSystem: {
+      existsSync() {
+        return false;
+      },
+    },
+    async scenariosProvider() {
+      const error = new Error("No Gauge language client available for /workspace/specs/example.spec.");
+      error.code = LANGUAGE_CLIENT_UNAVAILABLE;
+      throw error;
+    },
+    async runner(command) {
+      calls.push(command);
+      return true;
+    },
+  });
+
+  await assert.doesNotReject(() => controller.handleCommand("gauge.execute.scenario"));
+
+  assert.deepEqual(errors, [
+    "Could not read the scenarios in /workspace/specs/example.spec:"
+    + " No Gauge language client available for /workspace/specs/example.spec.",
+  ]);
+  assert.deepEqual(calls, []);
+});
+
 test("report command opens the last generated html report", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const opened = [];

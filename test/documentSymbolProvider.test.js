@@ -240,7 +240,7 @@ test("GaugeDocumentSymbolProvider lists concept symbols by extension", () => {
     "  # Shared checkout",
     "* Reuse",
     "",
-    "## Shared payment",
+    "# Shared payment",
     "* Pay",
   ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "plaintext");
 
@@ -248,7 +248,7 @@ test("GaugeDocumentSymbolProvider lists concept symbols by extension", () => {
 
   assert.deepEqual(symbols.map((symbol) => symbol.name), [
     "# Shared checkout",
-    "## Shared payment",
+    "# Shared payment",
   ]);
   assert.deepEqual({ ...symbols[0].location.range.start }, { line: 0, character: 2 });
   assert.deepEqual({ ...symbols[1].location.range.start }, { line: 3, character: 0 });
@@ -269,7 +269,7 @@ test("GaugeDocumentSymbolProvider lists concept symbols by language id", () => {
     "  # Shared checkout",
     "* Reuse",
     "",
-    "## Shared payment",
+    "# Shared payment",
     "* Pay",
   ].join("\n"), "/workspace/gauge/specs/concepts/shared", "gauge-concept");
 
@@ -277,7 +277,7 @@ test("GaugeDocumentSymbolProvider lists concept symbols by language id", () => {
 
   assert.deepEqual(symbols.map((symbol) => symbol.name), [
     "# Shared checkout",
-    "## Shared payment",
+    "# Shared payment",
   ]);
   assert.deepEqual({ ...symbols[0].location.range.start }, { line: 0, character: 2 });
   assert.deepEqual({ ...symbols[1].location.range.start }, { line: 3, character: 0 });
@@ -383,7 +383,7 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
     "# Shared checkout",
     "* Reuse checkout",
     "",
-    "## Shared payment",
+    "# Shared payment",
     "* Reuse payment",
   ].join("\n"), "/workspace/gauge/specs/concepts/shared.cpt", "gauge");
   const documents = new Map([
@@ -429,11 +429,11 @@ test("GaugeDocumentSymbolProvider lists concept workspace symbols", async () => 
       },
     },
     {
-      name: "## Shared payment",
+      name: "# Shared payment",
       uri: conceptDocument.uri,
       range: {
         start: { line: 3, character: 0 },
-        end: { line: 3, character: 17 },
+        end: { line: 3, character: 16 },
       },
     },
   ]);
@@ -682,7 +682,7 @@ test("GaugeDocumentSymbolProvider matches raw queries against concept heading va
     "# Shared checkout",
     "* Reuse checkout",
     "",
-    "## Shared payment",
+    "# Shared payment",
     "* Reuse payment",
     "",
     "#Compact checkout",
@@ -717,13 +717,17 @@ test("GaugeDocumentSymbolProvider matches raw queries against concept heading va
       .map((symbol) => symbol.name));
   }
 
+  // A concept heading is a single "#", so this file holds no "##" heading and the
+  // queries that only matched one ("# S" and " Shared", which used to hit
+  // "## Shared payment") now match nothing. Scenario "##" matching is covered by
+  // the specification-side tests above.
   assert.deepEqual(results, [
-    ["# Shared checkout", "## Shared payment"],
-    ["## Shared payment"],
-    ["## Shared payment"],
+    ["# Shared checkout", "# Shared payment"],
+    ["# Shared payment"],
     [],
     [],
-    ["## Shared payment"],
+    [],
+    [],
     [],
     [],
     ["#Compact checkout"],
@@ -770,12 +774,11 @@ test("GaugeDocumentSymbolProvider groups and sorts concept workspace symbols", a
   const symbols = await provider.provideWorkspaceSymbols("Sample");
 
   assert.deepEqual(symbols.map((symbol) => symbol.name), [
+    // A "##" line in a .cpt is a scenario heading Gauge rejects there, not a
+    // symbol. Verified against parser.CreateConceptsDictionary - see
+    // test/fixtures/concept-parity.json "hash scenario".
     "# Sample 1",
     "# Sample 2",
-    "## Sample Scenario 1",
-    "## Sample Scenario 6",
-    "## Scenario Sample 2",
-    "## Scenario Sample 5",
   ]);
 });
 
@@ -908,8 +911,8 @@ test("GaugeDocumentSymbolProvider reparses only changed concept workspace docume
 
   assert.equal(analyses, 4, "a watcher update must reparse only the changed document");
   assert.deepEqual(updated.map((symbol) => symbol.name), [
+    // "##" in a .cpt is not a concept symbol; see the note above.
     "# Updated Beta",
-    "## Updated Scenario",
   ]);
 });
 

@@ -2,7 +2,6 @@
 
 const {
   closedDocStringLines,
-  isConceptHashHeading,
   isGaugeHashHeading,
   isScenarioHashHeading,
 } = require("./gaugeHeadings");
@@ -222,8 +221,13 @@ function hasFollowingLine(lines, lineNumber) {
   return lineNumber + 1 < lines.length;
 }
 
-function isHashHeadingLine(line, conceptDocument) {
-  return conceptDocument ? isConceptHashHeading(line) : isGaugeHashHeading(line);
+// "###" is a comment everywhere. "##" in a concept file is a scenario heading the
+// lexer produces and CreateConceptsDictionary then rejects ("Scenario Heading is
+// not allowed in concept file"), so it is highlighted as the scenario heading it
+// is and the diagnostic carries the error - painting it as a concept heading
+// claimed it was valid, and painting it as a comment hid its arguments.
+function isHashHeadingLine(line) {
+  return isGaugeHashHeading(line);
 }
 
 function isTagLineEndingWithComma(line) {
@@ -358,9 +362,9 @@ class GaugeSemanticTokensProvider {
         }
       }
 
-      if (isHashHeadingLine(line, conceptDocument)) {
+      if (isHashHeadingLine(line)) {
         let lastIndex = line.search(/\S/);
-        const isScenarioHeading = !conceptDocument && isScenarioHashHeading(line);
+        const isScenarioHeading = isScenarioHashHeading(line);
         const headingToken = isScenarioHeading ? "scenario" : "specification";
         const headingArgumentRegex = conceptDocument ? dynamicArgumentRegex : argumentRegex;
         tagsContinuation = false;

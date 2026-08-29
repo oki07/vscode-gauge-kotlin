@@ -27,6 +27,7 @@ const { createProjectFactory } = require("../project/projectFactory");
 const { isMarkdownGaugeSpecFile } = require("../gaugeSpecScope");
 const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 const { createLspRequestOwner } = require("./lspRequestOwner");
+const { LANGUAGE_CLIENT_UNAVAILABLE } = require("./scenarioProvider");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 // Deliberately not a metadata callback name: ending a debug session must not
@@ -1573,9 +1574,17 @@ function createGaugeExecutionController(options = {}) {
           atCursor,
         }),
       );
-    } catch (_error) {
+    } catch (error) {
       if (disposed || executionRequestCancelled(flags[EXECUTION_METADATA])) {
         return cancelUnstartedExecution(flags);
+      }
+      // The reference message assumes the request failed because the
+      // specification does not parse. When the language client is simply not
+      // there it sends the user hunting for an error that does not exist.
+      if (error && error.code === LANGUAGE_CLIENT_UNAVAILABLE) {
+        return vscode.window.showErrorMessage(
+          `Could not read the scenarios in ${context.spec}: ${error.message}`,
+        );
       }
       return vscode.window.showErrorMessage(
         `found some problems in ${context.spec}. Fix all problems before running scenarios.`,

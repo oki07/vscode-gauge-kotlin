@@ -359,6 +359,13 @@ function createProjectFactory(options = {}) {
   // get() throw, and each of them catches and treats the folder as "not a Gauge
   // project". Without this the whole Gauge half of the extension turns itself
   // off with no message. Gauge itself refuses to run and says why, so say why.
+  function isReportableManifestError(error) {
+    if (error instanceof SyntaxError) {
+      return true;
+    }
+    return Boolean(error) && typeof error.code === "string" && error.code !== "ENOENT";
+  }
+
   function reportInvalidManifest(root, error) {
     if (reportedInvalidManifests.has(root)) {
       return;
@@ -369,10 +376,14 @@ function createProjectFactory(options = {}) {
       return;
     }
     const manifestFile = pathModule.join(root, GAUGE_MANIFEST_FILE);
+    // Reading the file and parsing it fail the same way from the caller's side,
+    // but they need different answers: fix the JSON, or fix the permissions.
+    const summary = error instanceof SyntaxError
+      ? `Gauge project manifest is not valid JSON: ${manifestFile}.`
+      : `Gauge project manifest could not be read: ${manifestFile}.`;
     try {
       Promise.resolve(vscodeApi.window.showErrorMessage(
-        `Gauge project manifest is not valid JSON: ${manifestFile}.`
-        + ` ${(error && error.message) || error}`,
+        `${summary} ${(error && error.message) || error}`,
       )).catch(() => undefined);
     } catch (_error) {
       // A failed notification must not replace the manifest error.
@@ -383,7 +394,11 @@ function createProjectFactory(options = {}) {
     try {
       return readProjectManifest(fileSystem, pathModule, root);
     } catch (error) {
-      if (error instanceof SyntaxError) {
+      // Unreadable is as fatal as unparseable - EACCES, EISDIR, a broken
+      // symlink - and only the latter used to say so. A missing manifest just
+      // means "not a Gauge project" and must stay quiet, and anything without an
+      // errno code is a bug in this extension rather than a manifest problem.
+      if (isReportableManifestError(error)) {
         reportInvalidManifest(root, error);
       }
       throw error;

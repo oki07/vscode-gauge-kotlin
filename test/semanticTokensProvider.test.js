@@ -655,7 +655,7 @@ test("GaugeSemanticTokensProvider keeps quoted concept heading text plain", () =
   });
 });
 
-test("GaugeSemanticTokensProvider treats concept double-hash headings as concept headings", () => {
+test("GaugeSemanticTokensProvider treats concept double-hash headings as scenario headings", () => {
   const {
     GaugeSemanticTokensProvider,
     tokenTypes,
@@ -673,8 +673,10 @@ test("GaugeSemanticTokensProvider treats concept double-hash headings as concept
   const tokens = provider.provideDocumentSemanticTokens(document)
     .map((entry) => ({ ...entry, type: tokenTypes[entry.tokenType] }));
 
+  // "##" is a scenario heading Gauge rejects in a concept file, not a concept
+  // heading. Highlighting it as one claimed it was valid.
   assert.deepEqual(tokens.map((entry) => entry.type), [
-    "specification",
+    "scenario",
     "dynamicArgument",
   ]);
 });

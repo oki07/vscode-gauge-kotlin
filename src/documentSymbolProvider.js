@@ -170,8 +170,13 @@ function hasLegacyHeadingText(line) {
   return isLegacyHeadingText(line);
 }
 
+// isLegacyHeadingText already applies Gauge's rule: a step line, a real table
+// row, a fence, tags or "table:" is not heading text. Rejecting any line merely
+// CONTAINING "#", "*" or "|" also dropped legitimate headings such as
+// "Create issue #<id>" or "Multiply <a> * <b>", which Gauge builds concepts for,
+// so they vanished from the outline, the folding ranges and workspace symbols.
 function isConceptLegacyUnderlineHeadingText(line) {
-  return hasLegacyHeadingText(line) && !/[#*|]/.test(line);
+  return hasLegacyHeadingText(line);
 }
 
 function isSpecUnderline(line) {

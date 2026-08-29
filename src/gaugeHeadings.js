@@ -25,8 +25,14 @@ function isGaugeHashHeading(line) {
   return isSpecHashHeading(line) || isScenarioHashHeading(line);
 }
 
+// A concept heading is a single "#": "##" is a scenario heading, which Gauge
+// rejects in a concept file, and "###" is neither - verified against
+// parser.CreateConceptsDictionary, where "### x" defines nothing and reports
+// nothing. Treating any run of hashes as a concept put a phantom node in the
+// outline and split the real concept in two.
 function isConceptHashHeading(line) {
-  return trimmedHashText(line).startsWith("#");
+  const text = trimmedHashText(line);
+  return text.startsWith("#") && !text.startsWith("##");
 }
 
 function documentLine(document, line) {

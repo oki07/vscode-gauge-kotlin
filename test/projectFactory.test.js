@@ -444,6 +444,50 @@ test("ProjectFactory reports a manifest that is not valid JSON", () => {
   assert.equal(errors.length, 1);
 });
 
+// A manifest.json that exists but cannot be read - wrong permissions, a broken
+// symlink, a directory of that name - fails the same way a syntax error does:
+// every caller catches and treats the folder as "not a Gauge project" and the
+// extension turns itself off. Only SyntaxError was reported, so this case was
+// silent.
+test("ProjectFactory reports a manifest it cannot read", () => {
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const errors = [];
+  const fileSystem = createFakeFileSystem({
+    "/workspace/gauge/manifest.json": "{}",
+    "/workspace/gauge/build.gradle.kts": "",
+  });
+  const readFileSync = fileSystem.readFileSync.bind(fileSystem);
+  fileSystem.readFileSync = (target, ...rest) => {
+    if (String(target).endsWith("manifest.json")) {
+      const error = new Error("EACCES: permission denied, open '/workspace/gauge/manifest.json'");
+      error.code = "EACCES";
+      throw error;
+    }
+    return readFileSync(target, ...rest);
+  };
+  const factory = createProjectFactory({
+    fileSystem,
+    pathModule: path.posix,
+    vscode: {
+      window: {
+        showErrorMessage(message) {
+          errors.push(message);
+          return Promise.resolve(undefined);
+        },
+      },
+    },
+  });
+
+  assert.throws(() => factory.get("/workspace/gauge"));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^Gauge project manifest could not be read: \/workspace\/gauge\/manifest\.json\./);
+  assert.match(errors[0], /EACCES/);
+
+  // Reported once per project, not once per caller.
+  assert.throws(() => factory.get("/workspace/gauge"));
+  assert.equal(errors.length, 1);
+});
+
 test("ProjectFactory keeps a valid manifest silent", () => {
   const { createProjectFactory } = require("../src/project/projectFactory");
   const errors = [];

@@ -38,8 +38,14 @@ function resolveClientsMap(clientsMap) {
   return clientsMap;
 }
 
+// Tagged so the caller can tell "the server is not there" apart from "the
+// specification does not parse" - both arrive as a rejected request.
+const LANGUAGE_CLIENT_UNAVAILABLE = "GAUGE_LANGUAGE_CLIENT_UNAVAILABLE";
+
 function missingClientError(spec) {
-  return new Error(`No Gauge language client available for ${spec}.`);
+  const error = new Error(`No Gauge language client available for ${spec}.`);
+  error.code = LANGUAGE_CLIENT_UNAVAILABLE;
+  return error;
 }
 
 function createGaugeScenariosProvider(clientsMap, options = {}) {
@@ -96,6 +102,7 @@ function createGaugeScenariosProvider(clientsMap, options = {}) {
 }
 
 module.exports = {
+  LANGUAGE_CLIENT_UNAVAILABLE,
   SCENARIOS_REQUEST,
   createGaugeScenariosProvider,
 };
