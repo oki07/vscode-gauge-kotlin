@@ -366,6 +366,46 @@ test("GaugeWorkspace drops the Markdown selector when gauge_spec_file_extensions
   assert.deepEqual(workspace.markdownSpecSelectors("/workspace/gauge"), []);
 });
 
+// gauge.executablePath and gauge.home are read once, when activate() builds the
+// shared CLI, so changing them does nothing until the window is reloaded. The
+// user who sets executablePath because the extension said "Gauge executable not
+// found!" saw no change and no explanation. Prompt, as the debug-log setting
+// already does.
+test("GaugeWorkspace asks for a restart when the Gauge executable settings change", async () => {
+  const { CLI, Command } = require("../src/cli");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const {
+    configurationChangeListeners,
+    configurations,
+    vscode,
+    warnings,
+  } = createFakeVscode({
+    configurations: {
+      "gauge.launch": { enableDebugLogs: false },
+      gauge: { executablePath: "", home: "" },
+    },
+    workspaceFolders: [],
+  });
+
+  const workspace = new GaugeWorkspace({
+    cli: new CLI(new Command("gauge"), { plugins: [] }),
+    clientsMap: new Map(),
+    LanguageClient: FakeLanguageClient,
+    vscode,
+  });
+  await workspace.ready();
+
+  configurations.gauge = { executablePath: "/opt/gauge/bin/gauge", home: "" };
+  await configurationChangeListeners[0]({});
+
+  assert.deepEqual(warnings, [
+    {
+      message: "Gauge Language Server configuration changed, please restart VS Code.",
+      actions: ["Restart Now"],
+    },
+  ]);
+});
+
 test("GaugeWorkspace scopes the Markdown selector to a configured gauge_specs_dir", () => {
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
   const workspace = Object.create(GaugeWorkspace.prototype);

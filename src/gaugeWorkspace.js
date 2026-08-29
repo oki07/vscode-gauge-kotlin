@@ -16,6 +16,7 @@ const { GaugeStepDefinitionProvider } = require("./stepDefinitionProvider");
 const { UNDEFINED_STEP_MESSAGE } = require("./stepDiagnostics");
 
 const GAUGE_MULTI_PROJECT_CONTEXT = "gauge:multipleProjects?";
+const GAUGE_CONFIG = "gauge";
 const GAUGE_LAUNCH_CONFIG = "gauge.launch";
 const CODE_LENS_METHOD = "textDocument/codeLens";
 const RENAME_METHOD = "textDocument/rename";
@@ -437,6 +438,9 @@ class GaugeWorkspace {
     this.projectChangeListeners = new Set();
     this.outputChannel = this.vscode.window.createOutputChannel("gauge");
     this.launchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
+    // Seeded here so the first change to gauge.executablePath or gauge.home is
+    // already a change to compare against.
+    this.executableSettings = this.readExecutableSettings();
     this.registerActiveEditorChanges();
     this.registerWorkspaceFolderChanges();
     this.registerConfigurationChanges();
@@ -823,6 +827,14 @@ class GaugeWorkspace {
     }
   }
 
+  readExecutableSettings() {
+    const configuration = this.getWorkspaceConfiguration(GAUGE_CONFIG);
+    if (!configuration || typeof configuration.get !== "function") {
+      return "";
+    }
+    return `${configuration.get("executablePath") || ""}\u0000${configuration.get("home") || ""}`;
+  }
+
   onConfigurationChanged() {
     if (this.disposed) {
       return undefined;
@@ -830,6 +842,7 @@ class GaugeWorkspace {
     let newLaunchConfig;
     let oldDebugLogs;
     let newDebugLogs;
+    let newExecutableSettings;
     try {
       newLaunchConfig = this.getWorkspaceConfiguration(GAUGE_LAUNCH_CONFIG);
       if (this.disposed) {
@@ -840,6 +853,10 @@ class GaugeWorkspace {
         return undefined;
       }
       newDebugLogs = newLaunchConfig && newLaunchConfig.get(DEBUG_LOG_LEVEL_CONFIG);
+      if (this.disposed) {
+        return undefined;
+      }
+      newExecutableSettings = this.readExecutableSettings();
     } catch (error) {
       if (this.disposed) {
         return undefined;
@@ -850,7 +867,14 @@ class GaugeWorkspace {
       return undefined;
     }
     this.launchConfig = newLaunchConfig;
-    if (oldDebugLogs === newDebugLogs) {
+    // gauge.executablePath and gauge.home are read once, when activation builds
+    // the shared CLI, so changing them does nothing until the window reloads.
+    // Without this the user who sets executablePath because the extension said
+    // "Gauge executable not found!" saw no change and no explanation.
+    const executableChanged = this.executableSettings !== undefined
+      && this.executableSettings !== newExecutableSettings;
+    this.executableSettings = newExecutableSettings;
+    if (oldDebugLogs === newDebugLogs && !executableChanged) {
       return undefined;
     }
     let prompt;

@@ -349,12 +349,14 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   assert.deepEqual(configuration["gauge.executablePath"], {
     type: "string",
     default: "",
-    description: "Path to the Gauge executable. Leave empty to use Gauge from PATH.",
+    description: "Path to the Gauge executable. Leave empty to use Gauge from PATH. "
+      + "Takes effect after a window reload.",
   });
   assert.deepEqual(configuration["gauge.home"], {
     type: "string",
     default: "",
-    description: "Path to GAUGE_HOME. Leave empty to use the process environment or Gauge default.",
+    description: "Path to GAUGE_HOME. Leave empty to use the process environment or the Gauge default. "
+      + "Takes effect after a window reload.",
   });
   assert.equal(configuration["gauge.specExplorer.enabled"].default, true);
   assert.equal(configuration["gauge.execution.debugPort"].default, 9229);
@@ -1201,13 +1203,25 @@ test("extension manifest preserves the official Gauge configuration schema", () 
   // cannot render an editor for it in the Settings UI. Everything else about the
   // property, including its default and description, still matches.
   const divergentTypeKeys = new Set(["gauge.execution.debugPort"]);
+  // gauge.welcomeNotification.showOn is the second deliberate divergence, in the
+  // description only. The reference says it controls a "welcome page"; this
+  // extension has none - src/welcomeNotifications.js shows a single information
+  // notification - and the reference wording also states a default ("on upgrade")
+  // that contradicts the declared value. Everything else about the property
+  // matches.
+  const divergentDescriptionKeys = new Set(["gauge.welcomeNotification.showOn"]);
   const sharedKeys = Object.keys(referenceConfiguration).filter((key) => configuration[key]);
 
-  const withoutDivergentType = (key, schema) => (
-    divergentTypeKeys.has(key)
-      ? { ...comparableConfigurationSchema(schema), type: undefined }
-      : comparableConfigurationSchema(schema)
-  );
+  const withoutDivergentType = (key, schema) => {
+    const comparable = comparableConfigurationSchema(schema);
+    if (divergentTypeKeys.has(key)) {
+      comparable.type = undefined;
+    }
+    if (divergentDescriptionKeys.has(key)) {
+      comparable.description = undefined;
+    }
+    return comparable;
+  };
 
   assert.deepEqual(
     Object.fromEntries(sharedKeys.map((key) => [key, withoutDivergentType(key, configuration[key])])),
@@ -1217,6 +1231,14 @@ test("extension manifest preserves the official Gauge configuration schema", () 
   );
   assert.equal(referenceConfiguration["gauge.execution.debugPort"].type, "int");
   assert.equal(configuration["gauge.execution.debugPort"].type, "integer");
+  assert.match(
+    referenceConfiguration["gauge.welcomeNotification.showOn"].description,
+    /welcome page/,
+  );
+  assert.match(
+    configuration["gauge.welcomeNotification.showOn"].description,
+    /Gauge plugin initialised/,
+  );
 });
 
 test("extension manifest preserves official spec explorer command icons", () => {

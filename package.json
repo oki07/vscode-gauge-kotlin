@@ -407,12 +407,12 @@
         "gauge.executablePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Gauge executable. Leave empty to use Gauge from PATH."
+          "description": "Path to the Gauge executable. Leave empty to use Gauge from PATH. Takes effect after a window reload."
         },
         "gauge.home": {
           "type": "string",
           "default": "",
-          "description": "Path to GAUGE_HOME. Leave empty to use the process environment or Gauge default."
+          "description": "Path to GAUGE_HOME. Leave empty to use the process environment or the Gauge default. Takes effect after a window reload."
         },
         "gauge.welcomeNotification.showOn": {
           "type": "string",
@@ -421,7 +421,7 @@
             "newProjectLoad",
             "never"
           ],
-          "description": "Shows gauge welcome page based on given value, defaulted to on upgrade."
+          "description": "When to show the one-time \"Gauge plugin initialised\" notification. newProjectLoad shows it once per workspace; never suppresses it."
         },
         "gauge.specExplorer.enabled": {
           "type": "boolean",
