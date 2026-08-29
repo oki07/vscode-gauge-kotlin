@@ -10362,6 +10362,12 @@ class GaugeStepDiagnosticsProvider {
         if (this.disposed) {
           return;
         }
+        // A git: diff or history revision carries the same fsPath as the file on
+        // disk, so closing one would wipe the bookkeeping of the real document
+        // that is still open. The open and change paths already guard this way.
+        if (!isFileSchemeDocument(document)) {
+          return;
+        }
         if (document && document.uri && typeof collection.delete === "function") {
           collection.delete(document.uri);
         }

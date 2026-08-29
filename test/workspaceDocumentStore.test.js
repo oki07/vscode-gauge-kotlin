@@ -166,6 +166,92 @@ test("WorkspaceDocumentStore scans the workspace once and reads files from disk"
   assert.equal(isWorkspaceStepImplementationScanComplete(documents), true);
 });
 
+// Removing a folder fires no watcher delete events, and the listener returned
+// early whenever nothing was added, so every .spec/.cpt/.kt of the removed
+// folder stayed in the store forever: its concepts kept appearing in Go to
+// Symbol in Workspace and opened a file outside the workspace.
+test("WorkspaceDocumentStore drops the documents of a removed workspace folder", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/specs/login.spec": "# Login\n",
+    "/gone/specs/shared.cpt": "# Shared\n* step\n",
+  };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  assert.equal(store.documents().length, 2);
+
+  vscode.workspace.findFiles = async (pattern) => {
+    state.findFilesCalls.push(pattern);
+    return [{ fsPath: "/ws/specs/login.spec" }];
+  };
+  await state.listeners.folders[0]({ added: [], removed: [{ uri: { fsPath: "/gone" } }] });
+
+  assert.equal(state.findFilesCalls.length, 2);
+  assert.deepEqual(
+    store.documents().map((entry) => entry.uri.fsPath),
+    ["/ws/specs/login.spec"],
+  );
+});
+
+// Two folder changes in quick succession overlap two scans. Without a generation
+// the older one finishes last and sets scanComplete on its own, stale result, so
+// every consumer treated an index that predates the newest folder as
+// authoritative and reported its steps undefined until something else changed.
+test("WorkspaceDocumentStore lets the newest scan win when two overlap", async () => {
+  const { WorkspaceDocumentStore, isWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const files = { "/ws/specs/login.spec": "# Login\n" };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem({
+      ...files,
+      "/first/specs/first.spec": "# First\n",
+      "/second/specs/second.spec": "# Second\n",
+    }),
+    vscode,
+  });
+
+  await store.start();
+
+  const gates = [];
+  vscode.workspace.findFiles = async (pattern) => {
+    state.findFilesCalls.push(pattern);
+    const index = gates.length;
+    await new Promise((resolve) => gates.push(resolve));
+    return index === 0
+      ? [{ fsPath: "/ws/specs/login.spec" }, { fsPath: "/first/specs/first.spec" }]
+      : [
+        { fsPath: "/ws/specs/login.spec" },
+        { fsPath: "/first/specs/first.spec" },
+        { fsPath: "/second/specs/second.spec" },
+      ];
+  };
+
+  const first = state.listeners.folders[0]({ added: [{ uri: { fsPath: "/first" } }], removed: [] });
+  await Promise.resolve();
+  const second = state.listeners.folders[0]({ added: [{ uri: { fsPath: "/second" } }], removed: [] });
+  await Promise.resolve();
+  assert.equal(gates.length, 2);
+
+  // The older scan finishes first while the newer one is still reading. It must
+  // not declare the index complete on a file list that predates /second.
+  gates[0]();
+  await first;
+  assert.equal(isWorkspaceStepImplementationScanComplete(store.documents()), false);
+
+  gates[1]();
+  await second;
+  assert.equal(isWorkspaceStepImplementationScanComplete(store.documents()), true);
+  assert.deepEqual(
+    store.documents().map((entry) => entry.uri.fsPath).sort(),
+    ["/first/specs/first.spec", "/second/specs/second.spec", "/ws/specs/login.spec"],
+  );
+});
+
 // The initial findFiles runs once at start(). A folder added to the workspace
 // afterwards brings existing specs and Kotlin sources with it, and the file
 // system watcher only reports create/change/delete, so those files stayed

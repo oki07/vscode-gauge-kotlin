@@ -4,6 +4,7 @@ const nodePath = require("node:path");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { headingMarkers } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+const { isFileSchemeDocument } = require("./workspaceDocumentStore");
 
 const CONTROLLER_ID = "gauge";
 const CONTROLLER_LABEL = "Gauge";
@@ -592,6 +593,10 @@ class GaugeTestController {
     }
     if (typeof workspace.onDidCloseTextDocument === "function") {
       addDisposable(disposables, workspace.onDidCloseTextDocument((document) => {
+        // Closing a diff editor must not prune the items of the file on disk.
+        if (!isFileSchemeDocument(document)) {
+          return;
+        }
         this.removeDocumentItems(document, this.workspaceDiscoveredIdsForPath(documentPath(document)));
       }));
     }
@@ -790,6 +795,10 @@ class GaugeTestController {
     if (
       this.disposed
       || !this.controller
+      // A git: diff or history revision carries the same fsPath as the file on
+      // disk, so discovering from one re-keys the Test Explorer items to content
+      // that is not what will run.
+      || !isFileSchemeDocument(document)
       || (!isGaugeSpecificationDocument(document) && !markdownSpec)
     ) {
       return [];

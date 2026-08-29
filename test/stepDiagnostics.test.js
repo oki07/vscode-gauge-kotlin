@@ -8640,6 +8640,68 @@ function createSchedulerFileSystem(files) {
   };
 }
 
+// A git: diff or history revision of a spec carries the SAME fsPath as the file
+// on disk, so closing the diff editor wiped the bookkeeping of the real document
+// that is still open. The daemon diagnostics then stopped being de-duplicated
+// against what was already published. The open/change paths already guard with
+// isFileSchemeDocument; the close path did not.
+test("GaugeStepDiagnosticsProvider ignores a closing non-file document", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  let closeListener;
+  const collection = { delete() {}, dispose() {}, set() {} };
+  const documentStore = {
+    documents: () => [],
+    onDidChangeDocuments() {
+      return { dispose() {} };
+    },
+    start() {},
+  };
+  const provider = new GaugeStepDiagnosticsProvider({
+    documentStore,
+    refreshDelayMs: 60_000,
+    vscode: {
+      ...createFakeVscode(),
+      languages: {
+        createDiagnosticCollection: () => collection,
+      },
+      workspace: {
+        textDocuments: [],
+        onDidChangeWorkspaceFolders() {
+          return { dispose() {} };
+        },
+        onDidOpenTextDocument() {
+          return { dispose() {} };
+        },
+        onDidChangeTextDocument() {
+          return { dispose() {} };
+        },
+        onDidCloseTextDocument(listener) {
+          closeListener = listener;
+          return { dispose() {} };
+        },
+        createFileSystemWatcher() {
+          return {
+            onDidCreate() { return { dispose() {} }; },
+            onDidChange() { return { dispose() {} }; },
+            onDidDelete() { return { dispose() {} }; },
+            dispose() {},
+          };
+        },
+      },
+    },
+  });
+  provider.register({ subscriptions: [] });
+
+  const file = "/workspace/gauge/specs/checkout.spec";
+  provider.publishedLines.set(file, { lines: ["published"], version: 3 });
+
+  closeListener({ uri: { fsPath: file, scheme: "git" } });
+
+  assert.deepEqual(provider.publishedLines.get(file), { lines: ["published"], version: 3 });
+
+  provider.dispose();
+});
+
 test("GaugeStepDiagnosticsProvider settles a pending refresh when disposed", async () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   let changeListener;

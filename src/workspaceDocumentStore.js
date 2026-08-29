@@ -303,10 +303,11 @@ class WorkspaceDocumentStore {
       // brings existing specs and Kotlin sources with it, and the file system
       // watcher only reports create/change/delete, so those files would stay
       // invisible to every local index until one of them was touched.
-      if (!listen("onDidChangeWorkspaceFolders", (event) => {
-        if (event && Array.isArray(event.added) && event.added.length === 0) {
-          return undefined;
-        }
+      // Removing a folder fires no watcher delete events either, so a rescan is
+      // the only thing that evicts its files: without one their concepts kept
+      // appearing in Go to Symbol in Workspace and opened a file that is no
+      // longer part of the workspace.
+      if (!listen("onDidChangeWorkspaceFolders", () => {
         // Returned so a caller can await the rescan. VS Code ignores it.
         return this.rescanWorkspace();
       })) {
@@ -353,36 +354,59 @@ class WorkspaceDocumentStore {
     }
   }
 
+  // Two scans can overlap when folders change twice in quick succession. Without
+  // a generation the older one finishes last and marks its own, incomplete
+  // result authoritative. This mirrors the per-file guard in loadDiskDocument.
+  isCurrentScanGeneration(generation) {
+    return this.scanGeneration === generation;
+  }
+
   async scanWorkspace() {
     if (this.disposed) {
       return;
     }
+    this.scanGeneration = (this.scanGeneration || 0) + 1;
+    const generation = this.scanGeneration;
     const workspace = this.vscode.workspace || {};
     if (typeof workspace.findFiles !== "function") {
       this.notifyChange(undefined);
       return;
     }
+    // Snapshot before the await: a file the watcher touches during the scan has
+    // a newer generation afterwards and must survive the reconciliation below.
+    const knownBefore = new Map(
+      [...this.diskDocuments.keys()].map((file) => [file, this.fileGenerations.get(file)]),
+    );
     let uris = [];
     try {
       uris = (await workspace.findFiles(WORKSPACE_DOCUMENT_GLOB)) || [];
     } catch (_error) {
       uris = [];
     }
-    if (this.disposed) {
+    if (this.disposed || !this.isCurrentScanGeneration(generation)) {
       return;
     }
+    const seen = new Set();
     await mapWithConcurrency(uris, this.initialReadConcurrency, async (uri) => {
-      if (this.disposed) {
+      if (this.disposed || !this.isCurrentScanGeneration(generation)) {
         return;
       }
       const file = uriPath(uri);
       if (!file || !isWorkspaceDocumentPath(file) || !this.belongsToGaugeProject(file)) {
         return;
       }
+      seen.add(file);
       await this.loadDiskDocument(file, { silent: true });
     });
-    if (this.disposed) {
+    if (this.disposed || !this.isCurrentScanGeneration(generation)) {
       return;
+    }
+    for (const [file, generationBefore] of knownBefore) {
+      if (seen.has(file) || this.fileGenerations.get(file) !== generationBefore) {
+        continue;
+      }
+      this.diskDocuments.delete(file);
+      this.fileGenerations.delete(file);
     }
     this.scanComplete = true;
     this.notifyChange(undefined);

@@ -594,6 +594,39 @@ test("GaugeTestController keeps retry attempts distinct for repeated scenario id
   ]);
 });
 
+// A git: diff or history revision of a spec carries the same fsPath as the file
+// on disk. Opening the diff re-keyed the Test Explorer items to the revision's
+// content, and closing it pruned the items of the real file, which is still
+// open. Only "file" documents may drive discovery.
+test("GaugeTestController ignores non-file scheme documents", () => {
+  const { GaugeTestController } = require("../src/testController");
+  const { controller, vscode } = createFakeVscode();
+  const gaugeTests = new GaugeTestController({ vscode });
+
+  gaugeTests.register();
+  gaugeTests.discoverDocument(createDocument([
+    "# Checkout",
+    "",
+    "## Successful checkout",
+  ].join("\n")));
+  const discovered = collectionItems(controller.items).length;
+
+  const revision = createDocument([
+    "# Checkout",
+    "",
+    "## Renamed in the working tree",
+  ].join("\n"));
+  revision.uri = { fsPath: "/workspace/specs/example.spec", scheme: "git" };
+
+  assert.deepEqual(gaugeTests.discoverDocument(revision), []);
+  assert.equal(collectionItems(controller.items).length, discovered);
+  const specItem = collectionItems(controller.items)[0];
+  assert.deepEqual(
+    collectionItems(specItem.children).map((item) => item.label),
+    ["Successful checkout"],
+  );
+});
+
 test("GaugeTestController keeps result-only leaves non-runnable and clears them before the next run", () => {
   const { GaugeTestController } = require("../src/testController");
   const { controller, profiles, vscode } = createFakeVscode();
