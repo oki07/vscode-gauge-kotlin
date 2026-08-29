@@ -2857,7 +2857,10 @@ test("ReferenceProvider matches local Gauge inline table references for Kotlin S
   });
 });
 
-test("ReferenceProvider keeps table Gauge references without closing pipes", async () => {
+// The row is indented, which does not stop it being the step's table. A row
+// with no closing "|" is a different case and is not a table at all - see
+// "stepTextAt ignores a pipe line with no closing pipe".
+test("ReferenceProvider keeps indented table Gauge references", async () => {
   const { GaugeClients } = require("../src/gaugeClients");
   const { ReferenceProvider } = require("../src/gaugeReference");
   const { GaugeProject } = require("../src/project/gaugeProject");
@@ -2893,7 +2896,7 @@ test("ReferenceProvider keeps table Gauge references without closing pipes", asy
         "",
         "## Scenario",
         "* Compare",
-        "  | name",
+        "  | name |",
       ].join("\n");
     },
   };

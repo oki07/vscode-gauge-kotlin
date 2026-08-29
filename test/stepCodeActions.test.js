@@ -508,7 +508,10 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
   });
 });
 
-test("GaugeStepCodeActionProvider includes table rows without closing pipes in step stubs", () => {
+// "| id" has no closing "|", so it is a comment and the step takes no table.
+// Generating a "<table>" stub for it produced an annotation that can never
+// match the step Gauge actually looks for.
+test("GaugeStepCodeActionProvider omits a table stub for a pipe line with no closing pipe", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,
     GENERATE_STEP_STUB,
@@ -536,7 +539,7 @@ test("GaugeStepCodeActionProvider includes table rows without closing pipes in s
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with account <table>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with account\")\nfun implementation() {\n}\n",
     ],
   });
 });

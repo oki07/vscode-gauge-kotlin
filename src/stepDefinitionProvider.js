@@ -182,9 +182,11 @@ function documentLineCount(document) {
   return 0;
 }
 
+// references/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
+// opening one, so "|name" is a comment and attaches no table to the step.
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.startsWith("|");
+  return text.length > 1 && text.startsWith("|") && text.endsWith("|");
 }
 
 // Gauge's lexer emits no token for a blank line following a step

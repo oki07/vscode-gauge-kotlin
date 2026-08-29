@@ -210,6 +210,38 @@ test("stepTextAt appends the table of a multi-line step", () => {
   );
 });
 
+// references/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
+// opening one, so "|name" is a comment and no table attaches to the step.
+// Accepting it gave the step a "{}" argument it does not have, so F12 and the
+// implemented/unimplemented verdict were both answered for the wrong step value.
+// Probed: with the closing pipe the row warns "Treating it as static param",
+// without it the parser reports nothing at all.
+test("stepTextAt ignores a pipe line with no closing pipe", () => {
+  const { stepTextAt } = require("../src/stepDefinitionProvider");
+  const lines = [
+    "# Checkout",
+    "## Buy",
+    "* Pay the total amount",
+    "|a",
+    "|1",
+  ];
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/checkout.spec" },
+    get lineCount() {
+      return lines.length;
+    },
+    lineAt(line) {
+      return { text: lines[line] };
+    },
+    getText() {
+      return lines.join("\n");
+    },
+  };
+
+  assert.equal(stepTextAt(document, { line: 2 }), "Pay the total amount");
+});
+
 test("GaugeStepDefinitionProvider resolves spec steps to Kotlin Step functions", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
@@ -472,12 +504,13 @@ test("GaugeStepDefinitionProvider resolves static and dynamic argument spec step
   assert.equal(dynamicDefinitions[0].uri, kotlinDocument.uri);
 });
 
-test("GaugeStepDefinitionProvider resolves table steps without closing pipes", async () => {
+// Indentation does not stop the row being the step's table.
+test("GaugeStepDefinitionProvider resolves indented table steps", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([
     "# Compare",
     "* Compare",
-    "  | name",
+    "  | name |",
   ].join("\n"), "gauge", "/workspace/gauge/specs/compare.spec");
   const kotlinDocument = createDocument([
     "package steps",
