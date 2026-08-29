@@ -9,7 +9,11 @@ const {
   UNDEFINED_STEP_MESSAGE,
 } = require("./stepDiagnostics");
 const { allowMultilineStep } = require("./stepDefinitionProvider");
-const { isGaugeTableRowLine } = require("./gaugeHeadings");
+const {
+  isGaugeDataTableKeywordLine,
+  isGaugeTableRowLine,
+  isGaugeTagKeywordLine,
+} = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const CREATE_CONCEPT_TITLE = "Create concept";
@@ -199,10 +203,8 @@ function isGaugeSyntaxBoundary(line) {
   return !text
     || text.startsWith("*")
     || text.startsWith("#")
-    || text.toLowerCase().startsWith("tags:")
-    || text.toLowerCase().startsWith("tags :")
-    || text.toLowerCase().startsWith("table:")
-    || text.toLowerCase().startsWith("table :")
+    || isGaugeTagKeywordLine(text)
+    || isGaugeDataTableKeywordLine(text)
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters

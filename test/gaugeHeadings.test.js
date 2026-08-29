@@ -100,11 +100,16 @@ test("an underline of mixed characters is not a heading", () => {
 //   "| a | b | / ----"   -> one scenario, no new heading
 //   "Just a comment / ----" -> a scenario named "Just a comment"
 test("an underline promotes only a comment line to a heading", () => {
+  // Probed by putting each line between "# S" and "----": the shapes that stay
+  // themselves leave "Spec should have at least one scenario" (or, for a table,
+  // "Data table should have at least 1 data row"), while a promoted one gives
+  // the scenario its step and reports nothing. An UNMATCHED doc-string fence is
+  // just a comment, so it is promoted like any other.
   const cases = [
     ["* a step", []],
     ["tags: smoke", []],
     ["| a | b |", []],
-    ["\"\"\"", []],
+    ["\"\"\"", [["scenario", 0]]],
     ["____", []],
     ["# Already a heading", [["specification", 0]]],
     ["Just a comment", [["scenario", 0]]],

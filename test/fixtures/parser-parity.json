@@ -579,5 +579,97 @@
     "parserErrorLines": [
       1
     ]
+  },
+  {
+    "label": "whitespace only newline",
+    "text": "\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "whitespace only spaces",
+    "text": "  ",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "whitespace only two newlines",
+    "text": "\n\n",
+    "parserErrors": [
+      "Spec heading not found"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "underline text underscores",
+    "text": "# S\n## Sc\n* a\n___\n=====\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "underline text dashes",
+    "text": "# S\n## Sc\n* a\n---\n=====\n",
+    "parserErrors": [
+      "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "underline text equals",
+    "text": "# S\n## Sc\n* a\n===\n=====\n",
+    "parserErrors": [
+      "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "underline text doc string fence",
+    "text": "# S\n## Sc\n* a\n\"\"\"\n=====\n",
+    "parserErrors": [
+      "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "tags with a tab before colon",
+    "text": "# S\n## Sc\n* a\ntags\t: smoke\n=====\n",
+    "parserErrors": [
+      "Multiple spec headings found in same file"
+    ],
+    "parserErrorLines": [
+      1
+    ]
+  },
+  {
+    "label": "tags with a space before colon",
+    "text": "# S\n## Sc\n* a\ntags : smoke\n=====\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "table keyword with spaces",
+    "text": "# S\n## Sc\n* a\ntable  : x.csv\n=====\n",
+    "parserErrors": [
+      "Could not resolve table. File x.csv doesn't exist."
+    ],
+    "parserErrorLines": [
+      1
+    ]
   }
 ]

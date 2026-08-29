@@ -152,8 +152,13 @@ function isEscapedCharacter(line, index) {
   return slashCount % 2 === 1;
 }
 
+// The two keywords do not take the same whitespace: a tags line allows at most
+// one SPACE before the colon, while isDataTable allows any run. Accepting a tab
+// for both painted `tags\t: smoke` as a valid tags line while the diagnostics
+// correctly treated it as a comment. Probed - see src/gaugeHeadings.js.
 function keywordLinePrefix(line, keyword) {
-  const keywordRegex = new RegExp(`^(\\s*)${keyword}[ \\t\\f]?:`, "i");
+  const separator = keyword === "tags" ? " ?" : "\\s*";
+  const keywordRegex = new RegExp(`^(\\s*)${keyword}${separator}:`, "i");
   const match = keywordRegex.exec(line);
   if (!match) {
     return undefined;

@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { WorkspaceEditor } = require("../refactor/workspaceEditor");
+const { isFileSchemeDocument } = require("../workspaceDocumentStore");
 const {
   kotlinFunctionNames,
   stepImplementationName,
@@ -611,6 +612,12 @@ class GenerateStubCommandProvider {
     const documents = (this.vscode && this.vscode.workspace
       && this.vscode.workspace.textDocuments) || [];
     for (const document of documents) {
+      // A git: diff of the same file has the SAME fsPath, and textDocuments is
+      // ordered by open time, so the HEAD side could win this lookup and hand
+      // back content the edit is not applied to.
+      if (!isFileSchemeDocument(document)) {
+        continue;
+      }
       const file = (document && document.uri && (document.uri.fsPath || document.uri.path))
         || (document && document.fileName);
       if (file === implementationFilePath && typeof document.getText === "function") {

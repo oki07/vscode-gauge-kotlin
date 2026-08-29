@@ -103,6 +103,23 @@ function closedDocStringLines(lines) {
 // the one place the rule lives: eight copies of it had drifted apart, and a
 // disagreement between two of them let the quick fix generate a stub that could
 // not clear the diagnostic it was offered for.
+// The two keywords do NOT take the same whitespace. Probed by putting each line
+// above a "=====" underline and watching for a promoted heading:
+//   "tags: x" / "tags : x"   -> a tags line
+//   "tags\t: x" / "tags\f: x" -> NOT a tags line, promoted as a comment
+//   "table: x" / "table  : x" -> both data tables (isDataTable allows \s*)
+// references/gauge/parser/lex.go: the tags branch tests the two literal
+// prefixes, while isDataTable matches /^\s*[tT][aA][bB][lL][eE]\s*:/.
+const TAGS_KEYWORD_PATTERN = /^\s*tags ?:/i;
+
+function isGaugeTagKeywordLine(line) {
+  return TAGS_KEYWORD_PATTERN.test(String(line || "").trimStart());
+}
+
+function isGaugeDataTableKeywordLine(line) {
+  return DATA_TABLE_KEYWORD_PATTERN.test(String(line || ""));
+}
+
 function isGaugeTableRowLine(line) {
   const text = String(line || "").trim();
   return text.startsWith("|") && text.endsWith("|");
@@ -126,16 +143,23 @@ function isLegacyHeadingText(line) {
   if (!text) {
     return false;
   }
-  if (text.startsWith("#") || text.startsWith("|") || text === "\"\"\"") {
+  // "###" is a comment, so an underline DOES promote it; only "#" and "##" are
+  // already heading tokens. And a pipe line is only a table row when it closes,
+  // so "| id | name" is a comment an underline promotes.
+  if (isGaugeHashHeading(text) || isGaugeTableRowLine(text)) {
     return false;
   }
-  if (isStepLine(text) || /^_+$/.test(text) || /^[=-]+$/.test(text)) {
+  // Only the teardown marker is excluded among the run-of-symbols shapes. Probed
+  // by putting each line above a "=====" underline in a spec that already has a
+  // heading and watching for "Multiple spec headings found in same file":
+  //   ___  -> not heading text        (teardown)
+  //   ---  -> heading text
+  //   ===  -> heading text
+  //   """  -> heading text            (an unmatched fence is just a comment)
+  if (isStepLine(text) || /^_+$/.test(text)) {
     return false;
   }
-  const lower = text.toLowerCase();
-  return !lower.startsWith("tags:")
-    && !lower.startsWith("tags :")
-    && !DATA_TABLE_KEYWORD_PATTERN.test(text);
+  return !isGaugeTagKeywordLine(text) && !isGaugeDataTableKeywordLine(text);
 }
 
 function legacyHeadingKind(line, nextLine) {
@@ -182,6 +206,8 @@ function headingMarkers(document) {
 
 module.exports = {
   closedDocStringLines,
+  isGaugeDataTableKeywordLine,
+  isGaugeTagKeywordLine,
   isGaugeTableRowLine,
   isLegacyHeadingText,
   headingMarkers,

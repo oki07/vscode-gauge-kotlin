@@ -7,7 +7,9 @@ const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
 
 const {
   closedDocStringLines,
+  isGaugeTagKeywordLine,
   isLegacyHeadingText,
+  isScenarioHashHeading,
 } = require("./gaugeHeadings");
 
 const nodeFs = require("node:fs");
@@ -21,9 +23,7 @@ const {
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
-const {
-  isScenarioHashHeading,
-} = require("./gaugeHeadings");
+
 
 const TEXT_DOCUMENT_COMPLETION_REQUEST = "textDocument/completion";
 const LSP_SNIPPET_INSERT_TEXT_FORMAT = 2;
@@ -459,8 +459,10 @@ function isInsideEscapedArgument(line, position) {
   return false;
 }
 
+// A tab or a form feed before the colon is NOT a tags line - probed, such a line
+// is promoted as a comment. The rule lives in src/gaugeHeadings.js.
 function isTagLine(line) {
-  return /^\s*tags[ \t\f]?:/i.test(String(line || ""));
+  return isGaugeTagKeywordLine(line);
 }
 
 function isTagLineEndingWithComma(line) {

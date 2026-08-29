@@ -441,7 +441,21 @@ test("GenerateStubCommandProvider reads the open buffer, not the file on disk", 
     fileName: "/workspace/src/test/kotlin/Steps.kt",
     getText: () => bufferText,
   };
-  vscode.workspace.textDocuments = [bufferDocument];
+  // "Open Changes" puts a git: document with the SAME fsPath in textDocuments,
+  // and the list is ordered by open time, so the HEAD side can win the lookup
+  // and hand back content that is not what the edit is applied to - the very
+  // stale-copy defect the buffer lookup was added to remove.
+  const headDocument = {
+    languageId: "kotlin",
+    uri: {
+      fsPath: "/workspace/src/test/kotlin/Steps.kt",
+      path: "/workspace/src/test/kotlin/Steps.kt",
+      scheme: "git",
+    },
+    fileName: "/workspace/src/test/kotlin/Steps.kt",
+    getText: () => diskText,
+  };
+  vscode.workspace.textDocuments = [headDocument, bufferDocument];
 
   new GenerateStubCommandProvider({
     get() {

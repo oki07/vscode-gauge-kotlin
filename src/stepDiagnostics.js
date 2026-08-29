@@ -4043,17 +4043,17 @@ function isGaugeHashHeadingLine(line) {
   return /^#(?!#)/.test(text) || /^##(?!#)/.test(text);
 }
 
+// One spelling of the rule, in src/gaugeHeadings.js. The two copies used to
+// disagree on `"""`, `___`, `---` and `===`, and each was wrong on a different
+// half: this one promoted the teardown marker to a heading, and that one refused
+// to promote a doc-string fence or a run of dashes that Gauge does promote.
 function isLegacyHeadingText(line) {
   const text = String(line || "").trim();
-  return Boolean(text)
-    && !isGaugeStepLine(text)
+  return hasLegacyHeadingText(text)
     // A "#" or "##" line is already a heading token, so an underline below it
     // does not promote it (references/gauge/parser/lex.go rewrites the previous
     // token only when it is a comment).
-    && !isGaugeHashHeadingLine(text)
-    && !isGaugeTableRowLine(text)
-    && !isGaugeTagKeywordLine(text)
-    && !/^table\s*:/i.test(text);
+    && !isGaugeHashHeadingLine(text);
 }
 
 function legacyHeadingValue(line) {
@@ -4227,10 +4227,15 @@ function duplicateScenarioDiagnostics(vscode, text) {
   }
   pushScenarioWithoutStepDiagnostic(vscode, diagnostics, currentScenario);
   if (!hasSpecHeading && !firstContentRange) {
+    // A blank line is already a token, so a file made only of blank or
+    // whitespace lines is not empty - it is a specification without a heading.
+    // Only a zero-byte file has no elements at all. Probed: "" answers "Spec
+    // does not have any elements", while "\n", "  ", "\n\n" and "  \n" all
+    // answer "Spec heading not found", every one of them at line 1.
     diagnostics.push(createDiagnostic(
       vscode,
       createRange(vscode, { line: 0, character: 0 }, { line: 0, character: 0 }),
-      SPEC_EMPTY_MESSAGE,
+      text.length === 0 ? SPEC_EMPTY_MESSAGE : SPEC_HEADING_NOT_FOUND_MESSAGE,
     ));
   }
   if (!hasSpecHeading && firstContentRange) {
@@ -5292,8 +5297,7 @@ function repeatedTagDiagnostics(vscode, text) {
 // this one accepted any whitespace, which made a comment line look like a second
 // tags block.
 function isGaugeTagKeywordLine(line) {
-  const text = String(line || "").trim().toLowerCase();
-  return text.startsWith("tags:") || text.startsWith("tags :");
+  return hasGaugeTagKeyword(line);
 }
 
 function isGaugeSyntaxBoundary(line) {
@@ -5303,10 +5307,8 @@ function isGaugeSyntaxBoundary(line) {
     || text.startsWith("#")
     // Gauge accepts both spellings: references/gauge/parser/lex.go checkTag
     // compares the line against "tags:" and "tags :".
-    || text.toLowerCase().startsWith("tags:")
-    || text.toLowerCase().startsWith("tags :")
-    || text.toLowerCase().startsWith("table:")
-    || text.toLowerCase().startsWith("table :")
+    || isGaugeTagKeywordLine(text)
+    || isGaugeDataTableKeywordLine(text)
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
@@ -8917,7 +8919,12 @@ const {
   isWorkspaceStepImplementationScanComplete,
   markWorkspaceStepImplementationScanComplete,
 } = require("./workspaceDocumentStore");
-const { isGaugeTableRowLine } = require("./gaugeHeadings");
+const {
+  isGaugeDataTableKeywordLine,
+  isGaugeTableRowLine,
+  isGaugeTagKeywordLine: hasGaugeTagKeyword,
+  isLegacyHeadingText: hasLegacyHeadingText,
+} = require("./gaugeHeadings");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 
 const JAVA_FILE_PATTERN = /\.java$/i;
