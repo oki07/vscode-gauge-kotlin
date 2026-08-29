@@ -286,6 +286,9 @@ function isConceptHeading(line) {
 
 function isTableLine(line) {
   const text = String(line || "").trim();
+  // Deliberately looser than isGaugeTableRowLine: this runs on every keystroke,
+  // while the row is still being typed and its closing "|" does not exist yet.
+  // The parser rule governs step VALUES; this one only governs an affordance.
   return text.startsWith("|");
 }
 

@@ -8,6 +8,7 @@ const {
   headingMarkers,
   isDocStringFenceLine,
   isStepLine,
+  isGaugeTableRowLine,
 } = require("./gaugeHeadings");
 const {
   GaugeStepDiagnosticsProvider,
@@ -144,7 +145,7 @@ const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
 
 function isTableLine(line) {
   const text = String(line || "").trim();
-  return text.startsWith("|");
+  return isGaugeTableRowLine(text);
 }
 
 // references/gauge/parser/lex.go isStep requires the second character not to be

@@ -97,6 +97,17 @@ function closedDocStringLines(lines) {
   return result;
 }
 
+// references/gauge/parser/lex.go isTableRow:
+//   text[0] == '|' && text[len(text)-1] == '|'
+// A lone "|" satisfies it, because both indices are the same character. This is
+// the one place the rule lives: eight copies of it had drifted apart, and a
+// disagreement between two of them let the quick fix generate a stub that could
+// not clear the diagnostic it was offered for.
+function isGaugeTableRowLine(line) {
+  const text = String(line || "").trim();
+  return text.startsWith("|") && text.endsWith("|");
+}
+
 function headingKind(line) {
   if (isScenarioHashHeading(line)) {
     return "scenario";
@@ -171,6 +182,7 @@ function headingMarkers(document) {
 
 module.exports = {
   closedDocStringLines,
+  isGaugeTableRowLine,
   isLegacyHeadingText,
   headingMarkers,
   isConceptHashHeading,

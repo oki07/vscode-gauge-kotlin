@@ -319,11 +319,13 @@ async function selectProjectRoot(vscode, pathModule, options = {}, operation) {
   const projectRoots = configuredProjects || getWorkspaceRoots(vscode);
   // A folder chosen from the Explorer already decides the target, so asking
   // "Choose a project" there was a question with no effect and Escaping it
-  // aborted the command with the wrong message. The project is the root that
-  // contains the folder; without one there is nothing to check its scope
-  // against, and the folder stands in for the project as it always did.
+  // aborted the command with the wrong message. The project is the nearest
+  // manifest.json owner at or above the folder - NOT the workspace folder that
+  // happens to contain it, which for a project nested at /workspace/e2e resolved
+  // gauge_specs_dir against /workspace and rejected the project's own specs/.
   if (options.specDir && pathModule.isAbsolute(options.specDir)) {
-    return projectRoots.find((root) => isInsideDirectory(pathModule, root, options.specDir))
+    return nearestManifestRoot(pathModule, options, options.specDir)
+      || projectRoots.find((root) => isInsideDirectory(pathModule, root, options.specDir))
       || options.specDir;
   }
   if (projectRoots.length === 0) {
@@ -545,6 +547,32 @@ async function createSpecification(options = {}) {
 
 async function createConcept(options = {}) {
   return createGaugeFile(options, CONCEPT_DESCRIPTOR);
+}
+
+// The project a folder belongs to is the nearest directory at or above it that
+// owns a manifest.json, which is what projectFactory resolves at runtime. Only
+// such a root can have its gauge_specs_dir resolved against it.
+function nearestManifestRoot(pathModule, options, directory) {
+  const fileSystem = options.fileSystem || nodeFs;
+  if (!fileSystem || typeof fileSystem.existsSync !== "function") {
+    return undefined;
+  }
+  let current = directory;
+  for (let depth = 0; depth < 64; depth += 1) {
+    try {
+      if (fileSystem.existsSync(pathModule.join(current, "manifest.json"))) {
+        return current;
+      }
+    } catch (_error) {
+      return undefined;
+    }
+    const parent = pathModule.dirname(current);
+    if (!parent || parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+  return undefined;
 }
 
 function isInsideDirectory(pathModule, directory, candidate) {

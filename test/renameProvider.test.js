@@ -2054,12 +2054,17 @@ test("GaugeRenameProvider preserves inline table step identity when renaming", a
   );
 });
 
-test("GaugeRenameProvider keeps table step identity without closing pipes", async () => {
+// references/gauge/parser/lex.go isTableRow needs a closing "|" as well as an
+// opening one, probed twice: a spec row without it reports nothing where a
+// closed row warns, and in a concept "|table" reports nothing where "|table|"
+// reports "Table doesn't belong to any step". The coverage here is indentation
+// and header matching, which a closed row keeps.
+test("GaugeRenameProvider keeps indented table step identity", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
     "* Pay with account",
-    "  | id",
+    "  | id |",
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const kotlinDocument = createDocument([
     "import com.thoughtworks.gauge.Step",

@@ -157,7 +157,7 @@
   },
   {
     "label": "unicode",
-    "text": "# 概念 <値>\n* a\n",
+    "text": "# \u6982\u5ff5 <\u5024>\n* a\n",
     "parserErrors": []
   },
   {
@@ -260,6 +260,25 @@
   {
     "label": "two tables blank between",
     "text": "# C\n* a\n|x|\n|-|\n|1|\n\n|y|\n|-|\n|2|\n",
+    "parserErrors": [
+      "Table doesn't belong to any step"
+    ]
+  },
+  {
+    "label": "unclosed table alone",
+    "text": "# Shared checkout\n\n|table\n\n* Confirm order\n",
+    "parserErrors": []
+  },
+  {
+    "label": "closed table alone",
+    "text": "# Shared checkout\n\n|table|\n\n* Confirm order\n",
+    "parserErrors": [
+      "Table doesn't belong to any step"
+    ]
+  },
+  {
+    "label": "bare pipe alone",
+    "text": "# Shared checkout\n\n|\n\n* Confirm order\n",
     "parserErrors": [
       "Table doesn't belong to any step"
     ]

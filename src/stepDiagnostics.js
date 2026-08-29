@@ -3914,8 +3914,7 @@ function gaugeDataDir(options = {}) {
 }
 
 function isInlineTableLine(line) {
-  const text = String(line || "").trim();
-  return text.startsWith("|");
+  return isGaugeTableRowLine(line);
 }
 
 // Gauge's lexer emits no token for a blank line following a step
@@ -3937,8 +3936,7 @@ function inlineTableLineAfterStep(lines, endLine) {
 
 
 function isGaugeTableRow(line) {
-  const text = String(line || "").trim();
-  return text.startsWith("|") && text.endsWith("|");
+  return isGaugeTableRowLine(line);
 }
 
 function gaugeTableCells(line) {
@@ -4007,9 +4005,7 @@ function isScenarioLegacyUnderline(line) {
 // references/gauge/parser/lex.go isTableRow requires BOTH a leading and a
 // trailing "|", so "| id | name" with the closing pipe forgotten is a comment
 // and an underline below it promotes it to a heading.
-function isGaugeTableRowLine(text) {
-  return text.length > 1 && text.startsWith("|") && text.endsWith("|");
-}
+
 
 function isGaugeHashHeadingLine(line) {
   const text = String(line || "").trim();
@@ -5806,7 +5802,7 @@ function conceptStepDynamicParameterDiagnostics(vscode, text) {
 }
 
 function isTopLevelTableLine(line) {
-  return String(line || "").startsWith("|") && isInlineTableLine(line);
+  return String(line || "").startsWith("|") && isGaugeTableRowLine(line);
 }
 
 function conceptTableDiagnostics(vscode, text) {
@@ -8866,6 +8862,7 @@ const {
   isWorkspaceStepImplementationScanComplete,
   markWorkspaceStepImplementationScanComplete,
 } = require("./workspaceDocumentStore");
+const { isGaugeTableRowLine } = require("./gaugeHeadings");
 
 const JAVA_FILE_PATTERN = /\.java$/i;
 // A Kotlin script is not a step implementation source: gauge-java builds its

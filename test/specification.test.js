@@ -427,6 +427,54 @@ test("createConcept accepts any folder when gauge_concepts_dir is unset", async 
   assert.deepEqual([...writes.keys()], ["/workspace/shop/concepts/Shared checkout.cpt"]);
 });
 
+// The Explorer folder resolves to "the root that contains it", picked from the
+// known projects or, when the language server has not started, from the
+// workspace FOLDERS. For a Gauge project nested at /workspace/e2e inside folder
+// /workspace, gauge_specs_dir was then resolved relative to /workspace, so the
+// project's own specs/ directory was rejected. Only a real manifest owner can be
+// judged against.
+test("createSpecification writes into a nested project's own spec directory", async () => {
+  const { createSpecification } = require("../src/specification");
+  const writes = new Map();
+  const errors = [];
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/workspace" } }],
+      getConfiguration: () => ({ get: () => false }),
+      openTextDocument: async (filename) => ({ filename }),
+    },
+    window: {
+      showQuickPick: async () => undefined,
+      showInputBox: async () => "Checkout",
+      showTextDocument: async () => {},
+      showErrorMessage(message) {
+        errors.push(message);
+      },
+    },
+  };
+
+  await createSpecification({
+    vscode,
+    fileSystem: {
+      existsSync: (file) => file === "/workspace/e2e/manifest.json",
+      promises: {
+        async mkdir() {},
+        async writeFile(filename, content) {
+          writes.set(filename, content);
+        },
+      },
+    },
+    pathModule: path.posix,
+    eol: "\n",
+    date: "2026-06-26",
+    user: "Ada",
+    specDir: "/workspace/e2e/specs",
+  });
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual([...writes.keys()], ["/workspace/e2e/specs/Checkout.spec"]);
+});
+
 test("createSpecification asks for project and spec directory when multiple choices exist", async () => {
   const { createSpecification } = require("../src/specification");
   const writes = new Map();

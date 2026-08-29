@@ -1133,6 +1133,10 @@ test("GaugeSemanticTokensProvider tokenizes indented top-level table markers", (
   ]);
 });
 
+// Colouring runs on every keystroke, while the row is still being typed and its
+// closing "|" does not exist yet, so this provider deliberately uses a looser
+// rule than the parser's isGaugeTableRowLine. The strict rule governs step
+// VALUES - what F12 resolves and what the quick fix generates - not highlighting.
 test("GaugeSemanticTokensProvider tokenizes table rows without closing pipes", () => {
   const {
     GaugeSemanticTokensProvider,

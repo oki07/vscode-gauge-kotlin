@@ -377,11 +377,19 @@ class WorkspaceDocumentStore {
     const knownBefore = new Map(
       [...this.diskDocuments.keys()].map((file) => [file, this.fileGenerations.get(file)]),
     );
-    let uris = [];
+    let uris;
     try {
       uris = (await workspace.findFiles(WORKSPACE_DOCUMENT_GLOB)) || [];
     } catch (_error) {
-      uris = [];
+      // A search that failed is not a listing of "no files". Reconciling against
+      // it would delete the whole index and then call it authoritative, so every
+      // step in the project would read as undefined until something else
+      // changed. Keep what is already known, and leave the scan INCOMPLETE: the
+      // folder that triggered this rescan really has not been read, and
+      // consumers suppress rather than accuse when the index is not
+      // authoritative.
+      this.cachedDocuments = undefined;
+      return;
     }
     if (this.disposed || !this.isCurrentScanGeneration(generation)) {
       return;

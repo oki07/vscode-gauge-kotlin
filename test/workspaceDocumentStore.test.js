@@ -252,6 +252,39 @@ test("WorkspaceDocumentStore lets the newest scan win when two overlap", async (
   );
 });
 
+// The reconciliation pass deletes every entry findFiles did not return, so a
+// findFiles that REJECTS - and is caught into an empty list - wipes the whole
+// index and then marks the scan complete. Every consumer treats the empty index
+// as authoritative and reports every step in the project undefined, and only a
+// later workspace-folder change restores it.
+test("WorkspaceDocumentStore keeps its index when a rescan cannot list files", async () => {
+  const { WorkspaceDocumentStore, isWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const files = {
+    "/ws/specs/login.spec": "# Login\n",
+    "/ws/src/Steps.kt": "package steps\n",
+  };
+  const { vscode, state } = createFakeVscode({ files: Object.keys(files) });
+  const store = new WorkspaceDocumentStore({
+    fileSystem: createFakeFileSystem(files),
+    vscode,
+  });
+
+  await store.start();
+  assert.equal(store.documents().length, 2);
+
+  vscode.workspace.findFiles = async () => {
+    throw new Error("EPERM: file search failed");
+  };
+  await state.listeners.folders[0]({ added: [{ uri: { fsPath: "/added" } }], removed: [] });
+
+  assert.deepEqual(
+    store.documents().map((entry) => entry.uri.fsPath).sort(),
+    ["/ws/specs/login.spec", "/ws/src/Steps.kt"],
+  );
+  // A scan that could not list anything is not an authoritative listing.
+  assert.equal(isWorkspaceStepImplementationScanComplete(store.documents()), false);
+});
+
 // The initial findFiles runs once at start(). A folder added to the workspace
 // afterwards brings existing specs and Kotlin sources with it, and the file
 // system watcher only reports create/change/delete, so those files stayed

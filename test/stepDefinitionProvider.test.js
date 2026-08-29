@@ -505,6 +505,38 @@ test("GaugeStepDefinitionProvider resolves static and dynamic argument spec step
 });
 
 // Indentation does not stop the row being the step's table.
+// references/gauge/parser/lex.go isTableRow is text[0] == '|' && text[len-1] ==
+// '|', which a lone "|" satisfies: both indices are the same character. The
+// closing-pipe fix added a length > 1 condition the reference does not have,
+// which dropped the table from a step whose header row is a bare "|". Probed:
+// a "|" row followed by "|<bad>|" warns "Treating it as static param", so the
+// table is parsed with the bare pipe as its header.
+test("stepTextAt attaches a table whose row is a bare pipe", () => {
+  const { stepTextAt } = require("../src/stepDefinitionProvider");
+  const lines = [
+    "# Checkout",
+    "## Buy",
+    "* Pay the total amount",
+    "|",
+    "|1|",
+  ];
+  const document = {
+    languageId: "gauge",
+    uri: { fsPath: "/workspace/gauge/specs/checkout.spec" },
+    get lineCount() {
+      return lines.length;
+    },
+    lineAt(line) {
+      return { text: lines[line] };
+    },
+    getText() {
+      return lines.join("\n");
+    },
+  };
+
+  assert.equal(stepTextAt(document, { line: 2 }), "Pay the total amount {}");
+});
+
 test("GaugeStepDefinitionProvider resolves indented table steps", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

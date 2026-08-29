@@ -9,6 +9,7 @@ const {
   UNDEFINED_STEP_MESSAGE,
 } = require("./stepDiagnostics");
 const { allowMultilineStep } = require("./stepDefinitionProvider");
+const { isGaugeTableRowLine } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const CREATE_CONCEPT_TITLE = "Create concept";
@@ -141,7 +142,7 @@ function projectLanguage(document, projectFactory) {
 // opening one, so "|name" is a comment and attaches no table to the step.
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.length > 1 && text.startsWith("|") && text.endsWith("|");
+  return isGaugeTableRowLine(text);
 }
 
 // Gauge's lexer emits no token for a blank line following a step

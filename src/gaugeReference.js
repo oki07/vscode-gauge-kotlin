@@ -47,6 +47,7 @@ const {
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate, stepTextAt } = require("./stepDefinitionProvider");
+const { isGaugeTableRowLine } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
 
 function getVscode(vscode) {
@@ -595,7 +596,7 @@ function gaugeStepMarker(line) {
 // opening one, so "|name" is a comment and attaches no table to the step.
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.length > 1 && text.startsWith("|") && text.endsWith("|");
+  return isGaugeTableRowLine(text);
 }
 
 // Gauge's lexer emits no token for a blank line following a step

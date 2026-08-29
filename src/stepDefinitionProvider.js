@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
+const { isGaugeTableRowLine } = require("./gaugeHeadings");
 
 const {
   GaugeStepDiagnosticsProvider,
@@ -186,7 +187,7 @@ function documentLineCount(document) {
 // opening one, so "|name" is a comment and attaches no table to the step.
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.length > 1 && text.startsWith("|") && text.endsWith("|");
+  return isGaugeTableRowLine(text);
 }
 
 // Gauge's lexer emits no token for a blank line following a step

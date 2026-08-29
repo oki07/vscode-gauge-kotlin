@@ -5737,6 +5737,32 @@ test("GaugeStepDiagnosticsProvider still warns when a comment splits two data ta
   );
 });
 
+// The closing-pipe rule reached the definition, reference and code-action
+// providers but not this one, so a step followed by "|a" resolved here to
+// "pay the total amount {}" while the quick fix generated @Step("Pay the total
+// amount"). Applying the offered fix then left "Undefined Step" on the line
+// permanently. The real parser sides with the quick fix: with no closing pipe
+// the row is a comment and the step takes no table.
+test("GaugeStepDiagnosticsProvider agrees with the quick fix on an unclosed table row", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "## Buy",
+    "* Pay the total amount",
+    "|a",
+    "|1",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Pay the total amount\")",
+    "fun pay() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
 test("GaugeStepDiagnosticsProvider warns on unresolved Gauge table row dynamic parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
@@ -6432,7 +6458,8 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
     [
       "Undefined Step",
       "Undefined Step",
-      "Undefined Step",
+      // "  | id" has no closing pipe, so it is a comment and "Confirm order"
+      // takes no table - the @Step above matches it and the step is defined.
       "Step should not be blank",
       "Dynamic parameter <amount> could not be resolved",
     ],
@@ -6441,12 +6468,12 @@ test("GaugeStepDiagnosticsProvider reports undefined Gauge steps", () => {
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 19 });
   assert.deepEqual({ ...diagnostics[1].range.start }, { line: 3, character: 2 });
   assert.deepEqual({ ...diagnostics[1].range.end }, { line: 3, character: 14 });
-  assert.deepEqual({ ...diagnostics[2].range.start }, { line: 4, character: 0 });
-  assert.deepEqual({ ...diagnostics[2].range.end }, { line: 4, character: 15 });
-  // Index 4 is now the dynamic parameter diagnostic: the "** Markdown bullet"
-  // line no longer produces an Undefined Step.
-  assert.deepEqual({ ...diagnostics[4].range.start }, { line: 2, character: 0 });
-  assert.deepEqual({ ...diagnostics[4].range.end }, { line: 2, character: 19 });
+  // "* Confirm order" at line 4 is no longer undefined, so index 2 is now the
+  // blank step at line 7 and index 3 the dynamic parameter. "** Markdown bullet"
+  // is a comment and produces nothing either way.
+  assert.deepEqual({ ...diagnostics[2].range.start }, { line: 7, character: 0 });
+  assert.deepEqual({ ...diagnostics[3].range.start }, { line: 2, character: 0 });
+  assert.deepEqual({ ...diagnostics[3].range.end }, { line: 2, character: 19 });
 });
 
 test("GaugeStepDiagnosticsProvider resolves multiline Gauge steps when project allows them", () => {
@@ -7825,13 +7852,18 @@ test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => 
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 7 });
 });
 
-test("GaugeStepDiagnosticsProvider reports concept tables without closing pipes outside steps", () => {
+// Probed with parser.AddConcepts + ValidateConcepts: "|table" reports nothing,
+// "|table|" and a bare "|" both report "Table doesn't belong to any step". An
+// unclosed row is not a table, so the error belongs to the closed shapes. Pinned
+// in test/fixtures/concept-parity.json as "unclosed table alone",
+// "closed table alone" and "bare pipe alone".
+test("GaugeStepDiagnosticsProvider reports concept tables outside steps", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
   const conceptDocument = createDocument([
     "# Shared checkout",
     "",
-    "|table",
+    "|table|",
     "",
     "* Confirm order",
   ].join("\n"), "plaintext", "/workspace/gauge/specs/concepts/shared.cpt");
@@ -7852,7 +7884,7 @@ test("GaugeStepDiagnosticsProvider reports concept tables without closing pipes 
     ],
   );
   assert.deepEqual({ ...diagnostics[0].range.start }, { line: 2, character: 0 });
-  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 6 });
+  assert.deepEqual({ ...diagnostics[0].range.end }, { line: 2, character: 7 });
 });
 
 test("GaugeStepDiagnosticsProvider reports circular concept references", () => {

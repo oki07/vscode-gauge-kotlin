@@ -1,6 +1,7 @@
 "use strict";
 
 const { offsetAt: indexedOffsetAt } = require("./documentPosition");
+const { isGaugeTableRowLine } = require("./gaugeHeadings");
 
 const {
   findConceptHeadings,
@@ -170,7 +171,7 @@ function documentLines(document) {
 
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
-  return text.startsWith("|");
+  return isGaugeTableRowLine(text);
 }
 
 // Gauge's lexer emits no token for a blank line following a step

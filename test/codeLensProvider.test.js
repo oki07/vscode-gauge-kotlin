@@ -732,7 +732,12 @@ test("GaugeCodeLensProvider counts multiline step references when project allows
   }
 });
 
-test("GaugeCodeLensProvider counts table references without closing pipes", async () => {
+// references/gauge/parser/lex.go isTableRow needs a closing "|" as well as an
+// opening one, probed twice: a spec row without it reports nothing where a
+// closed row warns, and in a concept "|table" reports nothing where "|table|"
+// reports "Table doesn't belong to any step". The coverage here is indentation
+// and header matching, which a closed row keeps.
+test("GaugeCodeLensProvider counts indented table references", async () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const document = createDocument([
     "import com.thoughtworks.gauge.Step",
@@ -743,7 +748,7 @@ test("GaugeCodeLensProvider counts table references without closing pipes", asyn
   const specDocument = createDocument([
     "# Compare",
     "* Compare",
-    "  | name",
+    "  | name |",
   ].join("\n"));
   const provider = new GaugeCodeLensProvider({
     vscode: createFakeVscode({
