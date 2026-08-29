@@ -7244,6 +7244,78 @@ test("GaugeStepDiagnosticsProvider treats a Markdown bold line as a comment", ()
 // the real parser answers ok=false with "Dynamic parameter <> could not be
 // resolved". Dropping it left the whole specification looking clean while
 // `gauge run` never got past parsing.
+// Gauge trims only the special TYPE (references/gauge/parser/resolver.go resolve
+// calls strings.TrimSpace on the match), never the dynamic name. Verified against
+// the real parser: "< foo >" does NOT resolve against a table header "foo" and is
+// reported with its spacing intact, while "<foo>" resolves.
+test("GaugeStepDiagnosticsProvider keeps a dynamic parameter exactly as written", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const implementation = createDocument([
+    "@Step(\"say <x>\")",
+    "fun say(x: String) {}",
+  ].join("\n"));
+
+  const spaced = createDocument([
+    "# S",
+    "|foo|",
+    "|---|",
+    "|1  |",
+    "",
+    "## Sc",
+    "* say < foo >",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/a.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(spaced, [spaced, implementation])
+      .map((diagnostic) => diagnostic.message),
+    ["Dynamic parameter < foo > could not be resolved"],
+  );
+
+  const exact = createDocument([
+    "# S",
+    "|foo|",
+    "|---|",
+    "|1  |",
+    "",
+    "## Sc",
+    "* say <foo>",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/b.spec");
+  assert.deepEqual(
+    provider.provideDiagnostics(exact, [exact, implementation])
+      .map((diagnostic) => diagnostic.message),
+    [],
+  );
+});
+
+// A second spec heading already fails the file, and the real parser reports
+// nothing more about the tables under it.
+test("GaugeStepDiagnosticsProvider stops table checks after a second spec heading", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# S",
+    "|a|",
+    "|-|",
+    "|1|",
+    "",
+    "# T",
+    "|b|",
+    "",
+    "## Sc",
+    "* a",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/a.spec");
+  const implementation = createDocument([
+    "@Step(\"a\")",
+    "fun a() {}",
+  ].join("\n"));
+
+  assert.deepEqual(
+    provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message),
+    ["Multiple spec headings found in same file"],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider reports an empty dynamic parameter", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

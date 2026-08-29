@@ -4245,6 +4245,12 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       || (isLegacyHeadingText(rawLine) && isSpecLegacyUnderline(nextLine));
     if (specHeading) {
       flushPendingDataTable();
+      // A second spec heading already fails the file with "Multiple spec
+      // headings found in same file", and the real parser reports nothing more
+      // about the tables under it.
+      if (hasSpecHeading) {
+        return diagnostics;
+      }
       hasSpecHeading = true;
       inScenario = false;
       sawDataTable = false;
@@ -4789,11 +4795,14 @@ function dynamicStepParameters(text) {
     if (closeIndex === -1) {
       return parameters;
     }
-    // An empty <> is still a parameter to Gauge and its lookup fails, so it must
-    // not be dropped: the real parser answers "Dynamic parameter <> could not be
-    // resolved" (references/gauge/parser/stepParser.go).
-    const parameter = text.slice(openIndex + 1, closeIndex).trim();
-    if (!SPECIAL_PARAMETER_PATTERN.test(parameter)) {
+    // Keep the parameter exactly as written. Gauge trims only the special TYPE
+    // (references/gauge/parser/resolver.go resolve calls strings.TrimSpace on the
+    // match), never the dynamic name: verified against the real parser, where
+    // "< foo >" does not resolve against a table header "foo" and is reported as
+    // "Dynamic parameter < foo > could not be resolved". An empty <> is still a
+    // parameter whose lookup fails, so it must not be dropped either.
+    const parameter = text.slice(openIndex + 1, closeIndex);
+    if (!SPECIAL_PARAMETER_PATTERN.test(parameter.trim())) {
       parameters.push(parameter);
     }
     openIndex = findDynamicParameterStart(text, closeIndex + 1);
