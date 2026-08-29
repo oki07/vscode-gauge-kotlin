@@ -543,11 +543,21 @@ function scenarioInfo(item, filename) {
   let id = scenario.id || `${filename}:${scenario.span ? scenario.span.start : 0}`;
   let name = scenario.heading || id;
   if (table && (table.isScenarioTableDriven || table.isSpecTableDriven)) {
-    const row = table.isScenarioTableDriven
-      ? table.scenarioTableRowIndex
-      : table.tableRowIndex;
-    id = `${id}_${row + 1}`;
-    name = `${name}_${row + 1}`;
+    // A nested run is N_spec x N_scenario executions and the proto carries both
+    // indices (references/gauge/execution/result/specResult.go sets
+    // IsSpecTableDriven and, for a nested scenario, IsScenarioTableDriven with
+    // ScenarioTableRowIndex). Keying on one of them collapsed the other's rows
+    // onto each other and half the results were overwritten.
+    const rows = [];
+    if (table.isSpecTableDriven) {
+      rows.push((table.tableRowIndex || 0) + 1);
+    }
+    if (table.isScenarioTableDriven) {
+      rows.push((table.scenarioTableRowIndex || 0) + 1);
+    }
+    const suffix = rows.join("_");
+    id = `${id}_${suffix}`;
+    name = `${name}_${suffix}`;
   }
   return { id, name, scenario };
 }

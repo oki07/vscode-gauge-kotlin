@@ -116,6 +116,52 @@ function tableScenarioItem(heading, line, rowIndex) {
   return message(fieldVarint(1, 4), fieldBytes(5, tableScenario));
 }
 
+// A nested table run is N_spec x N_scenario executions and the proto carries both
+// indices (references/gauge/execution/result/specResult.go sets
+// IsSpecTableDriven and, for a nested scenario, IsScenarioTableDriven with
+// ScenarioTableRowIndex). Keying on the scenario index alone collapsed the spec
+// rows onto each other, so half the results were overwritten - and when the
+// failures arrived first every surviving item ended green while Gauge exited
+// non-zero.
+test("last run result keeps nested table rows distinct", () => {
+  const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
+  const filename = "/workspace/specs/nested.spec";
+  const nestedItem = (specRow, scenarioRow) => {
+    const scenario = message(
+      fieldBytes(1, "Row"),
+      fieldVarint(8, 7),
+      fieldBytes(13, fieldVarint(1, 8)),
+      fieldVarint(14, 1),
+    );
+    // Field numbers per decodeTableDrivenScenario in the product:
+    // 1 scenario, 2 tableRowIndex, 3 scenarioTableRowIndex,
+    // 4 isSpecTableDriven, 5 isScenarioTableDriven.
+    const tableScenario = message(
+      fieldBytes(1, scenario),
+      fieldVarint(2, specRow),
+      fieldVarint(3, scenarioRow),
+      fieldVarint(4, 1),
+      fieldVarint(5, 1),
+    );
+    return message(fieldVarint(1, 4), fieldBytes(5, tableScenario));
+  };
+  const spec = message(
+    fieldBytes(1, "Nested"),
+    fieldBytes(2, nestedItem(0, 0)),
+    fieldBytes(2, nestedItem(0, 1)),
+    fieldBytes(2, nestedItem(1, 0)),
+    fieldBytes(2, nestedItem(1, 1)),
+    fieldBytes(6, filename),
+  );
+  const suiteResult = fieldBytes(1, message(fieldBytes(1, spec)));
+
+  const ids = executionEventsFromLastRunResult(suiteResult)
+    .filter((event) => event.type === "testFinished")
+    .map((event) => event.id);
+
+  assert.equal(new Set(ids).size, 4, JSON.stringify(ids));
+});
+
 test("last run result maps Gauge protobuf scenarios and hook failures to leaf events", () => {
   const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
   const filename = "/workspace/specs/example.spec";
