@@ -478,5 +478,36 @@
         "message": "Dynamic parameter <h> could not be resolved"
       }
     ]
+  },
+  {
+    "label": "two table driven scenarios",
+    "text": "# Spec\n\n## S1\n\n|x|y|\n|-|-|\n|1|2|\n\n* say <x>\n\n## S2\n\n|x|y|\n|-|-|\n|3|4|\n\n* say <x>\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "context step then table scenario",
+    "text": "# Spec\n\n* a\n\n## Sc\n\n|x|y|\n|-|-|\n|1|2|\n\n* say <x>\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "comment between step and table",
+    "text": "# Spec\n* a\nsome comment\n|h|\n\n## Sc\n* a\n",
+    "parserErrors": [
+      "Data table should have at least 1 data row"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 4,
+        "message": "Data table should have at least 1 data row"
+      }
+    ]
+  },
+  {
+    "label": "tags between step and table",
+    "text": "# Spec\n* a\ntags: t\n|h|\n\n## Sc\n* a\n",
+    "parserErrors": [],
+    "parserErrorLines": []
   }
 ]

@@ -4353,6 +4353,13 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
     if (!isGaugeTableRow(rawLine)) {
       flushPendingDataTable();
       inStepTable = false;
+      // A comment ends the attachment, so the next table is the
+      // specification's; a blank line or a tags line does not. Verified against
+      // the real parser: a comment between a step and a header-only table gives
+      // "Data table should have at least 1 data row", a tags line gives nothing.
+      if (rawLine.trim() && !isGaugeTagKeywordLine(rawLine.trim())) {
+        stepTablePending = false;
+      }
       continue;
     }
     if (stepTablePending) {
@@ -5080,10 +5087,17 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
       // A table below a step is that step's argument, and a table before the
       // spec heading belongs to no specification, so neither supplies the
       // dynamic parameters for later steps.
-      if (!inTableBlock && hasSpecHeading && !specHasStep) {
+      if (!inTableBlock && hasSpecHeading) {
         if (!inScenario) {
-          addTableHeaders(specHeaders, rawLine);
+          // A spec-level step's table is that step's argument, not the
+          // specification's.
+          if (!specHasStep) {
+            addTableHeaders(specHeaders, rawLine);
+          }
         } else if (!scenarioHasStep) {
+          // A scenario has its own table regardless of what came before it: a
+          // scenario heading resets the step scope
+          // (references/gauge/parser/convert.go).
           addTableHeaders(scenarioHeaders, rawLine);
         }
       }
@@ -5096,7 +5110,7 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
       continue;
     }
     scenarioHasStep = scenarioHasStep || inScenario;
-    specHasStep = true;
+    specHasStep = specHasStep || !inScenario;
     // A step above the spec heading belongs to no specification and the real
     // parser reports nothing for it.
     if (!hasSpecHeading) {
@@ -9026,6 +9040,7 @@ class GaugeStepDiagnosticsProvider {
     this.storeStepUsageCache = new Map();
     this.lastDiagnosisKeys = new Map();
     this.publishedLines = new Map();
+    this.recomputedLines = new Map();
     this.rootGenerations = new Map();
     this.fullGeneration = 0;
     this.pendingChanges = undefined;
@@ -9869,6 +9884,7 @@ class GaugeStepDiagnosticsProvider {
         collection.delete(document.uri);
       }
       this.publishedLines.delete(documentPath(document));
+      this.recomputedLines.delete(documentPath(document));
       return;
     }
     const diagnostics = this.provideDiagnostics(document, workspaceDocuments);
@@ -9931,9 +9947,20 @@ class GaugeStepDiagnosticsProvider {
     return entry.lines.get(String(message || "")) || new Set();
   }
 
+  // Memoized per document version. The language client filters the daemon's
+  // diagnostics one at a time, and twice for a missing-implementation one, so
+  // without this a single publish cost 2N full analyses - hundreds of
+  // milliseconds of extension host blocking on every keystroke, since the daemon
+  // republishes on every textDocument/didChange
+  // (references/gauge/api/lang/document.go).
   currentDiagnosticLines(document) {
     if (!this.documentStore || typeof this.documentStore.documents !== "function") {
       return undefined;
+    }
+    const file = documentPath(document);
+    const cached = this.recomputedLines.get(file);
+    if (cached && cached.version === document.version) {
+      return cached.lines;
     }
     let diagnostics;
     try {
@@ -9953,6 +9980,7 @@ class GaugeStepDiagnosticsProvider {
       }
       lines.get(message).add(start.line);
     }
+    this.recomputedLines.set(file, { lines, version: document.version });
     return lines;
   }
 
@@ -10331,6 +10359,7 @@ class GaugeStepDiagnosticsProvider {
         if (file) {
           this.lastDiagnosisKeys.delete(file);
           this.publishedLines.delete(file);
+          this.recomputedLines.delete(file);
         }
       });
       if (closeDisposable) {
@@ -10370,6 +10399,7 @@ class GaugeStepDiagnosticsProvider {
     this.storeStepUsageCache.clear();
     this.lastDiagnosisKeys.clear();
     this.publishedLines.clear();
+    this.recomputedLines.clear();
     this.rootGenerations.clear();
     this.lastDependencyGeneration = undefined;
 
