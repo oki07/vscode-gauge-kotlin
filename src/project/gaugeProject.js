@@ -24,6 +24,7 @@ class GaugeProject {
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.classpathDelimiter = options.pathDelimiter || pathDelimiter(this.pathModule);
+    this.platform = options.platform || process.platform;
     this.gaugeConfig = options.gaugeConfig || (
       options.gaugeConfigFactory
         ? options.gaugeConfigFactory()

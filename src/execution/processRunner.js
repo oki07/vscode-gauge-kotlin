@@ -78,6 +78,10 @@ function textWithLine(value) {
 
 // Returns the text a reader should see for this line, so the Test Results
 // panel can be fed the same filtered content as the output channel.
+// Returns the text to forward to the Test Results panel, which is only the text
+// no line processor will forward itself. MachineReadableEventProcessor is always
+// in the executor's list and maps every {"type":"out"} event to an output event,
+// so forwarding the decoded message from here too wrote the run log twice.
 function appendMachineReadableOutput(channel, lineText) {
   const event = parseMachineReadableEvent(lineText);
   if (!event) {
@@ -88,7 +92,6 @@ function appendMachineReadableOutput(channel, lineText) {
     const message = textWithLine(event.message || "");
     if (message) {
       channel.appendOutBuf(message);
-      return message;
     }
   }
   return "";

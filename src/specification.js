@@ -566,6 +566,13 @@ function isInsideProjectSpecDirs(pathModule, projectRoot, target, options, descr
   const directories = descriptor && descriptor.kind === "concept"
     ? configuredConceptDirs(scope)
     : configuredSpecDirs(scope);
+  // gauge_concepts_dir is unset in almost every project, and Gauge then reads
+  // concepts from the whole project root (references/gauge/util/fileUtils.go
+  // GetConceptFiles falls back to findConceptFiles([absProjRoot]) when
+  // GetConceptsPaths is empty), so every folder is a legitimate location.
+  if (!directories) {
+    return true;
+  }
   return directories.some((segments) => isInsideDirectory(
     pathModule,
     pathModule.join(projectRoot, segments.join(pathModule.sep || "/")),

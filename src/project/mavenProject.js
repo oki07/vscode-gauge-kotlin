@@ -7,7 +7,12 @@ const { BuildToolProject } = require("./buildToolProject");
 // gradlew over a system gradle; asking the CLI for `mvn` unconditionally left
 // such a project unable to resolve its classpath, so every step read as
 // unimplemented.
-const MAVEN_WRAPPER_FILES = ["mvnw", "mvnw.cmd", "mvnw.bat"];
+// A wrapper install ships the POSIX script and the Windows launchers together,
+// so searching one flat list in order always picked "mvnw" on Windows and every
+// classpath resolution and pre-run build failed. CLI.getGradleCommand branches
+// on the platform for the same reason.
+const MAVEN_WRAPPER_FILES = ["mvnw"];
+const WINDOWS_MAVEN_WRAPPER_FILES = ["mvnw.cmd", "mvnw.bat"];
 
 class MavenProject extends BuildToolProject {
   mavenWrapperCommand() {
@@ -18,12 +23,15 @@ class MavenProject extends BuildToolProject {
     if (!pathModule || typeof pathModule.join !== "function") {
       return undefined;
     }
-    for (const filename of MAVEN_WRAPPER_FILES) {
+    const isWindows = this.platform === "win32";
+    const candidates = isWindows
+      ? [...WINDOWS_MAVEN_WRAPPER_FILES, ...MAVEN_WRAPPER_FILES]
+      : [...MAVEN_WRAPPER_FILES, ...WINDOWS_MAVEN_WRAPPER_FILES];
+    for (const filename of candidates) {
       try {
         if (this.fileSystem.existsSync(pathModule.join(this.root(), filename))) {
-          const isWindowsScript = filename !== "mvnw";
           return {
-            command: isWindowsScript ? filename : "./mvnw",
+            command: filename === "mvnw" && !isWindows ? "./mvnw" : filename,
             shellMode: true,
           };
         }

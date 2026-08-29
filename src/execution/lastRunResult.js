@@ -100,6 +100,13 @@ function isWire(wireType, expected) {
   return wireType === expected;
 }
 
+// TableRowIndex is a proto3 int32 (references/gauge-proto/spec.proto), so the
+// field is absent from the wire exactly when its value is 0 - which is the FIRST
+// data-table row. references/gauge/execution/result/result.go
+// GetProtoHookFailure writes -1 for a hook that belongs to no table, and only
+// references/gauge/execution/merge.go addHookFailure overwrites it with the real
+// row, so an absent field cannot be told from row 0 on its own. The enclosing
+// ProtoSpec's isTableDriven decides, and a suite hook is never table driven.
 function decodeHookFailure(buffer) {
   const hook = { errorMessage: "", stackTrace: "", tableRowIndex: -1 };
   decode(buffer, (field, wireType, reader) => {
@@ -338,11 +345,16 @@ function decodeSpec(buffer) {
     beforeHooks: [],
     filename: "",
     heading: "",
+    isTableDriven: false,
     items: [],
   };
   decode(buffer, (field, wireType, reader) => {
     if (field === 1 && isWire(wireType, 2)) {
       spec.heading = reader.readString();
+      return true;
+    }
+    if (field === 3 && isWire(wireType, 0)) {
+      spec.isTableDriven = reader.readInt32() !== 0;
       return true;
     }
     if (field === 2 && isWire(wireType, 2)) {
@@ -363,6 +375,15 @@ function decodeSpec(buffer) {
     }
     return false;
   });
+  // isTableDriven arrives before or after the hooks depending on field order, so
+  // resolve the absent-field case once the whole spec is decoded.
+  if (spec.isTableDriven) {
+    for (const hook of [...spec.beforeHooks, ...spec.afterHooks]) {
+      if (hook.tableRowIndex < 0) {
+        hook.tableRowIndex = 0;
+      }
+    }
+  }
   return spec;
 }
 

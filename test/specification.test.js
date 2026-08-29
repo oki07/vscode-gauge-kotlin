@@ -377,6 +377,56 @@ test("createSpecification refuses a folder outside the project spec dirs", async
   assert.match(errors[0], /Gauge does not read specifications from \/workspace\/shop\/src\/main\/kotlin\./);
 });
 
+// gauge_concepts_dir is unset in almost every project, and Gauge then reads
+// concept files from the whole project root
+// (references/gauge/util/fileUtils.go GetConceptFiles falls back to
+// findConceptFiles([absProjRoot]) when GetConceptsPaths is empty), so every
+// folder is a legitimate concept location. configuredConceptDirs answers
+// undefined for that case, which the spec-dir scope check must read as "the
+// whole project", not crash on.
+test("createConcept accepts any folder when gauge_concepts_dir is unset", async () => {
+  const { createConcept } = require("../src/specification");
+  const writes = new Map();
+  const errors = [];
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/workspace/shop" } }],
+      getConfiguration: () => ({ get: () => false }),
+      openTextDocument: async (filename) => ({ filename }),
+    },
+    window: {
+      showQuickPick: async () => undefined,
+      showInputBox: async () => "Shared checkout",
+      showTextDocument: async () => {},
+      showErrorMessage(message) {
+        errors.push(message);
+      },
+    },
+  };
+
+  await createConcept({
+    vscode,
+    fileSystem: {
+      existsSync: () => false,
+      promises: {
+        async mkdir() {},
+        async writeFile(filename, content) {
+          writes.set(filename, content);
+        },
+      },
+    },
+    pathModule: path.posix,
+    eol: "\n",
+    date: "2026-06-26",
+    user: "Ada",
+    projects: ["/workspace/shop"],
+    specDir: "/workspace/shop/concepts",
+  });
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual([...writes.keys()], ["/workspace/shop/concepts/Shared checkout.cpt"]);
+});
+
 test("createSpecification asks for project and spec directory when multiple choices exist", async () => {
   const { createSpecification } = require("../src/specification");
   const writes = new Map();

@@ -909,6 +909,39 @@ test("MavenProject prefers the Maven Wrapper over a system Maven", () => {
   assert.deepEqual(calls.map((entry) => entry.command), ["./mvnw -q gauge:classpath"]);
 });
 
+// A Maven Wrapper install ships mvnw AND mvnw.cmd together, and the list was
+// searched in order, so Windows always picked the POSIX shell script and every
+// classpath resolution and pre-run build failed. CLI.getGradleCommand branches
+// on the platform for exactly this reason.
+test("MavenProject runs the Windows Maven Wrapper launcher on win32", () => {
+  const { MavenProject } = require("../src/project/mavenProject");
+  const calls = [];
+  const project = new MavenProject("/workspace/gauge", {
+    Language: "kotlin",
+    Plugins: [],
+  }, {
+    execSync(command, options) {
+      calls.push({ command, options });
+      return Buffer.from("C:\\workspace\\gauge\\target\\classes\n");
+    },
+    fileSystem: {
+      existsSync(filename) {
+        return filename === "/workspace/gauge/mvnw" || filename === "/workspace/gauge/mvnw.cmd";
+      },
+    },
+    pathModule: path.posix,
+    platform: "win32",
+  });
+
+  project.envs({
+    mavenCommand() {
+      return { command: "mvn" };
+    },
+  });
+
+  assert.deepEqual(calls.map((entry) => entry.command), ["mvnw.cmd -q gauge:classpath"]);
+});
+
 test("MavenProject falls back to a system Maven with no wrapper", () => {
   const { MavenProject } = require("../src/project/mavenProject");
   const calls = [];

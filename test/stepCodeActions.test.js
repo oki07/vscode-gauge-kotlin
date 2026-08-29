@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const test = require("node:test");
 
 function createFakeVscode() {
@@ -346,6 +347,62 @@ test("GaugeStepCodeActionProvider ignores Gauge LSP stub code outside step lines
   });
 
   assert.deepEqual(actions, []);
+});
+
+// A Kotlin Gauge project runs on the gauge-java runner, so its manifest says
+// "Language": "java" - the manifest can never tell Kotlin from Java. Deciding
+// the stub language from it made the Kotlin branch dead code and emitted
+// "public void implementation(Object arg0)" into every Kotlin project, which
+// does not compile there. The source layout is the signal that can tell them
+// apart.
+test("GaugeStepCodeActionProvider creates a Kotlin step implementation quick fix for Kotlin sources", () => {
+  const {
+    CREATE_STEP_IMPLEMENTATION_TITLE,
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({
+    fileSystem: {
+      existsSync(file) {
+        return file === "/workspace/gauge/src/test/kotlin";
+      },
+    },
+    pathModule: path.posix,
+    projectFactory: {
+      getGaugeRootFromFilePath() {
+        return "/workspace/gauge";
+      },
+      getProjectByFilepath() {
+        return {
+          language() {
+            return "java";
+          },
+        };
+      },
+      isGaugeProject() {
+        return true;
+      },
+    },
+    vscode,
+  });
+  const document = createDocument([
+    "# Checkout",
+    "* Pay with <amount>",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 19),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.deepEqual(actions[0].command.arguments, [
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+  ]);
 });
 
 test("GaugeStepCodeActionProvider creates a Java step implementation quick fix for Java projects", () => {

@@ -64,6 +64,44 @@ function classNameForFile(pathModule, implementationFilePath) {
 // class scaffolding. This mirrors the same two branches for Kotlin: fill an
 // empty file with a class, otherwise insert before the closing brace of the
 // last top-level declaration, which is where gauge-java puts it for Java.
+// Kotlin allows top-level functions and properties after the class, so "the last
+// line that is exactly } at column 0" is often a function's closing brace and
+// the stub lands inside its body, where the annotation is not a class member.
+// Track brace depth instead and keep the closing brace of the last top-level
+// class, interface or object - the member container gauge-java inserts into.
+const KOTLIN_TYPE_DECLARATION = /(^|\s)(class|interface|object)\s/;
+
+function lastTopLevelTypeClosingLine(lines) {
+  let depth = 0;
+  let openedType = false;
+  let closingLine;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (depth === 0 && KOTLIN_TYPE_DECLARATION.test(line)) {
+      openedType = true;
+    }
+    for (const character of line) {
+      if (character === "{") {
+        depth += 1;
+      } else if (character === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          if (openedType) {
+            closingLine = index;
+          }
+          openedType = false;
+        }
+      }
+    }
+    // A declaration with no body at all, such as "object Empty", closes on its
+    // own line without ever raising the depth.
+    if (depth === 0) {
+      openedType = false;
+    }
+  }
+  return closingLine;
+}
+
 function kotlinStubInsertion(existingText, stubCode, className) {
   const text = String(existingText || "");
   if (text.trim() === "") {
@@ -74,10 +112,9 @@ function kotlinStubInsertion(existingText, stubCode, className) {
     };
   }
   const lines = text.split(/\r?\n/);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (lines[index].trim() === "}" && !/^\s/.test(lines[index])) {
-      return { line: index, character: 0, newText: `\n${stubCode}\n` };
-    }
+  const closingLine = lastTopLevelTypeClosingLine(lines);
+  if (closingLine !== undefined) {
+    return { line: closingLine, character: 0, newText: `\n${stubCode}\n` };
   }
   const trailingNewline = text.endsWith("\n") ? "" : "\n";
   return {
@@ -1043,4 +1080,5 @@ class GenerateStubCommandProvider {
 
 module.exports = {
   GenerateStubCommandProvider,
+  kotlinStubInsertion,
 };

@@ -87,6 +87,53 @@ test("process runner creates its output channel only when it first runs", async 
   assert.deepEqual(disposed, []);
 });
 
+// MachineReadableEventProcessor is always in the executor's line processor list
+// and maps every {"type":"out"} event to an output event, so forwarding the
+// decoded text from here too wrote the whole run log to the Test Results panel
+// twice. A line that is NOT protocol JSON reaches no processor, so the runner
+// stays responsible for exactly those.
+test("process runner forwards machine-readable output once", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const channel = new FakeOutputChannel();
+  const forwarded = [];
+  const lines = [];
+  const child = createChildProcess();
+  const runner = createGaugeProcessRunner({
+    vscode: { window: { createOutputChannel: () => channel } },
+    pathModule: path.posix,
+    outputChannel: channel,
+    processOutputChunk(chunk) {
+      forwarded.push(chunk);
+    },
+    processOutputLine(line) {
+      lines.push(line);
+    },
+    spawn() {
+      return child;
+    },
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run", "--machine-readable", "specs"],
+    cwd: "/workspace",
+    forwardOutput: true,
+  });
+  child.stdout.emit("data", Buffer.from("{\"type\":\"out\",\"message\":\"hello from step\"}\n"));
+  child.stdout.emit("data", Buffer.from("plain stderr noise\n"));
+  child.emit("close", 0);
+  await run;
+
+  // The "out" event is the processor's to forward; the plain line is nobody
+  // else's, so the runner forwards that one.
+  assert.deepEqual(forwarded, ["plain stderr noise\n"]);
+  assert.deepEqual(lines, [
+    "{\"type\":\"out\",\"message\":\"hello from step\"}\n",
+    "plain stderr noise\n",
+  ]);
+  assert.equal(channel.lines.join("").includes("hello from step"), true);
+});
+
 test("process runner explains a spawn failure to a Test UI run", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();
@@ -677,7 +724,10 @@ test("process runner cancel kills the Windows parent before async tree lookup co
   assert.equal(outputChannel.lines.at(-1), "Run stopped by user.");
 });
 
-test("process runner forwards machine-readable runs to the test UI without raw JSON", async () => {
+// Raw protocol JSON must never reach the Test Results panel. The decoded text
+// does reach it, but through MachineReadableEventProcessor rather than from
+// here - forwarding it in both places wrote the run log twice.
+test("process runner keeps raw JSON out of the test UI", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();
   const outputChannel = new FakeOutputChannel();
@@ -707,5 +757,7 @@ test("process runner forwards machine-readable runs to the test UI without raw J
   child.emit("exit", 0);
   await run;
 
-  assert.deepEqual(forwarded, ["visible output\n"]);
+  assert.deepEqual(forwarded, []);
+  assert.equal(outputChannel.lines.join("").includes("visible output"), true);
+  assert.equal(outputChannel.lines.join("").includes("specStart"), false);
 });

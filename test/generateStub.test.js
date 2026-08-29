@@ -353,6 +353,36 @@ test("GenerateStubCommandProvider writes Kotlin stubs without Gauge LSP", async 
   );
 });
 
+// Kotlin allows top-level functions after the class, and the insertion point was
+// the last line that is exactly "}" at column 0 - which is that function's
+// closing brace. The stub landed INSIDE the function body, where the annotation
+// is not a class member and the file does not compile. gauge-java inserts into
+// the class for Java (StubImplementationCodeProcessor), and so must this.
+test("GenerateStubCommandProvider inserts into the class, not a trailing top-level function", () => {
+  const { kotlinStubInsertion } = require("../src/annotator/generateStub");
+  const text = [
+    "package steps",
+    "",
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class StepImplementation {",
+    "    @Step(\"an existing step\")",
+    "    fun existing() {",
+    "    }",
+    "}",
+    "",
+    "fun helper(): Int {",
+    "    return 1",
+    "}",
+    "",
+  ].join("\n");
+
+  const insertion = kotlinStubInsertion(text, "    @Step(\"a new step\")\n    fun implementation() {\n    }", "StepImplementation");
+
+  assert.equal(insertion.line, 8);
+  assert.equal(insertion.character, 0);
+});
+
 test("GenerateStubCommandProvider scaffolds a new Kotlin implementation file", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const appliedEdits = [];
@@ -561,10 +591,13 @@ test("GenerateStubCommandProvider avoids duplicate method names in selected Kotl
 
   assert.deepEqual(requests.map((entry) => entry.method), ["gauge/getImplFiles"]);
   assert.equal(appliedEdits.length, 1);
-  // The file has no top-level closing brace, so the stub is appended.
+  // The file declares no class, interface or object, only a top-level function.
+  // Inserting before that function's closing brace put the stub INSIDE its body,
+  // so with nothing to insert into the stub is appended instead. The file does
+  // not end with a newline, hence the extra one.
   assert.equal(
     appliedEdits[0].entries()[0][1][0].newText,
-    `\n${[
+    `\n\n${[
       "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")",
       "fun implementation1(arg0: Any) {",
       "}",

@@ -19,6 +19,7 @@ const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const JAVA_LANGUAGE = "java";
+const KOTLIN_LANGUAGE = "kotlin";
 const VALIDATE_DIAGNOSTIC_CODE = "gauge.validate";
 const VALIDATE_MISSING_IMPLEMENTATION_MESSAGE = "Step implementation not found";
 
@@ -431,6 +432,36 @@ class GaugeStepCodeActionProvider {
     this.projectFactory = options.projectFactory;
   }
 
+  // A Kotlin Gauge project runs on the gauge-java runner, so its manifest says
+  // "Language": "java" and cannot tell Kotlin from Java. Deciding the stub from
+  // it made the Kotlin branch unreachable and emitted Java into every Kotlin
+  // project. The source layout is the signal that can tell them apart; Kotlin is
+  // the default, since that is what this extension exists for.
+  stubLanguage(document) {
+    const language = projectLanguage(document, this.projectFactory);
+    if (language && language !== JAVA_LANGUAGE) {
+      return language;
+    }
+    const root = this.gaugeProjectRoot(document);
+    if (!root || !this.fileSystem || typeof this.fileSystem.existsSync !== "function") {
+      return language;
+    }
+    const has = (...segments) => {
+      try {
+        return this.fileSystem.existsSync(this.pathModule.join(root, ...segments));
+      } catch (_error) {
+        return false;
+      }
+    };
+    if (has("src", "test", "kotlin") || has("src", "main", "kotlin")) {
+      return KOTLIN_LANGUAGE;
+    }
+    if (has("src", "test", "java") || has("src", "main", "java")) {
+      return JAVA_LANGUAGE;
+    }
+    return language;
+  }
+
   // A Markdown file is a Gauge specification only inside the project's
   // configured gauge_specs_dir. The rule lives in src/gaugeSpecScope.js so every
   // provider gives the same answer for the same file.
@@ -506,7 +537,7 @@ class GaugeStepCodeActionProvider {
     const action = createCodeAction(this.vscode, CREATE_STEP_IMPLEMENTATION_TITLE);
     action.diagnostics = diagnostics;
     action.isPreferred = true;
-    const language = projectLanguage(document, this.projectFactory);
+    const language = this.stubLanguage(document);
     const code = suppliedCode || (language === JAVA_LANGUAGE
       ? javaStepStubCode(step.text, "implementation", step.implicitParameterCount)
       : stepStubCode(
