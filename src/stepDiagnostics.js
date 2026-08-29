@@ -4277,6 +4277,8 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
   // file, while each scenario may have its own.
   let sawSpecDataTable = false;
   let sawScenarioDataTable = false;
+  let stepTablePending = false;
+  let inStepTable = false;
   let pendingDataTable;
   const flushPendingDataTable = () => {
     if (pendingDataTable && !pendingDataTable.hasDataRow) {
@@ -4319,6 +4321,8 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
         inScenario = false;
       }
       hasSpecHeading = true;
+      stepTablePending = false;
+      inStepTable = false;
       continue;
     }
 
@@ -4328,10 +4332,37 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       flushPendingDataTable();
       inScenario = true;
       sawScenarioDataTable = false;
+      stepTablePending = false;
+      inStepTable = false;
       continue;
     }
 
-    if (!hasSpecHeading || inScenario || !isGaugeTableRow(rawLine)) {
+    // A table below a step is that step's argument, not the specification's data
+    // table, and a table before the spec heading is not one either. Claiming one
+    // put the squiggle on the wrong table and then skipped the real one as
+    // already seen.
+    // The first table block below a step is that step's argument; a later block
+    // is the specification's data table. Claiming the step's table put the
+    // squiggle on the wrong one and then skipped the real one as already seen.
+    if (isGaugeStepLine(rawLine)) {
+      flushPendingDataTable();
+      stepTablePending = true;
+      inStepTable = false;
+      continue;
+    }
+    if (!isGaugeTableRow(rawLine)) {
+      flushPendingDataTable();
+      inStepTable = false;
+      continue;
+    }
+    if (stepTablePending) {
+      stepTablePending = false;
+      inStepTable = true;
+    }
+    if (inStepTable) {
+      continue;
+    }
+    if (!hasSpecHeading || inScenario) {
       flushPendingDataTable();
       continue;
     }
@@ -4990,6 +5021,8 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
   const docStringLines = closedSpecDocStringLines(lines);
   let inScenario = false;
   let scenarioHasStep = false;
+  let specHasStep = false;
+  let hasSpecHeading = false;
   let inTableBlock = false;
 
   for (let line = 0; line < lines.length; line += 1) {
@@ -5011,6 +5044,8 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
       inScenario = false;
       scenarioHeaders = new Set();
       scenarioHasStep = false;
+      specHasStep = false;
+      hasSpecHeading = true;
       inTableBlock = false;
       continue;
     }
@@ -5042,7 +5077,10 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
     }
 
     if (isGaugeTableRow(rawLine)) {
-      if (!inTableBlock) {
+      // A table below a step is that step's argument, and a table before the
+      // spec heading belongs to no specification, so neither supplies the
+      // dynamic parameters for later steps.
+      if (!inTableBlock && hasSpecHeading && !specHasStep) {
         if (!inScenario) {
           addTableHeaders(specHeaders, rawLine);
         } else if (!scenarioHasStep) {
@@ -5058,6 +5096,12 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
       continue;
     }
     scenarioHasStep = scenarioHasStep || inScenario;
+    specHasStep = true;
+    // A step above the spec heading belongs to no specification and the real
+    // parser reports nothing for it.
+    if (!hasSpecHeading) {
+      continue;
+    }
     const availableParameters = new Set([...specHeaders, ...scenarioHeaders]);
     for (const parameter of dynamicStepParameters(rawLine)) {
       if (

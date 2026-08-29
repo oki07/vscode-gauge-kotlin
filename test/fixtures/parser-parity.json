@@ -446,5 +446,37 @@
     "text": "# Spec: one, two!\n\n## Sc?\n* a\n",
     "parserErrors": [],
     "parserErrorLines": []
+  },
+  {
+    "label": "context step table then spec table",
+    "text": "# Spec\n* a\n|x|\n|-|\n|1|\n\n|h|\n\n## Sc\n* a\n",
+    "parserErrors": [
+      "Data table should have at least 1 data row"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 7,
+        "message": "Data table should have at least 1 data row"
+      }
+    ]
+  },
+  {
+    "label": "step above spec heading",
+    "text": "* say <h>\n# Spec\n|h|\n|-|\n|1|\n\n## Sc\n* say <h>\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "table before spec heading",
+    "text": "|h|\n|-|\n|1|\n# Spec\n\n## Sc\n* say <h>\n",
+    "parserErrors": [
+      "Dynamic parameter <h> could not be resolved"
+    ],
+    "parserErrorLines": [
+      {
+        "line": 7,
+        "message": "Dynamic parameter <h> could not be resolved"
+      }
+    ]
   }
 ]
