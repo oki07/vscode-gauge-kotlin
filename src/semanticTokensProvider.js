@@ -4,6 +4,7 @@ const {
   closedDocStringLines,
   isGaugeHashHeading,
   isScenarioHashHeading,
+  isLegacyHeadingText: hasLegacyHeadingText,
 } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
@@ -208,8 +209,13 @@ function isTeardownIdentifierLine(line) {
   return /^_{3,}[ \t\f]*$/.test(String(line || "").trimStart());
 }
 
+// isLegacyHeadingText already applies Gauge's rule. Rejecting any line merely
+// CONTAINING "#", "*" or "|" also dropped legitimate concept headings such as
+// "Create issue #<id>" and "Multiply <a> * <b>" - probed, all three define a
+// concept, while a step line does not (it reports "Step is not defined inside a
+// concept heading").
 function isConceptLegacyUnderlineHeadingText(line) {
-  return line.trim().length > 0 && !/[#*|]/.test(line);
+  return hasLegacyHeadingText(line);
 }
 
 function isLegacyUnderlineHeadingStartLine(lines, lineNumber, conceptDocument) {

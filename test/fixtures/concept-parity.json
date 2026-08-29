@@ -282,5 +282,28 @@
     "parserErrors": [
       "Table doesn't belong to any step"
     ]
+  },
+  {
+    "label": "legacy heading with a hash in the text",
+    "text": "Create issue #<id>\n=====\n* a step\n",
+    "parserErrors": []
+  },
+  {
+    "label": "legacy heading with a star in the text",
+    "text": "Multiply <a> * <b>\n=====\n* a step\n",
+    "parserErrors": []
+  },
+  {
+    "label": "legacy heading with a pipe in the text",
+    "text": "Split <a> | <b>\n=====\n* a step\n",
+    "parserErrors": []
+  },
+  {
+    "label": "no legacy heading at all",
+    "text": "* only a step\n=====\n* a step\n",
+    "parserErrors": [
+      "Step is not defined inside a concept heading",
+      "Step is not defined inside a concept heading"
+    ]
   }
 ]

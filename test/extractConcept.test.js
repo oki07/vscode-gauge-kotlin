@@ -1238,7 +1238,12 @@ test("ExtractConceptCommandProvider formats selected table parameters like Gauge
   );
 });
 
-test("ExtractConceptCommandProvider formats table parameters without closing pipes", async () => {
+// A pipe line is a table row only when it CLOSES. Treating "|id|name" as one
+// pulled it out of the specification and into the new concept as the step's
+// inline table, where Gauge reads neither: probed, "|table" reports nothing
+// while "|table|" reports "Table doesn't belong to any step". The coverage here
+// is table PARAMETER formatting, which closed rows keep.
+test("ExtractConceptCommandProvider formats table parameters", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];
   const document = createDocument([
@@ -1246,10 +1251,10 @@ test("ExtractConceptCommandProvider formats table parameters without closing pip
     "",
     "## Success",
     "* Compare users",
-    "|id|name",
-    "|--|----",
-    "|1 |hello <foo>",
-    "|2 |bar",
+    "|id|name|",
+    "|--|----|",
+    "|1 |hello <foo>|",
+    "|2 |bar|",
     "* Done",
   ].join("\n"));
   const {

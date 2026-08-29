@@ -65,8 +65,10 @@ function hasLegacyHeadingText(line) {
   return isLegacyHeadingText(line);
 }
 
+// See the note in src/documentSymbolProvider.js: isLegacyHeadingText already
+// applies Gauge's rule, and the extra filter dropped real concept headings.
 function isConceptLegacyUnderlineHeadingText(line) {
-  return hasLegacyHeadingText(line) && !/[#*|]/.test(line);
+  return hasLegacyHeadingText(line);
 }
 
 function foldingMarkers(lines, options = {}) {

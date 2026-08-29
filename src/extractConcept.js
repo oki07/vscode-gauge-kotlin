@@ -1,6 +1,10 @@
 "use strict";
 
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+const {
+  isGaugeTableRowLine,
+  isLegacyHeadingText: hasLegacyHeadingText,
+} = require("./gaugeHeadings");
 
 // references/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
@@ -175,8 +179,12 @@ function tableStartLineAfterStep(document, startLine) {
   return undefined;
 }
 
+// A pipe line is a table row only when it CLOSES (see isGaugeTableRowLine).
+// Accepting the opening pipe alone made Extract to Concept pull "| id | name"
+// with the closing pipe forgotten out of the specification and into the new
+// concept as the step's inline table, where Gauge reads neither.
 function isTableLine(text) {
-  return /^\s*\|.*$/.test(text);
+  return isGaugeTableRowLine(text);
 }
 
 function isTableStartLine(text) {
@@ -411,8 +419,13 @@ function normalizeConceptHeading(input) {
   return normalizeConceptName(input).replace(/\s+/g, " ");
 }
 
+// isLegacyHeadingText already applies Gauge's rule. Rejecting any line merely
+// CONTAINING "#", "*" or "|" also dropped legitimate concept headings such as
+// "Create issue #<id>" and "Multiply <a> * <b>" - probed, all three define a
+// concept, while a step line does not (it reports "Step is not defined inside a
+// concept heading").
 function isConceptLegacyUnderlineHeadingText(line) {
-  return line.trim().length > 0 && !/[#*|]/.test(line);
+  return hasLegacyHeadingText(line);
 }
 
 function isConceptLegacyUnderline(lines, lineNumber) {

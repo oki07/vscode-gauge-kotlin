@@ -7,6 +7,7 @@ const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
 
 const {
   closedDocStringLines,
+  isGaugeDataTableKeywordLine,
   isGaugeTagKeywordLine,
   isLegacyHeadingText,
   isScenarioHashHeading,
@@ -956,13 +957,17 @@ function isGaugeSyntaxBoundary(line) {
   return !text
     || text.startsWith("*")
     || text.startsWith("#")
-    || text.toLowerCase().startsWith("tags:")
-    || text.toLowerCase().startsWith("tags :")
-    || DATA_TABLE_KEYWORD_PATTERN.test(text)
+    || isGaugeTagKeywordLine(text)
+    || isGaugeDataTableKeywordLine(text)
     || isTableLine(text)
     || isDocStringFenceLine(text)
-    || /^={3,}\s*$/.test(text)
-    || /^-{3,}\s*$/.test(text);
+    // A heading underline is one or more characters
+    // (references/gauge/parser/helper.go isUnderline), and the teardown marker
+    // ends the step too. Requiring three of each, and omitting the teardown
+    // branch, let a multi-line step swallow "____" and offer it as a completion.
+    || /^=+$/.test(text)
+    || /^-+$/.test(text)
+    || /^_{3,}\s*$/.test(text);
 }
 
 function dynamicArgumentsInLine(line, options = {}) {
