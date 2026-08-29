@@ -3986,6 +3986,10 @@ function isLegacyHeadingText(line) {
   const text = String(line || "").trim();
   return Boolean(text)
     && !isGaugeStepLine(text)
+    // A "#" or "##" line is already a heading token, so an underline below it
+    // does not promote it (references/gauge/parser/lex.go rewrites the previous
+    // token only when it is a comment).
+    && !isGaugeHashHeadingLine(text)
     && !isGaugeTableRowLine(text)
     && !isGaugeTagKeywordLine(text)
     && !/^table\s*:/i.test(text);
@@ -4028,6 +4032,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
   // diagnostic after it.
   const docStringLines = closedSpecDocStringLines(lines);
   let hasSpecElements = false;
+  let hasOnlyStepContent = true;
   let hasSpecHeading = false;
   let hasScenarioHeading = false;
   let hasEmptySpecHeading = false;
@@ -4046,6 +4051,9 @@ function duplicateScenarioDiagnostics(vscode, text) {
     }
     if (hasSpecHeading && rawLine.trim()) {
       hasSpecElements = true;
+    }
+    if (!hasSpecHeading && rawLine.trim() && !isGaugeStepLine(rawLine)) {
+      hasOnlyStepContent = false;
     }
 
     const nextLine = lines[line + 1] === undefined
@@ -4153,10 +4161,14 @@ function duplicateScenarioDiagnostics(vscode, text) {
     ));
   }
   if (!hasSpecHeading && firstContentRange) {
+    // A file whose only content is steps has no heading to promote, so Gauge
+    // answers "Spec does not have any elements" rather than "Spec heading not
+    // found". Verified against the real parser: "* a" alone gives the first
+    // message, while prose, a table or a tags line gives the second.
     diagnostics.unshift(createDiagnostic(
       vscode,
       firstContentRange,
-      SPEC_HEADING_NOT_FOUND_MESSAGE,
+      hasOnlyStepContent ? SPEC_EMPTY_MESSAGE : SPEC_HEADING_NOT_FOUND_MESSAGE,
     ));
   }
   if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading && !hasEmptyScenarioHeading) {
@@ -4266,8 +4278,13 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       // second heading carries a table it is still validated, and when the first
       // heading already has one the second is only warned about. So sawDataTable
       // must survive the heading.
+      // Gauge's specConverter rejects a second heading without touching the
+      // parser state (references/gauge/parser/convert.go), so the scenario scope
+      // survives it and a table below still belongs to that scenario.
+      if (!hasSpecHeading) {
+        inScenario = false;
+      }
       hasSpecHeading = true;
-      inScenario = false;
       continue;
     }
 
@@ -4917,6 +4934,12 @@ function unknownSpecialStepParameterDiagnostics(vscode, text) {
   return diagnostics;
 }
 
+// A table cell has its "\\|" unescaped by gaugeTableCells, so the parameter has to
+// be compared the same way or "<a\\|b>" never matches the header "a|b".
+function unescapedParameter(parameter) {
+  return String(parameter || "").replace(/\\(.)/g, "$1");
+}
+
 function addTableHeaders(target, rawLine) {
   for (const cell of gaugeTableCells(rawLine)) {
     if (cell) {
@@ -5003,7 +5026,10 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
     scenarioHasStep = scenarioHasStep || inScenario;
     const availableParameters = new Set([...specHeaders, ...scenarioHeaders]);
     for (const parameter of dynamicStepParameters(rawLine)) {
-      if (availableParameters.has(parameter)) {
+      if (
+        availableParameters.has(parameter)
+        || availableParameters.has(unescapedParameter(parameter))
+      ) {
         continue;
       }
       diagnostics.push(createDiagnostic(
