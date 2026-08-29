@@ -16,6 +16,7 @@ const {
   allowMultilineStep,
   normalizeStepTemplate,
 } = require("./stepDefinitionProvider");
+const { annotationStepTemplate } = require("./gaugeStepValue");
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
@@ -44,6 +45,13 @@ function documentLineText(document, line) {
 function documentPath(document) {
   const uri = document && document.uri;
   return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+}
+
+// An @Step alias is keyed the way the RUNNER keys it, not the way a spec step is
+// read - see src/gaugeStepValue.js. The two key spaces must meet here, or the
+// index answers a different question from the diagnostics.
+function annotationKey(alias) {
+  return annotationStepTemplate(String(alias || "")) || String(alias || "").trim().normalize("NFC");
 }
 
 function normalizedKey(value) {
@@ -376,8 +384,8 @@ class WorkspaceStepIndex {
       for (const entry of record.stepEntries) {
         for (const alias of entry.aliases || []) {
           addCompletion(alias, "step");
-          state.semanticCompletionKeys.add(normalizedKey(alias));
-          addMapEntry(state.stepDefinitionsByTemplate, normalizedKey(alias), {
+          state.semanticCompletionKeys.add(annotationKey(alias));
+          addMapEntry(state.stepDefinitionsByTemplate, annotationKey(alias), {
             document,
             entry,
             kind: "step",

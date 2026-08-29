@@ -4,6 +4,7 @@ const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
 const { GAUGE_CUSTOM_CLASSPATH } = require("./project/classpath");
+const { annotationStepTemplate } = require("./gaugeStepValue");
 
 const GAUGE_DEPENDENCY_SCHEME = "gauge-dependency";
 const GAUGE_STEP_DESCRIPTOR = "Lcom/thoughtworks/gauge/Step;";
@@ -517,7 +518,7 @@ class DependencyStepIndex {
         for (const step of parsed.steps) {
           const entry = { ...parsed, ...step };
           for (const alias of step.aliases) {
-            const normalized = normalizeStepTemplate(alias);
+            const normalized = annotationStepTemplate(alias);
             if (!normalized) {
               continue;
             }

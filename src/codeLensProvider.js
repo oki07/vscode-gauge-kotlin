@@ -18,6 +18,7 @@ const {
   positionAt,
 } = require("./stepDiagnostics");
 const { superStepAliasesForEntry } = require("./gaugeReference");
+const { annotationStepTemplate } = require("./gaugeStepValue");
 const { normalizeStepTemplate } = require("./stepDefinitionProvider");
 const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
 
@@ -399,7 +400,7 @@ function normalizedStepValues(aliases) {
   const values = [];
   const seen = new Set();
   for (const alias of aliases || []) {
-    const value = normalizeStepTemplate(alias);
+    const value = annotationStepTemplate(alias);
     if (!value || seen.has(value)) {
       continue;
     }

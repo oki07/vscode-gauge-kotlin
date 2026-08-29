@@ -3741,12 +3741,6 @@ function findBlankGaugeSteps(text) {
 // IntelliJ plugin this message comes from resolves the annotation through the
 // Gauge API (references/intellij-gauge-plugin SpecPsiImplUtil.getStepValueFor ->
 // StepUtil.getStepValue), not through StepsUtil.
-const ANNOTATION_PARAMETER_PATTERN = /<.*?>/g;
-
-function annotationStepTemplate(alias) {
-  return String(alias || "").replace(ANNOTATION_PARAMETER_PATTERN, "{}");
-}
-
 function normalizeStepTemplate(text) {
   let result = "";
   let index = 0;
@@ -8909,6 +8903,7 @@ const {
   markWorkspaceStepImplementationScanComplete,
 } = require("./workspaceDocumentStore");
 const { isGaugeTableRowLine } = require("./gaugeHeadings");
+const { annotationStepTemplate } = require("./gaugeStepValue");
 
 const JAVA_FILE_PATTERN = /\.java$/i;
 // A Kotlin script is not a step implementation source: gauge-java builds its

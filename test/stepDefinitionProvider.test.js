@@ -360,10 +360,18 @@ test("GaugeStepDefinitionProvider follows Gauge reserved brace parsing", async (
   const validDefinitions = await provider.provideDefinition(validSpecDocument, { line: 3, character: 5 });
   const invalidDefinitions = await provider.provideDefinition(invalidSpecDocument, { line: 3, character: 5 });
 
+  // The SPEC grammar reserves braces, so "* Step with \\{braces\\}" has the value
+  // "Step with {braces}" and "* Step with {braces}" is a parse error.
   assert.equal(normalizeStepTemplate("Step with \\{braces\\}"), "Step with {braces}");
   assert.equal(normalizeStepTemplate("Step with {braces}"), undefined);
   assert.equal(validDefinitions.length, 1);
-  assert.deepEqual({ ...validDefinitions[0].range.start }, { line: 6, character: 2 });
+  // The RUNNER key is whatever the annotation literally says, so it is the
+  // unescaped one on line 9 that registers "Step with {braces}" and matches;
+  // the escaped one on line 6 registers "Step with \\{braces\\}" and never does.
+  // Probed: the Go parser gives the spec step the value "Step with {braces}",
+  // and gauge-java's StepsUtil.getStepText run in a JDK gives those two
+  // annotations the keys "Step with \\{braces\\}" and "Step with {braces}".
+  assert.deepEqual({ ...validDefinitions[0].range.start }, { line: 9, character: 2 });
   assert.deepEqual(invalidDefinitions, []);
 });
 
@@ -535,6 +543,61 @@ test("stepTextAt attaches a table whose row is a bare pipe", () => {
   };
 
   assert.equal(stepTextAt(document, { line: 2 }), "Pay the total amount {}");
+});
+
+// The registry key rule reached stepDiagnostics only. Every other index still
+// ran @Step aliases through the SPEC grammar, so the two key spaces disagreed in
+// both directions: a quoted literal made F12 resolve a step the diagnostics
+// correctly call undefined, and an annotation containing braces was dropped from
+// every index but the diagnostics one, so F12 answered nothing for a step that
+// really is implemented. Probed: real Go gives `* cost is \{5\}` the value
+// `cost is {5}`, and real gauge-java gives `@Step("cost is {5}")` the key
+// `cost is {5}` - a match.
+test("GaugeStepDefinitionProvider keys annotations the way the runner does", async () => {
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+
+  const check = async (specLine, annotation) => {
+    const specDocument = createDocument([
+      "# Checkout",
+      "## Scenario",
+      specLine,
+    ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+    const kotlinDocument = createDocument([
+      "package steps",
+      "",
+      "import com.thoughtworks.gauge.Step",
+      "",
+      "class Steps {",
+      `  @Step("${annotation}")`,
+      "  fun implementation() {}",
+      "}",
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/steps/Steps.kt");
+    const vscode = createFakeVscode([specDocument, kotlinDocument]);
+    const definitions = await new GaugeStepDefinitionProvider({
+      projectFactory: createProjectFactory(),
+      vscode,
+    }).provideDefinition(specDocument, { line: 2, character: 4 });
+    const diagnostics = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() })
+      .provideDiagnostics(specDocument, [specDocument, kotlinDocument]);
+    return {
+      definitions: (definitions || []).length,
+      undefinedStep: diagnostics.some((entry) => entry.message === "Undefined Step"),
+    };
+  };
+
+  // The runner's key is `the user "admin" logs in`; the spec value is
+  // `the user {} logs in`. Not implemented, and F12 must not pretend otherwise.
+  assert.deepEqual(
+    await check("* the user \"admin\" logs in", "the user \\\"admin\\\" logs in"),
+    { definitions: 0, undefinedStep: true },
+  );
+
+  // The runner's key is `cost is {5}` and so is the spec value. Implemented.
+  assert.deepEqual(
+    await check("* cost is \\{5\\}", "cost is {5}"),
+    { definitions: 1, undefinedStep: false },
+  );
 });
 
 test("GaugeStepDefinitionProvider resolves indented table steps", async () => {

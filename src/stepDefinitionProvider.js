@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
+const { annotationStepTemplate } = require("./gaugeStepValue");
 const { isGaugeTableRowLine } = require("./gaugeHeadings");
 
 const {
@@ -1182,7 +1183,7 @@ class GaugeStepDefinitionProvider {
           return CANCELLED_DEFINITION_OPERATION;
         }
         const normalizedAliases = entry.aliases
-          .map((alias) => normalizeStepTemplate(alias))
+          .map((alias) => annotationStepTemplate(alias))
           .filter(Boolean);
         if (!normalizedAliases.some((alias) => wantedStepSet.has(alias))) {
           continue;

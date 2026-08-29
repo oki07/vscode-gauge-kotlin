@@ -2,6 +2,7 @@
 
 const { offsetAt: indexedOffsetAt } = require("./documentPosition");
 const { isGaugeTableRowLine } = require("./gaugeHeadings");
+const { annotationStepTemplate } = require("./gaugeStepValue");
 
 const {
   findConceptHeadings,
@@ -1265,7 +1266,7 @@ function stepEntryHasTemplate(entry, template) {
     return false;
   }
   return (entry.aliases || []).some((alias) => {
-    const normalized = normalizeStepTemplate(alias);
+    const normalized = annotationStepTemplate(alias);
     return normalized && normalized === template;
   });
 }
@@ -1812,7 +1813,7 @@ class GaugeRenameProvider {
         continue;
       }
       const alias = entry.aliases[0];
-      const template = normalizeStepTemplate(alias);
+      const template = annotationStepTemplate(alias);
       if (!template) {
         continue;
       }
@@ -2332,7 +2333,7 @@ class GaugeRenameProvider {
         return CANCELLED_RENAME_OPERATION;
       }
       const entryTemplate = entry.aliases.length === 1
-        ? normalizeStepTemplate(entry.aliases[0])
+        ? annotationStepTemplate(entry.aliases[0])
         : undefined;
       if (!entryTemplate || entryTemplate !== template) {
         continue;
