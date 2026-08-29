@@ -19,6 +19,7 @@ const {
 const {
   GaugeStepDiagnosticsProvider,
   findConceptHeadings,
+  hasStaticStepParameter,
   isConceptDocument,
   isStepImplementationDocument,
 } = require("./stepDiagnostics");
@@ -345,6 +346,14 @@ class WorkspaceStepIndex {
         continue;
       }
       for (const heading of record.concepts) {
+        // Gauge defines no concept for a heading carrying a static argument
+        // (references/gauge/parser/conceptParser.go), so indexing it would make
+        // the calling step look resolved and, since a concept shadows an
+        // implementation, would send Go to Definition to a heading Gauge throws
+        // away.
+        if (hasStaticStepParameter(heading.text)) {
+          continue;
+        }
         addCompletion(heading.text, "concept");
         state.semanticCompletionKeys.add(normalizedKey(heading.text));
         addMapEntry(state.conceptDefinitionsByTemplate, heading.normalized, {

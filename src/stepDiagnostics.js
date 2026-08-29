@@ -3,7 +3,12 @@
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { positionAt: indexedPositionAt } = require("./documentPosition");
-const { createMarkdownSpecScope, isMarkdownSpecPath: sharedIsMarkdownSpecPath, propertiesValueFor } = require("./gaugeSpecScope");
+const {
+  createMarkdownSpecScope,
+  isConceptPathInScope,
+  isMarkdownSpecPath: sharedIsMarkdownSpecPath,
+  propertiesValueFor,
+} = require("./gaugeSpecScope");
 
 const COLLECTION_NAME = "gauge-kotlin";
 const GAUGE_LANGUAGE = "gauge";
@@ -3555,6 +3560,35 @@ function parameterizedStepValue(stepText) {
   return result + text.slice(index);
 }
 
+// A concept heading may carry only dynamic parameters
+// (references/gauge/parser/conceptParser.go). The test is per ARGUMENT, not per
+// quote character: verified against parser.CreateConceptsDictionary, where
+// `# pay with <the "card">` defines the concept `pay with {}` while
+// `# pay with "card"` and `# pay "x" with <card>` define none.
+function hasStaticStepParameter(text) {
+  const value = String(text || "");
+  let index = 0;
+  while (index < value.length) {
+    const dynamicStart = findDynamicParameterStart(value, index);
+    const staticStart = findStaticParameterStart(value, index);
+    const parameter = findNextStepParameter(dynamicStart, staticStart);
+    if (!parameter) {
+      return false;
+    }
+    const closeIndex = parameter.type === "dynamic"
+      ? findDynamicParameterEnd(value, parameter.openIndex)
+      : findStaticParameterEnd(value, parameter.openIndex);
+    if (closeIndex === -1) {
+      return false;
+    }
+    if (parameter.type !== "dynamic") {
+      return true;
+    }
+    index = closeIndex + 1;
+  }
+  return false;
+}
+
 function findNextStepParameter(dynamicStart, staticStart) {
   if (dynamicStart === -1 && staticStart === -1) {
     return undefined;
@@ -5571,7 +5605,7 @@ function hashScenarioHeadingDiagnostics(vscode, text) {
 function conceptStaticParameterDiagnostics(vscode, text) {
   const diagnostics = [];
   for (const heading of findConceptDefinitionHeadings(text)) {
-    if (findStaticParameterStart(heading.text, 0) === -1) {
+    if (!hasStaticStepParameter(heading.text)) {
       continue;
     }
     diagnostics.push(createDiagnostic(
@@ -9473,6 +9507,13 @@ class GaugeStepDiagnosticsProvider {
       && isConceptDocument(candidate)
       && typeof candidate.getText === "function"
       && this.belongsToSourceGaugeProject(candidate, sourceRoot)
+      // gauge_concepts_dir narrows where Gauge reads concepts from, so a .cpt
+      // outside it satisfies nothing at run time.
+      && isConceptPathInScope(documentPath(candidate), {
+        fileSystem: this.fileSystem,
+        pathModule: this.pathModule,
+        projectRoot: sourceRoot,
+      })
     ));
   }
 
@@ -9699,7 +9740,7 @@ class GaugeStepDiagnosticsProvider {
         // concepts=0 plus "Concept heading can have only Dynamic Parameters"),
         // so indexing it would make the calling step look resolved while
         // gauge run reports it missing.
-        if (findStaticParameterStart(heading.text, 0) !== -1) {
+        if (hasStaticStepParameter(heading.text)) {
           continue;
         }
         templates.add(heading.normalized);
@@ -10283,6 +10324,7 @@ module.exports = {
   UNDEFINED_STEP_MESSAGE,
   countKotlinParameters,
   countStepParameters,
+  hasStaticStepParameter,
   parameterizedStepValue,
   findConceptHeadings,
   findJavaStepFunctions,

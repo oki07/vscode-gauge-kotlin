@@ -20,6 +20,7 @@ const nodePath = require("node:path");
 const GAUGE_SPECS_DIRECTORY = "specs";
 const GAUGE_SPECS_DIR_PROPERTY = "gauge_specs_dir";
 const GAUGE_SPEC_FILE_EXTENSIONS_PROPERTY = "gauge_spec_file_extensions";
+const GAUGE_CONCEPTS_DIR_PROPERTY = "gauge_concepts_dir";
 const MARKDOWN_EXTENSION = ".md";
 const DEFAULT_ENV_DIRECTORY = "env";
 const DEFAULT_ENV_NAME = "default";
@@ -209,6 +210,41 @@ function createMarkdownSpecScope(options = {}) {
   };
 }
 
+// When gauge_concepts_dir is set, Gauge reads concepts ONLY from those
+// directories (references/gauge/util/fileUtils.go GetConceptFiles returns early
+// on GetConceptsPaths). Unset, it reads them from the whole project, which is
+// what indexing every .cpt already matches.
+function configuredConceptDirs(options = {}) {
+  const configured = process.env[GAUGE_CONCEPTS_DIR_PROPERTY]
+    || propertiesValueFor(options, GAUGE_CONCEPTS_DIR_PROPERTY);
+  if (!configured) {
+    return undefined;
+  }
+  const directories = String(configured)
+    .split(",")
+    .map((entry) => pathSegments(entry.trim()))
+    .filter((segments) => segments.length > 0);
+  return directories.length > 0 ? directories : undefined;
+}
+
+function isConceptPathInScope(file, options = {}) {
+  const directories = configuredConceptDirs(options);
+  if (!directories) {
+    return true;
+  }
+  const projectRoot = options.projectRoot;
+  const segments = pathSegments(file).slice(0, -1);
+  if (!projectRoot) {
+    return true;
+  }
+  const rootSegments = pathSegments(projectRoot);
+  if (!startsWithSegments(segments, rootSegments)) {
+    return true;
+  }
+  const relative = segments.slice(rootSegments.length);
+  return directories.some((directory) => startsWithSegments(relative, directory));
+}
+
 function isMarkdownSpecPath(file, scope) {
   const directories = pathSegments(file).slice(0, -1);
   const projectRoot = scope && scope.projectRoot;
@@ -282,10 +318,12 @@ function isMarkdownGaugeSpecFile(file, options = {}) {
 module.exports = {
   GAUGE_SPECS_DIRECTORY,
   GAUGE_SPECS_DIR_PROPERTY,
+  configuredConceptDirs,
   configuredSpecDirs,
   createMarkdownSpecScope,
   gaugeProjectRootForFile,
   isMarkdownGaugeSpecFile,
+  isConceptPathInScope,
   isMarkdownSpecPath,
   markdownIsASpecExtension,
   propertiesValue,

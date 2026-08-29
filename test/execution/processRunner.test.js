@@ -41,6 +41,34 @@ function createChildProcess() {
 // Buffer.prototype.toString on the raw chunk turns each half into a replacement
 // character. StringDecoder exists for exactly this and the chunk emitter beside
 // this one already uses it.
+// A spawn failure writes to the output channel, but a Test UI run keeps that
+// channel hidden (reveal: command.forwardOutput !== true) and streams into the
+// Test Results panel instead, so the user saw an unexplained failure.
+test("process runner explains a spawn failure to a Test UI run", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const forwarded = [];
+  const runner = createGaugeProcessRunner({
+    outputChannel: new FakeOutputChannel(),
+    processOutputChunk(chunk) {
+      forwarded.push(String(chunk));
+    },
+    spawn: () => child,
+  });
+
+  const run = runner({
+    command: "gauge",
+    args: ["run"],
+    cwd: "/workspace",
+    forwardOutput: true,
+  });
+  child.emit("error", new Error("spawn gauge ENOENT"));
+  await run;
+
+  assert.match(forwarded.join(""), /Failed to start 'gauge'/);
+  assert.match(forwarded.join(""), /ENOENT/);
+});
+
 test("process runner decodes multi-byte output split across chunks", async () => {
   const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
   const child = createChildProcess();

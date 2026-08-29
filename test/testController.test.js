@@ -289,36 +289,6 @@ function createCancellationToken() {
 // tableIdentifier), so it names the scenario that owns it. Falling back to the
 // first included descendant of the spec parented every selected scenario's rows
 // under the first selected scenario, and the others showed no results.
-// Gauge exits 0 when a retry passes, so the scenario passed. The first attempt
-// writes its failure to the real test item and later attempts go to synthetic
-// result-only children, so without this the item the user sees stays red for a
-// scenario Gauge reports as passed.
-test("GaugeTestController clears a scenario that passes on retry", () => {
-  const { GaugeTestController } = require("../src/testController");
-  const { calls, vscode } = createFakeVscode();
-  const gaugeTests = new GaugeTestController({ vscode });
-
-  const disposable = gaugeTests.register();
-  gaugeTests.startTestRun({ include: [] });
-  const sink = gaugeTests.createExecutionEventSink();
-  const id = "/workspace/specs/example.spec:12";
-  const location = "gauge:///workspace/specs/example.spec:12";
-
-  sink({ type: "suiteStarted", id: "/workspace/specs/example.spec", name: "Example", location });
-  sink({ type: "testStarted", id, parentId: "/workspace/specs/example.spec", name: "Flaky", location });
-  sink({ type: "testFailed", id, message: "boom", location });
-  sink({ type: "testFinished", id, name: "Flaky", location });
-  sink({ type: "testStarted", id, parentId: "/workspace/specs/example.spec", name: "Flaky", location });
-  sink({ type: "testFinished", id, name: "Flaky", location });
-
-  const forId = calls.filter((entry) => entry[1] === id
-    && ["passed", "failed", "errored", "skipped"].includes(entry[0]));
-  assert.equal(forId.some((entry) => entry[0] === "failed"), true, "first attempt failed");
-  assert.equal(forId.at(-1)[0], "passed", "the item ends passed");
-
-  disposable.dispose();
-});
-
 test("GaugeTestController parents a table row under its own scenario", () => {
   const { GaugeTestController } = require("../src/testController");
   const { vscode } = createFakeVscode();
@@ -621,10 +591,6 @@ test("GaugeTestController keeps retry attempts distinct for repeated scenario id
     ["failed", "/workspace/specs/example.spec:12", "First attempt failed", 4],
     ["started", "/workspace/specs/example.spec:12#attempt=2"],
     ["passed", "/workspace/specs/example.spec:12#attempt=2", 5],
-    // Gauge exits 0 when a retry passes, so the scenario passed. The attempts
-    // stay distinct, and the item the user actually sees ends green rather than
-    // red for a scenario Gauge reports as passed.
-    ["passed", "/workspace/specs/example.spec:12", 5],
   ]);
 });
 

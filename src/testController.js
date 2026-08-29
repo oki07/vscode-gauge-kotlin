@@ -1940,25 +1940,18 @@ class GaugeTestController {
     }
     if (typeof run.passed === "function") {
       run.passed(item, event.duration);
-      // Gauge exits 0 when a retry passes, so the scenario passed. Later
-      // attempts land on synthetic result-only children, so the item the user
-      // actually sees would otherwise stay red for a scenario Gauge reports as
-      // passed.
-      this.passLogicalItem(run, event);
     }
     return "passed";
   }
 
-  passLogicalItem(run, event) {
-    const logicalId = event && event.logicalId;
-    if (!logicalId || logicalId === event.id) {
-      return;
-    }
-    const logicalItem = this.items.get(logicalId);
-    if (logicalItem && typeof run.passed === "function") {
-      run.passed(logicalItem, event.duration);
-    }
-  }
+  // A passing later attempt deliberately does NOT clear the logical item.
+  // Gauge's serial reporter gives every row of a nested data table the same
+  // event id - references/gauge/reporter/jsonConsole.go only appends the row
+  // when isParallel, and getTable returns just the scenario row index - so a
+  // second spec row is indistinguishable here from a retry of the first.
+  // Clearing on a pass therefore turned a genuinely failed row green while Gauge
+  // exited non-zero. Leaving a retried scenario red understates a pass, which is
+  // the safe direction; showing a failure as passed is not.
 
   showNotification(event) {
     if (this.disposed) {

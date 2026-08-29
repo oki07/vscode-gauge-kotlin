@@ -254,10 +254,15 @@ function createGaugeProcessRunner(options = {}) {
       // only "Error: Tests failed." for a missing gauge, gradle or mvn, or for
       // a cwd that does not exist.
       child.on("error", (error) => {
-        channel.appendErrBuf(
-          `Error: Failed to start '${command.command || (command.tool && command.tool.command) || "the build tool"}'.`
-          + ` ${(error && error.message) || error}\n`,
-        );
+        const message = `Error: Failed to start '${command.command || (command.tool && command.tool.command) || "the build tool"}'.`
+          + ` ${(error && error.message) || error}\n`;
+        channel.appendErrBuf(message);
+        // A Test UI run keeps the output channel hidden and streams into the
+        // Test Results panel instead, so without this the user sees an
+        // unexplained failure.
+        if (command.forwardOutput) {
+          processOutputChunk(message);
+        }
         finishProcess(1);
       });
     });
