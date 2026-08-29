@@ -5815,6 +5815,37 @@ test("GaugeStepDiagnosticsProvider keeps an annotation containing braces in the 
   assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
+// A step may carry BOTH a doc string and an inline table. The table scan stopped
+// at the opening fence, so the step was indexed without its table: a correct
+// implementation read as "Undefined Step", and the quick fix offered on that
+// error generated an annotation without <table>, which CLEARED the diagnostic
+// and left the runner still answering "Step implementation not found". Probed:
+// the real parser gives this step the value "Load the payload {}" with args
+// [special_string, table], while a doc string alone gives "Load the payload".
+test("GaugeStepDiagnosticsProvider sees the table of a step that also has a doc string", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Payloads",
+    "## Scenario",
+    "* Load the payload",
+    "\"\"\"",
+    "body",
+    "\"\"\"",
+    "|id|",
+    "|--|",
+    "|1 |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/payloads.spec");
+  const implementation = createDocument([
+    "@Step(\"Load the payload <table>\")",
+    "fun load(body: String, table: Any) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
 test("GaugeStepDiagnosticsProvider warns on unresolved Gauge table row dynamic parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

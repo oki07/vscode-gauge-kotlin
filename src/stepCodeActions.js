@@ -149,10 +149,23 @@ function isInlineTableLine(line) {
 // (references/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
+// A step may carry a doc string AND a table, in that order, so the scan resumes
+// after a closed fence. Probed: such a step has the value "Load the payload {}"
+// with the args [special_string, table], and stopping at the fence generated an
+// annotation that cleared the diagnostic without satisfying the runner.
 function hasInlineTableAfterStep(document, endLineNumber) {
+  let fenceLine;
   for (let line = endLineNumber + 1; line < documentLineCount(document); line += 1) {
     const text = String(documentLine(document, line) || "").trim();
     if (text === "") {
+      continue;
+    }
+    if (fenceLine === undefined && isDocStringFenceLine(text) && hasClosedDocString(document, line)) {
+      fenceLine = docStringEndLine(document, line);
+      if (fenceLine === undefined) {
+        return false;
+      }
+      line = fenceLine;
       continue;
     }
     return isInlineTableLine(text);
@@ -165,16 +178,20 @@ function isDocStringFenceLine(line) {
   return String(line || "").trim() === "\"\"\"";
 }
 
-function hasClosedDocString(document, fenceLine) {
+function docStringEndLine(document, fenceLine) {
   if (!isDocStringFenceLine(documentLine(document, fenceLine))) {
-    return false;
+    return undefined;
   }
   for (let line = fenceLine + 1; line < documentLineCount(document); line += 1) {
     if (isDocStringFenceLine(documentLine(document, line))) {
-      return true;
+      return line;
     }
   }
-  return false;
+  return undefined;
+}
+
+function hasClosedDocString(document, fenceLine) {
+  return docStringEndLine(document, fenceLine) !== undefined;
 }
 
 function isGaugeSyntaxBoundary(line) {

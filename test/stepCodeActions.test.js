@@ -392,6 +392,41 @@ test("GaugeStepCodeActionProvider resolves Gauge brace escapes in the generated 
   });
 });
 
+// A step may carry a doc string AND a table. Stopping the table scan at the
+// opening fence generated an annotation without <table>, which CLEARED the
+// "Undefined Step" the fix was offered for and left the runner still answering
+// "Step implementation not found". Probed: the real parser gives this step the
+// value "Load the payload {}" with the args [special_string, table].
+test("GaugeStepCodeActionProvider includes the table of a step that also has a doc string", () => {
+  const {
+    GENERATE_STEP_STUB,
+    GaugeStepCodeActionProvider,
+    UNDEFINED_STEP_MESSAGE,
+  } = require("../src/stepCodeActions");
+  const vscode = createFakeVscode();
+  const provider = new GaugeStepCodeActionProvider({ vscode });
+  const document = createDocument([
+    "# Payloads",
+    "* Load the payload",
+    "\"\"\"",
+    "body",
+    "\"\"\"",
+    "|id|",
+    "|--|",
+    "|1 |",
+  ]);
+  const range = new vscode.Range(
+    new vscode.Position(1, 0),
+    new vscode.Position(1, 18),
+  );
+
+  const actions = provider.provideCodeActions(document, range, {
+    diagnostics: [{ message: UNDEFINED_STEP_MESSAGE, range }],
+  });
+
+  assert.match(actions[0].command.arguments[0], /Step\("Load the payload <table>"\)/);
+});
+
 test("GaugeStepCodeActionProvider creates a Kotlin step implementation quick fix for Kotlin sources", () => {
   const {
     CREATE_STEP_IMPLEMENTATION_TITLE,

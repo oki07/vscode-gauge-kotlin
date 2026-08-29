@@ -3945,8 +3945,17 @@ function isInlineTableLine(line) {
 // to the step. Verified against parser.SpecParser.Parse: a blank line between a
 // step and an inline table still yields one table argument. A non-blank comment
 // line in between does break the attachment.
+// A step may carry a doc string AND a table, in that order. Stopping at the
+// opening fence indexed the step without its table, so a correct implementation
+// read as undefined and the quick fix offered on that error generated an
+// annotation the runner can never match. Probed: the real parser gives such a
+// step the value "Load the payload {}" with args [special_string, table].
 function inlineTableLineAfterStep(lines, endLine) {
+  const docStringLines = closedSpecDocStringLines(lines);
   for (let index = endLine + 1; index < lines.length; index += 1) {
+    if (docStringLines.has(index)) {
+      continue;
+    }
     const text = String(lines[index] || "").trim();
     if (text === "") {
       continue;
@@ -5465,14 +5474,20 @@ function findConceptDefinitionHeadings(text) {
 // several lines (references/gauge/parser/lex.go AllowMultiLineStep, supported
 // here as the allowMultilineStep option below), and the second describes
 // parser internals rather than anything the author wrote.
-function stepParseError(stepText, docStringEndLine) {
+// The count is taken from what the user WROTE, not from the signature: a step
+// may carry a doc string and an inline table at once, and the table really does
+// become a parameter. Probed: "* Load the payload" with both has the value
+// "Load the payload {}" and the args [special_string, table], while
+// "* Load \"x\"" with a doc string keeps its raw text and takes only the doc
+// string - which is what this rule is about.
+function stepParseError(stepText, docStringEndLine, declaredText) {
   if (!stepText) {
     return undefined;
   }
   if (docStringEndLine === undefined) {
     return stepParserError(stepText);
   }
-  return countStepParameters(stepText) > 0
+  return countStepParameters(declaredText === undefined ? stepText : declaredText) > 0
     ? MIXED_MULTILINE_PARAMETER_MESSAGE
     : undefined;
 }
@@ -5521,7 +5536,7 @@ function findGaugeSteps(text, options = {}) {
       declaredText,
       end: { line: endLine, character: endCharacter },
       marker,
-      parseError: stepParseError(stepText, docStringEndLine),
+      parseError: stepParseError(stepText, docStringEndLine, declaredText),
       normalized: stepText ? normalizeStepTemplate(stepText) : undefined,
       start: { line: startLine, character: marker },
       text: stepText,
