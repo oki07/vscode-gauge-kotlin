@@ -4683,13 +4683,17 @@ function tableHeaderSet(rawLine) {
   return headers;
 }
 
+// The cell text itself is trimmed, but the name between the angle brackets is
+// looked up in the header verbatim (references/gauge/parser/resolver.go), so
+// "<  type2  >" is not the column "type2". Trimming it here accepted a name
+// Gauge rejects and swallowed its warning.
 function dynamicTableCellParameter(cell) {
-  const match = /^<\s*(.*?)\s*>$/.exec(String(cell || "").trim());
+  const match = /^<(.*)>$/.exec(String(cell || "").trim());
   if (!match) {
     return undefined;
   }
-  const parameter = match[1].trim();
-  if (!parameter || /^file\s*:/i.test(parameter)) {
+  const parameter = match[1];
+  if (!parameter.trim() || /^\s*file\s*:/i.test(parameter)) {
     return undefined;
   }
   return parameter;
@@ -4743,12 +4747,18 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
       if (!tableBlock) {
         const headers = tableHeaderSet(rawLine);
         if (!sectionHasStep) {
+          // A second data table is discarded whole before anything is resolved
+          // (references/gauge/parser/specparser.go), so its rows produce no
+          // parameter warnings - only "Multiple data table present".
+          const ignoredDataTable = inScenario
+            ? scenarioHeaders.size > 0
+            : specHeaders.size > 0;
           if (inScenario) {
-            scenarioHeaders = headers;
+            scenarioHeaders = ignoredDataTable ? scenarioHeaders : headers;
           } else {
-            specHeaders = headers;
+            specHeaders = ignoredDataTable ? specHeaders : headers;
           }
-          tableBlock = { lookup: headers };
+          tableBlock = { ignored: ignoredDataTable, lookup: headers };
         } else {
           tableBlock = {
             lookup: new Set([...specHeaders, ...scenarioHeaders]),
@@ -4757,7 +4767,7 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
         continue;
       }
 
-      if (isGaugeTableSeparatorRow(rawLine)) {
+      if (tableBlock.ignored || isGaugeTableSeparatorRow(rawLine)) {
         continue;
       }
       for (const cell of gaugeTableCells(rawLine)) {

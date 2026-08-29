@@ -5612,6 +5612,131 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge data table file para
   assert.deepEqual({ ...diagnostics[0].range.end }, { line: 3, character: 31 });
 });
 
+// The parser looks the cell text up in the header verbatim
+// (references/gauge/parser/resolver.go), so "<  type2  >" is not the column
+// "type2". Trimming it here accepted a name Gauge rejects and swallowed the
+// warning. Probed: W: ["Dynamic param <  type2  > could not be resolved,
+// Treating it as static param"].
+test("GaugeStepDiagnosticsProvider does not trim whitespace inside a table cell parameter", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| type1 | type2 |",
+    "| one | two |",
+    "## Scenario",
+    "* Step with inline table",
+    "| id | name |",
+    "| 1 | <  type2  > |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Step with inline table <table>\")",
+    "fun step(table: Table) {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    [
+      "Dynamic param <  type2  > could not be resolved, Treating it as static param",
+    ],
+  );
+});
+
+// Gauge discards the whole second data table before resolving anything
+// (references/gauge/parser/specparser.go), so its rows produce no parameter
+// warnings - only "Multiple data table present, ignoring table". Probed:
+// W: ["Multiple data table present, ignoring table"] and nothing about <bad>.
+test("GaugeStepDiagnosticsProvider leaves the ignored second data table unvalidated", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| type1 |",
+    "| one |",
+    "",
+    "| type2 |",
+    "| <bad> |",
+    "",
+    "## Scenario",
+    "* Step one",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Step one\")",
+    "fun step() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Multiple data table present, ignoring table"],
+  );
+});
+
+// A table that follows a step belongs to the scenario, and neither a comment
+// between them nor an existing spec data table turns it into a second data
+// table. Probed: no errors and no warnings for either shape - only a table that
+// follows the spec data table without an intervening step warns.
+test("GaugeStepDiagnosticsProvider does not call a table after a comment a second data table", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| type1 |",
+    "| one |",
+    "",
+    "## Scenario",
+    "* Step one",
+    "",
+    "some comment",
+    "",
+    "| id |",
+    "| 1 |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Step one\")",
+    "fun step() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
+});
+
+// A comment sits between the spec data table and a second table, with no step
+// in between. Gauge still calls the second one a data table. Probed:
+// W: ["Multiple data table present, ignoring table"].
+test("GaugeStepDiagnosticsProvider still warns when a comment splits two data tables", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+  const document = createDocument([
+    "# Checkout",
+    "| type1 |",
+    "| one |",
+    "",
+    "some comment",
+    "",
+    "| id |",
+    "| 1 |",
+    "",
+    "## Scenario",
+    "* Step one",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const implementation = createDocument([
+    "@Step(\"Step one\")",
+    "fun step() {}",
+  ].join("\n"));
+
+  const diagnostics = provider.provideDiagnostics(document, [document, implementation]);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ["Multiple data table present, ignoring table"],
+  );
+});
+
 test("GaugeStepDiagnosticsProvider warns on unresolved Gauge table row dynamic parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
