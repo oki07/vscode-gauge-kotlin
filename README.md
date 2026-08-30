@@ -106,9 +106,10 @@ both are bundled with this extension; any Kotlin template you register with
   but can still be unknown to `gauge run` until the project is rebuilt.
 - A `@Step` in a Kotlin file that is not compiled into the test classpath is
   treated as implemented by the local analysis.
-- Gauge environment properties are read from `env/default`. A `gauge_specs_dir`
-  or `gauge_data_dir` overridden in another environment is not picked up by the
-  editor.
+- Always-on editor features read the default Gauge environment, including a
+  manifest `EnvironmentDir` or relative `gauge_env_dir`. A `gauge_specs_dir` or
+  `gauge_data_dir` overridden only by a launch configuration's non-default
+  `--env` is not picked up by those editor features.
 
 ## License
 
