@@ -9,6 +9,7 @@ const {
   isDocStringFenceLine,
   isStepLine,
   isGaugeTableRowLine,
+  inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
 } = require("./gaugeHeadings");
 const {
   GaugeStepDiagnosticsProvider,
@@ -385,14 +386,7 @@ function isExternalDataTableLine(line) {
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {
-  for (let index = endLine + 1; index < lines.length; index += 1) {
-    const text = String(lines[index] || "").trim();
-    if (text === "") {
-      continue;
-    }
-    return isTableLine(text) ? index : undefined;
-  }
-  return undefined;
+  return sharedInlineTableLineAfterStep(lines, endLine, isTableLine);
 }
 
 

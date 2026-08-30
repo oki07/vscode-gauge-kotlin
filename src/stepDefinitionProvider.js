@@ -8,6 +8,7 @@ const {
   isGaugeDataTableKeywordLine,
   isGaugeTableRowLine,
   isGaugeTagKeywordLine,
+  inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
 } = require("./gaugeHeadings");
 
 const {
@@ -200,14 +201,11 @@ function isInlineTableLine(line) {
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function hasInlineTableAfterStep(document, endLineNumber) {
-  for (let line = endLineNumber + 1; line < documentLineCount(document); line += 1) {
-    const text = String(documentLine(document, line) || "").trim();
-    if (text === "") {
-      continue;
-    }
-    return isInlineTableLine(text);
-  }
-  return false;
+  const lines = Array.from(
+    { length: documentLineCount(document) },
+    (_value, line) => documentLine(document, line),
+  );
+  return sharedInlineTableLineAfterStep(lines, endLineNumber, isInlineTableLine) !== undefined;
 }
 
 

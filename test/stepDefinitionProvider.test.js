@@ -600,6 +600,42 @@ test("GaugeStepDefinitionProvider keys annotations the way the runner does", asy
   );
 });
 
+// The doc-string-and-table rule reached two of eight copies, so the diagnostics
+// keyed such a step as "Load the payload {}" while F12, Find References, the
+// CodeLens and Rename keyed it as "Load the payload". With the correct
+// annotation present the editor showed no diagnostic, F12 answered nothing, and
+// a rename rewrote only the .spec. Ground truth from the real CLI: with
+// @Step("Load the payload") the runner answers
+//   Step implementation not found => 'Load the payload <table>'
+// and with @Step("Load the payload <table>") it answers "No errors found."
+test("stepTextAt keys a step with a doc string and a table like the runner", () => {
+  const { stepTextAt } = require("../src/stepDefinitionProvider");
+  const at = (lines) => {
+    const document = {
+      languageId: "gauge",
+      uri: { fsPath: "/workspace/gauge/specs/payloads.spec" },
+      get lineCount() {
+        return lines.length;
+      },
+      lineAt(line) {
+        return { text: lines[line] };
+      },
+      getText() {
+        return lines.join("\n");
+      },
+    };
+    return stepTextAt(document, { line: 2 });
+  };
+
+  const head = ["# Payloads", "## Scenario", "* Load the payload"];
+  assert.equal(at([...head, "\"\"\"", "body", "\"\"\"", "|id|"]), "Load the payload {}");
+  assert.equal(at([...head, "\"\"\"", "body", "\"\"\"", "", "|id|"]), "Load the payload {}");
+  // A blank line before the fence detaches BOTH the doc string and the table,
+  // and a comment or a second fence between them detaches the table. Probed.
+  assert.equal(at([...head, "", "\"\"\"", "body", "\"\"\"", "|id|"]), "Load the payload");
+  assert.equal(at([...head, "\"\"\"", "body", "\"\"\"", "note", "|id|"]), "Load the payload");
+});
+
 test("GaugeStepDefinitionProvider resolves indented table steps", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
   const specDocument = createDocument([

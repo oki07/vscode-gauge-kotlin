@@ -3951,18 +3951,7 @@ function isInlineTableLine(line) {
 // annotation the runner can never match. Probed: the real parser gives such a
 // step the value "Load the payload {}" with args [special_string, table].
 function inlineTableLineAfterStep(lines, endLine) {
-  const docStringLines = closedSpecDocStringLines(lines);
-  for (let index = endLine + 1; index < lines.length; index += 1) {
-    if (docStringLines.has(index)) {
-      continue;
-    }
-    const text = String(lines[index] || "").trim();
-    if (text === "") {
-      continue;
-    }
-    return isInlineTableLine(text) ? index : undefined;
-  }
-  return undefined;
+  return sharedInlineTableLineAfterStep(lines, endLine, isInlineTableLine);
 }
 
 
@@ -8924,6 +8913,7 @@ const {
   isGaugeTableRowLine,
   isGaugeTagKeywordLine: hasGaugeTagKeyword,
   isLegacyHeadingText: hasLegacyHeadingText,
+  inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
 } = require("./gaugeHeadings");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 

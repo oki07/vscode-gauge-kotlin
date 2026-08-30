@@ -4,6 +4,7 @@ const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 const {
   isGaugeTableRowLine,
   isLegacyHeadingText: hasLegacyHeadingText,
+  inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
 } = require("./gaugeHeadings");
 
 // references/gauge/parser/lex.go isDataTable matches
@@ -169,14 +170,15 @@ function isStepLine(text) {
   return /^\s*\*(?!\*)\s*\S.*$/.test(text);
 }
 
+// The step's table may sit after a doc string, and the rule for when it attaches
+// lives in src/gaugeHeadings.js. Stopping at the opening fence left the table
+// orphaned in the specification while the doc string went into the concept.
 function tableStartLineAfterStep(document, startLine) {
-  for (let line = startLine; line < document.lineCount; line += 1) {
-    const text = lineText(document, line);
-    if (text.trim()) {
-      return isTableStartLine(text) ? line : undefined;
-    }
-  }
-  return undefined;
+  const lines = Array.from(
+    { length: document.lineCount },
+    (_value, line) => lineText(document, line),
+  );
+  return sharedInlineTableLineAfterStep(lines, startLine - 1, isTableStartLine);
 }
 
 // A pipe line is a table row only when it CLOSES (see isGaugeTableRowLine).

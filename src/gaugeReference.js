@@ -48,6 +48,7 @@ const {
 } = require("./stepDiagnostics");
 const { normalizeStepTemplate, stepTextAt } = require("./stepDefinitionProvider");
 const { isGaugeTableRowLine } = require("./gaugeHeadings");
+const { inlineTableLineAfterStep: sharedInlineTableLineAfterStep } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile, propertiesValueFor } = require("./gaugeSpecScope");
 
 function getVscode(vscode) {
@@ -604,14 +605,7 @@ function isInlineTableLine(line) {
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {
-  for (let index = endLine + 1; index < lines.length; index += 1) {
-    const text = String(lines[index] || "").trim();
-    if (text === "") {
-      continue;
-    }
-    return isInlineTableLine(text) ? index : undefined;
-  }
-  return undefined;
+  return sharedInlineTableLineAfterStep(lines, endLine, isInlineTableLine);
 }
 
 

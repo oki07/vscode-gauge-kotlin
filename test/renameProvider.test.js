@@ -483,6 +483,88 @@ test("GaugeRenameProvider keeps a concept table parameter out of its usages", as
   assert.deepEqual(byFile("checkout.spec"), ["Set up cart"]);
 });
 
+// The two cases a usage's missing slot can mean. Probed with the real
+// refactorer plus formatter.FormatStep, all three over `* Prepare cart` /
+// `* Load the payload` above an inline table:
+//   "Prepare cart <table>"     -> "Set up cart <table>"          {0:0}
+//      -> * Set up cart               (the table still supplies it)
+//   "Load the payload <table>" -> "Load the payload <mode> <table>" {0:-1, 1:0}
+//      -> * Load the payload "mode"   (a NEW parameter needs an argument)
+// Dropping every slot the usage lacks left the second one unwritten, so the
+// annotation gained a parameter the specification never passed and the runner
+// answered "Step implementation not found" on a rename that reported success.
+test("GaugeRenameProvider tells a table-supplied parameter from a new one", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const rename = async (annotation, newName) => {
+    const specDocument = createDocument([
+      "# Checkout",
+      "",
+      "## One",
+      "",
+      "* Load the payload",
+      "|id|",
+      "|--|",
+      "|1 |",
+    ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+    const kotlinDocument = createDocument([
+      "import com.thoughtworks.gauge.Step",
+      "",
+      `@Step("${annotation}")`,
+      "fun load(table: Any) {}",
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+    const vscode = createFakeVscode([specDocument, kotlinDocument]);
+    const edit = await new GaugeRenameProvider({ vscode })
+      .provideRenameEdits(kotlinDocument, new vscode.Position(2, 12), newName);
+    return edit.replacements
+      .filter((replacement) => replacement.uri.fsPath.endsWith("checkout.spec"))
+      .map((replacement) => replacement.newText);
+  };
+
+  assert.deepEqual(
+    await rename("Load the payload <table>", "Store the payload <table>"),
+    ["Store the payload"],
+  );
+  assert.deepEqual(
+    await rename("Load the payload <table>", "Load the payload <mode> <table>"),
+    ["Load the payload \"mode\""],
+  );
+});
+
+// getArgsInOrder keeps the special form only when the parser RESOLVED the
+// parameter. A rename introduces a name that almost never resolves yet, and the
+// real refactorer then falls through to the Static default: probed,
+// "read" -> "read <file:nope.txt>" formats `* read "file:nope.txt"`. Writing
+// the angled form leaves a dynamic parameter the parser rejects with
+// "Dynamic parameter <file:nope.txt> could not be resolved" - the very failure
+// the static argument exists to avoid.
+test("GaugeRenameProvider writes a new special parameter as a static argument", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Files",
+    "",
+    "## One",
+    "",
+    "* read",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/files.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"read\")",
+    "fun read() {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+
+  const edit = await new GaugeRenameProvider({ vscode })
+    .provideRenameEdits(kotlinDocument, new vscode.Position(2, 8), "read <file:nope.txt>");
+
+  assert.deepEqual(
+    edit.replacements
+      .filter((replacement) => replacement.uri.fsPath.endsWith("files.spec"))
+      .map((replacement) => replacement.newText),
+    ["read \"file:nope.txt\""],
+  );
+});
+
 test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge client is available", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -1144,7 +1226,14 @@ test("GaugeRenameProvider normalizes table file parameters in Kotlin Step implem
           start: { line: 1, character: 2 },
           end: { line: 1, character: 14 },
         },
-        newText: "a basic step <table:validTable.csv>",
+        // A rename introduces a name that does not resolve yet - there is no
+      // filesystem here and no such table - and getArgsInOrder keeps the
+      // special form only for a parameter the parser RESOLVED. Probed: with
+      // the file missing, "read" -> "read <file:nope.txt>" formats
+      // `* read "file:nope.txt"`. Writing the angled form would leave a
+      // dynamic parameter the parser rejects. The Kotlin-side normalization
+      // below is what this test is really about.
+      newText: 'a basic step "table:validTable.csv"',
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",

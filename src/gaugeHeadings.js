@@ -125,6 +125,44 @@ function isGaugeTableRowLine(line) {
   return text.startsWith("|") && text.endsWith("|");
 }
 
+// A step may carry a doc string AND an inline table, in that order, and the two
+// are read as separate arguments. The doc string must open on the line
+// IMMEDIATELY after the step's last line; the table scan then resumes after its
+// closing fence, skipping blank lines on either side. Probed with the real
+// parser and cross-checked with `gauge validate`:
+//   step + fence + table                -> table   ("Load {}")
+//   step + fence + BLANK + table        -> table
+//   step + BLANK + fence + table        -> no table, and no doc string either
+//   step + fence + comment + table      -> no table
+//   step + fence + fence + table        -> no table (only the first attaches)
+//   step + unclosed fence + table       -> no table
+// Returns the line the step's inline table starts on, or undefined.
+function inlineTableLineAfterStep(lines, endLine, isTableRow) {
+  const rowTest = isTableRow || isGaugeTableRowLine;
+  let index = endLine + 1;
+  if (isDocStringFenceLine(lines[index])) {
+    let close;
+    for (let candidate = index + 1; candidate < lines.length; candidate += 1) {
+      if (isDocStringFenceLine(lines[candidate])) {
+        close = candidate;
+        break;
+      }
+    }
+    if (close === undefined) {
+      return undefined;
+    }
+    index = close + 1;
+  }
+  for (; index < lines.length; index += 1) {
+    const text = String(lines[index] || "").trim();
+    if (text === "") {
+      continue;
+    }
+    return rowTest(text) ? index : undefined;
+  }
+  return undefined;
+}
+
 function headingKind(line) {
   if (isScenarioHashHeading(line)) {
     return "scenario";
@@ -206,6 +244,7 @@ function headingMarkers(document) {
 
 module.exports = {
   closedDocStringLines,
+  inlineTableLineAfterStep,
   isGaugeDataTableKeywordLine,
   isGaugeTagKeywordLine,
   isGaugeTableRowLine,

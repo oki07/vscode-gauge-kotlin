@@ -13,6 +13,7 @@ const {
   isGaugeDataTableKeywordLine,
   isGaugeTableRowLine,
   isGaugeTagKeywordLine,
+  inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
 } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
@@ -158,23 +159,11 @@ function isInlineTableLine(line) {
 // with the args [special_string, table], and stopping at the fence generated an
 // annotation that cleared the diagnostic without satisfying the runner.
 function hasInlineTableAfterStep(document, endLineNumber) {
-  let fenceLine;
-  for (let line = endLineNumber + 1; line < documentLineCount(document); line += 1) {
-    const text = String(documentLine(document, line) || "").trim();
-    if (text === "") {
-      continue;
-    }
-    if (fenceLine === undefined && isDocStringFenceLine(text) && hasClosedDocString(document, line)) {
-      fenceLine = docStringEndLine(document, line);
-      if (fenceLine === undefined) {
-        return false;
-      }
-      line = fenceLine;
-      continue;
-    }
-    return isInlineTableLine(text);
-  }
-  return false;
+  const lines = Array.from(
+    { length: documentLineCount(document) },
+    (_value, line) => documentLine(document, line),
+  );
+  return sharedInlineTableLineAfterStep(lines, endLineNumber, isInlineTableLine) !== undefined;
 }
 
 

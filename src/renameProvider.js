@@ -5,6 +5,7 @@ const {
   isGaugeDataTableKeywordLine,
   isGaugeTableRowLine,
   isGaugeTagKeywordLine,
+  inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
 } = require("./gaugeHeadings");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 
@@ -184,14 +185,7 @@ function isInlineTableLine(line) {
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {
-  for (let index = endLine + 1; index < lines.length; index += 1) {
-    const text = String(lines[index] || "").trim();
-    if (text === "") {
-      continue;
-    }
-    return isInlineTableLine(text) ? index : undefined;
-  }
-  return undefined;
+  return sharedInlineTableLineAfterStep(lines, endLine, isInlineTableLine);
 }
 
 
@@ -453,23 +447,45 @@ function createOrderOfArgs(oldName, newName) {
 //     orderMap {0:-1}            ->  * read "file:nope.txt"
 // Leaving "<language>" behind made the specification stop parsing, because a
 // dynamic parameter with nothing to resolve against is an error.
+// A new parameter's argument, as getArgsInOrder builds it: Static, with the
+// parameter's own name as the value. A concept usage supplies its heading's
+// parameters by name, so there the dynamic form is kept instead.
+//
+// The special form (<file:...>, <table:...>) is NOT kept: getArgsInOrder keeps
+// it only when the parser RESOLVED the parameter, and a rename introduces a name
+// that almost never resolves yet. Probed - "read" -> "read <file:nope.txt>"
+// formats `* read "file:nope.txt"`. Writing the angled form leaves a dynamic
+// parameter the parser rejects, which is the failure this exists to avoid.
 function freshArgumentFor(slotRaw, isConcept) {
   const name = slotRaw.slice(1, -1);
-  if (isConcept || /^\s*(file|table)\s*:/i.test(name)) {
+  if (isConcept) {
     return slotRaw;
   }
   return `"${name.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
 }
 
-// DELIBERATE DIVERGENCE, and the only one here. Gauge matches parameters by
-// exact text, so it cannot tell a RENAMED parameter from a NEW one: probed,
-// renaming "Pay with <amount>" to "Pay with <value>" gives orderMap {0:-1} and
-// rewrites `* Pay with <amount>` as `* Pay with "value"`, destroying the binding.
-// This extension can tell them apart, and already does - it renames the Kotlin
-// method parameter to match. So a slot that still sits within the old step's
-// parameter count is a rename and keeps the dynamic form; only a slot BEYOND
-// that count is genuinely new and gets Gauge's static argument.
-function gaugeUsageReplacementName(newName, usageText, orderMap, isConcept, oldParameterCount) {
+// A usage slot can be missing for two opposite reasons, and only the order map
+// tells them apart:
+//   the parameter EXISTED in the old step and the usage's inline table supplies
+//   it (a concept heading's "<table1>"), so it is dropped from the usage; or
+//   the rename ADDED it, so the usage needs an argument for it.
+// Dropping both left the second unwritten, and the runner then could not find a
+// step whose annotation had gained a parameter. Probed over `* Load the payload`
+// above a table:
+//   "Load the payload <table>" -> "Store the payload <table>"        {0:0}
+//      -> * Store the payload
+//   "Load the payload <table>" -> "Load the payload <mode> <table>"  {0:-1,1:0}
+//      -> * Load the payload "mode"
+//
+// DELIBERATE DIVERGENCE, the only one here. Gauge matches parameters by exact
+// text and so cannot tell a RENAMED parameter from a NEW one: probed,
+// "Pay with <amount>" -> "Pay with <value>" gives {0:-1} and rewrites
+// `* Pay with <amount>` as `* Pay with "value"`, destroying the binding. This
+// extension can tell them apart and already does - it renames the Kotlin method
+// parameter to match, a design fifteen tests describe. So when the two steps
+// carry the SAME number of parameters an unmatched slot is a rename and keeps
+// its dynamic form; only a step that gained parameters has genuinely new ones.
+function gaugeUsageReplacementName(newName, usageText, orderMap, options = {}) {
   if (!usageText || !orderMap || orderMap.length === 0) {
     return newName;
   }
@@ -478,6 +494,7 @@ function gaugeUsageReplacementName(newName, usageText, orderMap, isConcept, oldP
   if (newSlots.length !== orderMap.length) {
     return newName;
   }
+  const renamedInPlace = newSlots.length === options.oldParameterCount;
   let result = "";
   let index = 0;
   for (let slot = 0; slot < newSlots.length; slot += 1) {
@@ -485,57 +502,35 @@ function gaugeUsageReplacementName(newName, usageText, orderMap, isConcept, oldP
     let replacement;
     if (source !== -1 && usageSlots[source]) {
       replacement = usageSlots[source].raw;
-    } else if (slot < oldParameterCount) {
+    } else if (source !== -1 && options.hasInlineTable) {
+      replacement = undefined;
+    } else if (renamedInPlace) {
       replacement = newSlots[slot].raw;
     } else {
-      replacement = freshArgumentFor(newSlots[slot].raw, isConcept);
+      replacement = freshArgumentFor(newSlots[slot].raw, options.isConcept);
     }
-    result += newName.slice(index, newSlots[slot].start) + replacement;
+    let start = newSlots[slot].start;
+    if (replacement === undefined) {
+      while (start > index && /\s/.test(newName[start - 1])) {
+        start -= 1;
+      }
+    }
+    result += newName.slice(index, start) + (replacement || "");
     index = newSlots[slot].end + 1;
   }
-  return result + newName.slice(index);
-}
-
-// A concept heading's trailing parameter can be supplied by the usage's inline
-// table, and Extract to Concept names it "<table1>" rather than "<table>". The
-// usage carries no slot for it, so writing the heading's text over the usage
-// left a dangling dynamic parameter that stops the specification parsing. Drop
-// exactly as many trailing parameters as the usage does not have slots for -
-// the mirror of removeTableParameters in src/extractConcept.js, and of Gauge's
-// own LSP, which appends " <table>" from the other side
-// (references/gauge/api/lang/rename.go getNewStepName).
-function removeTableBackedParameters(value, usageText) {
-  const slots = stepParameterSlots(value);
-  const wanted = stepParameterSlots(usageText || "").length;
-  if (slots.length <= wanted) {
-    return value;
-  }
-  let text = value;
-  for (let index = slots.length - 1; index >= wanted; index -= 1) {
-    let start = slots[index].start;
-    while (start > 0 && /\s/.test(text[start - 1])) {
-      start -= 1;
-    }
-    text = `${text.slice(0, start)}${text.slice(slots[index].end + 1)}`;
-  }
-  return text.trim();
+  return (result + newName.slice(index)).trim();
 }
 
 function gaugeReplacementName(value, hasInlineTable, options = {}) {
-  let text = hasInlineTable ? removeInlineTableSuffix(value) : value;
-  if (hasInlineTable && options.usageText !== undefined) {
-    text = removeTableBackedParameters(text, options.usageText);
-  }
+  const text = hasInlineTable ? removeInlineTableSuffix(value) : value;
   if (!options.orderMap || !options.usageText) {
     return text;
   }
-  return gaugeUsageReplacementName(
-    text,
-    options.usageText,
-    options.orderMap,
-    options.isConcept,
-    options.oldParameterCount,
-  );
+  return gaugeUsageReplacementName(text, options.usageText, options.orderMap, {
+    hasInlineTable,
+    isConcept: options.isConcept,
+    oldParameterCount: options.oldParameterCount,
+  });
 }
 
 function kotlinReplacementName(value, hasInlineTable, options = {}) {
