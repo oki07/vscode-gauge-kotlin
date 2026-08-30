@@ -198,6 +198,24 @@ test("configuredSpecDirs expands property references", () => {
   );
 });
 
+// `gauge validate` refuses first=${second} and second=${first} as a circular
+// reference. The editor must not treat the unresolved marker as a directory.
+test("configuredSpecDirs ignores circular property references", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["default.properties"],
+        readFileSync: () => "first = ${second}\nsecond = ${first}\ngauge_specs_dir = ${first}\n",
+      },
+    }),
+    [["specs"]],
+  );
+});
+
 // `gauge validate` reports "invalid unicode literal" and refuses the
 // environment for invalid\\uZZZZ. The editor must not reinterpret that invalid
 // value as a different directory name.

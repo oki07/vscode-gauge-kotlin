@@ -144,12 +144,17 @@ function propertyValue(values, key) {
       return undefined;
     }
     resolving.add(name);
+    let unresolvedReference = false;
     const resolved = value.replace(/\$\{(\w+)\}/g, (match, referencedKey) => {
       const referencedValue = resolve(referencedKey);
-      return referencedValue === undefined ? match : referencedValue;
+      if (referencedValue === undefined) {
+        unresolvedReference = true;
+        return match;
+      }
+      return referencedValue;
     });
     resolving.delete(name);
-    return resolved;
+    return unresolvedReference ? undefined : resolved;
   }
   return resolve(key);
 }
