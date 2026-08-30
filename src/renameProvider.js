@@ -496,8 +496,36 @@ function gaugeUsageReplacementName(newName, usageText, orderMap, isConcept, oldP
   return result + newName.slice(index);
 }
 
+// A concept heading's trailing parameter can be supplied by the usage's inline
+// table, and Extract to Concept names it "<table1>" rather than "<table>". The
+// usage carries no slot for it, so writing the heading's text over the usage
+// left a dangling dynamic parameter that stops the specification parsing. Drop
+// exactly as many trailing parameters as the usage does not have slots for -
+// the mirror of removeTableParameters in src/extractConcept.js, and of Gauge's
+// own LSP, which appends " <table>" from the other side
+// (references/gauge/api/lang/rename.go getNewStepName).
+function removeTableBackedParameters(value, usageText) {
+  const slots = stepParameterSlots(value);
+  const wanted = stepParameterSlots(usageText || "").length;
+  if (slots.length <= wanted) {
+    return value;
+  }
+  let text = value;
+  for (let index = slots.length - 1; index >= wanted; index -= 1) {
+    let start = slots[index].start;
+    while (start > 0 && /\s/.test(text[start - 1])) {
+      start -= 1;
+    }
+    text = `${text.slice(0, start)}${text.slice(slots[index].end + 1)}`;
+  }
+  return text.trim();
+}
+
 function gaugeReplacementName(value, hasInlineTable, options = {}) {
-  const text = hasInlineTable ? removeInlineTableSuffix(value) : value;
+  let text = hasInlineTable ? removeInlineTableSuffix(value) : value;
+  if (hasInlineTable && options.usageText !== undefined) {
+    text = removeTableBackedParameters(text, options.usageText);
+  }
   if (!options.orderMap || !options.usageText) {
     return text;
   }

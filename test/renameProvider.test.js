@@ -442,6 +442,47 @@ test("GaugeRenameProvider keeps a new concept parameter dynamic", async () => {
   );
 });
 
+// Extract to Concept produces the pair `# Prepare cart <table1>` and
+// `* Prepare cart` above its table: both have the step value "Prepare cart {}",
+// the heading's parameter being supplied by the usage's inline table. A rename
+// has to preserve that correspondence in both directions. Gauge's own LSP does
+// the same thing from the other side - references/gauge/api/lang/rename.go
+// getNewStepName appends " <table>" to the new name when step.HasInlineTable.
+test("GaugeRenameProvider keeps a concept table parameter out of its usages", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## One",
+    "",
+    "* Prepare cart",
+    "|item|qty|",
+    "|----|---|",
+    "|nut |2  |",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Prepare cart <table1>",
+    "* Confirm order",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/cart.cpt");
+  const vscode = createFakeVscode([specDocument, conceptDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    conceptDocument,
+    new vscode.Position(0, 4),
+    "Set up cart <table1>",
+  );
+
+  const byFile = (suffix) => edit.replacements
+    .filter((replacement) => replacement.uri.fsPath.endsWith(suffix))
+    .map((replacement) => replacement.newText);
+
+  // The heading keeps its parameter; the usage keeps supplying it with the
+  // table it already has, so the specification parses exactly as before.
+  assert.deepEqual(byFile("cart.cpt"), ["Set up cart <table1>"]);
+  assert.deepEqual(byFile("checkout.spec"), ["Set up cart"]);
+});
+
 test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge client is available", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
