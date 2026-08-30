@@ -440,7 +440,36 @@ function createOrderOfArgs(oldName, newName) {
 // text over every usage instead discarded each usage's arguments: a static
 // "gauge" became the template's <word>, which the parser then cannot resolve,
 // and a table-driven usage lost its binding to its own columns.
-function gaugeUsageReplacementName(newName, usageText, orderMap) {
+// A parameter with no counterpart in the old step gets a FRESH argument, and
+// getArgsInOrder builds it in three steps: Static with the parameter's own name
+// as the value; overridden to the special form when the parameter is a
+// <file:...> or <table:...>; overridden to Dynamic when the step resolves to a
+// concept, whose usage supplies its heading's parameters by name.
+//
+// Probed with the real refactorer plus formatter.FormatStep:
+//   "... vowels." -> "... vowels in <language>."  over a static usage
+//     orderMap {0:0, 1:1, 2:-1}  ->  * The word "gauge" has "3" vowels in "language".
+//   "read" -> "read <file:nope.txt>"
+//     orderMap {0:-1}            ->  * read "file:nope.txt"
+// Leaving "<language>" behind made the specification stop parsing, because a
+// dynamic parameter with nothing to resolve against is an error.
+function freshArgumentFor(slotRaw, isConcept) {
+  const name = slotRaw.slice(1, -1);
+  if (isConcept || /^\s*(file|table)\s*:/i.test(name)) {
+    return slotRaw;
+  }
+  return `"${name.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+}
+
+// DELIBERATE DIVERGENCE, and the only one here. Gauge matches parameters by
+// exact text, so it cannot tell a RENAMED parameter from a NEW one: probed,
+// renaming "Pay with <amount>" to "Pay with <value>" gives orderMap {0:-1} and
+// rewrites `* Pay with <amount>` as `* Pay with "value"`, destroying the binding.
+// This extension can tell them apart, and already does - it renames the Kotlin
+// method parameter to match. So a slot that still sits within the old step's
+// parameter count is a rename and keeps the dynamic form; only a slot BEYOND
+// that count is genuinely new and gets Gauge's static argument.
+function gaugeUsageReplacementName(newName, usageText, orderMap, isConcept, oldParameterCount) {
   if (!usageText || !orderMap || orderMap.length === 0) {
     return newName;
   }
@@ -453,9 +482,14 @@ function gaugeUsageReplacementName(newName, usageText, orderMap) {
   let index = 0;
   for (let slot = 0; slot < newSlots.length; slot += 1) {
     const source = orderMap[slot];
-    const replacement = source !== -1 && usageSlots[source]
-      ? usageSlots[source].raw
-      : newSlots[slot].raw;
+    let replacement;
+    if (source !== -1 && usageSlots[source]) {
+      replacement = usageSlots[source].raw;
+    } else if (slot < oldParameterCount) {
+      replacement = newSlots[slot].raw;
+    } else {
+      replacement = freshArgumentFor(newSlots[slot].raw, isConcept);
+    }
     result += newName.slice(index, newSlots[slot].start) + replacement;
     index = newSlots[slot].end + 1;
   }
@@ -467,7 +501,13 @@ function gaugeReplacementName(value, hasInlineTable, options = {}) {
   if (!options.orderMap || !options.usageText) {
     return text;
   }
-  return gaugeUsageReplacementName(text, options.usageText, options.orderMap);
+  return gaugeUsageReplacementName(
+    text,
+    options.usageText,
+    options.orderMap,
+    options.isConcept,
+    options.oldParameterCount,
+  );
 }
 
 function kotlinReplacementName(value, hasInlineTable, options = {}) {
@@ -2101,12 +2141,14 @@ class GaugeRenameProvider {
     return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
-  addGaugeRenames(edit, document, template, newName, operation, oldName) {
+  addGaugeRenames(edit, document, template, newName, operation, oldName, isConcept) {
     // Built once from the two templates: each usage then keeps the argument it
     // already had, moved to wherever that parameter now sits.
-    const orderMap = oldName
-      ? createOrderOfArgs(removeInlineTableSuffix(oldName), removeInlineTableSuffix(newName))
+    const oldTemplate = oldName ? removeInlineTableSuffix(oldName) : undefined;
+    const orderMap = oldTemplate
+      ? createOrderOfArgs(oldTemplate, removeInlineTableSuffix(newName))
       : undefined;
+    const oldParameterCount = oldTemplate ? stepParameterSlots(oldTemplate).length : 0;
     const lines = documentLines(document);
     const allowMultiline = this.allowsMultilineStep(document);
     const docStringLines = closedDocStringLines(lines);
@@ -2125,6 +2167,8 @@ class GaugeRenameProvider {
             document.uri,
             step.range,
             gaugeReplacementName(newName, step.hasInlineTable, {
+              isConcept,
+              oldParameterCount,
               orderMap,
               usageText: step.text,
             }),
@@ -2517,6 +2561,14 @@ class GaugeRenameProvider {
       return CANCELLED_RENAME_OPERATION;
     }
     const implementationDocuments = this.stepImplementationDocuments(documents);
+    // A usage of a CONCEPT supplies its heading's parameters by name, so a newly
+    // added parameter stays dynamic there - getArgsInOrder's `if step.IsConcept`
+    // branch. Anywhere else the fresh argument is static.
+    const templateIsConcept = documents.some((candidate) => (
+      isConceptDocument(candidate)
+      && findConceptHeadings(candidate.getText())
+        .some((heading) => heading.normalized && heading.normalized === step.template)
+    ));
     for (const candidate of documents) {
       if (isGaugeDocument(candidate)) {
         const renamed = this.callSyncForOperation(
@@ -2528,6 +2580,7 @@ class GaugeRenameProvider {
             newName,
             operation,
             step.text,
+            templateIsConcept,
           ),
         );
         if (renamed === CANCELLED_RENAME_OPERATION) {

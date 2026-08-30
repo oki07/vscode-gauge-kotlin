@@ -368,6 +368,80 @@ test("GaugeRenameProvider keeps each usage's own arguments", async () => {
   );
 });
 
+// getArgsInOrder builds a fresh argument when a new parameter has no counterpart
+// in the old step, and its DEFAULT is Static with the parameter's own name as
+// the value - the Dynamic form is reserved for a step that resolves to a
+// concept. Probed with the real refactorer plus formatter.FormatStep:
+//   "The word <word> has <expectedCount> vowels." -> "... vowels in <language>."
+//   over `* The word "gauge" has "3" vowels.` gives orderMap {0:0, 1:1, 2:-1}
+//   and formats `* The word "gauge" has "3" vowels in "language".`
+// Leaving "<language>" in a plain spec step is an unresolvable dynamic
+// parameter, so the rename made the specification stop parsing.
+test("GaugeRenameProvider fills a new parameter with a static argument", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Vowels",
+    "",
+    "## One",
+    "",
+    "* The word \"gauge\" has \"3\" vowels.",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/vowels.spec");
+  const kotlinDocument = createDocument([
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "@Step(\"The word <word> has <expectedCount> vowels.\")",
+    "fun count(word: String, expectedCount: Int) {}",
+  ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+  const vscode = createFakeVscode([specDocument, kotlinDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    kotlinDocument,
+    new vscode.Position(2, 20),
+    "The word <word> has <expectedCount> vowels in <language>.",
+  );
+
+  assert.deepEqual(
+    edit.replacements
+      .filter((replacement) => replacement.uri.fsPath.endsWith("vowels.spec"))
+      .map((replacement) => replacement.newText),
+    ["The word \"gauge\" has \"3\" vowels in \"language\"."],
+  );
+});
+
+// A step that resolves to a CONCEPT keeps the dynamic form: getArgsInOrder's
+// `if step.IsConcept` branch overrides the static default, because a concept
+// usage supplies its heading's parameters by name.
+test("GaugeRenameProvider keeps a new concept parameter dynamic", async () => {
+  const { GaugeRenameProvider } = require("../src/renameProvider");
+  const specDocument = createDocument([
+    "# Checkout",
+    "",
+    "## One",
+    "",
+    "* Reuse payment \"visa\"",
+  ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+  const conceptDocument = createDocument([
+    "# Reuse payment <method>",
+    "* Confirm order",
+  ].join("\n"), "gauge-concept", "/workspace/gauge/specs/concepts/payment.cpt");
+  const vscode = createFakeVscode([specDocument, conceptDocument]);
+  const provider = new GaugeRenameProvider({ vscode });
+
+  const edit = await provider.provideRenameEdits(
+    conceptDocument,
+    new vscode.Position(0, 4),
+    "Reuse payment <method> now <mode>",
+  );
+
+  assert.deepEqual(
+    edit.replacements
+      .filter((replacement) => replacement.uri.fsPath.endsWith("checkout.spec"))
+      .map((replacement) => replacement.newText),
+    ["Reuse payment \"visa\" now <mode>"],
+  );
+});
+
 test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge client is available", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
