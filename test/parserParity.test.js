@@ -13,8 +13,8 @@ const test = require("node:test");
 // happens to output.
 //
 // This exists because hand-tuning the heading, table and doc string state machine
-// against one case at a time kept introducing regressions that only a later audit
-// found. A regression here now fails `npm run check` instead.
+// against one case at a time, which is easy to get right for the case at hand and
+// wrong for a shape fixed earlier. This corpus fails `npm run check` instead.
 //
 // Messages the parser does not model are excluded: Undefined Step and duplicate
 // implementation come from the local Kotlin index, and Gauge reports the multiple

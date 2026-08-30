@@ -99,10 +99,11 @@ function closedDocStringLines(lines) {
 
 // references/gauge/parser/lex.go isTableRow:
 //   text[0] == '|' && text[len(text)-1] == '|'
-// A lone "|" satisfies it, because both indices are the same character. This is
-// the one place the rule lives: eight copies of it had drifted apart, and a
-// disagreement between two of them let the quick fix generate a stub that could
-// not clear the diagnostic it was offered for.
+// A lone "|" satisfies it, because both indices are the same character.
+//
+// This is the one place the rule lives. Every module that decides what a step's
+// value is must import it: when two of them answer differently the editor
+// contradicts itself, and test/stepKeyAgreement.test.js is what catches that.
 // The two keywords do NOT take the same whitespace. Probed by putting each line
 // above a "=====" underline and watching for a promoted heading:
 //   "tags: x" / "tags : x"   -> a tags line

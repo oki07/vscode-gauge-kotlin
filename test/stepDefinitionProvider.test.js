@@ -600,12 +600,9 @@ test("GaugeStepDefinitionProvider keys annotations the way the runner does", asy
   );
 });
 
-// The doc-string-and-table rule reached two of eight copies, so the diagnostics
-// keyed such a step as "Load the payload {}" while F12, Find References, the
-// CodeLens and Rename keyed it as "Load the payload". With the correct
-// annotation present the editor showed no diagnostic, F12 answered nothing, and
-// a rename rewrote only the .spec. Ground truth from the real CLI: with
-// @Step("Load the payload") the runner answers
+// A step may carry a doc string AND an inline table, and the table is still an
+// argument. Against the real CLI, with @Step("Load the payload") the runner
+// answers
 //   Step implementation not found => 'Load the payload <table>'
 // and with @Step("Load the payload <table>") it answers "No errors found."
 test("stepTextAt keys a step with a doc string and a table like the runner", () => {

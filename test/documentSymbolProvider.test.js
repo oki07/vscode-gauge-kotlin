@@ -718,7 +718,7 @@ test("GaugeDocumentSymbolProvider matches raw queries against concept heading va
   }
 
   // A concept heading is a single "#", so this file holds no "##" heading and the
-  // queries that only matched one ("# S" and " Shared", which used to hit
+  // queries that only match one ("# S" and " Shared", which would hit
   // "## Shared payment") now match nothing. Scenario "##" matching is covered by
   // the specification-side tests above.
   assert.deepEqual(results, [

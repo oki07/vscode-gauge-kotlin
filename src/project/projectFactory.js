@@ -394,10 +394,10 @@ function createProjectFactory(options = {}) {
     try {
       return readProjectManifest(fileSystem, pathModule, root);
     } catch (error) {
-      // Unreadable is as fatal as unparseable - EACCES, EISDIR, a broken
-      // symlink - and only the latter used to say so. A missing manifest just
-      // means "not a Gauge project" and must stay quiet, and anything without an
-      // errno code is a bug in this extension rather than a manifest problem.
+      // Unreadable is as fatal as unparseable: EACCES, EISDIR and a broken
+      // symlink all leave the project unusable and must say so. A missing
+      // manifest just means "not a Gauge project" and stays quiet, and anything
+      // without an errno code is a bug here rather than a manifest problem.
       if (isReportableManifestError(error)) {
         reportInvalidManifest(root, error);
       }

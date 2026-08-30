@@ -4032,10 +4032,8 @@ function isGaugeHashHeadingLine(line) {
   return /^#(?!#)/.test(text) || /^##(?!#)/.test(text);
 }
 
-// One spelling of the rule, in src/gaugeHeadings.js. The two copies used to
-// disagree on `"""`, `___`, `---` and `===`, and each was wrong on a different
-// half: this one promoted the teardown marker to a heading, and that one refused
-// to promote a doc-string fence or a run of dashes that Gauge does promote.
+// The rule itself lives in src/gaugeHeadings.js; this adds only the hash-heading
+// exclusion the diagnostics need.
 function isLegacyHeadingText(line) {
   const text = String(line || "").trim();
   return hasLegacyHeadingText(text)
@@ -6456,7 +6454,7 @@ function previousLineBounds(text, lineStart) {
   }
   const end = lineStart - 1;
   const start = end === 0 ? 0 : text.lastIndexOf("\n", end - 1) + 1;
-  // A file whose first character is a newline used to yield {start: 1, end: 0},
+  // A file whose first character is a newline yields {start: 1, end: 0},
   // and the caller re-entered with the same bounds forever, hanging the scan and
   // with it every feature that runs it.
   return start > end ? undefined : { end, start };

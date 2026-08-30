@@ -1,11 +1,8 @@
 "use strict";
 
 // Two grammars meet when the extension asks "is this step implemented?", and
-// they are NOT the same grammar. Keeping them in one place is the point of this
-// module: the rule used to live in eight copies of one file's helper, and
-// correcting some of them made the editor contradict itself - the diagnostics
-// called a step undefined while Go to Definition resolved it, and a rename
-// rewrote a specification while silently leaving its annotation behind.
+// they are NOT the same grammar. Both live here so that every module answers
+// with the same one; test/stepKeyAgreement.test.js checks that they do.
 //
 // SPEC side: references/gauge parser.ExtractStepValueAndParams. A quoted run and
 // a <dynamic> run are both arguments and collapse to {}; a bare "{" or "}" is a
