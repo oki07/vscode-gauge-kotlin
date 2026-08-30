@@ -98,6 +98,57 @@ function createChildProcess() {
   return child;
 }
 
+// A scaffolded project must have a terminal entry point that WORKS. `gauge run
+// specs` is not it for a build-tool project: gauge-java compiles only *.java
+// from src/test/java into gauge_bin and puts only gauge_bin on the classpath, so
+// a Kotlin project's steps are invisible and every step reports "Step
+// implementation not found". The stock java_maven and java_gradle templates
+// ship the same empty gauge_custom_build_path and document the BUILD TOOL
+// instead.
+//
+// Verified by running real Maven against the generated pom: with no <execution>
+// binding a goal to a phase, `mvn -B clean test` reports BUILD SUCCESS having
+// executed no specification at all. Adding a bare execution makes it run them
+// (gauge-maven-plugin's execute mojo already defaults to the test phase).
+test("the bundled templates document a terminal entry point that works", () => {
+  const {
+    listBundledKotlinTemplates,
+    writeBundledKotlinTemplate,
+  } = require("../src/init/bundledKotlinTemplates");
+  const written = new Map();
+  const fileSystem = {
+    existsSync: () => false,
+    mkdirSync() {},
+    writeFileSync(file, content) {
+      written.set(String(file), String(content));
+    },
+  };
+  const fileFor = (label, suffix) => {
+    written.clear();
+    writeBundledKotlinTemplate({
+      fileSystem,
+      pathModule: path.posix,
+      projectRoot: "/p",
+      projectName: "demo",
+      template: listBundledKotlinTemplates().find((entry) => entry.label === label),
+    });
+    return [...written.entries()].find(([file]) => file.endsWith(suffix))[1];
+  };
+
+  const pom = fileFor("kotlin_maven", "pom.xml");
+  assert.match(pom, /<executions>[\s\S]*<goal>execute<\/goal>[\s\S]*<\/executions>/);
+
+  for (const [label, command] of [["kotlin_maven", "mvn"], ["kotlin_gradle", "gradle"]]) {
+    const readme = fileFor(label, "README.md");
+    assert.equal(readme.includes("`gauge run specs` from a terminal"), false, label);
+    assert.match(readme, new RegExp(command), label);
+  }
+
+  for (const label of ["kotlin_maven", "kotlin_gradle"]) {
+    assert.match(fileFor(label, ".gitignore"), /gauge_bin\//, label);
+  }
+});
+
 test("ProjectInitializer creates a Gauge project from the selected template", async () => {
   const { ProjectInitializer } = require("../src/init/projectInit");
   const {

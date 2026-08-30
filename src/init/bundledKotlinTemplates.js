@@ -123,6 +123,7 @@ class StepImplementation {
 const GRADLE_GITIGNORE = `.gauge/
 logs/
 reports/
+gauge_bin/
 build/
 .gradle/
 .classpath
@@ -132,6 +133,7 @@ build/
 const MAVEN_GITIGNORE = `.gauge/
 logs/
 reports/
+gauge_bin/
 target/
 .classpath
 .project
@@ -209,6 +211,13 @@ const MAVEN_POM = `<?xml version="1.0" encoding="UTF-8"?>
         <groupId>com.thoughtworks.gauge.maven</groupId>
         <artifactId>gauge-maven-plugin</artifactId>
         <version>${GAUGE_MAVEN_PLUGIN_VERSION}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>execute</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
@@ -240,7 +249,12 @@ Gauge specifications with Kotlin step implementations.
 ## Running
 
 Use the Test Explorer, the Run and Debug code lenses above each specification, or
-\`gauge run specs\` from a terminal.
+\`gradle gauge -PspecsDir=specs\` from a terminal.
+
+\`gauge run specs\` will NOT work here: the Gauge Java runner compiles only
+\`*.java\` from \`src/test/java\` and puts only \`gauge_bin\` on the classpath, so it
+cannot see Kotlin classes that Gradle compiled. The build tool is the terminal
+entry point, exactly as the stock \`java_gradle\` template documents.
 `;
 
 const MAVEN_README = `# {{projectName}}
@@ -262,7 +276,12 @@ Gauge specifications with Kotlin step implementations.
 ## Running
 
 Use the Test Explorer, the Run and Debug code lenses above each specification, or
-\`gauge run specs\` from a terminal.
+\`mvn clean test\` from a terminal.
+
+\`gauge run specs\` will NOT work here: the Gauge Java runner compiles only
+\`*.java\` from \`src/test/java\` and puts only \`gauge_bin\` on the classpath, so it
+cannot see Kotlin classes that Maven compiled. The build tool is the terminal
+entry point, exactly as the stock \`java_maven\` template documents.
 `;
 
 const SHARED_FILES = [
