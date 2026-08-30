@@ -109,8 +109,9 @@ function propertyLines(content) {
   return lines;
 }
 
-function propertiesValue(content, key) {
+function propertyValues(content) {
   const separators = new Set(["=", ":"]);
+  const values = new Map();
   for (const rawLine of propertyLines(content)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#") || line.startsWith("!")) {
@@ -121,12 +122,34 @@ function propertiesValue(content, key) {
     if (separator === -1) {
       continue;
     }
-    if (line.slice(0, separator).trim() !== key) {
-      continue;
+    const propertyKey = unescapePropertyValue(line.slice(0, separator).trim());
+    if (propertyKey) {
+      values.set(propertyKey, unescapePropertyValue(line.slice(separator + 1).trim()));
     }
-    return unescapePropertyValue(line.slice(separator + 1).trim());
   }
-  return undefined;
+  return values;
+}
+
+function propertyValue(values, key) {
+  const resolving = new Set();
+  function resolve(name) {
+    const value = values.get(name);
+    if (value === undefined || resolving.has(name)) {
+      return undefined;
+    }
+    resolving.add(name);
+    const resolved = value.replace(/\$\{(\w+)\}/g, (match, referencedKey) => {
+      const referencedValue = resolve(referencedKey);
+      return referencedValue === undefined ? match : referencedValue;
+    });
+    resolving.delete(name);
+    return resolved;
+  }
+  return resolve(key);
+}
+
+function propertiesValue(content, key) {
+  return propertyValue(propertyValues(content), key);
 }
 
 function pathSegments(value) {
@@ -210,21 +233,18 @@ function propertiesValueFor(options, key) {
     .map((entry) => String((entry && entry.name) || entry))
     .filter((name) => name.toLowerCase().endsWith(PROPERTIES_EXTENSION))
     .sort();
-  let value;
+  const values = new Map();
   for (const name of propertyFiles) {
     try {
-      const found = propertiesValue(
-        fileSystem.readFileSync(pathModule.join(directory, name), "utf8"),
-        key,
-      );
-      if (found !== undefined) {
-        value = found;
+      const entries = propertyValues(fileSystem.readFileSync(pathModule.join(directory, name), "utf8"));
+      for (const [propertyKey, propertyValue] of entries) {
+        values.set(propertyKey, propertyValue);
       }
     } catch (_error) {
       // An unreadable file is skipped, like a file Gauge cannot parse.
     }
   }
-  return value;
+  return propertyValue(values, key);
 }
 
 function configuredSpecDirs(options = {}) {

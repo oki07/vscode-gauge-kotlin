@@ -143,6 +143,25 @@ test("configuredSpecDirs unescapes unknown property characters", () => {
   );
 });
 
+// `gauge validate` resolves gauge_specs_dir = ${spec_root} from the matching
+// property and validates interpolated/interpolation.spec. Gauge expands a
+// property reference before it selects the specification directories.
+test("configuredSpecDirs expands property references", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["default.properties"],
+        readFileSync: () => "spec_root = interpolated\ngauge_specs_dir = ${spec_root}\n",
+      },
+    }),
+    [["interpolated"]],
+  );
+});
+
 // The environment directory itself is not fixed: references/gauge/env/env.go
 // getEnvDir prefers the gauge_env_dir variable and otherwise takes
 // EnvironmentDir from the project manifest.
