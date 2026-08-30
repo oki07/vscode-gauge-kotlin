@@ -77,8 +77,9 @@ both are bundled with this extension; any Kotlin template you register with
 - Debugging attaches to the JVM the runner starts; the port is
   `gauge.execution.debugPort`. A Kotlin or Java debug extension must be
   installed for the attach to succeed.
-- A whole Test Explorer selection runs as a single Gauge process, so `Before
-  Suite` and `After Suite` run once per run.
+- Test Explorer selections use one Gauge process for the plain CLI. Gradle and
+  Maven projects run each selected target separately because their build-plugin
+  target property accepts one specification at a time.
 
 ## Settings
 
