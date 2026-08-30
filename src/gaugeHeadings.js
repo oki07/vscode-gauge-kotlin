@@ -163,6 +163,31 @@ function inlineTableLineAfterStep(lines, endLine, isTableRow) {
   return undefined;
 }
 
+// references/gauge/parser/helper.go isUnderline accepts a run of ONE or more, so
+// "_" and "__" are teardown markers too - they simply also earn "Teardown should
+// have at least three underscore characters". Probed: both end the scenario, so
+// a scenario whose only step sits below one is empty. Requiring three let the
+// step stay in the scenario and the error vanish.
+function isGaugeTeardownLine(line) {
+  return /^_+$/.test(String(line || "").trim());
+}
+
+// A separator row is one whose cells are all runs of dashes, EMPTY CELLS ASIDE.
+// Probed with a header and nothing else, watching for "Data table should have at
+// least 1 data row":
+//   | |---|    -> separator        |---|---| -> separator
+//   |-|-|      -> separator        |:-:|---| -> NOT a separator, a data row
+// So an empty cell does not disqualify the row and a Markdown alignment cell
+// does not qualify it.
+function isGaugeTableSeparatorRow(line) {
+  const text = String(line || "").trim();
+  if (!isGaugeTableRowLine(text)) {
+    return false;
+  }
+  const cells = text.slice(1, -1).split("|").map((cell) => cell.trim()).filter(Boolean);
+  return cells.length > 0 && cells.every((cell) => /^-+$/.test(cell));
+}
+
 function headingKind(line) {
   if (isScenarioHashHeading(line)) {
     return "scenario";
@@ -194,7 +219,7 @@ function isLegacyHeadingText(line) {
   //   ---  -> heading text
   //   ===  -> heading text
   //   """  -> heading text            (an unmatched fence is just a comment)
-  if (isStepLine(text) || /^_+$/.test(text)) {
+  if (isStepLine(text) || isGaugeTeardownLine(text)) {
     return false;
   }
   return !isGaugeTagKeywordLine(text) && !isGaugeDataTableKeywordLine(text);
@@ -244,6 +269,8 @@ function headingMarkers(document) {
 
 module.exports = {
   closedDocStringLines,
+  isGaugeTableSeparatorRow,
+  isGaugeTeardownLine,
   inlineTableLineAfterStep,
   isGaugeDataTableKeywordLine,
   isGaugeTagKeywordLine,

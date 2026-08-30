@@ -4070,7 +4070,7 @@ function pushScenarioWithoutStepDiagnostic(vscode, diagnostics, scenario) {
 
 // references/gauge/parser/lex.go isTearDown: a run of three or more underscores.
 function isTeardownMarkerLine(line) {
-  return /^_{3,}\s*$/.test(String(line || "").trim());
+  return isGaugeTeardownLine(line);
 }
 
 function duplicateScenarioDiagnostics(vscode, text) {
@@ -4302,8 +4302,7 @@ function tableHeaderDiagnostics(vscode, text) {
 }
 
 function isGaugeTableSeparatorRow(line) {
-  const cells = gaugeTableCells(line);
-  return cells.length > 0 && cells.every((cell) => /^-+$/.test(cell));
+  return hasGaugeTableSeparatorRow(line);
 }
 
 function dataTableWithoutRowDiagnostics(vscode, text) {
@@ -5307,7 +5306,7 @@ function isGaugeSyntaxBoundary(line) {
     || /^-+$/.test(text)
     // The teardown marker: references/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
-    || /^_{3,}\s*$/.test(text);
+    || isGaugeTeardownLine(text);
 }
 
 function isDocStringFenceLine(line) {
@@ -8914,6 +8913,8 @@ const {
   isGaugeTagKeywordLine: hasGaugeTagKeyword,
   isLegacyHeadingText: hasLegacyHeadingText,
   inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
+  isGaugeTeardownLine,
+  isGaugeTableSeparatorRow: hasGaugeTableSeparatorRow,
 } = require("./gaugeHeadings");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 

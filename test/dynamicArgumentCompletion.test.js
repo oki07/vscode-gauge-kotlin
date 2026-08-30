@@ -1060,6 +1060,18 @@ test("GaugeDynamicArgumentCompletionProvider stops table dynamic arguments at un
   assert.deepEqual(afterPipeItems, []);
 });
 
+// Whichever of a quote or an angle bracket opens FIRST wins. Probed:
+// `* render "<html>" now` takes ONE static argument and reports no unresolved
+// parameter, so "html" is not a dynamic argument there - offering it produced a
+// step Gauge never sees.
+test("GaugeDynamicArgumentCompletionProvider ignores angle brackets inside a static argument", () => {
+  const { dynamicArgumentsInLine } = require("../src/dynamicArgumentCompletion");
+
+  assert.deepEqual(dynamicArgumentsInLine("* render \"<html>\" now"), []);
+  assert.deepEqual(dynamicArgumentsInLine("* render <html> now"), ["html"]);
+  assert.deepEqual(dynamicArgumentsInLine("* render \"a\" then <b>"), ["b"]);
+});
+
 test("GaugeDynamicArgumentCompletionProvider suggests table headers without closing pipes", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();

@@ -15,6 +15,37 @@ class CapturingSemanticTokensBuilder {
   }
 }
 
+// An underline promotes a COMMENT and nothing else. Painting whatever sits above
+// "===" as a heading coloured a step, a tags line, a table row and a teardown
+// marker as headings in a .spec, so the same line was a heading here and a step
+// everywhere else in the extension.
+test("GaugeSemanticTokensProvider promotes only a comment above an underline", () => {
+  const {
+    GaugeSemanticTokensProvider,
+    tokenTypes,
+  } = require("../src/semanticTokensProvider");
+  const typesFor = (line) => {
+    const provider = new GaugeSemanticTokensProvider({
+      SemanticTokensBuilder: CapturingSemanticTokensBuilder,
+    });
+    const document = {
+      uri: { fsPath: "/workspace/specs/example.spec" },
+      getText() {
+        return [line, "====="].join("\n");
+      },
+    };
+    return provider.provideDocumentSemanticTokens(document)
+      .filter((entry) => entry.line === 0)
+      .map((entry) => tokenTypes[entry.tokenType]);
+  };
+
+  assert.deepEqual(typesFor("Just a comment"), ["specification"]);
+  assert.equal(typesFor("* a step").includes("specification"), false);
+  assert.equal(typesFor("tags: smoke").includes("specification"), false);
+  assert.equal(typesFor("| a | b |").includes("specification"), false);
+  assert.equal(typesFor("____").includes("specification"), false);
+});
+
 test("GaugeSemanticTokensProvider tokenizes Gauge document elements", () => {
   const {
     GaugeSemanticTokensProvider,

@@ -5,6 +5,7 @@ const {
   isGaugeHashHeading,
   isScenarioHashHeading,
   isLegacyHeadingText: hasLegacyHeadingText,
+  isGaugeTeardownLine,
 } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
@@ -206,7 +207,7 @@ function isStepLine(line) {
 }
 
 function isTeardownIdentifierLine(line) {
-  return /^_{3,}[ \t\f]*$/.test(String(line || "").trimStart());
+  return isGaugeTeardownLine(line);
 }
 
 // isLegacyHeadingText already applies Gauge's rule. Rejecting any line merely
@@ -352,12 +353,15 @@ class GaugeSemanticTokensProvider {
 
       if (index + 1 < lines.length) {
         const nextLine = lines[index + 1];
+        // An underline promotes a COMMENT and nothing else: a step, a tags
+        // line, a table row, a teardown marker and an existing hash heading all
+        // keep their own kind. Testing only the underline painted every one of
+        // them as a heading in a .spec, so the same line was coloured a heading
+        // here and diagnosed as a step - or a teardown - by everything else.
         if (
           /^[=]+$/.test(String(nextLine || "").trim())
-          && (
-            !conceptDocument
-            || (isConceptLegacyUnderlineHeadingText(line) && hasFollowingLine(lines, index + 1))
-          )
+          && isConceptLegacyUnderlineHeadingText(line)
+          && (!conceptDocument || hasFollowingLine(lines, index + 1))
         ) {
           const leadingSpaces = line.length - line.trimStart().length;
           tagsContinuation = false;
@@ -366,7 +370,11 @@ class GaugeSemanticTokensProvider {
           index += 2;
           continue;
         }
-        if (!conceptDocument && /^[-]+$/.test(String(nextLine || "").trim())) {
+        if (
+          !conceptDocument
+          && /^[-]+$/.test(String(nextLine || "").trim())
+          && isConceptLegacyUnderlineHeadingText(line)
+        ) {
           const leadingSpaces = line.length - line.trimStart().length;
           tagsContinuation = false;
           builder.push(index, leadingSpaces, line.length - leadingSpaces, tokenTypes.indexOf("scenario"), 0);

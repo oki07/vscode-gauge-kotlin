@@ -12,6 +12,8 @@ const {
   isLegacyHeadingText,
   isScenarioHashHeading,
   inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
+  isGaugeTeardownLine,
+  isGaugeTableSeparatorRow,
 } = require("./gaugeHeadings");
 
 const nodeFs = require("node:fs");
@@ -210,8 +212,11 @@ function hasLegacyHeadingText(line) {
   return isLegacyHeadingText(line);
 }
 
+// isLegacyHeadingText already applies Gauge's rule. The extra filter dropped
+// real concept headings such as "Create issue #<id>" - probed, all three of
+// "#", "*" and "|" in the TEXT still define a concept.
 function isConceptLegacyHeadingText(line) {
-  return hasLegacyHeadingText(line) && !/[#*|]/.test(line);
+  return hasLegacyHeadingText(line);
 }
 
 function hasFollowingLine(lines, lineNumber) {
@@ -935,11 +940,7 @@ function scenarioDataTableHeaders(text, lineNumber) {
 }
 
 function isTableSeparatorLine(line) {
-  if (!isTableLine(line)) {
-    return false;
-  }
-  const cells = tableCells(line);
-  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
+  return isGaugeTableSeparatorRow(line);
 }
 
 function isDocStringFenceLine(line) {
@@ -961,15 +962,55 @@ function isGaugeSyntaxBoundary(line) {
     // branch, let a multi-line step swallow "____" and offer it as a completion.
     || /^=+$/.test(text)
     || /^-+$/.test(text)
-    || /^_{3,}\s*$/.test(text);
+    || isGaugeTeardownLine(text);
+}
+
+// Whichever of a quote or an angle bracket opens FIRST wins, as every other copy
+// of the rule in the product reads it. Scanning for "<" alone offered the inside
+// of a static argument as a parameter: probed, `* render "<html>" now` takes ONE
+// static argument and reports no unresolved parameter, so "html" is not a
+// dynamic argument there and completing it produced a step Gauge never sees.
+function staticArgumentEnd(line, openIndex) {
+  for (let index = openIndex + 1; index < line.length; index += 1) {
+    if (line[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (line[index] === "\"") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function nextUnquotedAngle(line, fromIndex) {
+  for (let index = fromIndex; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
+    if (character === "\"") {
+      const end = staticArgumentEnd(line, index);
+      if (end === -1) {
+        return -1;
+      }
+      index = end;
+      continue;
+    }
+    if (character === "<") {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function dynamicArgumentsInLine(line, options = {}) {
   const values = [];
-  let openIndex = line.indexOf("<");
+  let openIndex = nextUnquotedAngle(line, 0);
   while (openIndex !== -1) {
     if (isEscapedCharacter(line, openIndex)) {
-      openIndex = line.indexOf("<", openIndex + 1);
+      openIndex = nextUnquotedAngle(line, openIndex + 1);
       continue;
     }
     const closeIndex = closingAngleIndex(
@@ -981,14 +1022,14 @@ function dynamicArgumentsInLine(line, options = {}) {
       break;
     }
     if (line[closeIndex] !== ">") {
-      openIndex = line.indexOf("<", closeIndex + 1);
+      openIndex = nextUnquotedAngle(line, closeIndex + 1);
       continue;
     }
     const value = line.slice(openIndex + 1, closeIndex).trim();
     if (value) {
       values.push(value);
     }
-    openIndex = line.indexOf("<", closeIndex + 1);
+    openIndex = nextUnquotedAngle(line, closeIndex + 1);
   }
   return values;
 }
@@ -2310,6 +2351,7 @@ class GaugeDynamicArgumentCompletionProvider {
 }
 
 module.exports = {
+  dynamicArgumentsInLine,
   GaugeDynamicArgumentCompletionProvider,
   conceptDynamicArguments,
   scenarioDataTableHeaders,

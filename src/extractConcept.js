@@ -5,6 +5,7 @@ const {
   isGaugeTableRowLine,
   isLegacyHeadingText: hasLegacyHeadingText,
   inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
+  isGaugeTeardownLine,
 } = require("./gaugeHeadings");
 
 // references/gauge/parser/lex.go isDataTable matches
@@ -247,7 +248,7 @@ function isGaugeSyntaxBoundary(text) {
     // references/gauge/parser/lex.go isTearDown).
     || /^=+$/.test(line)
     || /^-+$/.test(line)
-    || /^_{3,}$/.test(line);
+    || isGaugeTeardownLine(line);
 }
 
 function multilineStepLineAt(document, lineNumber) {
@@ -488,8 +489,12 @@ function isEscapedPipe(line, index) {
   return isEscaped(line, index);
 }
 
+// Cells, not a line, here - but the same rule: empty cells aside, every cell is
+// a run of dashes. See isGaugeTableSeparatorRow in src/gaugeHeadings.js for the
+// probe that settles the empty and the Markdown-alignment cases.
 function isTableSeparator(cells) {
-  return cells && cells.length > 0 && cells.every((cell) => /^-+$/.test(cell));
+  const filled = (cells || []).map((cell) => String(cell || "").trim()).filter(Boolean);
+  return filled.length > 0 && filled.every((cell) => /^-+$/.test(cell));
 }
 
 function formatGaugeTableLines(tableLines) {

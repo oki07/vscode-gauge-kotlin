@@ -10,6 +10,7 @@ const {
   isStepLine,
   isGaugeTableRowLine,
   inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
+  isGaugeTeardownLine,
 } = require("./gaugeHeadings");
 const {
   GaugeStepDiagnosticsProvider,
@@ -179,7 +180,7 @@ function isGaugeSyntaxBoundary(line) {
     || /^-+$/.test(text)
     // The teardown marker: references/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
-    || /^_{3,}\s*$/.test(text);
+    || isGaugeTeardownLine(text);
 }
 
 function multilineGaugeStepText(lines, lineNumber) {

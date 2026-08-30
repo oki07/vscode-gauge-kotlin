@@ -5846,6 +5846,42 @@ test("GaugeStepDiagnosticsProvider sees the table of a step that also has a doc 
   assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
+// isUnderline accepts a run of ONE or more, so "_" and "__" are teardown
+// markers too - they simply also earn the underscore-count error. Requiring
+// three left the step inside the scenario, so the scenario looked non-empty.
+// Probed: both shapes report BOTH errors, "___" reports only the second.
+test("GaugeStepDiagnosticsProvider ends a scenario at a short teardown marker", () => {
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const messagesFor = (marker) => {
+    const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });
+    const document = createDocument([
+      "# Checkout",
+      "",
+      "## Scenario",
+      "",
+      marker,
+      "* Confirm order",
+    ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+    const implementation = createDocument([
+      "@Step(\"Confirm order\")",
+      "fun confirm() {}",
+    ].join("\n"));
+    return provider.provideDiagnostics(document, [document, implementation])
+      .map((diagnostic) => diagnostic.message)
+      .filter((message) => message.includes("Teardown") || message.includes("at least one step"));
+  };
+
+  assert.deepEqual(messagesFor("_"), [
+    "Teardown should have at least three underscore characters",
+    "Scenario should have at least one step",
+  ]);
+  assert.deepEqual(messagesFor("__"), [
+    "Teardown should have at least three underscore characters",
+    "Scenario should have at least one step",
+  ]);
+  assert.deepEqual(messagesFor("___"), ["Scenario should have at least one step"]);
+});
+
 test("GaugeStepDiagnosticsProvider warns on unresolved Gauge table row dynamic parameters", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
   const provider = new GaugeStepDiagnosticsProvider({ vscode: createFakeVscode() });

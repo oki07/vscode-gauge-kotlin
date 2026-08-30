@@ -671,5 +671,53 @@
     "parserErrorLines": [
       1
     ]
+  },
+  {
+    "label": "teardown one underscore",
+    "text": "# S\n\n## Sc\n\n_\n* a\n",
+    "parserErrors": [
+      "Teardown should have at least three underscore characters",
+      "Scenario should have at least one step"
+    ],
+    "parserErrorLines": []
+  },
+  {
+    "label": "teardown two underscores",
+    "text": "# S\n\n## Sc\n\n__\n* a\n",
+    "parserErrors": [
+      "Teardown should have at least three underscore characters",
+      "Scenario should have at least one step"
+    ],
+    "parserErrorLines": []
+  },
+  {
+    "label": "teardown three underscores",
+    "text": "# S\n\n## Sc\n\n___\n* a\n",
+    "parserErrors": [
+      "Scenario should have at least one step"
+    ],
+    "parserErrorLines": []
+  },
+  {
+    "label": "separator with an empty cell",
+    "text": "# S\n|a|b|\n| |---|\n\n## Sc\n* x\n",
+    "parserErrors": [
+      "Data table should have at least 1 data row"
+    ],
+    "parserErrorLines": []
+  },
+  {
+    "label": "separator with an alignment cell",
+    "text": "# S\n|a|b|\n|:-:|---|\n\n## Sc\n* x\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "separator of single dashes",
+    "text": "# S\n|a|b|\n|-|-|\n\n## Sc\n* x\n",
+    "parserErrors": [
+      "Data table should have at least 1 data row"
+    ],
+    "parserErrorLines": []
   }
 ]

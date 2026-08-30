@@ -6,6 +6,7 @@ const {
   isGaugeTableRowLine,
   isGaugeTagKeywordLine,
   inlineTableLineAfterStep: sharedInlineTableLineAfterStep,
+  isGaugeTeardownLine,
 } = require("./gaugeHeadings");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 
@@ -243,7 +244,7 @@ function isGaugeSyntaxBoundary(line) {
     || /^-+$/.test(text)
     // The teardown marker: references/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
-    || /^_{3,}\s*$/.test(text);
+    || isGaugeTeardownLine(text);
 }
 
 function removeInlineTableSuffix(value) {
