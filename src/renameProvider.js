@@ -24,7 +24,6 @@ const {
   allowMultilineStep,
   normalizeStepTemplate,
 } = require("./stepDefinitionProvider");
-const { GaugeValidateDiagnosticsProvider } = require("./validateDiagnostics");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const GAUGE_LANGUAGE = "gauge";
@@ -46,7 +45,6 @@ const WORKSPACE_SCAN_FILE_PATTERNS = [
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
 // references/gauge-java .../refactor/JavaRefactoring.java.
 const DUPLICATE_STEP_RENAME_ERROR = "Duplicate step implementation found.";
-const PRE_REFACTOR_ERRORS_MESSAGE = "Please fix all errors before refactoring.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
 const CANCELLED_RENAME_OPERATION = Symbol("cancelled rename operation");
 
@@ -89,18 +87,6 @@ function createWorkspaceEdit(vscode) {
       replacements.push({ uri, range, newText });
     },
   };
-}
-
-function validateErrors(result) {
-  if (Array.isArray(result)) {
-    return result;
-  }
-  return (result && result.errors) || [];
-}
-
-function isBlockingValidateError(error) {
-  const type = String((error && error.type) || "").replace(/^\[|\]$/g, "").toLowerCase();
-  return type !== "parsewarning";
 }
 
 function documentPath(document) {
@@ -1404,12 +1390,6 @@ class GaugeRenameProvider {
         projectFactory: this.projectFactory,
         vscode: this.vscode,
       });
-    this.validateDiagnosticsProvider = options.validateDiagnosticsProvider
-      || new GaugeValidateDiagnosticsProvider({
-        cli: options.cli,
-        projectFactory: this.projectFactory,
-        vscode: this.vscode,
-      });
     this.disposed = false;
     this.activeOperations = new Set();
     this.registrationDisposable = undefined;
@@ -2132,7 +2112,7 @@ class GaugeRenameProvider {
     );
   }
 
-  async preflightRename(document, operation) {
+  async preflightRename(_document, operation) {
     if (!this.isOperationActive(operation)) {
       return CANCELLED_RENAME_OPERATION;
     }
@@ -2145,23 +2125,8 @@ class GaugeRenameProvider {
         return CANCELLED_RENAME_OPERATION;
       }
     }
-    if (
-      !this.validateDiagnosticsProvider
-      || typeof this.validateDiagnosticsProvider.validateErrorsForDocument !== "function"
-    ) {
-      return;
-    }
-    const result = await this.callForOperation(
-      operation,
-      () => this.validateDiagnosticsProvider.validateErrorsForDocument(document, new Map()),
-    );
-    if (result === CANCELLED_RENAME_OPERATION) {
-      return CANCELLED_RENAME_OPERATION;
-    }
-    const errors = validateErrors(result).filter(isBlockingValidateError);
-    if (errors.length > 0) {
-      throw new Error(PRE_REFACTOR_ERRORS_MESSAGE);
-    }
+    // Gauge LSP requests workspace/saveFiles before refactoring and does not run
+    // gauge validate here (references/gauge/api/lang/rename.go).
     return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 

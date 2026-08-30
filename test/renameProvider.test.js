@@ -679,7 +679,7 @@ test("GaugeRenameProvider reports Gauge language server rename errors", async ()
   );
 });
 
-test("GaugeRenameProvider rejects local renames when Gauge validate reports errors", async () => {
+test("GaugeRenameProvider saves local renames without waiting for Gauge validate", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -712,20 +712,22 @@ test("GaugeRenameProvider rejects local renames when Gauge validate reports erro
     vscode,
   });
 
-  await assert.rejects(
-    () => provider.provideRenameEdits(
-      specDocument,
-      new vscode.Position(1, 4),
-      "Pay with <value>",
-    ),
-    /Please fix all errors before refactoring/,
+  const edit = await provider.provideRenameEdits(
+    specDocument,
+    new vscode.Position(1, 4),
+    "Pay with <value>",
   );
 
   assert.deepEqual(saveAllCalls, [true]);
-  assert.deepEqual(validateCalls, [true]);
+  assert.deepEqual(validateCalls, []);
+  assert.deepEqual(edit.replacements.map((replacement) => replacement.newText), [
+    "Pay with <value>",
+    "Pay with <value>",
+    "argValue: Any",
+  ]);
 });
 
-test("GaugeRenameProvider saves and validates before language server renames", async () => {
+test("GaugeRenameProvider saves without validation before language server renames", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -733,6 +735,7 @@ test("GaugeRenameProvider saves and validates before language server renames", a
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const requests = [];
   const saveAllCalls = [];
+  const validateCalls = [];
   const client = {
     sendRequest(method, params, token) {
       requests.push({ method, params, token });
@@ -749,6 +752,7 @@ test("GaugeRenameProvider saves and validates before language server renames", a
     validateErrorsForDocument(document, diagnostics) {
       assert.equal(document, specDocument);
       assert.ok(diagnostics instanceof Map);
+      validateCalls.push(true);
       return {
         errors: [],
       };
@@ -772,12 +776,13 @@ test("GaugeRenameProvider saves and validates before language server renames", a
   );
 
   assert.deepEqual(saveAllCalls, [true]);
+  assert.deepEqual(validateCalls, []);
   assert.deepEqual(requests.length, 1);
   assert.deepEqual(requests.map((request) => request.method), ["textDocument/rename"]);
   assert.deepEqual(edit.replacements, []);
 });
 
-test("GaugeRenameProvider validates but does not compile before language server rename", async () => {
+test("GaugeRenameProvider does not validate or compile before language server rename", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const { MavenProject } = require("../src/project/mavenProject");
   const specDocument = createDocument([
@@ -856,7 +861,7 @@ test("GaugeRenameProvider validates but does not compile before language server 
 
   assert.deepEqual(saveAllCalls, [true]);
   assert.deepEqual(spawnSyncCalls, []);
-  assert.deepEqual(validateCalls, [true]);
+  assert.deepEqual(validateCalls, []);
   assert.deepEqual(requests.map((request) => request.method), ["textDocument/rename"]);
   assert.deepEqual(edit.replacements, []);
 });
@@ -920,7 +925,7 @@ test("GaugeRenameProvider does not reject renames for implementation diagnostics
 
   assert.deepEqual(saveAllCalls, [true]);
   assert.deepEqual(diagnosticCalls, []);
-  assert.deepEqual(validateCalls, [true]);
+  assert.deepEqual(validateCalls, []);
   assert.deepEqual(edit.replacements.map((replacement) => replacement.newText), [
     "Pay with <value>",
     "Pay with <value>",
