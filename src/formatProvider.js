@@ -538,8 +538,15 @@ class GaugeFormatProvider {
     );
 
     if (typeof document.save === "function") {
+      const wasDirty = document.isDirty === true;
       try {
-        await document.save();
+        const saved = await document.save();
+        // TextDocument.save may return false for a clean document, which is
+        // already safe to format. A false return for a dirty document leaves the
+        // disk stale, so gauge format must not replace the user's buffer with it.
+        if (wasDirty && !saved) {
+          return [];
+        }
       } catch (error) {
         if (cancellationRequested(token)) {
           return [];

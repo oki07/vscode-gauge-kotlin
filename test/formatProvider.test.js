@@ -171,6 +171,42 @@ test("GaugeFormatProvider drops its edit when the document changed during format
   assert.deepEqual(edits, []);
 });
 
+// vscode.d.ts declares TextDocument.save(): Thenable<boolean>. A false result
+// leaves the document's in-memory text unsaved, while gauge format rewrites the
+// file on disk. Formatting that stale file and returning it as a whole-document
+// edit would overwrite the user's unsaved text.
+test("GaugeFormatProvider does not format when saving the document fails", async () => {
+  const { GaugeFormatProvider } = require("../src/formatProvider");
+  const spawned = [];
+  const document = createDocument("# Checkout\n* Pay\n");
+  document.isDirty = true;
+  document.save = () => Promise.resolve(false);
+  const provider = new GaugeFormatProvider({
+    cli: {
+      gaugeCommand: () => ({
+        spawn(...args) {
+          spawned.push(args);
+          throw new Error("format must not start after a failed save");
+        },
+      }),
+    },
+    fileSystem: {
+      readFileSync() {
+        throw new Error("format output must not be read after a failed save");
+      },
+    },
+    projectFactory: {
+      getGaugeRootFromFilePath: () => "/workspace/gauge",
+    },
+    vscode: createFakeVscode(),
+  });
+
+  const edits = await provider.provideDocumentFormattingEdits(document);
+
+  assert.deepEqual(edits, []);
+  assert.deepEqual(spawned, []);
+});
+
 test("GaugeFormatProvider returns full document edits from gauge format output", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
 
