@@ -76,9 +76,42 @@ function unescapePropertyValue(value) {
     });
 }
 
+function trailingBackslashCount(value) {
+  let count = 0;
+  for (let index = value.length - 1; index >= 0 && value[index] === "\\"; index -= 1) {
+    count += 1;
+  }
+  return count;
+}
+
+// Gauge loads Java properties through properties.MustLoadFiles. Its physical
+// line continuation uses one unescaped trailing backslash, then discards the
+// leading whitespace on the next line. Keep this normalization here so every
+// property consumer shares Gauge's directory and extension values.
+function propertyLines(content) {
+  const lines = [];
+  let joined = "";
+  let continuing = false;
+  for (const physicalLine of String(content || "").split(/\r?\n/)) {
+    const line = continuing ? physicalLine.replace(/^[ \t\f]+/, "") : physicalLine;
+    if (trailingBackslashCount(line) % 2 === 1) {
+      joined += line.slice(0, -1);
+      continuing = true;
+      continue;
+    }
+    lines.push(joined + line);
+    joined = "";
+    continuing = false;
+  }
+  if (continuing) {
+    lines.push(joined);
+  }
+  return lines;
+}
+
 function propertiesValue(content, key) {
   const separators = new Set(["=", ":"]);
-  for (const rawLine of String(content || "").split(/\r?\n/)) {
+  for (const rawLine of propertyLines(content)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#") || line.startsWith("!")) {
       continue;
