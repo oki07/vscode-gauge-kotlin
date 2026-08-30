@@ -117,6 +117,12 @@ function startsWithSegments(segments, prefix) {
 function environmentDirectory(fileSystem, pathModule, projectRoot) {
   const configured = process.env[GAUGE_ENV_DIR_PROPERTY];
   if (configured) {
+    // Gauge rejects an absolute gauge_env_dir before loading any properties
+    // (references/gauge/env/env.go getEnvDir). Do not reinterpret it as a
+    // project-relative path and decorate files from that unrelated location.
+    if (typeof pathModule.isAbsolute === "function" && pathModule.isAbsolute(configured)) {
+      return undefined;
+    }
     return configured;
   }
   try {
@@ -150,9 +156,13 @@ function propertiesValueFor(options, key) {
   if (!projectRoot || typeof fileSystem.readFileSync !== "function") {
     return undefined;
   }
+  const environmentDir = environmentDirectory(fileSystem, pathModule, projectRoot);
+  if (!environmentDir) {
+    return undefined;
+  }
   const directory = pathModule.join(
     projectRoot,
-    environmentDirectory(fileSystem, pathModule, projectRoot),
+    environmentDir,
     DEFAULT_ENV_NAME,
   );
   let names;

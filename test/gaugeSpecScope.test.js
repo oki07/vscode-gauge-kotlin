@@ -117,6 +117,42 @@ test("configuredSpecDirs honours a manifest EnvironmentDir", () => {
   );
 });
 
+// `env gauge_env_dir=/tmp gauge validate specs` reports that the variable must
+// be relative to the project root. An invalid absolute value must not make the
+// editor read a project-relative lookalike such as /workspace/gauge/tmp.
+test("configuredSpecDirs ignores an absolute gauge_env_dir", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+  const previous = process.env.gauge_env_dir;
+  const reads = [];
+  process.env.gauge_env_dir = "/tmp";
+  try {
+    assert.deepEqual(
+      configuredSpecDirs({
+        pathModule: path.posix,
+        projectRoot: "/workspace/gauge",
+        fileSystem: {
+          readdirSync(directory) {
+            reads.push(directory);
+            return ["default.properties"];
+          },
+          readFileSync(filename) {
+            reads.push(filename);
+            return "gauge_specs_dir = wrong-directory\n";
+          },
+        },
+      }),
+      [["specs"]],
+    );
+    assert.deepEqual(reads, []);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.gauge_env_dir;
+    } else {
+      process.env.gauge_env_dir = previous;
+    }
+  }
+});
+
 
 test("isMarkdownGaugeSpecFile honours a narrowed gauge_spec_file_extensions", () => {
   const { isMarkdownGaugeSpecFile } = require("../src/gaugeSpecScope");
