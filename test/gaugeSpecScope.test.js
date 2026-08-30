@@ -105,6 +105,25 @@ test("configuredSpecDirs joins continued property values", () => {
   );
 });
 
+// `gauge validate` resolves feature\\#s to feature#s and validates the
+// specification in that directory. A Java-properties backslash escapes a
+// marker character inside a value instead of creating a path separator.
+test("configuredSpecDirs unescapes property marker characters", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["default.properties"],
+        readFileSync: () => "gauge_specs_dir = feature\\#s\n",
+      },
+    }),
+    [["feature#s"]],
+  );
+});
+
 // The environment directory itself is not fixed: references/gauge/env/env.go
 // getEnvDir prefers the gauge_env_dir variable and otherwise takes
 // EnvironmentDir from the project manifest.

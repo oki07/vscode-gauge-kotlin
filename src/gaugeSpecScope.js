@@ -59,7 +59,7 @@ function firstWhitespaceIndex(line) {
 function unescapePropertyValue(value) {
   return String(value || "")
     .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
+    .replace(/\\([tnrf\\:= #!])/g, (_match, character) => {
       if (character === "t") {
         return "\t";
       }
