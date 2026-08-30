@@ -158,6 +158,37 @@ function propertiesValue(content, key) {
   return propertyValue(propertyValues(content), key);
 }
 
+function environmentPropertyFiles(fileSystem, pathModule, directory) {
+  const files = [];
+  function collect(currentDirectory) {
+    let entries;
+    try {
+      entries = fileSystem.readdirSync(currentDirectory, { withFileTypes: true }) || [];
+    } catch (_error) {
+      return;
+    }
+    for (const entry of entries) {
+      const name = String((entry && entry.name) || entry);
+      const filePath = pathModule.join(currentDirectory, name);
+      if (entry && typeof entry.isDirectory === "function") {
+        if (entry.isDirectory()) {
+          collect(filePath);
+        } else if (name.toLowerCase().endsWith(PROPERTIES_EXTENSION)) {
+          files.push(filePath);
+        }
+        continue;
+      }
+      if (name.toLowerCase().endsWith(PROPERTIES_EXTENSION)) {
+        files.push(filePath);
+      } else if (!name.includes(".")) {
+        collect(filePath);
+      }
+    }
+  }
+  collect(directory);
+  return files.sort();
+}
+
 function pathSegments(value) {
   return String(value || "")
     .split(/[\\/]/)
@@ -227,22 +258,13 @@ function propertiesValueFor(options, key) {
     environmentDir,
     DEFAULT_ENV_NAME,
   );
-  let names;
-  try {
-    names = typeof fileSystem.readdirSync === "function"
-      ? fileSystem.readdirSync(directory)
-      : [DEFAULT_ENV_FILE];
-  } catch (_error) {
-    return undefined;
-  }
-  const propertyFiles = (names || [])
-    .map((entry) => String((entry && entry.name) || entry))
-    .filter((name) => name.toLowerCase().endsWith(PROPERTIES_EXTENSION))
-    .sort();
+  const propertyFiles = typeof fileSystem.readdirSync === "function"
+    ? environmentPropertyFiles(fileSystem, pathModule, directory)
+    : [pathModule.join(directory, DEFAULT_ENV_FILE)];
   const values = new Map();
-  for (const name of propertyFiles) {
+  for (const file of propertyFiles) {
     try {
-      const entries = propertyValues(fileSystem.readFileSync(pathModule.join(directory, name), "utf8"));
+      const entries = propertyValues(fileSystem.readFileSync(file, "utf8"));
       for (const [propertyKey, propertyValue] of entries) {
         values.set(propertyKey, propertyValue);
       }

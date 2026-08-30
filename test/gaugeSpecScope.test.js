@@ -59,6 +59,42 @@ test("configuredSpecDirs reads every properties file in the environment director
   );
 });
 
+// `gauge validate` reads env/default/nested/custom.properties and validates
+// interpolated/interpolation.spec. Gauge recursively collects properties files
+// from the selected environment directory.
+test("configuredSpecDirs reads nested environment properties files", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+  const files = {
+    "/workspace/gauge/env/default/default.properties": "gauge_reports_dir = reports\n",
+    "/workspace/gauge/env/default/nested/custom.properties": "gauge_specs_dir = interpolated\n",
+  };
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync(directory) {
+          if (directory === "/workspace/gauge/env/default") {
+            return ["default.properties", "nested"];
+          }
+          if (directory === "/workspace/gauge/env/default/nested") {
+            return ["custom.properties"];
+          }
+          throw new Error(`Missing ${directory}`);
+        },
+        readFileSync(filename) {
+          if (files[filename] === undefined) {
+            throw new Error(`Missing ${filename}`);
+          }
+          return files[filename];
+        },
+      },
+    }),
+    [["interpolated"]],
+  );
+});
+
 // properties.MustLoadFiles merges in order, so the last file to define a key
 // wins.
 test("configuredSpecDirs lets the last properties file win", () => {
