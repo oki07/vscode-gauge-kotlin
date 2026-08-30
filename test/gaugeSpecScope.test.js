@@ -162,6 +162,25 @@ test("configuredSpecDirs expands property references", () => {
   );
 });
 
+// `gauge validate` reports "invalid unicode literal" and refuses the
+// environment for invalid\\uZZZZ. The editor must not reinterpret that invalid
+// value as a different directory name.
+test("configuredSpecDirs ignores invalid property Unicode escapes", () => {
+  const { configuredSpecDirs } = require("../src/gaugeSpecScope");
+
+  assert.deepEqual(
+    configuredSpecDirs({
+      pathModule: path.posix,
+      projectRoot: "/workspace/gauge",
+      fileSystem: {
+        readdirSync: () => ["default.properties"],
+        readFileSync: () => "gauge_specs_dir = invalid\\uZZZZ\n",
+      },
+    }),
+    [["specs"]],
+  );
+});
+
 // The environment directory itself is not fixed: references/gauge/env/env.go
 // getEnvDir prefers the gauge_env_dir variable and otherwise takes
 // EnvironmentDir from the project manifest.

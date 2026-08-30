@@ -57,7 +57,13 @@ function firstWhitespaceIndex(line) {
 }
 
 function unescapePropertyValue(value) {
-  return String(value || "")
+  const text = String(value || "");
+  if (/\\u(?![0-9a-fA-F]{4})/.test(text)) {
+    // Gauge's Java-properties reader rejects an invalid Unicode literal rather
+    // than treating its backslash as an ordinary escape marker.
+    throw new Error("Invalid property Unicode literal");
+  }
+  return text
     .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
     .replace(/\\(.)/g, (_match, character) => {
       if (character === "t") {
