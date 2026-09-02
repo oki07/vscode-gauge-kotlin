@@ -26,7 +26,11 @@ const GAUGE_JAVA_VERSION = "1.0.3";
 const GAUGE_GRADLE_PLUGIN_VERSION = "3.2.0";
 const GAUGE_MAVEN_PLUGIN_VERSION = "2.0.0";
 const KOTLIN_VERSION = "2.2.21";
-const JVM_TOOLCHAIN = "17";
+// The floor the templates document and Maven compiles against, not a JDK the
+// project selects. A Gradle Java toolchain matches an installed JDK by exact
+// major version and a fresh project configures no toolchain download
+// repository, so pinning one there fails on every machine whose JDK is newer.
+const JVM_TARGET = "17";
 
 const MANIFEST = `{
   "Language": "java",
@@ -151,10 +155,6 @@ repositories {
 dependencies {
     testImplementation("com.thoughtworks.gauge:gauge-java:${GAUGE_JAVA_VERSION}")
 }
-
-kotlin {
-    jvmToolchain(${JVM_TOOLCHAIN})
-}
 `;
 
 const GRADLE_SETTINGS = `rootProject.name = "{{projectName}}"
@@ -173,7 +173,7 @@ const MAVEN_POM = `<?xml version="1.0" encoding="UTF-8"?>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <kotlin.version>${KOTLIN_VERSION}</kotlin.version>
-    <maven.compiler.release>${JVM_TOOLCHAIN}</maven.compiler.release>
+    <maven.compiler.release>${JVM_TARGET}</maven.compiler.release>
   </properties>
 
   <dependencies>
@@ -233,7 +233,7 @@ Gauge specifications with Kotlin step implementations.
 
 ## Requirements
 
-- JDK ${JVM_TOOLCHAIN} or newer.
+- JDK ${JVM_TARGET} or newer.
 - Gauge CLI on your PATH.
 - Gradle on your PATH. To make the project self-contained instead, run
   \`gradle wrapper\` once and commit the generated \`gradlew\`,
@@ -263,7 +263,7 @@ Gauge specifications with Kotlin step implementations.
 
 ## Requirements
 
-- JDK ${JVM_TOOLCHAIN} or newer.
+- JDK ${JVM_TARGET} or newer.
 - Gauge CLI on your PATH.
 - Maven on your PATH, or the Maven Wrapper (\`mvnw\`) in this directory.
 

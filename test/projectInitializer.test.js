@@ -1915,3 +1915,39 @@ test("the bundled Gradle template says what it needs to run", () => {
   assert.ok(readme, [...written.keys()].join(", "));
   assert.match(readme, /gradle wrapper/);
 });
+
+test("a bundled template builds on any JDK at or above the one it documents", () => {
+  const {
+    listBundledKotlinTemplates,
+    writeBundledKotlinTemplate,
+  } = require("../src/init/bundledKotlinTemplates");
+
+  for (const template of listBundledKotlinTemplates()) {
+    const written = new Map();
+    writeBundledKotlinTemplate({
+      fileSystem: { mkdirSync() {}, writeFileSync(file, content) { written.set(file, content); } },
+      pathModule: path.posix,
+      projectRoot: "/p",
+      template,
+    });
+
+    const readme = written.get("/p/README.md");
+    const [, documented] = /JDK (\d+) or newer/.exec(readme) || [];
+    assert.ok(documented, `${template.label} README states no JDK requirement`);
+
+    // A Gradle Java toolchain selects an installed JDK by exact major version,
+    // and a fresh project configures no toolchain download repository, so
+    // `jvmToolchain(N)` fails outright on a machine whose only JDK is newer
+    // than N: "Cannot find a Java installation on your machine matching:
+    // {languageVersion=N ...}. Toolchain download repositories have not been
+    // configured." A template that documents "or newer" must compile with the
+    // JDK that runs the build. Maven's `maven.compiler.release` is a compiler
+    // flag on the running JDK, not a JDK selector, so it carries the floor
+    // without pinning an installation.
+    const build = written.get("/p/build.gradle.kts");
+    if (build) {
+      assert.doesNotMatch(build, /jvmToolchain\s*\(/, template.label);
+      assert.doesNotMatch(build, /languageVersion\s*[.=]/, template.label);
+    }
+  }
+});
