@@ -365,6 +365,14 @@ function stepImplementationName(existingNames) {
   }
 }
 
+// A generated stub has to FAIL until someone writes the body. gauge-java's own
+// suggestion, which the reference extension inserts verbatim, throws
+// (references/gauge-java .../processor/ValidateStepProcessor.java validateStep);
+// an empty body reports the un-implemented step as passed, so a suite stubbed
+// this way is green while asserting nothing. gauge-java's MethodExecutor
+// catches Throwable, so Kotlin's TODO fails the step like any exception.
+const UNIMPLEMENTED_STEP_MESSAGE = "Provide custom implementation";
+
 function stepStubCode(stepText, methodName = "implementation", implicitParameterCount = 0) {
   const params = Array.from(
     { length: countStepParameters(stepText) + implicitParameterCount },
@@ -376,6 +384,7 @@ function stepStubCode(stepText, methodName = "implementation", implicitParameter
   return [
     `@com.thoughtworks.gauge.Step(${kotlinStringLiteral(parameterizedStepValue(stepText))})`,
     `fun ${methodName}(${params}) {`,
+    `    TODO(${kotlinStringLiteral(UNIMPLEMENTED_STEP_MESSAGE)})`,
     "}",
     "",
   ].join("\n");
@@ -389,6 +398,7 @@ function javaStepStubCode(stepText, methodName = "implementation", implicitParam
   return [
     `@com.thoughtworks.gauge.Step(${JSON.stringify(parameterizedStepValue(stepText))})`,
     `public void ${methodName}(${params}) {`,
+    `    throw new UnsupportedOperationException(${JSON.stringify(UNIMPLEMENTED_STEP_MESSAGE)});`,
     "}",
     "",
   ].join("\n");

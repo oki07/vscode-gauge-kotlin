@@ -74,7 +74,7 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -118,7 +118,7 @@ test("GaugeStepCodeActionProvider parameterizes static arguments in the stub", (
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <100>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <100>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -200,7 +200,7 @@ test("GaugeStepCodeActionProvider creates fixes for multiline Gauge steps when p
       command: GENERATE_STEP_STUB,
       title: CREATE_STEP_IMPLEMENTATION_TITLE,
       arguments: [
-        "@com.thoughtworks.gauge.Step(\"Pay with card <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+        "@com.thoughtworks.gauge.Step(\"Pay with card <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
       ],
     });
     assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
@@ -280,7 +280,7 @@ test("GaugeStepCodeActionProvider ignores local undefined-step diagnostic code i
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -348,7 +348,7 @@ test("GaugeStepCodeActionProvider resolves Gauge brace escapes in the generated 
     command: GENERATE_STEP_STUB,
     title: actions[0].command.title,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"cost is {5}\")\nfun implementation() {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"cost is {5}\")\nfun implementation() {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -434,7 +434,7 @@ test("GaugeStepCodeActionProvider creates a Kotlin step implementation quick fix
   });
 
   assert.deepEqual(actions[0].command.arguments, [
-    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
   ]);
 });
 
@@ -486,7 +486,7 @@ test("GaugeStepCodeActionProvider creates a Java step implementation quick fix f
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\npublic void implementation(Object arg0) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\npublic void implementation(Object arg0) {\n    throw new UnsupportedOperationException(\"Provide custom implementation\");\n}\n",
     ],
   });
 });
@@ -559,7 +559,7 @@ test("GaugeStepCodeActionProvider escapes Kotlin string templates in step stubs"
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay \\$amount\")\nfun implementation() {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay \\$amount\")\nfun implementation() {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -593,7 +593,7 @@ test("GaugeStepCodeActionProvider includes inline table arguments in step stubs"
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with account <table>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with account <table>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -629,7 +629,7 @@ test("GaugeStepCodeActionProvider omits a table stub for a pipe line with no clo
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with account\")\nfun implementation() {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with account\")\nfun implementation() {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -664,7 +664,7 @@ test("GaugeStepCodeActionProvider includes docstring arguments in step stubs", (
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Execute the following content\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Execute the following content\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -698,7 +698,7 @@ test("GaugeStepCodeActionProvider ignores unterminated docstrings in step stubs"
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Execute content\")\nfun implementation() {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Execute content\")\nfun implementation() {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -730,7 +730,7 @@ test("GaugeStepCodeActionProvider creates fixes for indented Gauge steps", () =>
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Draft pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Draft pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -762,7 +762,7 @@ test("GaugeStepCodeActionProvider creates fixes for markdown Gauge specs", () =>
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -806,7 +806,7 @@ test("GaugeStepCodeActionProvider creates fixes for concept files by extension",
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
 });
@@ -853,7 +853,7 @@ test("GaugeStepCodeActionProvider creates fixes for gauge-concept documents by l
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
   assert.equal(actions[1].title, CREATE_CONCEPT_TITLE);
@@ -962,7 +962,43 @@ test("GaugeStepCodeActionProvider defers duplicate Kotlin stub names until desti
     command: GENERATE_STEP_STUB,
     title: CREATE_STEP_IMPLEMENTATION_TITLE,
     arguments: [
-      "@com.thoughtworks.gauge.Step(\"Refund <amount>\")\nfun implementation(arg0: Any) {\n}\n",
+      "@com.thoughtworks.gauge.Step(\"Refund <amount>\")\nfun implementation(arg0: Any) {\n    TODO(\"Provide custom implementation\")\n}\n",
     ],
   });
+});
+
+// A generated stub must FAIL until someone writes the body. gauge-java's own
+// suggestion, which the reference extension inserts verbatim, ends with
+// `throw new UnsupportedOperationException("Provide custom implementation");`
+// (references/gauge-java .../processor/ValidateStepProcessor.java validateStep).
+//
+// Measured by running gauge-java's own MethodExecutor over each body shape,
+// compiled by the bundled Gradle template against gauge-java 1.0.3:
+//   empty body        -> failed=false
+//   TODO(...)         -> failed=true  kotlin.NotImplementedError: An operation
+//                                     is not implemented: Provide custom
+//                                     implementation
+//   throw Unsupported -> failed=true  java.lang.UnsupportedOperationException:
+//                                     Provide custom implementation
+// An empty body therefore reports the un-implemented step as PASSED, and a
+// suite stubbed this way is green while asserting nothing. MethodExecutor
+// catches Throwable, so Kotlin's TODO is reported as a step failure like any
+// exception.
+test("a generated step stub fails until it is implemented", () => {
+  const { javaStepStubCode, stepStubCode } = require("../src/stepCodeActions");
+
+  assert.equal(
+    stepStubCode("Pay with <amount>"),
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\n"
+    + "fun implementation(arg0: Any) {\n"
+    + "    TODO(\"Provide custom implementation\")\n"
+    + "}\n",
+  );
+  assert.equal(
+    javaStepStubCode("Pay with <amount>"),
+    "@com.thoughtworks.gauge.Step(\"Pay with <amount>\")\n"
+    + "public void implementation(Object arg0) {\n"
+    + "    throw new UnsupportedOperationException(\"Provide custom implementation\");\n"
+    + "}\n",
+  );
 });
