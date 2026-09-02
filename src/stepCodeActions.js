@@ -27,8 +27,6 @@ const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const GAUGE_FILE_PATTERN = /\.(?:spec|md|cpt)$/i;
 const JAVA_LANGUAGE = "java";
 const KOTLIN_LANGUAGE = "kotlin";
-const VALIDATE_DIAGNOSTIC_CODE = "gauge.validate";
-const VALIDATE_MISSING_IMPLEMENTATION_MESSAGE = "Step implementation not found";
 
 function getVscode(vscode) {
   return vscode || require("vscode");
@@ -410,23 +408,13 @@ function diagnosticStubCode(diagnostic) {
   return undefined;
 }
 
-function isMissingImplementationDiagnostic(diagnostic) {
-  return String((diagnostic && diagnostic.message) || "").includes(
-    VALIDATE_MISSING_IMPLEMENTATION_MESSAGE,
-  );
-}
-
+// The extension owns the step diagnostics it publishes itself; every other
+// "step implementation not found" on the line belongs to the Gauge runner,
+// which supplies its own stub through the diagnostic code
+// (references/gauge/api/lang/diagnostics.go createValidationDiagnostics) and
+// answers its own code action requests.
 function isLocalStepCodeActionDiagnostic(diagnostic) {
-  return Boolean(
-    diagnostic
-    && (
-      diagnostic.message === UNDEFINED_STEP_MESSAGE
-      || (
-        diagnostic.code === VALIDATE_DIAGNOSTIC_CODE
-        && isMissingImplementationDiagnostic(diagnostic)
-      )
-    )
-  );
+  return Boolean(diagnostic && diagnostic.message === UNDEFINED_STEP_MESSAGE);
 }
 
 function undefinedStepDiagnostics(context) {

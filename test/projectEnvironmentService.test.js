@@ -381,7 +381,6 @@ test("ProjectEnvironmentService shares one environment across consumers", async 
   const { DependencyStepIndex } = require("../src/dependencyStepIndex");
   const { GaugeFormatProvider } = require("../src/formatProvider");
   const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
-  const { GaugeValidateDiagnosticsProvider } = require("../src/validateDiagnostics");
   let computations = 0;
   const project = {
     root() {
@@ -394,10 +393,6 @@ test("ProjectEnvironmentService shares one environment across consumers", async 
   };
   const service = new ProjectEnvironmentService();
   const format = new GaugeFormatProvider({ projectEnvironmentService: service, vscode: {} });
-  const validate = new GaugeValidateDiagnosticsProvider({
-    projectEnvironmentService: service,
-    vscode: {},
-  });
   const dependency = new DependencyStepIndex({
     pathModule: require("node:path").posix,
     projectEnvironmentService: service,
@@ -406,7 +401,6 @@ test("ProjectEnvironmentService shares one environment across consumers", async 
   });
 
   await format.cachedProjectEnvironment(project);
-  await validate.projectEnvironmentAsync(project);
   await dependency.projectClasspath("/workspace/gauge");
 
   assert.equal(computations, 1);

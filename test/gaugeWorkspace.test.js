@@ -3021,11 +3021,6 @@ test("clientMiddleware separates local and runner step code action ownership", a
     code: "gauge.undefinedStep",
     source: "gauge",
   };
-  const localValidate = {
-    message: "[ValidationError] Step implementation not found",
-    code: "gauge.validate",
-    source: "gauge",
-  };
   const runnerDiagnostic = {
     message: "Step implementation not found",
     code: "expected generated stub",
@@ -3047,7 +3042,7 @@ test("clientMiddleware separates local and runner step code action ownership", a
     document,
     range,
     {
-      diagnostics: [localUndefined, runnerDiagnostic, localValidate],
+      diagnostics: [localUndefined, runnerDiagnostic],
       only,
       triggerKind: 2,
     },
@@ -3057,7 +3052,7 @@ test("clientMiddleware separates local and runner step code action ownership", a
   const localResult = await middleware.provideCodeActions(
     document,
     range,
-    { diagnostics: [localUndefined, localValidate], only },
+    { diagnostics: [localUndefined], only },
     token,
     next,
   );

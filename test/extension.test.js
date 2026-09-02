@@ -471,7 +471,6 @@ test("activation preserves Gauge editor language configuration", () => {
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
     GaugeStepDiagnosticsProvider: RegisteringDisposable,
-    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
@@ -676,11 +675,6 @@ test("activation writes no workspace settings and recommends none", () => {
     },
     GaugeSemanticTokensProvider: class FakeSemanticTokensProvider {},
     GaugeStepDiagnosticsProvider: class FakeStepDiagnosticsProvider {
-      register() {
-        return { dispose() {} };
-      }
-    },
-    GaugeValidateDiagnosticsProvider: class FakeValidateDiagnosticsProvider {
       register() {
         return { dispose() {} };
       }
@@ -1293,7 +1287,6 @@ test("new activation supersedes pending asynchronous Gauge service discovery", a
     GaugeWorkspace: SecondGaugeWorkspace,
     GaugeTestController: SecondGaugeTestController,
     GaugeStepDiagnosticsProvider: RegisteringDisposable,
-    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
@@ -1475,7 +1468,6 @@ test("activation does not discover tests after pending workspace readiness is de
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
     GaugeStepDiagnosticsProvider: RegisteringDisposable,
-    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
@@ -1580,7 +1572,6 @@ test("activation does not connect a workspace handed off after deactivation", as
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: FakeGaugeTestController,
     GaugeStepDiagnosticsProvider: RegisteringDisposable,
-    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: DisposableOnly,
@@ -1697,7 +1688,6 @@ test("activation disposes unpublished services after synchronous deactivation", 
     GaugeWorkspace: FakeGaugeWorkspace,
     GaugeTestController: RegisteringDisposable,
     GaugeStepDiagnosticsProvider: RegisteringDisposable,
-    GaugeValidateDiagnosticsProvider: RegisteringDisposable,
     ProjectInitializer: DisposableOnly,
     TerminalProvider: DisposableOnly,
     ReferenceProvider: CountedReferenceProvider,
@@ -2850,18 +2840,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
     }
   }
 
-  class FakeValidateDiagnosticsProvider {
-    constructor(options) {
-      this.options = options;
-      this.disposable = { dispose() {} };
-      created.validateDiagnosticsProvider = this;
-    }
-
-    register() {
-      return this.disposable;
-    }
-  }
-
   class FakeGaugeState {
     constructor(receivedContext) {
       this.context = receivedContext;
@@ -2937,7 +2915,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
     GaugeStepCodeActionProvider: FakeStepCodeActionProvider,
     GaugeStepDiagnosticsProvider: FakeStepDiagnosticsProvider,
     GaugeUnusedReferenceDiagnosticsProvider: FakeUnusedReferenceDiagnosticsProvider,
-    GaugeValidateDiagnosticsProvider: FakeValidateDiagnosticsProvider,
     ProjectInitializer: FakeProjectInitializer,
     ReferenceProvider: FakeReferenceProvider,
     semanticTokensLegend: { id: "legend" },
@@ -2982,7 +2959,6 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
   );
   assert.equal(created.executionOptions.projectEnvironmentService, created.projectEnvironmentService);
   assert.equal(created.workspace.options.projectEnvironmentService, created.projectEnvironmentService);
-  assert.equal(created.validateDiagnosticsProvider, undefined);
   assert.equal(context.subscriptions.includes(created.projectEnvironmentService), true);
   assert.equal(
     created.dependencyStepIndex.options.projectFactory,
@@ -4615,7 +4591,6 @@ test("activation propagates the default project factory to Gauge providers", () 
     GaugeStepDefinitionProvider: FakeProvider,
     GaugeStepDiagnosticsProvider: FakeProvider,
     GaugeTestController: FakeGaugeTestController,
-    GaugeValidateDiagnosticsProvider: FakeProvider,
     GaugeWorkspace: FakeGaugeWorkspace,
     GenerateStubCommandProvider: FakeProvider,
     ProjectInitializer: FakeProvider,
