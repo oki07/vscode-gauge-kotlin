@@ -3115,10 +3115,14 @@ test("GaugeRenameProvider detaches pending preflight and augmentation stages", a
 
   {
     const cancellation = createCancellation();
-    const validationEntered = deferred();
-    const validationGate = deferred();
+    const saveEntered = deferred();
+    const saveGate = deferred();
     let requestCalls = 0;
     const vscode = createFakeVscode([specDocument]);
+    vscode.workspace.saveAll = () => {
+      saveEntered.resolve();
+      return saveGate.promise;
+    };
     const provider = new GaugeRenameProvider({
       clientsMap: {
         get() {
@@ -3130,12 +3134,6 @@ test("GaugeRenameProvider detaches pending preflight and augmentation stages", a
               },
             },
           };
-        },
-      },
-      validateDiagnosticsProvider: {
-        validateErrorsForDocument() {
-          validationEntered.resolve();
-          return validationGate.promise;
         },
       },
       vscode,
@@ -3151,11 +3149,11 @@ test("GaugeRenameProvider detaches pending preflight and augmentation stages", a
       return value;
     });
 
-    await validationEntered.promise;
+    await saveEntered.promise;
     cancellation.cancel();
     await nextTurn();
     const observedBeforeRelease = outcome;
-    validationGate.reject(new Error("late validation failure"));
+    saveGate.reject(new Error("late save failure"));
     await Promise.allSettled([invocation]);
 
     assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
