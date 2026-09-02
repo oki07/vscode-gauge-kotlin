@@ -650,10 +650,11 @@ class GaugeValidateDiagnosticsProvider {
         Promise.all(roots.map((pendingRoot) => this.refreshRoot(collection, pendingRoot)))
           .then(() => resolve(), () => resolve());
       };
+      // A debounced refresh owns work a caller awaits, so the timer has to hold
+      // the runtime open until it fires. Disposal is what cancels it: clearTimeout
+      // plus a settled pending promise. An unreferenced timer is not one the
+      // runtime promises to run, so it must not carry awaited work.
       this.refreshTimer = setTimeout(run, this.refreshDelayMs);
-      if (this.refreshTimer && typeof this.refreshTimer.unref === "function") {
-        this.refreshTimer.unref();
-      }
     });
     return this.pendingRefreshPromise;
   }

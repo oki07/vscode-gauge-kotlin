@@ -600,9 +600,6 @@ class SpecNodeProvider {
     if (!fired && timeout !== undefined) {
       this.activationTimers.add(timeout);
     }
-    if (timeout && typeof timeout.unref === "function") {
-      timeout.unref();
-    }
   }
 
   shouldRefresh(fileUri) {

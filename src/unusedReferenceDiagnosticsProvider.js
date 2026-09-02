@@ -347,11 +347,12 @@ class GaugeUnusedReferenceDiagnosticsProvider {
     };
     const timer = setTimeout(run, this.refreshDelayMs);
     refresh.timer = timer;
+    // A debounced refresh owns work a caller awaits, so the timer has to hold
+    // the runtime open until it fires. Disposal is what cancels it: clearTimeout
+    // plus a settled pending promise. An unreferenced timer is not one the
+    // runtime promises to run, so it must not carry awaited work.
     if (!refresh.started && !this.disposed) {
       this.refreshTimer = timer;
-      if (timer && typeof timer.unref === "function") {
-        timer.unref();
-      }
     } else if (!refresh.started) {
       clearTimeout(timer);
       this.settleRefresh(refresh);
