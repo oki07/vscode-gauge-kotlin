@@ -21,9 +21,8 @@ const {
   extractGaugeRunOption,
 } = require("./runArgs");
 const { CLI } = require("../cli");
-const { GradleProject } = require("../project/gradleProject");
-const { MavenProject } = require("../project/mavenProject");
 const { createProjectFactory } = require("../project/projectFactory");
+const { executionKindForRoot, projectForRoot } = require("./projectKind");
 const { isMarkdownGaugeSpecFile } = require("../gaugeSpecScope");
 const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 const { createLspRequestOwner } = require("./lspRequestOwner");
@@ -276,39 +275,6 @@ async function selectProjectRoot(vscode, pathModule, projectFactory, waitForSele
   return selected.description || selected;
 }
 
-function detectProjectKind(projectRoot, fileSystem, pathModule) {
-  const exists = (relativePath) => (
-    typeof fileSystem.existsSync === "function"
-    && fileSystem.existsSync(pathModule.join(projectRoot, relativePath))
-  );
-
-  // A root build script, matching GRADLE_BUILD_FILES in
-  // src/project/projectFactory.js. A wrapper script alone - a multi-module repo
-  // whose root holds only settings.gradle.kts - is a plain Gauge project there,
-  // so accepting it here handed Gradle plugin arguments to a command that cannot
-  // use them.
-  if (exists("build.gradle.kts") || exists("build.gradle")) {
-    return "gradle";
-  }
-  if (exists("pom.xml")) {
-    return "maven";
-  }
-  return "gauge";
-}
-
-function projectKindFromProject(project) {
-  if (project && typeof project.executionKind === "function") {
-    return project.executionKind();
-  }
-  if (project instanceof MavenProject) {
-    return "maven";
-  }
-  if (project instanceof GradleProject) {
-    return "gradle";
-  }
-  return undefined;
-}
-
 function projectRunnerLanguage(project, fallbackLanguage) {
   if (project && typeof project.language === "function") {
     const language = project.language();
@@ -327,17 +293,6 @@ function commandForProjectKind(projectKind, options) {
     return options.mavenCommand || "mvn";
   }
   return options.gaugeCommand || "gauge";
-}
-
-function getProjectForExecution(projectFactory, projectRoot) {
-  if (!projectFactory || typeof projectFactory.get !== "function") {
-    return undefined;
-  }
-  try {
-    return projectFactory.get(projectRoot);
-  } catch (_error) {
-    return undefined;
-  }
 }
 
 function resourcePath(resource) {
@@ -1000,9 +955,11 @@ function createGaugeExecutionController(options = {}) {
         return undefined;
       }
 
-      const project = getProjectForExecution(projectFactory, projectRoot);
-      const projectKind = projectKindFromProject(project)
-        || detectProjectKind(projectRoot, fileSystem, pathModule);
+      const project = projectForRoot(projectFactory, projectRoot);
+      const projectKind = executionKindForRoot(projectFactory, projectRoot, {
+        fileSystem,
+        pathModule,
+      });
       const cli = getCli();
       const executionTool = project ? commandFromProject(project, cli) : undefined;
       const usesBuildTool = Boolean(project && typeof project.executionEnvsAsync === "function");

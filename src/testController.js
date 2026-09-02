@@ -1,7 +1,9 @@
 "use strict";
 
+const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
+const { executionKindForRoot } = require("./execution/projectKind");
 const { headingMarkers } = require("./gaugeHeadings");
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 const { isFileSchemeDocument } = require("./workspaceDocumentStore");
@@ -426,20 +428,6 @@ function projectRootForTarget(target, projectRoots, projectFactory) {
 
 // A Gradle or Maven project cannot take more than one target per invocation -
 // see canBatchSpecificationTargets.
-function executionKindForRoot(projectFactory, projectRoot) {
-  if (!projectRoot || !projectFactory || typeof projectFactory.get !== "function") {
-    return undefined;
-  }
-  try {
-    const project = projectFactory.get(projectRoot);
-    return project && typeof project.executionKind === "function"
-      ? project.executionKind()
-      : undefined;
-  } catch (_error) {
-    return undefined;
-  }
-}
-
 function groupedTargetsByKnownProject(targets, clientsMap, projectFactory) {
   const projectRoots = knownProjectRoots(clientsMap);
   const groups = [];
@@ -493,6 +481,8 @@ class GaugeTestController {
     });
     this.projectChanges = options.projectChanges;
     this.projectFactory = options.projectFactory;
+    this.fileSystem = options.fileSystem || nodeFs;
+    this.pathModule = options.pathModule || nodePath;
     this.scenarioRequestConcurrency = concurrencyLimit(
       options.scenarioRequestConcurrency,
       DEFAULT_SCENARIO_REQUEST_CONCURRENCY,
@@ -1668,7 +1658,10 @@ class GaugeTestController {
           // tool anywhere in it disqualifies batching, because such a group
           // would have to join its targets into one property value.
           const buildToolKind = targetGroups
-            .map((group) => executionKindForRoot(this.projectFactory, group.projectRoot))
+            .map((group) => executionKindForRoot(this.projectFactory, group.projectRoot, {
+              fileSystem: this.fileSystem,
+              pathModule: this.pathModule,
+            }))
             .find((kind) => kind === "gradle" || kind === "maven");
           if (canBatchSpecificationTargets(runnableTargets, buildToolKind)) {
             for (const group of targetGroups) {
