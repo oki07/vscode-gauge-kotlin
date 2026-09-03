@@ -123,6 +123,16 @@ both are bundled with this extension; any Kotlin template you register with
   `src/test/kotlin`: under the Gradle template a `@Step` in `src/main/kotlin`
   does not compile, because `gauge-java` is a test dependency there, and the
   Maven template compiles `src/test/kotlin` only.
+- The Gauge Java runner constructs the class that declares a step, with
+  `Class.forName(name).getDeclaredConstructor().newInstance()`. Kotlin's file
+  class has no constructor, and the constructors of an `object` and of a
+  `companion object` are private, so a `@Step` written as a top-level function
+  or inside an `object` or `companion object` registers and then fails at run
+  time with a message about a constructor rather than about the step. This
+  extension reports such a step as implemented, because it is - it just cannot
+  be constructed by default. Put step implementations in a class with a
+  no-argument constructor, as both bundled templates do, or supply a
+  `ClassInitializer` implementation, which the runner picks up and uses instead.
 - Always-on editor features read the default Gauge environment, including a
   manifest `EnvironmentDir` or relative `gauge_env_dir`. A `gauge_specs_dir` or
   `gauge_data_dir` overridden only by a launch configuration's non-default
