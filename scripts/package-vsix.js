@@ -1,7 +1,7 @@
 "use strict";
 
 const { spawnSync } = require("node:child_process");
-const { rmSync, statSync } = require("node:fs");
+const { statSync } = require("node:fs");
 const { join } = require("node:path");
 const { tmpdir } = require("node:os");
 
@@ -86,22 +86,23 @@ async function validatePackage() {
   ].join("\n"));
 }
 
+// `npm ci` is what guarantees the tree packaged here matches the lockfile, and
+// vsce keeps dependencies out of the VSIX with --no-dependencies, which
+// validatePackage re-checks. Removing node_modules afterwards only left the
+// checkout unable to run the gate again, because `npm run check` starts with a
+// lint that needs its dev dependencies.
 async function main() {
-  try {
-    run(npmCommand, ["ci", "--ignore-scripts"]);
-    run(npmCommand, ["run", "bundle"]);
-    run(npxCommand, [
-      "--yes",
-      "@vscode/vsce@3.9.1",
-      "package",
-      "--no-dependencies",
-      "--out",
-      outputPath,
-    ]);
-    await validatePackage();
-  } finally {
-    rmSync(join(root, "node_modules"), { force: true, recursive: true });
-  }
+  run(npmCommand, ["ci", "--ignore-scripts"]);
+  run(npmCommand, ["run", "bundle"]);
+  run(npxCommand, [
+    "--yes",
+    "@vscode/vsce@3.9.1",
+    "package",
+    "--no-dependencies",
+    "--out",
+    outputPath,
+  ]);
+  await validatePackage();
 }
 
 main().catch((error) => {

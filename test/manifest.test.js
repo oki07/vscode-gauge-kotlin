@@ -1200,6 +1200,19 @@ test("extension package script requires repository metadata", () => {
   assert.equal(packageScript.includes("--allow-missing-repository"), false);
 });
 
+// `npm run package` is the last stage of `npm run check`, and `npm run lint` is
+// the first. Removing node_modules on the way out left the next `npm run check`
+// with no eslint, so the gate could not run twice without a reinstall. The
+// `npm ci` this script already performs is what guarantees a clean tree for
+// packaging; the VSIX is kept free of dependencies by --no-dependencies and by
+// the entry assertion below it.
+test("extension package script leaves the checkout able to run the gate again", () => {
+  const packageScript = fs.readFileSync(path.join(root, "scripts", "package-vsix.js"), "utf8");
+
+  assert.equal(/rmSync\([^)]*node_modules/.test(packageScript), false);
+  assert.equal(packageScript.includes("--no-dependencies"), true);
+});
+
 test("extension manifest preserves the official Gauge configuration schema", () => {
   const manifest = readPackageJson();
   const referenceManifest = readReferencePackageJson();
