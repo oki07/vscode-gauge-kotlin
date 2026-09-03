@@ -233,8 +233,31 @@ function productDiagnostics(text) {
   return provider.provideDiagnostics(spec, documents);
 }
 
+// Every element of parserErrorLines is { line, message }: the parser's 1-based
+// line and the message it belongs to. A bare line number carries no message, so
+// it can never be matched to a diagnostic, and an expectation that cannot be
+// matched has to fail rather than be dropped - a skipped expectation looks
+// exactly like a passing one.
+test("every line expectation in the corpus is one the test can check", () => {
+  const malformed = [];
+  for (const entry of corpus) {
+    for (const error of entry.parserErrorLines || []) {
+      if (
+        !error
+        || typeof error !== "object"
+        || typeof error.message !== "string"
+        || typeof error.line !== "number"
+      ) {
+        malformed.push({ label: entry.label, error });
+      }
+    }
+  }
+  assert.deepEqual(malformed, []);
+});
+
 test("diagnostics land on the line the real parser names", () => {
   const mismatches = [];
+  const unmatched = [];
   for (const entry of corpus) {
     const expected = (entry.parserErrorLines || [])
       .filter((error) => !LINE_EXEMPT_MESSAGES.has(error.message));
@@ -245,6 +268,7 @@ test("diagnostics land on the line the real parser names", () => {
     for (const error of expected) {
       const match = produced.find((diagnostic) => diagnostic.message === error.message);
       if (!match) {
+        unmatched.push({ label: entry.label, message: error.message });
         continue;
       }
       if (match.range.start.line !== error.line - 1) {
@@ -257,5 +281,6 @@ test("diagnostics land on the line the real parser names", () => {
       }
     }
   }
+  assert.deepEqual(unmatched, []);
   assert.deepEqual(mismatches, []);
 });

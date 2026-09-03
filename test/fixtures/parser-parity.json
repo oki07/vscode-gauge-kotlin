@@ -517,7 +517,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -527,7 +530,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -537,7 +543,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -547,7 +556,10 @@
       "Spec does not have any elements"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec does not have any elements"
+      }
     ]
   },
   {
@@ -557,7 +569,10 @@
       "Spec does not have any elements"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec does not have any elements"
+      }
     ]
   },
   {
@@ -567,7 +582,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -577,7 +595,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -587,7 +608,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -597,7 +621,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -607,7 +634,10 @@
       "Spec heading not found"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 1,
+        "message": "Spec heading not found"
+      }
     ]
   },
   {
@@ -623,7 +653,10 @@
       "Multiple spec headings found in same file"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 4,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -633,7 +666,10 @@
       "Multiple spec headings found in same file"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 4,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -643,7 +679,10 @@
       "Multiple spec headings found in same file"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 4,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -653,7 +692,10 @@
       "Multiple spec headings found in same file"
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 4,
+        "message": "Multiple spec headings found in same file"
+      }
     ]
   },
   {
@@ -669,7 +711,10 @@
       "Could not resolve table. File x.csv doesn't exist."
     ],
     "parserErrorLines": [
-      1
+      {
+        "line": 4,
+        "message": "Could not resolve table. File x.csv doesn't exist."
+      }
     ]
   },
   {
