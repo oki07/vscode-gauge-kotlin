@@ -143,6 +143,23 @@ both are bundled with this extension; any Kotlin template you register with
   together, because both Gauge and this extension read the process environment
   ahead of the properties file.
 
+## Development
+
+`npm run check` runs the lint, the unit and language server suites, and the
+packaging gate. It needs nothing beyond the project's own dependencies.
+
+The integration suite drives the real Gauge CLI over a real Gradle build, so it
+runs separately:
+
+```
+npm run test:integration
+```
+
+Gradle has to be on `PATH`, or named by `GAUGE_LIFECYCLE_GRADLE`. A Gauge on
+`PATH` that already carries the Java runner plugin is used as it is; otherwise a
+pinned Gauge and Java plugin are downloaded into the user's cache directory and
+given their own `GAUGE_HOME`, leaving an existing Gauge installation untouched.
+
 ## License
 
 MIT. See [LICENSE](LICENSE) and

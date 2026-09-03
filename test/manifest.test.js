@@ -151,6 +151,9 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "test:unit": "node --test",
     "test:lsp": "node --test test/gaugeClients.test.js test/gaugeWorkspace.test.js",
     "test:vscode": "node --test test/extension.test.js test/manifest.test.js",
+    // The integration suite needs the real Gauge CLI and a real Gradle build, so
+    // it stays out of `check`, which runs on the project's own dependencies.
+    "test:integration": "node scripts/integration-test.js",
     package: "node scripts/package-vsix.js",
     check: "npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
     test: "npm run test:unit",
