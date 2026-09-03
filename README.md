@@ -100,16 +100,37 @@ both are bundled with this extension; any Kotlin template you register with
 
 ## Known limitations
 
-- The Gauge Java runner builds its step registry once, by reflection over the
-  compiled classes, when the language server starts. A step added or renamed in
-  Kotlin after that is reported as implemented by this extension's own analysis
-  but can still be unknown to `gauge run` until the project is rebuilt.
-- A `@Step` in a Kotlin file that is not compiled into the test classpath is
-  treated as implemented by the local analysis.
+- The Gauge Java runner fills its step registry by reflection over the compiled
+  classes each time a runner process starts, and afterwards updates it only from
+  Java source, so a Kotlin `@Step` never reaches it incrementally. Runs started
+  from this extension are not affected: a Gradle or Maven project is compiled
+  first, and Gauge then starts a fresh runner over the classes it just built.
+  What stays behind is the long-lived runner behind the language server, which
+  answers step-validation questions for the rest of the session from what it
+  reflected at startup; this extension's own Kotlin analysis overrides those
+  answers before they reach the editor. A Gauge project with neither `pom.xml`
+  nor `build.gradle` has no pre-run build, so there a step added after the last
+  compile stays unknown to the run until you compile it yourself.
+- This extension indexes every `.kt` and `.java` file under the project root,
+  not only the files the build compiles. A `@Step` in a file outside the
+  project's source sets - a scratch directory, or a generated copy under a build
+  output directory - is treated as implemented: it gets no `Undefined Step`, and
+  Gauge's own missing-implementation error for that line is suppressed as a
+  stale runner verdict, so nothing in the editor flags it while `gauge run`
+  fails on it. The Gauge Java runner bounds its own source scope to
+  `src/main/java` and `src/test/java`, overridable with
+  `gauge_custom_compile_dir`. Both bundled templates put step implementations in
+  `src/test/kotlin`: under the Gradle template a `@Step` in `src/main/kotlin`
+  does not compile, because `gauge-java` is a test dependency there, and the
+  Maven template compiles `src/test/kotlin` only.
 - Always-on editor features read the default Gauge environment, including a
   manifest `EnvironmentDir` or relative `gauge_env_dir`. A `gauge_specs_dir` or
   `gauge_data_dir` overridden only by a launch configuration's non-default
-  `--env` is not picked up by those editor features.
+  `--env` is not picked up by those editor features, and neither is it by the
+  Gauge language server, which `gauge daemon` gives no environment flag. Setting
+  the property in the environment VS Code itself runs in moves every surface
+  together, because both Gauge and this extension read the process environment
+  ahead of the properties file.
 
 ## License
 
