@@ -57,7 +57,7 @@ both are bundled with this extension; any Kotlin template you register with
   including aliases, `typealias` chains, `const val` step text and multi-line
   arguments.
 - Unreferenced `@Step` functions and unreferenced concepts are faded.
-- **Gauge: Show all references at cursor** (`gauge.showReferences.atCursor`).
+- **Gauge: Find Step References** (`gauge.showReferences.atCursor`).
 
 ### Running specifications
 
@@ -77,9 +77,10 @@ both are bundled with this extension; any Kotlin template you register with
 - Debugging attaches to the JVM the runner starts; the port is
   `gauge.execution.debugPort`. A Kotlin or Java debug extension must be
   installed for the attach to succeed.
-- Test Explorer selections use one Gauge process for the plain CLI. Gradle and
-  Maven projects run each selected target separately because their build-plugin
-  target property accepts one specification at a time.
+- A Test Explorer selection of several specifications or scenarios runs in one
+  Gauge process. A Kotlin project executes through the Gauge CLI with the
+  classpath its build tool computed, and the CLI takes each target as its own
+  argument, so the whole selection runs together.
 
 ## Settings
 
@@ -87,7 +88,7 @@ both are bundled with this extension; any Kotlin template you register with
 | --- | --- | --- |
 | `gauge.executablePath` | `""` | Path to the `gauge` executable. Empty uses `PATH`. |
 | `gauge.home` | `""` | Path to `GAUGE_HOME`. Empty uses the process environment or the Gauge default. |
-| `gauge.welcomeNotification.showOn` | `newProjectLoad` | When the welcome page is shown. |
+| `gauge.welcomeNotification.showOn` | `newProjectLoad` | When to show the one-time "Gauge plugin initialised" notification. `newProjectLoad` shows it once per workspace; `never` suppresses it. |
 | `gauge.specExplorer.enabled` | `true` | Show the Gauge Specs tree view. Turning it off leaves every other Gauge command in place. |
 | `gauge.launch.enableDebugLogs` | `false` | Log the traffic between VS Code and the Gauge language server. |
 | `gauge.execution.debugPort` | `9229` | Debug port for the runner JVM. |

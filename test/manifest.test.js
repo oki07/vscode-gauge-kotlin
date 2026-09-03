@@ -1238,6 +1238,42 @@ test("every asset copied from the reference extension is credited", () => {
   assert.deepEqual(uncredited, []);
 });
 
+// A version in the notices that does not match the lockfile is a claim about
+// what ships that nobody checked. The table is the licence record for a bundle
+// built with legalComments: "none", so it has to track the tree it is built
+// from.
+test("every version in the notices matches the lockfile", () => {
+  const notices = fs.readFileSync(path.join(root, "THIRD_PARTY_NOTICES.md"), "utf8");
+  const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+  const rows = [...notices.matchAll(/^\| `([^`]+)` \| ([^|]+?) \| /gm)]
+    .map((match) => ({ name: match[1], version: match[2].trim() }));
+  assert.ok(rows.length > 0);
+
+  const mismatched = rows
+    .map((row) => ({
+      ...row,
+      installed: (lock.packages[`node_modules/${row.name}`] || {}).version,
+    }))
+    .filter((row) => row.installed !== row.version);
+
+  assert.deepEqual(mismatched, []);
+});
+
+// The README names some commands by the title the palette shows. A title that
+// does not match the manifest sends the reader looking for something that is
+// not there.
+test("every command title the README spells matches the manifest", () => {
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+  const manifest = readPackageJson();
+  const titles = new Set(manifest.contributes.commands.map((command) => (
+    command.category ? `${command.category}: ${command.title}` : command.title
+  )));
+  const named = [...readme.matchAll(/\*\*(Gauge: [^*]+)\*\*/g)].map((match) => match[1]);
+  assert.ok(named.length > 0);
+
+  assert.deepEqual(named.filter((title) => !titles.has(title)), []);
+});
+
 test("extension package script requires repository metadata", () => {
   const packageScript = fs.readFileSync(path.join(root, "scripts", "package-vsix.js"), "utf8");
 

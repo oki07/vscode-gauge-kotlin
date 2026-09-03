@@ -31,8 +31,8 @@ First release.
 ### Running specifications
 
 - Test Explorer integration with run and debug profiles, per-scenario results,
-  failure locations and Gauge's own output. Plain CLI selections run in one
-  process; Gradle and Maven selections run each target separately.
+  failure locations and Gauge's own output. A selection of several
+  specifications or scenarios runs in one Gauge process.
 - A Gauge Specs tree view, Run and Debug code lenses, and the Gauge run commands
   including rerun-failed, repeat, stop and open HTML report.
 - Debugger attach to the runner JVM, with the classpath computed from the

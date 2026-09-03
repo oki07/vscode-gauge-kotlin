@@ -44,7 +44,7 @@ available from the package's own repository on npm.
 | Package | Version | License |
 | --- | --- | --- |
 | `balanced-match` | 1.0.2 | MIT |
-| `brace-expansion` | 2.1.1 | MIT |
+| `brace-expansion` | 2.1.4 | MIT |
 | `duplexer` | 0.1.2 | MIT |
 | `event-stream` | 3.3.4 | MIT |
 | `from` | 0.1.7 | MIT |
