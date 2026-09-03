@@ -11,7 +11,6 @@ const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const SPEC_FILE_EXTENSION = ".spec";
 const CONCEPT_FILE_EXTENSION = ".cpt";
-const MARKDOWN_SPEC_EXTENSION = ".md";
 
 function getVscode(vscode) {
   return vscode || require("vscode");

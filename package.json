@@ -23,7 +23,8 @@
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "eslint": "^9.39.5"
   },
   "categories": [
     "Programming Languages",
@@ -55,13 +56,12 @@
     "benchmark:workspace-index": "node scripts/benchmark-workspace-step-index.js",
     "bundle": "node scripts/build-extension.js",
     "vscode:prepublish": "npm run bundle",
-    "typecheck": "node scripts/check-js-syntax.js",
-    "lint": "node scripts/check-js-syntax.js",
+    "lint": "eslint .",
     "test:unit": "node --test",
     "test:lsp": "node --test test/gaugeClients.test.js test/gaugeWorkspace.test.js",
     "test:vscode": "node --test test/extension.test.js test/manifest.test.js",
     "package": "node scripts/package-vsix.js",
-    "check": "npm run typecheck && npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
+    "check": "npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
     "test": "npm run test:unit"
   },
   "contributes": {

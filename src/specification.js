@@ -18,14 +18,14 @@ function cleanupOwnedSource(source, cancel) {
   if (cancel && typeof source.cancel === "function") {
     try {
       source.cancel();
-    } catch (error) {
+    } catch (_error) {
       // Best-effort cancellation must not interrupt terminal cleanup.
     }
   }
   if (typeof source.dispose === "function") {
     try {
       source.dispose();
-    } catch (error) {
+    } catch (_error) {
       // Owned listener cleanup must not replace the operation result.
     }
   }
@@ -37,7 +37,7 @@ function cleanupDisposable(disposable) {
   }
   try {
     disposable.dispose();
-  } catch (error) {
+  } catch (_error) {
     // Continue releasing the remaining provider-owned registrations.
   }
 }
@@ -260,7 +260,7 @@ function buildSpecificationDocument(options = {}) {
 function defaultUser() {
   try {
     return nodeOs.userInfo().username || "";
-  } catch (error) {
+  } catch (_error) {
     return process.env.USER || process.env.USERNAME || "";
   }
 }
@@ -375,10 +375,6 @@ function toRange(vscode, selection) {
     );
   }
   return selection;
-}
-
-function showError(vscode, message) {
-  return showGenerationError(vscode, "specification", message);
 }
 
 function showGenerationError(vscode, kind, message) {
@@ -624,12 +620,13 @@ async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}
       projectRoot !== target
       && !isInsideProjectSpecDirs(pathModule, projectRoot, target, options, options.descriptor)
     ) {
-      return callForOperation(operation, () => showGenerationError(
+      const notified = await callForOperation(operation, () => showGenerationError(
         vscode,
         (options.descriptor && options.descriptor.kind) || "specification",
         `Gauge does not read specifications from ${target}.`
         + " Choose a folder inside gauge_specs_dir.",
-      )) === DISPOSED_CREATION ? DISPOSED_CREATION : undefined;
+      ));
+      return notified === DISPOSED_CREATION ? DISPOSED_CREATION : undefined;
     }
     return target;
   }

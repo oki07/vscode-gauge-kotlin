@@ -608,7 +608,6 @@ const KOTLIN_BARE_IDENTIFIER_PATTERN = "[\\p{L}_][\\p{L}\\p{N}_]*";
 const KOTLIN_BACKTICK_IDENTIFIER_PATTERN = "`[^`\\r\\n]+`";
 const KOTLIN_IDENTIFIER_PATTERN =
   `(?:${KOTLIN_BARE_IDENTIFIER_PATTERN}|${KOTLIN_BACKTICK_IDENTIFIER_PATTERN})`;
-const KOTLIN_ANNOTATION_NAME_PATTERN = `${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*`;
 const KOTLIN_IDENTIFIER_PATH_PATTERN = new RegExp(
   `^${KOTLIN_IDENTIFIER_PATTERN}(?:\\.${KOTLIN_IDENTIFIER_PATTERN})*$`,
   "u",
@@ -909,7 +908,6 @@ function collectKotlinTypeAliases(
   );
   const lines = sourceLines;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const line = lines[lineIndex];
     const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
     let match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
     if (match) {
@@ -3694,40 +3692,6 @@ function findStaticParameterEnd(text, openIndex) {
   return -1;
 }
 
-function findBlankGaugeSteps(text) {
-  const entries = [];
-  let line = 0;
-  let lineStart = 0;
-
-  while (lineStart <= text.length) {
-    let lineEnd = text.indexOf("\n", lineStart);
-    if (lineEnd === -1) {
-      lineEnd = text.length;
-    }
-
-    const rawLine = text.slice(lineStart, lineEnd).replace(/\r$/, "");
-    const marker = rawLine.search(/\S/);
-    if (
-      marker !== -1
-      && rawLine[marker] === "*"
-      && rawLine.slice(marker + 1).trim() === ""
-    ) {
-      entries.push({
-        end: { line, character: rawLine.length },
-        start: { line, character: marker },
-      });
-    }
-
-    if (lineEnd === text.length) {
-      break;
-    }
-    line += 1;
-    lineStart = lineEnd + 1;
-  }
-
-  return entries;
-}
-
 // A @Step annotation is not spec text WHERE THE REGISTRY IS CONCERNED.
 // references/gauge-java scan/RegistryMethodVisitor keys the registry on
 // StepsUtil.getStepText, which is the whole of what the runner does to it:
@@ -3833,72 +3797,6 @@ function normalizeLiteralStepText(text) {
     result += character;
   }
   return result;
-}
-
-function isEscapedCharacter(line, index) {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
-}
-
-function firstUnescapedIndex(line, characters) {
-  for (let index = 0; index < line.length; index += 1) {
-    if (characters.has(line[index]) && !isEscapedCharacter(line, index)) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function firstWhitespaceIndex(line) {
-  for (let index = 0; index < line.length; index += 1) {
-    if (/\s/.test(line[index])) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function unescapePropertyValue(value) {
-  return String(value || "")
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
-      if (character === "t") {
-        return "\t";
-      }
-      if (character === "n") {
-        return "\n";
-      }
-      if (character === "r") {
-        return "\r";
-      }
-      if (character === "f") {
-        return "\f";
-      }
-      return character;
-    });
-}
-
-function propertiesValue(content, key) {
-  const separators = new Set(["=", ":"]);
-  for (const rawLine of String(content || "").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || line.startsWith("!")) {
-      continue;
-    }
-    const explicitSeparator = firstUnescapedIndex(line, separators);
-    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
-    if (separator === -1) {
-      continue;
-    }
-    if (line.slice(0, separator).trim() !== key) {
-      continue;
-    }
-    return unescapePropertyValue(line.slice(separator + 1).trim());
-  }
-  return undefined;
 }
 
 function boolProperty(value) {
@@ -7559,7 +7457,6 @@ function stepAnnotationImports(
   );
   const lines = sourceLines;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const line = lines[lineIndex];
     const importStatement = readKotlinImportStatement(lines, lineIndex, importPattern);
     let match = importPattern.exec(normalizeKotlinImportStatementForMatch(importStatement.statement));
     if (match) {

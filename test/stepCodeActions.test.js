@@ -360,7 +360,6 @@ test("GaugeStepCodeActionProvider resolves Gauge brace escapes in the generated 
 // value "Load the payload {}" with the args [special_string, table].
 test("GaugeStepCodeActionProvider includes the table of a step that also has a doc string", () => {
   const {
-    GENERATE_STEP_STUB,
     GaugeStepCodeActionProvider,
     UNDEFINED_STEP_MESSAGE,
   } = require("../src/stepCodeActions");
@@ -390,8 +389,6 @@ test("GaugeStepCodeActionProvider includes the table of a step that also has a d
 
 test("GaugeStepCodeActionProvider creates a Kotlin step implementation quick fix for Kotlin sources", () => {
   const {
-    CREATE_STEP_IMPLEMENTATION_TITLE,
-    GENERATE_STEP_STUB,
     GaugeStepCodeActionProvider,
     UNDEFINED_STEP_MESSAGE,
   } = require("../src/stepCodeActions");

@@ -613,7 +613,6 @@ test("previewGaugeDocument does not create output when Spectacle is missing", as
   const { previewGaugeDocument } = require("../src/preview");
   const {
     errorPrompts,
-    errors,
     informationPrompts,
     opened,
     vscode,

@@ -1398,3 +1398,68 @@ test("SpecificationProvider completes terminal cleanup when request cancellation
   assert.equal(fixture.registrationDisposals.get("gauge.create.concept"), 1);
   assert.equal(fixture.provider.activeOperations.size, 0);
 });
+
+// Every other operation-scoped call in src/specification.js is awaited, so its
+// disposal verdict is read and its result is observed. The rejected-folder
+// branch compared the un-awaited promise itself with DISPOSED_CREATION, which no
+// promise can ever equal, so the command finished while its own notification was
+// still pending.
+test("the rejected folder notice is awaited before the command finishes", async () => {
+  const { createSpecification } = require("../src/specification");
+  const writes = new Map();
+  const errors = [];
+  let releaseNotice;
+  const notice = new Promise((resolve) => {
+    releaseNotice = resolve;
+  });
+
+  const vscode = {
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: "/workspace/shop" } }],
+      getConfiguration: () => ({ get: () => false }),
+      openTextDocument: async (filename) => ({ filename }),
+    },
+    window: {
+      showQuickPick: async () => undefined,
+      showInputBox: async () => "Checkout",
+      showTextDocument: async () => {},
+      showErrorMessage(message) {
+        errors.push(message);
+        return notice;
+      },
+    },
+  };
+
+  let finished = false;
+  const creation = createSpecification({
+    vscode,
+    fileSystem: {
+      existsSync: () => false,
+      promises: {
+        async mkdir() {},
+        async writeFile(filename, content) {
+          writes.set(filename, content);
+        },
+      },
+    },
+    pathModule: path.posix,
+    eol: "\n",
+    date: "2026-06-26",
+    user: "Ada",
+    projects: ["/workspace/shop"],
+    specDir: "/workspace/shop/src/main/kotlin",
+  }).then((value) => {
+    finished = true;
+    return value;
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  const finishedWhileNoticePending = finished;
+  releaseNotice(undefined);
+  await creation;
+
+  assert.equal(finishedWhileNoticePending, false);
+  assert.deepEqual([...writes.keys()], []);
+  assert.equal(errors.length, 1);
+});

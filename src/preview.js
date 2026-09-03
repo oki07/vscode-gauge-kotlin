@@ -13,7 +13,6 @@ const GAUGE_DOCS_ARGS = ["docs", "spectacle"];
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
-const MARKDOWN_SPEC_EXTENSION = ".md";
 const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
 const NO_ACTIVE_GAUGE_DOCUMENT_MESSAGE = "Open a Gauge specification or concept to preview.";
 const SPECTACLE_PLUGIN_NAME = "spectacle";

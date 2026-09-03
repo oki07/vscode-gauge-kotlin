@@ -219,19 +219,6 @@ function isConceptLegacyUnderlineHeadingText(line) {
   return hasLegacyHeadingText(line);
 }
 
-function isLegacyUnderlineHeadingStartLine(lines, lineNumber, conceptDocument) {
-  const line = lines[lineNumber] || "";
-  const nextLine = lines[lineNumber + 1] || "";
-  if (!line.trim()) {
-    return false;
-  }
-  if (/^[=]+$/.test(String(nextLine || "").trim())) {
-    return !conceptDocument
-      || (isConceptLegacyUnderlineHeadingText(line) && hasFollowingLine(lines, lineNumber + 1));
-  }
-  return !conceptDocument && /^[-]+$/.test(String(nextLine || "").trim());
-}
-
 function hasFollowingLine(lines, lineNumber) {
   return lineNumber + 1 < lines.length;
 }

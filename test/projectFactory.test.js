@@ -371,7 +371,7 @@ test("ProjectFactory invalidates caches on manifest watcher events", () => {
   const entries = {
     "/workspace/gauge/manifest.json": JSON.stringify({ Language: "kotlin" }),
   };
-  const { counts, fileSystem } = createCountingFileSystem(entries);
+  const { fileSystem } = createCountingFileSystem(entries);
   const factory = createProjectFactory({
     fileSystem,
     pathModule: path.posix,

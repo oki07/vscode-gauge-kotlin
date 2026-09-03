@@ -6,7 +6,6 @@ const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
 const GAUGE_FILE_EXTENSIONS = new Set([".spec", ".cpt"]);
-const MARKDOWN_SPEC_FILE_PATTERN = /\.md$/i;
 const DEFAULT_COMMENT_COMMAND = "editor.action.commentLine";
 const REFUSED_EDIT_MESSAGE = "The edit was not applied.";
 

@@ -487,34 +487,6 @@ function isTagContinuationBoundary(line) {
     || /^-+$/.test(text);
 }
 
-function isTagsContext(lines, lineNumber) {
-  if (lineNumber < 0 || lineNumber >= lines.length) {
-    return false;
-  }
-  let tagsContinuation = false;
-  for (let index = 0; index <= lineNumber; index += 1) {
-    const line = lines[index] || "";
-    if (isTagLine(line)) {
-      if (index === lineNumber) {
-        return true;
-      }
-      tagsContinuation = isTagLineEndingWithComma(line);
-    } else if (
-      tagsContinuation
-      && !isTagContinuationBoundary(line)
-      && !isLegacyHeadingAt(lines, index)
-    ) {
-      if (index === lineNumber) {
-        return true;
-      }
-      tagsContinuation = isTagLineEndingWithComma(line);
-    } else {
-      tagsContinuation = false;
-    }
-  }
-  return false;
-}
-
 function isDocumentTagsContext(document, lineNumber) {
   for (let currentLine = lineNumber; currentLine >= 0; currentLine -= 1) {
     const line = documentLineText(document, currentLine);
@@ -745,64 +717,6 @@ function parseCsvRecord(line, delimiter) {
   }
   cells.push(cell.trim());
   return cells.filter(Boolean);
-}
-
-function firstUnescapedIndex(line, characters) {
-  for (let index = 0; index < line.length; index += 1) {
-    if (characters.has(line[index]) && !isEscapedCharacter(line, index)) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function firstWhitespaceIndex(line) {
-  for (let index = 0; index < line.length; index += 1) {
-    if (/\s/.test(line[index])) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function unescapePropertyValue(value) {
-  return String(value || "")
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/\\([tnrf\\:= ])/g, (_match, character) => {
-      if (character === "t") {
-        return "\t";
-      }
-      if (character === "n") {
-        return "\n";
-      }
-      if (character === "r") {
-        return "\r";
-      }
-      if (character === "f") {
-        return "\f";
-      }
-      return character;
-    });
-}
-
-function propertiesValue(content, key) {
-  const separators = new Set(["=", ":"]);
-  for (const rawLine of String(content || "").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || line.startsWith("!")) {
-      continue;
-    }
-    const explicitSeparator = firstUnescapedIndex(line, separators);
-    const separator = explicitSeparator === -1 ? firstWhitespaceIndex(line) : explicitSeparator;
-    if (separator === -1) {
-      continue;
-    }
-    if (line.slice(0, separator).trim() !== key) {
-      continue;
-    }
-    return unescapePropertyValue(line.slice(separator + 1).trim());
-  }
-  return undefined;
 }
 
 // Gauge merges every *.properties file in the environment directory and the

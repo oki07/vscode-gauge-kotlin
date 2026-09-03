@@ -932,7 +932,7 @@ class GaugeWorkspace {
     let projectRoot;
     try {
       projectRoot = this.projectFactory.getGaugeRootFromFilePath(file);
-    } catch (error) {
+    } catch (_error) {
       return undefined;
     }
     return this.startServerFor(projectRoot);

@@ -1728,7 +1728,9 @@ test("GenerateStubCommandProvider detaches generated edit stages on disposal", a
       }[stage];
       assert.deepEqual({
         ...snapshot,
-        ...expectedCounts,
+        applyCalls,
+        converterCalls,
+        factoryCalls,
         cancelCalls: sources.map((source) => source.cancelCalls),
         disposeCalls: sources.map((source) => source.disposeCalls),
         errors: fake.errors,
@@ -1973,7 +1975,9 @@ test("GenerateStubCommandProvider preserves live generated-edit failures and rel
     }[stage];
     assert.deepEqual({
       activeOperations: provider.activeOperations.size,
-      ...expectedCounts,
+      applyCalls,
+      converterCalls,
+      factoryCalls,
       cancelCalls: sources.map((source) => source.cancelCalls),
       disposeCalls: sources.map((source) => source.disposeCalls),
       errors: fake.errors,

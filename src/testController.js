@@ -173,10 +173,6 @@ function createMessage(vscode, message, location) {
   return message || "";
 }
 
-function createOptionalMessage(vscode, message) {
-  return message ? createMessage(vscode, message) : undefined;
-}
-
 function testResultsOutput(value) {
   return String(value || "").replace(/\r?\n/g, "\r\n");
 }
@@ -308,10 +304,6 @@ function executionTargetsForRequest(controller, request = {}) {
       .map(executionTargetForItem)
       .filter(Boolean),
   );
-}
-
-function isScenarioTarget(target) {
-  return /:\d+$/.test(String(target || ""));
 }
 
 // Gauge accepts scenario identifiers ("spec.spec:3") on the same command line as

@@ -145,17 +145,19 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     // `vsce package` or `vsce publish` would ship a stale or missing bundle
     // without this hook. `npm run package` builds it explicitly as well.
     "vscode:prepublish": "npm run bundle",
-    typecheck: "node scripts/check-js-syntax.js",
-    lint: "node scripts/check-js-syntax.js",
+    // Correctness rules, not style: the gate has to be able to fail on an
+    // undeclared identifier or a duplicated key, which a syntax parse cannot see.
+    lint: "eslint .",
     "test:unit": "node --test",
     "test:lsp": "node --test test/gaugeClients.test.js test/gaugeWorkspace.test.js",
     "test:vscode": "node --test test/extension.test.js test/manifest.test.js",
     package: "node scripts/package-vsix.js",
-    check: "npm run typecheck && npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
+    check: "npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
     test: "npm run test:unit",
   });
   assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");
   assert.equal(typeof manifest.devDependencies.esbuild, "string");
+  assert.equal(typeof manifest.devDependencies.eslint, "string");
   assert.deepEqual(manifest.categories, ["Programming Languages", "Testing"]);
   assert.equal(Object.hasOwn(manifest, "files"), false);
   assert.equal(fs.existsSync(path.join(root, "README.md")), true);
