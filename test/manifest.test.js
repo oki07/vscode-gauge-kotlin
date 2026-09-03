@@ -1194,6 +1194,50 @@ test("third-party notices cover every bundled runtime dependency", () => {
   }
 });
 
+// An asset shipped byte-for-byte from another project is a redistribution, and
+// the notices are where its licence and copyright have to appear. The check is
+// on the bytes rather than on a list, so a file copied later cannot ship
+// uncredited.
+test("every asset copied from the reference extension is credited", () => {
+  const crypto = require("node:crypto");
+  const referenceRoot = path.join(root, "..", "references", "gauge-vscode");
+  const notices = fs.readFileSync(path.join(root, "THIRD_PARTY_NOTICES.md"), "utf8");
+  const digest = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+  const assets = [];
+  for (const directory of ["images", "resources"]) {
+    const walk = (relative) => {
+      const absolute = path.join(root, relative);
+      if (!fs.existsSync(absolute)) {
+        return;
+      }
+      for (const entry of fs.readdirSync(absolute, { withFileTypes: true })) {
+        const next = path.posix.join(relative, entry.name);
+        if (entry.isDirectory()) {
+          walk(next);
+        } else {
+          assets.push(next);
+        }
+      }
+    };
+    walk(directory);
+  }
+  assert.ok(assets.length > 0);
+
+  const uncredited = assets.filter((asset) => {
+    const reference = path.join(referenceRoot, asset);
+    if (!fs.existsSync(reference)) {
+      return false;
+    }
+    if (digest(path.join(root, asset)) !== digest(reference)) {
+      return false;
+    }
+    return !notices.includes(asset);
+  });
+
+  assert.deepEqual(uncredited, []);
+});
+
 test("extension package script requires repository metadata", () => {
   const packageScript = fs.readFileSync(path.join(root, "scripts", "package-vsix.js"), "utf8");
 

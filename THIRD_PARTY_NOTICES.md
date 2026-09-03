@@ -15,6 +15,24 @@ Copyright (C) 2020 ThoughtWorks, Inc.
 Licensed under the Apache License, Version 2.0. A copy of the license is
 available at https://www.apache.org/licenses/LICENSE-2.0.
 
+## Gauge VS Code extension assets
+
+The following files are copied verbatim from the official Gauge extension for
+Visual Studio Code:
+
+- `images/gauge-icon.png`
+- `resources/dark/icon-list.svg`
+- `resources/dark/play.svg`
+- `resources/light/icon-list.svg`
+- `resources/light/play.svg`
+
+Source: https://github.com/getgauge/gauge-vscode
+
+Copyright (c) 2017 Gauge
+
+Licensed under the MIT License. A copy of the license is available at
+https://github.com/getgauge/gauge-vscode/blob/master/LICENSE.
+
 ## Bundled npm packages
 
 `out/extension.js` is a single esbuild bundle built with
