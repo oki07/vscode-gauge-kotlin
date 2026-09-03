@@ -80,7 +80,7 @@ test("GaugeStepCodeActionProvider creates a step implementation quick fix", () =
 });
 
 // The runner builds its suggested annotation from the PARAMETERIZED step value:
-// references/gauge-java ValidateStepProcessor formats @Step("%s") from
+// getgauge/gauge-java ValidateStepProcessor formats @Step("%s") from
 // getStepValue().getParameterizedStepValue(). Verified against the real parser -
 // ExtractStepValueAndParams on `Pay with "100"` gives
 // value="Pay with {}", parameterized="Pay with <100>".
@@ -319,7 +319,7 @@ test("GaugeStepCodeActionProvider ignores Gauge LSP stub code outside step lines
 // The braces Gauge reserves are written "\\{" in the spec and reach the runner
 // unescaped: the real parser gives "* cost is \\{5\\}" the value "cost is {5}",
 // and the registry key is whatever the annotation literally says
-// (references/gauge-java RegistryMethodVisitor -> StepsUtil.getStepText, which
+// (getgauge/gauge-java RegistryMethodVisitor -> StepsUtil.getStepText, which
 // leaves braces alone). Emitting the raw spec text and then escaping the
 // backslash again for Kotlin registered "cost is \\{5\\}", which the runner can
 // never match - and the editor stayed green about it.
@@ -967,7 +967,7 @@ test("GaugeStepCodeActionProvider defers duplicate Kotlin stub names until desti
 // A generated stub must FAIL until someone writes the body. gauge-java's own
 // suggestion, which the reference extension inserts verbatim, ends with
 // `throw new UnsupportedOperationException("Provide custom implementation");`
-// (references/gauge-java .../processor/ValidateStepProcessor.java validateStep).
+// (getgauge/gauge-java .../processor/ValidateStepProcessor.java validateStep).
 //
 // Measured by running gauge-java's own MethodExecutor over each body shape,
 // compiled by the bundled Gradle template against gauge-java 1.0.3:

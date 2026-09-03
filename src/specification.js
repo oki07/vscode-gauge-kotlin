@@ -579,7 +579,7 @@ function isInsideDirectory(pathModule, directory, candidate) {
 // The Explorer menu passes the folder the user right clicked on straight
 // through, with none of the checking the quick-pick path applies. Gauge only
 // reads specifications from the directories named by gauge_specs_dir
-// (references/gauge/util/util.go GetSpecDirs), so a file created outside them is
+// (getgauge/gauge/util/util.go GetSpecDirs), so a file created outside them is
 // invisible to every Gauge command with no hint why.
 function isInsideProjectSpecDirs(pathModule, projectRoot, target, options, descriptor) {
   const scope = {
@@ -591,7 +591,7 @@ function isInsideProjectSpecDirs(pathModule, projectRoot, target, options, descr
     ? configuredConceptDirs(scope)
     : configuredSpecDirs(scope);
   // gauge_concepts_dir is unset in almost every project, and Gauge then reads
-  // concepts from the whole project root (references/gauge/util/fileUtils.go
+  // concepts from the whole project root (getgauge/gauge/util/fileUtils.go
   // GetConceptFiles falls back to findConceptFiles([absProjRoot]) when
   // GetConceptsPaths is empty), so every folder is a legitimate location.
   if (!directories) {
@@ -643,7 +643,7 @@ async function selectSpecDirectory(vscode, pathModule, projectRoot, options = {}
   // gauge/specDirs only answers while a language client is running. Falling back
   // to a hard coded "specs" wrote new specifications into a directory Gauge does
   // not read whenever gauge_specs_dir moved them
-  // (references/gauge/util/util.go GetSpecDirs).
+  // (getgauge/gauge/util/util.go GetSpecDirs).
   const specDirs = relativeSpecDirs && relativeSpecDirs.length > 0
     ? relativeSpecDirs
     : projectSpecDirs(projectRoot, options, pathModule);

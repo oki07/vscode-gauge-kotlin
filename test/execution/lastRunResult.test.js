@@ -117,7 +117,7 @@ function tableScenarioItem(heading, line, rowIndex) {
 }
 
 // A nested table run is N_spec x N_scenario executions and the proto carries both
-// indices (references/gauge/execution/result/specResult.go sets
+// indices (getgauge/gauge/execution/result/specResult.go sets
 // IsSpecTableDriven and, for a nested scenario, IsScenarioTableDriven with
 // ScenarioTableRowIndex). Keying on the scenario index alone collapsed the spec
 // rows onto each other, so half the results were overwritten - and when the
@@ -299,9 +299,9 @@ test("last run result namespaces suite hook leaves by Gauge project root", () =>
 test("last run result does not duplicate a specification hook failure", () => {
   const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
   const filename = "/workspace/specs/setup.spec";
-  // references/gauge/execution/result/result.go GetProtoHookFailure always sets
+  // getgauge/gauge/execution/result/result.go GetProtoHookFailure always sets
   // TableRowIndex to -1, and only the table-driven merge path in
-  // references/gauge/execution/merge.go addHookFailure overwrites it. -1 is
+  // getgauge/gauge/execution/merge.go addHookFailure overwrites it. -1 is
   // non-zero, so gauge always puts it on the wire for a non-table hook failure.
   const beforeSpec = message(
     fieldBytes(1, "spec stack"),
@@ -344,7 +344,7 @@ test("last run result does not duplicate a specification hook failure", () => {
 test("last run result keeps table-driven specification hook failures distinct by row", () => {
   const { executionEventsFromLastRunResult } = require("../../src/execution/lastRunResult");
   const filename = "/workspace/specs/table-hooks.spec";
-  // TableRowIndex is a proto3 int32 (references/gauge-proto/spec.proto), so
+  // TableRowIndex is a proto3 int32 (getgauge/gauge-proto/spec.proto), so
   // protobuf-go omits the field entirely when the value is 0 - which is exactly
   // the FIRST data-table row. Reading an absent field as "not table driven"
   // labelled row 1 as a bare "Before Specification" next to its "(row 2)"
@@ -352,7 +352,7 @@ test("last run result keeps table-driven specification hook failures distinct by
   const hookFailure = (rowIndex, messageText) => (rowIndex === 0
     ? message(fieldBytes(2, messageText))
     : message(fieldBytes(2, messageText), fieldInt32(4, rowIndex)));
-  // references/gauge/execution/merge.go mergeResults sets IsTableDriven on the
+  // getgauge/gauge/execution/merge.go mergeResults sets IsTableDriven on the
   // very spec whose hooks addHookFailure gives row indices to, so it is the
   // signal that tells an absent TableRowIndex (row 0) from a hook that belongs
   // to no table (an explicit -1).

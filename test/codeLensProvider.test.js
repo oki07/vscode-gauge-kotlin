@@ -313,9 +313,9 @@ test("GaugeCodeLensProvider mirrors Gauge parallel execution CodeLens for specif
 });
 
 // Gauge emits the parallel lens whenever spec.DataTable.IsInitialized()
-// (references/gauge/api/lang/codeLens.go), and an external `table: file.csv`
+// (getgauge/gauge/api/lang/codeLens.go), and an external `table: file.csv`
 // initializes it through AddExternalDataTable
-// (references/gauge/parser/convert.go), exactly like an inline table.
+// (getgauge/gauge/parser/convert.go), exactly like an inline table.
 test("GaugeCodeLensProvider mirrors Gauge parallel execution CodeLens for external data tables", () => {
   const { GaugeCodeLensProvider } = require("../src/codeLensProvider");
   const provider = new GaugeCodeLensProvider();
@@ -614,7 +614,7 @@ test("GaugeCodeLensProvider adds separate reference lenses for Step aliases", as
   ]);
 });
 
-// references/gauge/parser/lex.go isStep requires the second character not to be
+// getgauge/gauge/parser/lex.go isStep requires the second character not to be
 // another '*', so "** Bold comment" is a comment and cannot reference a step.
 // Verified against the real parser.
 test("GaugeCodeLensProvider does not count double-star lines as step references", async () => {
@@ -732,7 +732,7 @@ test("GaugeCodeLensProvider counts multiline step references when project allows
   }
 });
 
-// references/gauge/parser/lex.go isTableRow needs a closing "|" as well as an
+// getgauge/gauge/parser/lex.go isTableRow needs a closing "|" as well as an
 // opening one, probed twice: a spec row without it reports nothing where a
 // closed row warns, and in a concept "|table" reports nothing where "|table|"
 // reports "Table doesn't belong to any step". The coverage here is indentation
@@ -1931,7 +1931,7 @@ test("GaugeCodeLensProvider preserves live fallback scan error topology", async 
   }
 });
 
-// references/gauge/parser/lex.go isDataTable matches /^\s*[tT][aA][bB][lL][eE]\s*:/,
+// getgauge/gauge/parser/lex.go isDataTable matches /^\s*[tT][aA][bB][lL][eE]\s*:/,
 // so any run of whitespace may sit between the keyword and the colon. Verified
 // against the real parser: "table  : data.csv" and "table\t: data.csv" both parse
 // as an external data table ("Could not resolve table. File data.csv doesn't

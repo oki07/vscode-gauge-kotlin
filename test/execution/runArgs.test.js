@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-// gauge sets NoOptDefVal on --sort (references/gauge/cmd/run.go:143-145), so
+// gauge sets NoOptDefVal on --sort (getgauge/gauge/cmd/run.go:143-145), so
 // pflag reads a separated "--sort random" as --sort=alpha plus a positional
 // "random", which gauge then treats as a spec path. The value has to be attached.
 // package.json declares "default": [] for scenario and env, which is exactly what
@@ -20,7 +20,7 @@ test("buildRunArgs.forGauge drops an empty array launch attribute", () => {
   );
 });
 
-// references/gauge/cmd/run.go:158 registers --scenario with StringArrayVar, so it
+// getgauge/gauge/cmd/run.go:158 registers --scenario with StringArrayVar, so it
 // is repeatable. Comma joining made Gauge read the whole string as one scenario
 // heading, which matches nothing.
 test("buildRunArgs.forGauge repeats a scenario flag per name", () => {
@@ -73,7 +73,7 @@ test("buildRunArgs.forGauge drops flags Gauge refuses on a rerun", () => {
 
   // Gauge tolerates only a fixed set of extra flags on a rerun:
   // overrideRerunFlags = {verbose, simple-console, machine-readable, dir,
-  // log-level} (references/gauge/cmd/run.go:72). hide-suggestion is not among
+  // log-level} (getgauge/gauge/cmd/run.go:72). hide-suggestion is not among
   // them, so handleConflictingParams (run.go:278-291) counts it and answers
   // "Invalid Command. Usage: gauge run --failed", which exit() turns into
   // os.Exit(1). The Test UI always sets hide-suggestion
@@ -184,7 +184,7 @@ test("buildRunArgs.forGauge preserves boolean sort launch compatibility", () => 
     ["run", "--hide-suggestion", "--simple-console", "--sort"],
   );
   // --sort carries a pflag NoOptDefVal, so its value must be attached
-  // (references/gauge/cmd/run.go:143-145). --random-seed has none and keeps the
+  // (getgauge/gauge/cmd/run.go:143-145). --random-seed has none and keeps the
   // separated form.
   assert.deepEqual(
     buildRunArgs.forGauge(null, { sort: "random", "random-seed": 4 }),

@@ -6,7 +6,7 @@ class BaseProcessor {
   }
 
   // Gauge encodes machine-readable output with Go's encoding/json
-  // (references/gauge/logger/logger.go json.Marshal), which HTML-escapes ">" to
+  // (getgauge/gauge/logger/logger.go json.Marshal), which HTML-escapes ">" to
   // \u003e, so a raw JSON line does not contain a prefix like
   // "... to => ". Decode first, then match.
   canProcess(lineText) {

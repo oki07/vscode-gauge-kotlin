@@ -5,8 +5,8 @@ const nodePath = require("node:path");
 
 // Gauge reads Markdown as a specification only inside the directories named by
 // `gauge_specs_dir`, a comma separated list of project relative paths that
-// defaults to "specs" (references/gauge/util/util.go GetSpecDirs,
-// references/gauge/env/env.go). `.spec` and `.cpt` are unambiguous and are
+// defaults to "specs" (getgauge/gauge/util/util.go GetSpecDirs,
+// getgauge/gauge/env/env.go). `.spec` and `.cpt` are unambiguous and are
 // recognised anywhere in the project; `.md` is not, and without this scope a
 // README or CHANGELOG in a Gauge project gets Gauge colouring, folding, an
 // outline, Run and Debug code lenses and undefined-step diagnostics.
@@ -206,7 +206,7 @@ function startsWithSegments(segments, prefix) {
     && prefix.every((segment, index) => segment === segments[index]);
 }
 
-// references/gauge/env/env.go getEnvDir prefers the gauge_env_dir variable and
+// getgauge/gauge/env/env.go getEnvDir prefers the gauge_env_dir variable and
 // otherwise takes EnvironmentDir from the project manifest, falling back to
 // "env" (github.com/getgauge/common EnvDirectoryName).
 // Read every time rather than memoized. A module level cache would answer with a
@@ -216,7 +216,7 @@ function environmentDirectory(fileSystem, pathModule, projectRoot) {
   const configured = process.env[GAUGE_ENV_DIR_PROPERTY];
   if (configured) {
     // Gauge rejects an absolute gauge_env_dir before loading any properties
-    // (references/gauge/env/env.go getEnvDir). Do not reinterpret it as a
+    // (getgauge/gauge/env/env.go getEnvDir). Do not reinterpret it as a
     // project-relative path and decorate files from that unrelated location.
     if (typeof pathModule.isAbsolute === "function" && pathModule.isAbsolute(configured)) {
       return undefined;
@@ -238,13 +238,13 @@ function environmentDirectory(fileSystem, pathModule, projectRoot) {
 }
 
 // Gauge loads every *.properties file in the environment directory, not just
-// default.properties: references/gauge/env/env.go loadEnvDir collects them with
+// default.properties: getgauge/gauge/env/env.go loadEnvDir collects them with
 // common.FindFilesInDir(envDirPath, isPropertiesFile) and merges them with
 // properties.MustLoadFiles, where a later file wins. The bundled Kotlin template
 // writes env/default/java.properties beside default.properties.
 //
 // Only the "default" environment is read. Selecting another one is the --env
-// flag (references/gauge/cmd/run.go environmentDefault "default"), which this
+// flag (getgauge/gauge/cmd/run.go environmentDefault "default"), which this
 // extension never passes, so no other directory can be in force for a run it
 // starts.
 function propertiesValueFor(options, key) {
@@ -307,7 +307,7 @@ function createMarkdownSpecScope(options = {}) {
 }
 
 // When gauge_concepts_dir is set, Gauge reads concepts ONLY from those
-// directories (references/gauge/util/fileUtils.go GetConceptFiles returns early
+// directories (getgauge/gauge/util/fileUtils.go GetConceptFiles returns early
 // on GetConceptsPaths). Unset, it reads them from the whole project, which is
 // what indexing every .cpt already matches.
 function configuredConceptDirs(options = {}) {
@@ -377,7 +377,7 @@ function gaugeProjectRootForFile(file, projectFactory) {
 
 // Convenience for the providers that answer one document at a time.
 // Gauge decides which extensions count as specifications from
-// gauge_spec_file_extensions (references/gauge/env/env.go
+// gauge_spec_file_extensions (getgauge/gauge/env/env.go
 // GaugeSpecFileExtensions, default ".spec, .md"), and
 // util.IsValidSpecExtension compares the lowercased extension against that
 // list. Narrowing it to ".spec" is a project saying its Markdown is

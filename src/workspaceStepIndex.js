@@ -304,7 +304,7 @@ class WorkspaceStepIndex {
       record.stepEntries = await Promise.resolve(this.stepEntriesProvider(document, documents, root));
     }
     // gauge_concepts_dir narrows where Gauge reads concepts from
-    // (references/gauge/util/fileUtils.go GetConceptFiles), and a concept
+    // (getgauge/gauge/util/fileUtils.go GetConceptFiles), and a concept
     // shadows an implementation, so indexing one Gauge never reads would send Go
     // to Definition away from the Kotlin function that actually runs.
     if (isConceptDocument(document) && isConceptPathInScope(documentPath(document), {
@@ -366,7 +366,7 @@ class WorkspaceStepIndex {
       }
       for (const heading of record.concepts) {
         // Gauge defines no concept for a heading carrying a static argument
-        // (references/gauge/parser/conceptParser.go), so indexing it would make
+        // (getgauge/gauge/parser/conceptParser.go), so indexing it would make
         // the calling step look resolved and, since a concept shadows an
         // implementation, would send Go to Definition to a heading Gauge throws
         // away.
@@ -557,7 +557,7 @@ class WorkspaceStepIndex {
 
   // A concept shadows an implementation of the same text: Gauge substitutes the
   // concept when it builds the specification
-  // (references/gauge/gauge/specification.go ProcessConceptStepsFrom), so the
+  // (getgauge/gauge/gauge/specification.go ProcessConceptStepsFrom), so the
   // Kotlin function is never executed for that step and navigating to it would
   // send the user to dead code.
   async definitionEntries(sourceDocument, templates) {

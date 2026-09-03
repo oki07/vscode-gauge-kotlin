@@ -188,7 +188,7 @@ test("createSpecification writes a spec file under the workspace specs directory
 
 // With no language client running there is no gauge/specDirs answer, and the
 // fallback hard coded "specs". A project that moved its specifications with
-// gauge_specs_dir (references/gauge/util/util.go GetSpecDirs) then had new
+// gauge_specs_dir (getgauge/gauge/util/util.go GetSpecDirs) then had new
 // specifications written into a directory Gauge does not read. The rule already
 // lives in src/gaugeSpecScope.js configuredSpecDirs.
 test("createSpecification honours gauge_specs_dir without a language client", async () => {
@@ -330,7 +330,7 @@ test("createSpecification does not ask for a project when a folder was chosen", 
 // The Explorer "New Gauge Specification" menu passes the folder the user right
 // clicked on straight through as specDir, with none of the gauge_specs_dir
 // checking the quick-pick path applies. Gauge only reads specifications from the
-// directories named by gauge_specs_dir (references/gauge/util/util.go
+// directories named by gauge_specs_dir (getgauge/gauge/util/util.go
 // GetSpecDirs), so a specification created in src/ or docs/ is invisible to
 // every Gauge command and the user is given no hint why.
 test("createSpecification refuses a folder outside the project spec dirs", async () => {
@@ -379,7 +379,7 @@ test("createSpecification refuses a folder outside the project spec dirs", async
 
 // gauge_concepts_dir is unset in almost every project, and Gauge then reads
 // concept files from the whole project root
-// (references/gauge/util/fileUtils.go GetConceptFiles falls back to
+// (getgauge/gauge/util/fileUtils.go GetConceptFiles falls back to
 // findConceptFiles([absProjRoot]) when GetConceptsPaths is empty), so every
 // folder is a legitimate concept location. configuredConceptDirs answers
 // undefined for that case, which the spec-dir scope check must read as "the

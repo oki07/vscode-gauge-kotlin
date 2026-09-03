@@ -361,7 +361,7 @@ function hasActiveImplementationGaugeDocument(vscode, projectFactory) {
 
 // The activation event is workspaceContains:manifest.json, so any project with an
 // unrelated manifest.json at its root reaches here. A Gauge manifest always names
-// the runner language (references/gauge/manifest/manifest.go Manifest.Language),
+// the runner language (getgauge/gauge/manifest/manifest.go Manifest.Language),
 // so require one before starting the Gauge service stack.
 // Discovery already returns only Gauge project roots, so those need the language
 // check alone rather than a second project check.
@@ -805,7 +805,7 @@ function updateGaugeSemanticTokenColors(vscode) {
   }
   rules.gaugeComment = { foreground: gaugeConfig.get("comment") };
   // The teardown separator is a comment line to Gauge: its own provider colours
-  // "____" through gaugeComment (references/gauge-vscode/src/semanticTokensProvider.ts).
+  // "____" through gaugeComment (getgauge/gauge-vscode/src/semanticTokensProvider.ts).
   // This extension emits a distinct token type for it, which had no rule at all,
   // so the separator rendered in the plain editor foreground with no setting to
   // change it.
@@ -1367,7 +1367,7 @@ function activate(context, vscodeApi, options = {}) {
   const ownsExecutionStatusProvider = !options.executionStatusProvider;
   // The provider needs the file system to check for .gauge/executionStatus.json
   // before asking: gauge/executionStatus exits the daemon when that file is
-  // missing (references/gauge/execution/execute.go ReadLastExecutionResult).
+  // missing (getgauge/gauge/execution/execute.go ReadLastExecutionResult).
   const executionStatusProvider = options.executionStatusProvider || createGaugeExecutionStatusProvider(
     () => activeClientsMap,
     { fileSystem: options.fileSystem, pathModule: options.pathModule, vscode },

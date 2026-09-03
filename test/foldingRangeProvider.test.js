@@ -89,7 +89,7 @@ test("GaugeFoldingRangeProvider folds legacy underline headings and concepts", (
   ]);
 });
 
-// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// Gauge compares the trimmed line (getgauge/gauge/parser/lex.go), so an
 // indented underline is still an underline. Verified against the real parser:
 // "Checkout / \u0020\u0020======== / ## Scenario / * a step" yields spec heading
 // "Checkout" with one scenario.
@@ -127,7 +127,7 @@ test("GaugeFoldingRangeProvider folds indented legacy underline headings", () =>
   ]);
 });
 
-// references/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
+// getgauge/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
 // "### Nested scenario syntax" is a comment. Verified against the real parser.
 test("GaugeFoldingRangeProvider folds only hash headings accepted by the Gauge lexer", () => {
   const { GaugeFoldingRangeProvider } = require("../src/foldingRangeProvider");

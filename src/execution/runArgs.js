@@ -19,7 +19,7 @@ const processExecutionAttributes = new Set([
   "cwd",
   "processEnv",
 ]);
-// Exactly references/gauge/cmd/run.go overrideRerunFlags. Gauge counts any other
+// Exactly getgauge/gauge/cmd/run.go overrideRerunFlags. Gauge counts any other
 // flag set alongside --failed or --repeat in handleConflictingParams and answers
 // "Invalid Command. Usage: gauge run --failed", which exit() turns into
 // os.Exit(1). hide-suggestion must not be in this list: because the Test UI
@@ -31,9 +31,9 @@ const RERUN_FLAG_KEYS = [
   "dir",
   "log-level",
 ];
-// references/gauge/cmd/run.go sets NoOptDefVal only on --sort.
+// getgauge/gauge/cmd/run.go sets NoOptDefVal only on --sort.
 const NO_OPT_DEFAULT_FLAG_KEYS = new Set(["sort"]);
-// references/gauge/cmd/run.go registers these as repeatable string slices.
+// getgauge/gauge/cmd/run.go registers these as repeatable string slices.
 const REPEATABLE_FLAG_KEYS = new Set(["scenario"]);
 const explicitFalseBooleanFlags = new Set([
   "install-plugins",
@@ -119,7 +119,7 @@ function flagTokens(key, value) {
       return [];
     }
     // pflag registers --scenario as a repeatable string slice
-    // (references/gauge/cmd/run.go), so a comma joined value reads as one
+    // (getgauge/gauge/cmd/run.go), so a comma joined value reads as one
     // scenario heading and matches nothing.
     if (REPEATABLE_FLAG_KEYS.has(key)) {
       return value.flatMap((entry) => [flag(key), entry]);
@@ -130,7 +130,7 @@ function flagTokens(key, value) {
     // A flag with a pflag NoOptDefVal must carry its value attached: pflag reads
     // a separated "--sort random" as --sort=alpha plus a positional "random",
     // which gauge then treats as a spec path
-    // (references/gauge/cmd/run.go:143-145).
+    // (getgauge/gauge/cmd/run.go:143-145).
     return NO_OPT_DEFAULT_FLAG_KEYS.has(key)
       ? [`${flag(key)}=${value}`]
       : [flag(key), `${value}`];

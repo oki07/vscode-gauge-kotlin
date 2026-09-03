@@ -203,7 +203,7 @@ test("GenerateStubCommandProvider lists Kotlin files under a Windows project roo
 
 // gauge/getImplFiles is delegated to the runner, and gauge-java's FileHelper
 // only scans files ending in .java
-// (references/gauge-java/src/main/java/com/thoughtworks/gauge/FileHelper.java).
+// (getgauge/gauge-java/src/main/java/com/thoughtworks/gauge/FileHelper.java).
 // A Kotlin project therefore gets an empty list and the picker can only ever
 // offer "New File": there is no way to add a step to an existing Kotlin file.
 test("GenerateStubCommandProvider lists workspace Kotlin files the Java runner cannot see", async () => {
@@ -267,7 +267,7 @@ test("GenerateStubCommandProvider lists workspace Kotlin files the Java runner c
 
 // gauge/putStubImpl is answered by gauge-java's StubImplementationCodeProcessor,
 // which parses the target with JavaParser
-// (references/gauge-java/src/main/java/com/thoughtworks/gauge/connection/StubImplementationCodeProcessor.java).
+// (getgauge/gauge-java/src/main/java/com/thoughtworks/gauge/connection/StubImplementationCodeProcessor.java).
 // Kotlin source is not valid Java, so parsing an existing .kt file yields an
 // empty ParseResult and the processor throws on orElseThrow: the quick fix fails
 // with no edit. For a new file it writes Java class scaffolding instead. The
@@ -2344,7 +2344,7 @@ test("GenerateStubCommandProvider reports a workspace edit VS Code refused", asy
 // outside a Gauge project. The command then read .client off undefined and the
 // user saw a raw TypeError. Upstream's identical unguarded access is unreachable
 // because there the quick fix is produced by the Gauge server itself
-// (references/gauge/api/lang/codeAction.go), so it only exists when a client does.
+// (getgauge/gauge/api/lang/codeAction.go), so it only exists when a client does.
 test("GenerateStubCommandProvider explains that no Gauge project is running", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
   const { commands, errors, vscode } = createFakeVscode();

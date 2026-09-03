@@ -291,7 +291,7 @@ test("SpecNodeProvider populates specifications and scenarios from Gauge LSP", a
 });
 
 // gauge/scenarios answers with a single ScenarioInfo, not a list, whenever a
-// scenario's span covers the requested line: references/gauge/api/lang/customResponses.go
+// scenario's span covers the requested line: getgauge/gauge/api/lang/customResponses.go
 // getScenarioAt returns `info` as soon as `sce.InSpan(line + 1)` is true. The
 // explorer always asks at position (1, 1), so a specification whose first
 // scenario heading sits on line 2 - "# Spec" then "## Scenario" - gets a bare
@@ -1521,7 +1521,7 @@ test("SpecNodeProvider initial readiness stops after synchronous disposal", asyn
 // whole Gauge command surface here - the palette entries, the explorer and
 // editor context menus, the editor title action and the keybindings - so tying
 // it to the tree view setting would remove every Gauge command from the UI.
-// references/gauge-vscode can afford that coupling because its manifest gates
+// getgauge/gauge-vscode can afford that coupling because its manifest gates
 // only palette entries and the view itself on the key.
 test("SpecNodeProvider activates the Gauge command context when spec explorer is disabled", async () => {
   const { SpecNodeProvider } = require("../src/explorer/specExplorer");

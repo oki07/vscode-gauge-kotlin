@@ -1497,7 +1497,7 @@ test("GaugeStepDiagnosticsProvider respects Step wildcard imports", () => {
 });
 
 // The runner resolves steps by reflection, not by imports:
-// references/gauge-java StepsScanner.scan calls
+// getgauge/gauge-java StepsScanner.scan calls
 // reflections.getMethodsAnnotatedWith(Step.class). So once the Gauge package is
 // imported by wildcard, a bare @Step is the Gauge one - a second unrelated
 // wildcard says nothing. Counting wildcards instead dropped every @Step in a
@@ -4953,7 +4953,7 @@ test("GaugeStepDiagnosticsProvider reports Gauge step parser errors", () => {
   ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
   const implementation = createDocument([
     // The runner registers what the annotation LITERALLY says
-    // (references/gauge-java RegistryMethodVisitor keys on
+    // (getgauge/gauge-java RegistryMethodVisitor keys on
     // StepsUtil.getStepText, which leaves braces alone), and the spec value for
     // "* Pay \\{card\\}" is "Pay {card}" (probed). So the annotation must not
     // carry the spec's escapes.
@@ -5618,7 +5618,7 @@ test("GaugeStepDiagnosticsProvider reports unresolved Gauge data table file para
 });
 
 // The parser looks the cell text up in the header verbatim
-// (references/gauge/parser/resolver.go), so "<  type2  >" is not the column
+// (getgauge/gauge/parser/resolver.go), so "<  type2  >" is not the column
 // "type2". Trimming it here accepted a name Gauge rejects and swallowed the
 // warning. Probed: W: ["Dynamic param <  type2  > could not be resolved,
 // Treating it as static param"].
@@ -5650,7 +5650,7 @@ test("GaugeStepDiagnosticsProvider does not trim whitespace inside a table cell 
 });
 
 // Gauge discards the whole second data table before resolving anything
-// (references/gauge/parser/specparser.go), so its rows produce no parameter
+// (getgauge/gauge/parser/specparser.go), so its rows produce no parameter
 // warnings - only "Multiple data table present, ignoring table". Probed:
 // W: ["Multiple data table present, ignoring table"] and nothing about <bad>.
 test("GaugeStepDiagnosticsProvider leaves the ignored second data table unvalidated", () => {
@@ -5768,7 +5768,7 @@ test("GaugeStepDiagnosticsProvider agrees with the quick fix on an unclosed tabl
   assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.message), []);
 });
 
-// The annotation is not spec text. references/gauge-java StepsUtil.getStepText
+// The annotation is not spec text. getgauge/gauge-java StepsUtil.getStepText
 // only does replaceAll("(<.*?>)", "{}"), so a quoted run inside the annotation
 // stays literal and the registry key is `the user "admin" logs in`. Applying the
 // SPEC grammar here made it `the user {} logs in`, which matches the spec step,
@@ -6946,7 +6946,7 @@ test("GaugeStepDiagnosticsProvider reports unresolved special concept heading pa
   assert.deepEqual({ ...headingDiagnostic.range.end }, { line: 0, character: 35 });
 });
 
-// Gauge compares the trimmed line (references/gauge/parser/lex.go) and
+// Gauge compares the trimmed line (getgauge/gauge/parser/lex.go) and
 // parser/helper.go isUnderline accepts a run of one or more, so an indented
 // legacy concept heading still defines a concept. Verified against
 // parser.CreateConceptsDictionary: "  my concept" over "  ==========="
@@ -7072,7 +7072,7 @@ test("GaugeStepDiagnosticsProvider accepts a step alias list", () => {
 
 // Every property reader must follow Gauge's own rule: loadEnvDir merges every
 // *.properties file in the environment directory
-// (references/gauge/env/env.go). allow_multiline_step put in java.properties -
+// (getgauge/gauge/env/env.go). allow_multiline_step put in java.properties -
 // the very file the bundled Kotlin template writes - was ignored.
 test("GaugeStepDiagnosticsProvider reads allow_multiline_step from any properties file", () => {
   const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
@@ -7116,7 +7116,7 @@ test("GaugeStepDiagnosticsProvider reads allow_multiline_step from any propertie
 });
 
 // Gauge's lexer only consumes a doc string when a CLOSING fence is found:
-// references/gauge/parser/lex.go calls extractMultilineContent, which returns
+// getgauge/gauge/parser/lex.go calls extractMultilineContent, which returns
 // found=false and consumes nothing when unterminated. So an unmatched """ is
 // just a line, and everything after it is still lexed. Verified against the real
 // parser: this input reports "Teardown should have at least three underscore
@@ -7163,7 +7163,7 @@ test("GaugeStepDiagnosticsProvider reports a missing step special parameter file
 });
 
 // Gauge's resolver map is keyed by the exact lowercase type
-// (references/gauge/parser/resolver.go initializePredefinedResolvers, and
+// (getgauge/gauge/parser/resolver.go initializePredefinedResolvers, and
 // getStepArg looks the trimmed type up verbatim), so <FILE:...> is not a known
 // special parameter at all. The real parser answers with the unknown-type
 // warning and the unresolved error even when the file exists.
@@ -7203,11 +7203,11 @@ test("GaugeStepDiagnosticsProvider treats an upper case special type as unknown"
   );
 });
 
-// A scenario heading ends the teardown scope: references/gauge/parser/convert.go
+// A scenario heading ends the teardown scope: getgauge/gauge/parser/convert.go
 // scenarioConverter calls retainStates(state, specScope), which drops
 // tearDownScope. Verified against the real parser - both inputs below parse
 // ok=true with every scenario holding its own step.
-// references/gauge/parser/lex.go isStep requires text[0] == '*' && text[1] != '*',
+// getgauge/gauge/parser/lex.go isStep requires text[0] == '*' && text[1] != '*',
 // so a Markdown bold line is a comment. Verified against the real parser: this
 // input is ok=true with one step. Every other surface already guards this;
 // findGaugeSteps did not, so "**bold**" drew a false Undefined Step.
@@ -7284,7 +7284,7 @@ test("GaugeStepDiagnosticsProvider ignores headings inside a concept doc string"
 });
 
 // An underline promotes the line above only when that line is a comment:
-// references/gauge/parser/lex.go rewrites the previous token only when
+// getgauge/gauge/parser/lex.go rewrites the previous token only when
 // isInState(currentState, commentScope). A step line followed by a rule of "="
 // is not a concept heading, and a hash heading followed by dashes is not a
 // scenario heading.
@@ -7363,7 +7363,7 @@ test("GaugeStepDiagnosticsProvider rejects an indented hash scenario heading in 
 });
 
 // An unmatched fence is an ordinary comment token that DOES end a step's scope
-// (references/gauge/parser/lex.go extractMultilineContent returns found=false
+// (getgauge/gauge/parser/lex.go extractMultilineContent returns found=false
 // and consumes nothing), so the table below it belongs to nothing. Only a closed
 // block is the step's argument. Verified against the real concept parser, which
 // reports this and accepts the closed-block form.
@@ -7529,7 +7529,7 @@ test("GaugeStepDiagnosticsProvider treats a Markdown bold line as a comment", ()
 // the real parser answers ok=false with "Dynamic parameter <> could not be
 // resolved". Dropping it left the whole specification looking clean while
 // `gauge run` never got past parsing.
-// Gauge trims only the special TYPE (references/gauge/parser/resolver.go resolve
+// Gauge trims only the special TYPE (getgauge/gauge/parser/resolver.go resolve
 // calls strings.TrimSpace on the match), never the dynamic name. Verified against
 // the real parser: "< foo >" does NOT resolve against a table header "foo" and is
 // reported with its spacing intact, while "<foo>" resolves.
@@ -7623,7 +7623,7 @@ test("GaugeStepDiagnosticsProvider validates the first spec table wherever it ap
 });
 
 // "###" is neither a spec nor a scenario heading to the lexer
-// (references/gauge/parser/lex.go), so it is a comment and an underline below it
+// (getgauge/gauge/parser/lex.go), so it is a comment and an underline below it
 // promotes it. And isTableRow requires a trailing "|" too, so "| id | name" is a
 // comment as well. Verified against the real parser, which reports both.
 // Gauge produces NO concept for a heading with a static parameter: verified
@@ -9633,7 +9633,7 @@ test("GaugeStepDiagnosticsProvider leaves Markdown in a nested directory named s
 });
 
 // Gauge's lexer emits no token for a blank line that follows a step
-// (references/gauge/parser/lex.go: newToken.Suffix = "\n"; continue), so the
+// (getgauge/gauge/parser/lex.go: newToken.Suffix = "\n"; continue), so the
 // step token is still the last token when the table arrives and the table
 // attaches to it. Verified against the real parser: for "* Send payload" with a
 // blank line before an inline table, parser.SpecParser.Parse returns step value
@@ -9699,7 +9699,7 @@ test("GaugeStepDiagnosticsProvider leaves a table behind a comment line unattach
 });
 
 // Gauge's lexer accepts both spellings of the tag keyword:
-// references/gauge/parser/lex.go checkTag compares against "tags:" and "tags :".
+// getgauge/gauge/parser/lex.go checkTag compares against "tags:" and "tags :".
 // Six other modules stop a multi-line step at either spelling; stepDiagnostics
 // only knew the first, so with allow_multiline_step a "tags : smoke" line was
 // swallowed into the step text here and nowhere else.
@@ -9739,7 +9739,7 @@ test("GaugeStepDiagnosticsProvider ends a multiline step at a spaced tags keywor
   }
 });
 
-// references/gauge/parser/lex.go isTearDown -> parser/helper.go isUnderline
+// getgauge/gauge/parser/lex.go isTearDown -> parser/helper.go isUnderline
 // recognises a line of underscores as the teardown marker. Verified against the
 // real parser: "* first step" followed by "____" and "* teardown step" yields a
 // scenario with one step and one teardown step, parse ok. The boundary check knew
@@ -9803,7 +9803,7 @@ test("GaugeStepDiagnosticsProvider does not treat a Kotlin script as a step sour
   assert.deepEqual(provider.provideDiagnostics(script, [script]), []);
 });
 
-// A heading underline is one or more characters (references/gauge/parser/helper.go
+// A heading underline is one or more characters (getgauge/gauge/parser/helper.go
 // isUnderline), but every isGaugeSyntaxBoundary required three or more. With
 // allow_multiline_step a short underline was therefore a heading to the heading
 // rules and part of the step above it to the step parsers at the same time.
@@ -9844,7 +9844,7 @@ test("GaugeStepDiagnosticsProvider ends a multiline step at a short legacy under
 });
 
 // A doc string is a `"""` fence on the line after a step, closed by a second
-// fence (references/gauge/parser/stepParser.go processStep). Toggling on any
+// fence (getgauge/gauge/parser/stepParser.go processStep). Toggling on any
 // `"""` meant a stray or unmatched fence anywhere in the file silenced every
 // duplicate-scenario and table-header diagnostic after it.
 test("GaugeStepDiagnosticsProvider keeps diagnosing after a fence that is not a doc string", () => {
@@ -9878,7 +9878,7 @@ test("GaugeStepDiagnosticsProvider keeps diagnosing after a fence that is not a 
   );
 });
 
-// references/gauge/parser/specparser.go validateSpec returns "Spec does not have
+// getgauge/gauge/parser/specparser.go validateSpec returns "Spec does not have
 // any elements" when the specification has no items at all, and only falls
 // through to "Spec should have at least one scenario" once something else is
 // present. Verified against the real parser: "# Checkout" alone gives the first
@@ -9904,7 +9904,7 @@ test("GaugeStepDiagnosticsProvider reports an empty specification as having no e
   );
 });
 
-// references/gauge/parser/lex.go checkTag compares the lower-cased line against
+// getgauge/gauge/parser/lex.go checkTag compares the lower-cased line against
 // exactly two literal prefixes, "tags:" and "tags :". Verified against the real
 // parser: "tags  : a" and "tags\t: a" produce no tags at all, so they are
 // comments. Every other module used the two forms; stepDiagnostics accepted any

@@ -3,9 +3,8 @@ const path = require("node:path");
 const test = require("node:test");
 
 // A `"""` block on the line after a step is that step's multi-line argument, and
-// its payload is data, not Gauge syntax (references/gauge/parser/stepParser.go
-// processStep, references/gauge/parser/specparser.go CreateStepUsingLookup; see
-// docs/tdd-evidence/2026-08-27-multiline-argument-step-parameter-count.md).
+// its payload is data, not Gauge syntax (getgauge/gauge/parser/stepParser.go
+// processStep, getgauge/gauge/parser/specparser.go CreateStepUsingLookup).
 // A payload that happens to contain "## Login" must not become a scenario in the
 // outline, a fold, or a scenario-coloured line.
 

@@ -44,7 +44,7 @@ const TABLE_HEADER_DUPLICATE_MESSAGE = "Table header cannot have repeated column
 const TABLE_OUTSIDE_STEP_MESSAGE = "Table doesn't belong to any step";
 const TEARDOWN_UNDERSCORE_MESSAGE = "Teardown should have at least three underscore characters";
 const UNDEFINED_STEP_MESSAGE = "Undefined Step";
-// references/gauge-java ValidateStepProcessor.validateStep.
+// getgauge/gauge-java ValidateStepProcessor.validateStep.
 const DUPLICATE_STEP_IMPLEMENTATION_MESSAGE = "Duplicate step implementation found";
 const STRING_NOT_TERMINATED_MESSAGE = "String not terminated";
 const DYNAMIC_PARAMETER_NOT_TERMINATED_MESSAGE = "Dynamic parameter not terminated";
@@ -3527,7 +3527,7 @@ function countStepParameters(stepText) {
 
 // The runner builds its suggested annotation from the parameterized step value,
 // where every argument - static or dynamic - is written as <value>:
-// references/gauge-java ValidateStepProcessor formats @Step("%s") from
+// getgauge/gauge-java ValidateStepProcessor formats @Step("%s") from
 // getStepValue().getParameterizedStepValue(). Verified against the real parser:
 // ExtractStepValueAndParams on `Pay with "100"` gives `Pay with <100>`, and on
 // `Mix "a b" and <c>` gives `Mix <a b> and <c>`. An escaped quote is not an
@@ -3568,7 +3568,7 @@ function parameterizedStepValue(stepText) {
 }
 
 // A concept heading may carry only dynamic parameters
-// (references/gauge/parser/conceptParser.go). The test is per ARGUMENT, not per
+// (getgauge/gauge/parser/conceptParser.go). The test is per ARGUMENT, not per
 // quote character: verified against parser.CreateConceptsDictionary, where
 // `# pay with <the "card">` defines the concept `pay with {}` while
 // `# pay with "card"` and `# pay "x" with <card>` define none.
@@ -3693,7 +3693,7 @@ function findStaticParameterEnd(text, openIndex) {
 }
 
 // A @Step annotation is not spec text WHERE THE REGISTRY IS CONCERNED.
-// references/gauge-java scan/RegistryMethodVisitor keys the registry on
+// getgauge/gauge-java scan/RegistryMethodVisitor keys the registry on
 // StepsUtil.getStepText, which is the whole of what the runner does to it:
 //   parameterizedStepText.replaceAll("(<.*?>)", "{}")
 // so a quoted run stays literal, and "{" and "}" are ordinary characters rather
@@ -3703,7 +3703,7 @@ function findStaticParameterEnd(text, openIndex) {
 //
 // The parameter-count diagnostic deliberately keeps the SPEC grammar: the
 // IntelliJ plugin this message comes from resolves the annotation through the
-// Gauge API (references/intellij-gauge-plugin SpecPsiImplUtil.getStepValueFor ->
+// Gauge API (getgauge/Intellij-Plugin SpecPsiImplUtil.getStepValueFor ->
 // StepUtil.getStepValue), not through StepsUtil.
 function normalizeStepTemplate(text) {
   let result = "";
@@ -3811,7 +3811,7 @@ function boolProperty(value) {
 }
 
 // Gauge merges every *.properties file in the environment directory and the
-// directory itself is not fixed (references/gauge/env/env.go loadEnvDir,
+// directory itself is not fixed (getgauge/gauge/env/env.go loadEnvDir,
 // getEnvDir). The rule lives in src/gaugeSpecScope.js so every reader gives the
 // same answer for the same project.
 function projectDefaultProperty(options = {}, key) {
@@ -3838,7 +3838,7 @@ function isInlineTableLine(line) {
 }
 
 // Gauge's lexer emits no token for a blank line following a step
-// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// (getgauge/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so the step token is still current when a table arrives and the table attaches
 // to the step. Verified against parser.SpecParser.Parse: a blank line between a
 // step and an inline table still yields one table argument. A non-blank comment
@@ -3917,10 +3917,10 @@ function isScenarioLegacyUnderline(line) {
 }
 
 // Rejects a STEP line, not merely a line starting with "*": a step is "*"
-// followed by something other than "*" (references/gauge/parser/lex.go isStep),
+// followed by something other than "*" (getgauge/gauge/parser/lex.go isStep),
 // so "**S**" is ordinary text and a valid legacy heading. This is the rule
 // isLegacyHeadingText in src/gaugeHeadings.js already applies.
-// references/gauge/parser/lex.go isTableRow requires BOTH a leading and a
+// getgauge/gauge/parser/lex.go isTableRow requires BOTH a leading and a
 // trailing "|", so "| id | name" with the closing pipe forgotten is a comment
 // and an underline below it promotes it to a heading.
 
@@ -3936,7 +3936,7 @@ function isLegacyHeadingText(line) {
   const text = String(line || "").trim();
   return hasLegacyHeadingText(text)
     // A "#" or "##" line is already a heading token, so an underline below it
-    // does not promote it (references/gauge/parser/lex.go rewrites the previous
+    // does not promote it (getgauge/gauge/parser/lex.go rewrites the previous
     // token only when it is a comment).
     && !isGaugeHashHeadingLine(text);
 }
@@ -3964,7 +3964,7 @@ function pushScenarioWithoutStepDiagnostic(vscode, diagnostics, scenario) {
   }
 }
 
-// references/gauge/parser/lex.go isTearDown: a run of three or more underscores.
+// getgauge/gauge/parser/lex.go isTearDown: a run of three or more underscores.
 function isTeardownMarkerLine(line) {
   return isGaugeTeardownLine(line);
 }
@@ -4068,7 +4068,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
       continue;
     }
     // A scenario heading ends the teardown scope:
-    // references/gauge/parser/convert.go scenarioConverter calls
+    // getgauge/gauge/parser/convert.go scenarioConverter calls
     // retainStates(state, specScope), which drops tearDownScope. Without this
     // every scenario after a "____" reported as empty.
     inTeardown = false;
@@ -4141,7 +4141,7 @@ function duplicateScenarioDiagnostics(vscode, text) {
     ));
   }
   if (firstSpecHeadingRange && !hasScenarioHeading && !hasEmptySpecHeading && !hasEmptyScenarioHeading) {
-    // references/gauge/parser/specparser.go validateSpec answers "Spec does not
+    // getgauge/gauge/parser/specparser.go validateSpec answers "Spec does not
     // have any elements" first, and only falls through to "Spec should have at
     // least one scenario" once the specification holds something besides its
     // heading. Verified against the real parser: "# Checkout" alone gives the
@@ -4228,7 +4228,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       flushPendingDataTable();
@@ -4249,7 +4249,7 @@ function dataTableWithoutRowDiagnostics(vscode, text) {
       // heading already has one the second is only warned about. So sawDataTable
       // must survive the heading.
       // Gauge's specConverter rejects a second heading without touching the
-      // parser state (references/gauge/parser/convert.go), so the scenario scope
+      // parser state (getgauge/gauge/parser/convert.go), so the scenario scope
       // survives it and a table below still belongs to that scenario.
       if (!hasSpecHeading) {
         inScenario = false;
@@ -4393,7 +4393,7 @@ function externalTableExists(location, options = {}) {
 
 // Gauge reads an external data table as CSV: the first record is the header row,
 // `#` opens a comment and the delimiter defaults to a comma but is overridable
-// through csv_delimiter (references/gauge/parser/tableParser.go
+// through csv_delimiter (getgauge/gauge/parser/tableParser.go
 // convertCsvToTable). Only the headers matter here, so the reader stops at the
 // first record.
 function csvHeaderCells(contents, delimiter) {
@@ -4474,7 +4474,7 @@ function externalDataTableScopeDiagnostics(vscode, text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       continue;
@@ -4515,7 +4515,7 @@ function tableLocationDiagnostics(vscode, text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       continue;
@@ -4577,7 +4577,7 @@ function tableFileParameterDiagnostics(vscode, text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       inTableBlock = false;
@@ -4618,7 +4618,7 @@ function tableHeaderSet(rawLine) {
 }
 
 // The cell text itself is trimmed, but the name between the angle brackets is
-// looked up in the header verbatim (references/gauge/parser/resolver.go), so
+// looked up in the header verbatim (getgauge/gauge/parser/resolver.go), so
 // "<  type2  >" is not the column "type2". Trimming it here accepted a name
 // Gauge rejects and swallowed its warning.
 function dynamicTableCellParameter(cell) {
@@ -4646,7 +4646,7 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       tableBlock = undefined;
@@ -4682,7 +4682,7 @@ function tableRowDynamicParameterDiagnostics(vscode, text) {
         const headers = tableHeaderSet(rawLine);
         if (!sectionHasStep) {
           // A second data table is discarded whole before anything is resolved
-          // (references/gauge/parser/specparser.go), so its rows produce no
+          // (getgauge/gauge/parser/specparser.go), so its rows produce no
           // parameter warnings - only "Multiple data table present".
           const ignoredDataTable = inScenario
             ? scenarioHeaders.size > 0
@@ -4741,7 +4741,7 @@ function multipleDataTableDiagnostics(vscode, text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       inTableBlock = false;
@@ -4847,7 +4847,7 @@ function dynamicStepParameters(text) {
       return parameters;
     }
     // Keep the parameter exactly as written. Gauge trims only the special TYPE
-    // (references/gauge/parser/resolver.go resolve calls strings.TrimSpace on the
+    // (getgauge/gauge/parser/resolver.go resolve calls strings.TrimSpace on the
     // match), never the dynamic name: verified against the real parser, where
     // "< foo >" does not resolve against a table header "foo" and is reported as
     // "Dynamic parameter < foo > could not be resolved". An empty <> is still a
@@ -4862,13 +4862,13 @@ function dynamicStepParameters(text) {
 }
 
 // Gauge's resolver map is keyed by the exact lowercase type
-// (references/gauge/parser/resolver.go initializePredefinedResolvers, and
+// (getgauge/gauge/parser/resolver.go initializePredefinedResolvers, and
 // getStepArg looks the trimmed type up verbatim), so <FILE:...> is not a known
 // special parameter at all.
 const SPECIAL_PARAMETER_PATTERN = /^(?:file|table)\s*:/;
 
 // A <file:>/<table:> parameter on a step is resolved by reading the named file
-// (references/gauge/parser/resolver.go), so a missing one is an unresolved
+// (getgauge/gauge/parser/resolver.go), so a missing one is an unresolved
 // parameter. Only table cells were checked before, so a step reference was
 // silently accepted and the spec then failed to parse at run time.
 function specialStepParameters(text) {
@@ -4925,7 +4925,7 @@ function unknownSpecialStepParameterDiagnostics(vscode, text) {
   const diagnostics = [];
   const lines = text.split("\n");
   // An unmatched fence is just a line to Gauge's lexer
-  // (references/gauge/parser/lex.go extractMultilineContent returns found=false
+  // (getgauge/gauge/parser/lex.go extractMultilineContent returns found=false
   // and consumes nothing), so only a closed pair is payload.
   const docStringLines = closedSpecDocStringLines(lines);
 
@@ -4979,7 +4979,7 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       inTableBlock = false;
@@ -5041,7 +5041,7 @@ function dynamicStepParameterDiagnostics(vscode, text, options = {}) {
         } else if (!scenarioHasStep) {
           // A scenario has its own table regardless of what came before it: a
           // scenario heading resets the step scope
-          // (references/gauge/parser/convert.go).
+          // (getgauge/gauge/parser/convert.go).
           addTableHeaders(scenarioHeaders, rawLine);
         }
       }
@@ -5085,7 +5085,7 @@ function teardownMarkerDiagnostics(vscode, text) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       continue;
@@ -5117,7 +5117,7 @@ function repeatedTagDiagnostics(vscode, text) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     // An unmatched fence is just a line to Gauge's lexer
-    // (references/gauge/parser/lex.go extractMultilineContent returns
+    // (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only a closed pair is payload.
     if (docStringLines.has(line)) {
       previousWasTag = false;
@@ -5174,7 +5174,7 @@ function repeatedTagDiagnostics(vscode, text) {
   return diagnostics;
 }
 
-// references/gauge/parser/lex.go checkTag compares the lower-cased line against
+// getgauge/gauge/parser/lex.go checkTag compares the lower-cased line against
 // exactly two literal prefixes, "tags:" and "tags :". Verified against the real
 // parser: "tags  : a" and "tags\t: a" produce no tags at all, so they are
 // comments. Every other module in the product already used the two forms; only
@@ -5189,18 +5189,18 @@ function isGaugeSyntaxBoundary(line) {
   return !text
     || text.startsWith("*")
     || text.startsWith("#")
-    // Gauge accepts both spellings: references/gauge/parser/lex.go checkTag
+    // Gauge accepts both spellings: getgauge/gauge/parser/lex.go checkTag
     // compares the line against "tags:" and "tags :".
     || isGaugeTagKeywordLine(text)
     || isGaugeDataTableKeywordLine(text)
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // (getgauge/gauge/parser/helper.go isUnderline), and Gauge terminates the
     // step at it either way.
     || /^=+$/.test(text)
     || /^-+$/.test(text)
-    // The teardown marker: references/gauge/parser/lex.go isTearDown ->
+    // The teardown marker: getgauge/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
     || isGaugeTeardownLine(text);
 }
@@ -5274,7 +5274,7 @@ function conceptLegacyHeading(lines, lineNumber) {
   const rawLine = lines[lineNumber].replace(/\r$/, "");
   const underline = lines[lineNumber + 1].replace(/\r$/, "");
   const textStart = rawLine.search(/\S/);
-  // Gauge compares the trimmed line (references/gauge/parser/lex.go) and
+  // Gauge compares the trimmed line (getgauge/gauge/parser/lex.go) and
   // parser/helper.go isUnderline accepts a run of one or more, so an indented
   // underline still defines a concept, matching legacyHeadingKind in
   // src/gaugeHeadings.js. The line above must also be heading TEXT: lex.go
@@ -5339,25 +5339,25 @@ function findConceptDefinitionHeadings(text) {
 }
 
 // Gauge stops parsing inline parameters as soon as a step carries a multi-line
-// argument (references/gauge/parser/stepParser.go processStep), so the step
+// argument (getgauge/gauge/parser/stepParser.go processStep), so the step
 // keeps its raw text as the step value and gets exactly one implicit argument
-// (references/gauge/parser/specparser.go CreateStepUsingLookup). A quoted or
+// (getgauge/gauge/parser/specparser.go CreateStepUsingLookup). A quoted or
 // angled parameter left on such a step is therefore never read as a parameter:
 // a static one only matches an implementation that hard codes the literal
 // value, and a dynamic one can never match at all, because a runner turns
 // every <name> in its annotation into a placeholder
-// (references/gauge-java/src/main/java/com/thoughtworks/gauge/scan/StepsUtil.java).
+// (getgauge/gauge-java/src/main/java/com/thoughtworks/gauge/scan/StepsUtil.java).
 // Gauge means to reject the combination outright, as its own parser test
-// records (references/gauge/parser/specparser_test.go
+// records (getgauge/gauge/parser/specparser_test.go
 // TestStepWithMixedExplicitAndImplicitArgs, "we can't mix explicit and
 // implicit args"), but the real parse path never enforces it. Reporting it
 // here keeps the editor from calling a step resolved that Gauge will refuse.
 // The wording follows Gauge's own rule errors, closest to "Multiline step
-// should have exactly one argument" (references/gauge/parser/stepParser.go)
+// should have exactly one argument" (getgauge/gauge/parser/stepParser.go)
 // and "Step text should not have '{static}' or '{dynamic}' or '{special}'".
 // It does not reuse either string: the first says "Multiline step", which in
 // Gauge also names the unrelated feature that spreads one step text over
-// several lines (references/gauge/parser/lex.go AllowMultiLineStep, supported
+// several lines (getgauge/gauge/parser/lex.go AllowMultiLineStep, supported
 // here as the allowMultilineStep option below), and the second describes
 // parser internals rather than anything the author wrote.
 // The count is taken from what the user WROTE, not from the signature: a step
@@ -5385,7 +5385,7 @@ function findGaugeSteps(text, options = {}) {
   for (let line = 0; line < lines.length; line += 1) {
     const rawLine = lines[line].replace(/\r$/, "");
     const marker = rawLine.search(/\S/);
-    // references/gauge/parser/lex.go isStep requires text[0] == '*' and
+    // getgauge/gauge/parser/lex.go isStep requires text[0] == '*' and
     // text[1] != '*', so a Markdown bold line is a comment.
     if (marker === -1 || rawLine[marker] !== "*" || rawLine[marker + 1] === "*") {
       continue;
@@ -5534,7 +5534,7 @@ function conceptWithoutStepDiagnostics(vscode, text) {
 }
 
 // Gauge closes the concept scope at EVERY heading and reopens it only when the
-// heading parsed cleanly: references/gauge/parser/conceptParser.go resets
+// heading parsed cleanly: getgauge/gauge/parser/conceptParser.go resets
 // currentState to initial after processConceptHeading and skips
 // addStates(conceptScope) whenever the heading produced errors. So a rejected
 // heading later in the file puts the steps under it outside a concept again.
@@ -5588,7 +5588,7 @@ function stepsOutsideConceptDiagnostics(vscode, text) {
   return diagnostics;
 }
 
-// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// Gauge compares the trimmed line (getgauge/gauge/parser/lex.go), so an
 // indented underline still marks a legacy scenario heading.
 function isLegacyScenarioUnderline(line) {
   return /^-+$/.test(String(line || "").trim());
@@ -5599,7 +5599,7 @@ function legacyScenarioHeadingDiagnostics(vscode, text) {
   const lines = text.split("\n");
   // A doc string is the step's argument, so markdown inside it is content.
   // And an underline promotes the line above only when that line is a comment
-  // (references/gauge/parser/lex.go rewrites the previous token only when
+  // (getgauge/gauge/parser/lex.go rewrites the previous token only when
   // isInState(currentState, commentScope)), which is what isLegacyHeadingText
   // encodes: a step line, a table row, a fence, tags or "table:" is not a
   // heading, and neither is a line that is already a hash heading.
@@ -5613,7 +5613,7 @@ function legacyScenarioHeadingDiagnostics(vscode, text) {
       || !isLegacyHeadingText(rawLine)
       // Only a real hash heading is already a heading. "###" is neither a spec
       // nor a scenario heading to the lexer
-      // (references/gauge/parser/lex.go isSpecHeading / isScenarioHeading), so
+      // (getgauge/gauge/parser/lex.go isSpecHeading / isScenarioHeading), so
       // it is a comment and an underline below it does promote it.
       || isGaugeHashHeadingLine(rawLine)
       || !isLegacyScenarioUnderline(lines[line + 1].replace(/\r$/, ""))
@@ -5767,7 +5767,7 @@ function conceptTableDiagnostics(vscode, text) {
     // for a blank line after a step, so a table below one still attaches to it.
     // A CLOSED doc string is consumed as the step's argument and does not end it
     // either, but an unmatched fence is an ordinary comment token that DOES end
-    // the scope (references/gauge/parser/lex.go extractMultilineContent returns
+    // the scope (getgauge/gauge/parser/lex.go extractMultilineContent returns
     // found=false and consumes nothing), so only closed blocks may be skipped.
     if (!rawLine.trim() || docStringLines.has(line)) {
       inTableBlock = false;
@@ -8768,15 +8768,15 @@ function stepUsageEquals(left, right) {
 
 // IntelliJ resolves the parameter count of a step annotation through the Gauge
 // API and only ever adds one context derived parameter, the inline table
-// (references/intellij-gauge-plugin/src/com/thoughtworks/gauge/language/psi/SpecPsiImplUtil.java
-// getStepValueFor, references/gauge/parser/parse.go ExtractStepValueAndParams).
+// (getgauge/Intellij-Plugin/src/com/thoughtworks/gauge/language/psi/SpecPsiImplUtil.java
+// getStepValueFor, getgauge/gauge/parser/parse.go ExtractStepValueAndParams).
 // A multi-line argument is the same kind of context derived parameter, except
 // that it leaves no trace at all in the annotation text: Gauge skips inline
 // parsing for a step followed by a docstring and gives the step exactly one
-// implicit argument (references/gauge/parser/stepParser.go processStep,
-// references/gauge/parser/specparser.go CreateStepUsingLookup), which Gauge
+// implicit argument (getgauge/gauge/parser/stepParser.go processStep,
+// getgauge/gauge/parser/specparser.go CreateStepUsingLookup), which Gauge
 // then reports as the parameter count
-// (references/gauge/validation/validate.go NumberOfParameters).
+// (getgauge/gauge/validation/validate.go NumberOfParameters).
 // So an implementation that takes exactly one parameter more than the
 // annotation declares is indistinguishable from a valid multi-line step
 // implementation until a spec or concept shows how the step is used.
@@ -9650,7 +9650,7 @@ class GaugeStepDiagnosticsProvider {
   }
 
   // Gauge parses concept files with the very same lexer it uses for specs
-  // (references/gauge/parser/conceptParser.go Parse), so a docstring below a
+  // (getgauge/gauge/parser/conceptParser.go Parse), so a docstring below a
   // step inside a concept carries a multi-line argument exactly like a spec.
   computeStepUsageTemplates(document, workspaceDocuments) {
     const usage = emptyStepUsage();
@@ -9908,7 +9908,7 @@ class GaugeStepDiagnosticsProvider {
   // without this a single publish cost 2N full analyses - hundreds of
   // milliseconds of extension host blocking on every keystroke, since the daemon
   // republishes on every textDocument/didChange
-  // (references/gauge/api/lang/document.go).
+  // (getgauge/gauge/api/lang/document.go).
   currentDiagnosticLines(document) {
     if (!this.documentStore || typeof this.documentStore.documents !== "function") {
       return undefined;

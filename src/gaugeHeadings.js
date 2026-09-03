@@ -1,6 +1,6 @@
 "use strict";
 
-// references/gauge/parser/lex.go isDataTable matches
+// getgauge/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
 // keyword and the colon. Verified against the real parser.
 const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
@@ -14,7 +14,7 @@ function isSpecHashHeading(line) {
   return text.startsWith("#") && !text.startsWith("##");
 }
 
-// references/gauge/parser/lex.go isScenarioHeading requires the third character
+// getgauge/gauge/parser/lex.go isScenarioHeading requires the third character
 // not to be another '#', so "### Sub heading" is a comment, not a scenario.
 function isScenarioHashHeading(line) {
   const text = trimmedHashText(line);
@@ -57,7 +57,7 @@ function firstNonWhitespace(line) {
   return index === -1 ? 0 : index;
 }
 
-// references/gauge/parser/lex.go isStep requires the second character not to be
+// getgauge/gauge/parser/lex.go isStep requires the second character not to be
 // another '*', so "**bold text**" is a comment, not a step.
 function isStepLine(line) {
   const text = String(line || "");
@@ -97,7 +97,7 @@ function closedDocStringLines(lines) {
   return result;
 }
 
-// references/gauge/parser/lex.go isTableRow:
+// getgauge/gauge/parser/lex.go isTableRow:
 //   text[0] == '|' && text[len(text)-1] == '|'
 // A lone "|" satisfies it, because both indices are the same character.
 //
@@ -109,7 +109,7 @@ function closedDocStringLines(lines) {
 //   "tags: x" / "tags : x"   -> a tags line
 //   "tags\t: x" / "tags\f: x" -> NOT a tags line, promoted as a comment
 //   "table: x" / "table  : x" -> both data tables (isDataTable allows \s*)
-// references/gauge/parser/lex.go: the tags branch tests the two literal
+// getgauge/gauge/parser/lex.go: the tags branch tests the two literal
 // prefixes, while isDataTable matches /^\s*[tT][aA][bB][lL][eE]\s*:/.
 const TAGS_KEYWORD_PATTERN = /^\s*tags ?:/i;
 
@@ -164,7 +164,7 @@ function inlineTableLineAfterStep(lines, endLine, isTableRow) {
   return undefined;
 }
 
-// references/gauge/parser/helper.go isUnderline accepts a run of ONE or more, so
+// getgauge/gauge/parser/helper.go isUnderline accepts a run of ONE or more, so
 // "_" and "__" are teardown markers too - they simply also earn "Teardown should
 // have at least three underscore characters". Probed: both end the scenario, so
 // a scenario whose only step sits below one is empty. Requiring three let the
@@ -196,7 +196,7 @@ function headingKind(line) {
   return isSpecHashHeading(line) ? "specification" : undefined;
 }
 
-// references/gauge/parser/lex.go reaches its isSpecUnderline branch only after the
+// getgauge/gauge/parser/lex.go reaches its isSpecUnderline branch only after the
 // scenario-heading, spec-heading, tag, table-row and step branches, and there it
 // rewrites the previous token only when isInState(commentScope). So an underline
 // promotes a comment line and nothing else: a step, a tags line, a table row, a
@@ -230,7 +230,7 @@ function legacyHeadingKind(line, nextLine) {
   if (!isLegacyHeadingText(line)) {
     return undefined;
   }
-  // Gauge compares the trimmed line (references/gauge/parser/lex.go) and
+  // Gauge compares the trimmed line (getgauge/gauge/parser/lex.go) and
   // parser/helper.go isUnderline accepts a run of one or more, so a trailing
   // space must not hide the heading and a single character is enough.
   const underline = String(nextLine || "").trim();

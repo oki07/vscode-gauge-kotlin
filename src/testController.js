@@ -813,7 +813,7 @@ class GaugeTestController {
       return [];
     }
     // Gauge reads Markdown as a specification only inside the directories named
-    // by gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). Without
+    // by gauge_specs_dir (getgauge/gauge/util/util.go GetSpecDirs). Without
     // this a README in a Gauge project becomes a runnable Test Explorer node and
     // pressing Run starts a Gauge process against it.
     if (
@@ -1977,7 +1977,7 @@ class GaugeTestController {
 
   // A passing later attempt deliberately does NOT clear the logical item.
   // Gauge's serial reporter gives every row of a nested data table the same
-  // event id - references/gauge/reporter/jsonConsole.go only appends the row
+  // event id - getgauge/gauge/reporter/jsonConsole.go only appends the row
   // when isParallel, and getTable returns just the scenario row index - so a
   // second spec row is indistinguishable here from a retry of the first.
   // Clearing on a pass therefore turned a genuinely failed row green while Gauge

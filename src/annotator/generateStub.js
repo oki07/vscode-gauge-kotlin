@@ -59,7 +59,7 @@ function classNameForFile(pathModule, implementationFilePath) {
 }
 
 // gauge-java answers gauge/putStubImpl by parsing the target with JavaParser
-// (references/gauge-java .../connection/StubImplementationCodeProcessor.java).
+// (getgauge/gauge-java .../connection/StubImplementationCodeProcessor.java).
 // Kotlin source is not valid Java, so an existing .kt file yields an empty
 // ParseResult and the processor throws on orElseThrow, and a new file gets Java
 // class scaffolding. This mirrors the same two branches for Kotlin: fill an

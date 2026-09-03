@@ -8,7 +8,7 @@ const {
   isGaugeTeardownLine,
 } = require("./gaugeHeadings");
 
-// references/gauge/parser/lex.go isDataTable matches
+// getgauge/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
 // keyword and the colon. Verified against the real parser.
 const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
@@ -165,7 +165,7 @@ function normalizedSelection(selection) {
   return { start: selection.end, end: selection.start };
 }
 
-// references/gauge/parser/lex.go isStep requires the second character not to be
+// getgauge/gauge/parser/lex.go isStep requires the second character not to be
 // another '*', so "**bold text**" is a comment, not a step.
 function isStepLine(text) {
   return /^\s*\*(?!\*)\s*\S.*$/.test(text);
@@ -244,8 +244,8 @@ function isGaugeSyntaxBoundary(text) {
     || isTableLine(line)
     || isDocStringFenceLine(line)
     // A heading underline is one or more characters and the teardown marker ends
-    // the step too (references/gauge/parser/helper.go isUnderline,
-    // references/gauge/parser/lex.go isTearDown).
+    // the step too (getgauge/gauge/parser/helper.go isUnderline,
+    // getgauge/gauge/parser/lex.go isTearDown).
     || /^=+$/.test(line)
     || /^-+$/.test(line)
     || isGaugeTeardownLine(line);
@@ -911,7 +911,7 @@ function normalizeConceptFilePath(file, projectRoot, pathModule) {
   const resolved = pathModule.join(projectRoot, projectRelative);
   // Stripping the root forces the path project-relative, but join resolves "..",
   // so "../evil.cpt" still escaped. Gauge only reads concepts under the project
-  // (references/gauge/util/util.go), so a file outside it is invisible to Gauge
+  // (getgauge/gauge/util/util.go), so a file outside it is invisible to Gauge
   // and written somewhere the user did not ask for.
   return isInsideProject(resolved, projectRoot, pathModule) ? resolved : ESCAPES_PROJECT;
 }
@@ -945,7 +945,7 @@ function canExtractConceptFromDocument(document, projectClient, scopeOptions = {
     return hasProjectClient;
   }
   // A Markdown file is a Gauge specification only inside the project's
-  // configured gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). The
+  // configured gauge_specs_dir (getgauge/gauge/util/util.go GetSpecDirs). The
   // rule lives in src/gaugeSpecScope.js so every surface agrees.
   return document.languageId === MARKDOWN_LANGUAGE
     && isMarkdownGaugeSpecFile(documentPath(document), scopeOptions)

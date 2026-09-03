@@ -801,10 +801,10 @@ test("GaugeTestController discovers specification and scenario test items from o
   ]);
 });
 
-// Proven at runtime by the second sweep: a README in a Gauge project became a
-// runnable Test Explorer node with its "## Installation" heading as a scenario,
+// Observed at runtime: a README in a Gauge project became a runnable Test
+// Explorer node with its "## Installation" heading as a scenario,
 // and pressing Run started a Gauge process against it. Gauge reads Markdown as a
-// specification only inside gauge_specs_dir (references/gauge/util/util.go
+// specification only inside gauge_specs_dir (getgauge/gauge/util/util.go
 // GetSpecDirs).
 test("GaugeTestController leaves a README in a Gauge project out of the tree", () => {
   const { GaugeTestController } = require("../src/testController");
@@ -897,7 +897,7 @@ test("GaugeTestController ignores open Gauge documents outside Gauge projects", 
   assert.deepEqual(collectionItems(controller.items), []);
 });
 
-// references/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
+// getgauge/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
 // "### Notes" is a comment. Verified against the real parser: a spec whose only
 // "##"-looking line is "### Notes" has zero scenarios, and Gauge reports
 // "Spec should have at least one scenario".

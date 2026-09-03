@@ -23,10 +23,10 @@ function document(text) {
 }
 
 // Every rule below was checked against the real parser through a temporary Go
-// module with `replace github.com/getgauge/gauge => references/gauge`, calling
+// module with `replace github.com/getgauge/gauge => getgauge/gauge`, calling
 // parser.SpecParser.Parse and printing the resulting headings and steps.
 
-// references/gauge/parser/lex.go isScenarioHeading:
+// getgauge/gauge/parser/lex.go isScenarioHeading:
 //   len(text) > 2 -> text[0]=='#' && text[1]=='#' && text[2] != '#'
 // A "### Sub heading" is a comment, not a scenario. Probe: "# Spec / ## Scenario
 // / ### Sub heading / * a step" gives one scenario named "Scenario".
@@ -50,7 +50,7 @@ test("a third-level heading is not a Gauge scenario", () => {
   );
 });
 
-// references/gauge/parser/lex.go isStep:
+// getgauge/gauge/parser/lex.go isStep:
 //   len(text) > 1 -> text[0]=='*' && text[1] != '*'
 // A "**bold text**" line is a comment, not a step. Probe: "## Scenario /
 // **bold text** / * a step" gives one step, "a step".
@@ -62,7 +62,7 @@ test("a bold Markdown line is not a Gauge step", () => {
   assert.equal(isStepLine("*"), true);
 });
 
-// references/gauge/parser/lex.go compares the trimmed line, and
+// getgauge/gauge/parser/lex.go compares the trimmed line, and
 // parser/helper.go isUnderline accepts a run of one or more. Probe:
 // "Spec / ====   " and "Spec / =" are both specification headings.
 test("a legacy underline is recognised when trimmed and however short", () => {
@@ -90,7 +90,7 @@ test("an underline of mixed characters is not a heading", () => {
   );
 });
 
-// references/gauge/parser/lex.go promotes an underline to a heading only when the
+// getgauge/gauge/parser/lex.go promotes an underline to a heading only when the
 // previous token was a comment: the isSpecUnderline branch is reached after the
 // scenario-heading, spec-heading, tag, table-row and step branches, and it only
 // rewrites the last token when isInState(commentScope). Verified against the real

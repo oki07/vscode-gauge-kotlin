@@ -144,7 +144,7 @@ function createProjectFactory(options = {}) {
   }
 
   // A Gauge manifest always names the runner language
-  // (references/gauge/manifest/manifest.go Manifest.Language) and a project
+  // (getgauge/gauge/manifest/manifest.go Manifest.Language) and a project
   // without one cannot run. Root resolution stays permissive so an existing
   // project with a damaged manifest still resolves its files, but the service
   // gate uses this so an unrelated manifest.json - a Chrome extension, a PWA -

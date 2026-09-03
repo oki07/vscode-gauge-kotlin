@@ -198,7 +198,7 @@ test("GaugeDynamicArgumentCompletionProvider offers nothing inside a doc string"
   );
 });
 
-// references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+// getgauge/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
 // bold line is a comment. isStepLine in this same file already encodes that;
 // stepCompletionRange did not, so accepting a completion on "**bold**" rewrote
 // the comment into a step.
@@ -242,7 +242,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers in
   assert.deepEqual({ ...items[0].range.end }, { line: 6, character: 13 });
 });
 
-// Gauge compares the trimmed line (references/gauge/parser/lex.go), so a legacy
+// Gauge compares the trimmed line (getgauge/gauge/parser/lex.go), so a legacy
 // concept heading whose underline carries trailing whitespace still defines the
 // concept and its parameters. isLegacyScenarioHeadingAt already trimmed while
 // isLegacySpecHeadingAt and isLegacyConceptHeadingAt did not, so completion
@@ -540,7 +540,7 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
 
     assert.deepEqual(labels(items), ["one", "two"]);
     // Each property lookup first resolves the environment directory from the
-    // manifest (references/gauge/env/env.go getEnvDir) and then reads the
+    // manifest (getgauge/gauge/env/env.go getEnvDir) and then reads the
     // properties beside it. Deliberately not memoized: a cached directory would
     // answer stale after the manifest changed.
     assert.deepEqual(reads.map((entry) => entry.filename), [
@@ -562,7 +562,7 @@ test("GaugeDynamicArgumentCompletionProvider uses project default csv delimiter 
   }
 });
 
-// references/gauge/parser/lex.go isDataTable matches
+// getgauge/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so the keyword is case insensitive and any run
 // of whitespace may precede the colon. Verified against the real parser:
 // "table  : data.csv" and "table\t: data.csv" both parse as an external data
@@ -924,12 +924,12 @@ test("GaugeDynamicArgumentCompletionProvider suggests spec data table headers wi
 });
 
 // A "### Notes" line is a comment, not a scenario heading
-// (references/gauge/parser/lex.go isScenarioHeading), so the table below it is no
+// (getgauge/gauge/parser/lex.go isScenarioHeading), so the table below it is no
 // longer scenario scoped. Against the real parser this document has no scenario
 // at all and the table becomes the spec data table; the extension's spec data
-// table walk stops at the context step above it, which is recorded as an open
-// item in docs/parity-progress.md. This test keeps its original intent - scenario
-// scoped table headers - by using a real scenario heading.
+// table walk stops at the context step above it, which is a known difference
+// from the real parser. This test keeps its original intent - scenario scoped
+// table headers - by using a real scenario heading.
 test("GaugeDynamicArgumentCompletionProvider reads scenario table headers", () => {
   const { GaugeDynamicArgumentCompletionProvider } = require("../src/dynamicArgumentCompletion");
   const vscode = createFakeVscode();
@@ -1912,7 +1912,7 @@ test("GaugeDynamicArgumentCompletionProvider suggests Kotlin Step aliases in Mar
 
 // A step whose text begins with "*" is written "* * Log in as <user>": the
 // marker, then the text. "** Log" is a comment, because
-// references/gauge/parser/lex.go isStep requires text[1] != '*'. Verified
+// getgauge/gauge/parser/lex.go isStep requires text[1] != '*'. Verified
 // against the real parser - "** Log" yields no step, "* * Log in as <u>" yields
 // the step "* Log in as {}".
 test("GaugeDynamicArgumentCompletionProvider completes a step whose text starts with a star", async () => {

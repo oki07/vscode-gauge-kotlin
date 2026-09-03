@@ -210,7 +210,7 @@ test("stepTextAt appends the table of a multi-line step", () => {
   );
 });
 
-// references/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
+// getgauge/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
 // opening one, so "|name" is a comment and no table attaches to the step.
 // Accepting it gave the step a "{}" argument it does not have, so F12 and the
 // implemented/unimplemented verdict were both answered for the wrong step value.
@@ -513,7 +513,7 @@ test("GaugeStepDefinitionProvider resolves static and dynamic argument spec step
 });
 
 // Indentation does not stop the row being the step's table.
-// references/gauge/parser/lex.go isTableRow is text[0] == '|' && text[len-1] ==
+// getgauge/gauge/parser/lex.go isTableRow is text[0] == '|' && text[len-1] ==
 // '|', which a lone "|" satisfies: both indices are the same character. The
 // closing-pipe fix added a length > 1 condition the reference does not have,
 // which dropped the table from a step whose header row is a bare "|". Probed:
@@ -1791,7 +1791,7 @@ test("GaugeStepDefinitionProvider skips unopened Step sources resolved to non-Ga
   assert.deepEqual(openedFiles, []);
 });
 
-// references/gauge/parser/lex.go isStep rejects a second '*', so "** Bold
+// getgauge/gauge/parser/lex.go isStep rejects a second '*', so "** Bold
 // comment" is a comment and has no definition. Verified against the real parser.
 test("GaugeStepDefinitionProvider ignores headings and double-star comment lines", async () => {
   const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");

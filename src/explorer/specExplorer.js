@@ -357,7 +357,7 @@ class SpecNodeProvider {
       }
       // gauge/scenarios answers with a single ScenarioInfo rather than a list
       // whenever a scenario's span covers the requested line
-      // (references/gauge/api/lang/customResponses.go getScenarioAt returns
+      // (getgauge/gauge/api/lang/customResponses.go getScenarioAt returns
       // `info` as soon as `sce.InSpan(line + 1)` is true). The request always
       // asks at position (1, 1), so a specification whose first scenario heading
       // sits on line 2 comes back as a bare object.

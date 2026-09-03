@@ -5,7 +5,7 @@ const test = require("node:test");
 // Every provider registered for `**/*.md` must agree on whether a given Markdown
 // file is a Gauge specification. Gauge reads Markdown as a specification only
 // inside the directories named by gauge_specs_dir
-// (references/gauge/util/util.go GetSpecDirs), so a README or CHANGELOG in a
+// (getgauge/gauge/util/util.go GetSpecDirs), so a README or CHANGELOG in a
 // Gauge project must get no Gauge decoration at all: no colouring, no folding,
 // no outline, and above all no Run and Debug code lenses that would run Gauge
 // against it.

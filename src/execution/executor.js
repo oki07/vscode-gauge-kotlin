@@ -32,7 +32,7 @@ const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
 // Deliberately not a metadata callback name: ending a debug session must not
 // reach the Test UI as a cancellation.
 const DEBUG_SESSION_ENDED = "onDebugSessionEnded";
-// references/gauge/execution/execute.go executionStatusFile, common.DotGauge.
+// getgauge/gauge/execution/execute.go executionStatusFile, common.DotGauge.
 const EXECUTION_STATUS_DIRECTORY = ".gauge";
 const EXECUTION_STATUS_FILE = "executionStatus.json";
 const SHOW_REPORT_COMMAND = "gauge.report.html";
@@ -80,9 +80,9 @@ function resolveClientsMap(getClientsMap) {
 }
 
 // gauge/executionStatus is answered by execution.ReadLastExecutionResult
-// (references/gauge/api/lang/server.go), which calls logger.Fatalf when the
+// (getgauge/gauge/api/lang/server.go), which calls logger.Fatalf when the
 // status file cannot be read, and logger.Fatal ends with os.Exit(1)
-// (references/gauge/logger/gaugeLogger.go). Asking before any run has written
+// (getgauge/gauge/logger/gaugeLogger.go). Asking before any run has written
 // .gauge/executionStatus.json therefore kills the daemon and every language
 // feature with it.
 function hasExecutionStatusFile(projectRoot, options) {
@@ -309,10 +309,10 @@ function resourcePath(resource) {
 }
 
 // `.spec` is unambiguous anywhere. `.md` is a specification only inside the
-// directories named by gauge_specs_dir (references/gauge/util/util.go
+// directories named by gauge_specs_dir (getgauge/gauge/util/util.go
 // GetSpecDirs), which is the rule src/gaugeSpecScope.js owns for the other
 // fourteen surfaces. Gauge takes a bare path verbatim
-// (references/gauge/util/fileUtils.go GetSpecFiles accepts any file whose
+// (getgauge/gauge/util/fileUtils.go GetSpecFiles accepts any file whose
 // extension is in gauge_spec_file_extensions, which defaults to ".spec, .md"),
 // so running a README parses the prose as a specification and reports every
 // bullet as a missing step.
@@ -343,7 +343,7 @@ function isDirectory(filename, fileSystem) {
 }
 
 // Gauge takes a directory as a run target and walks it recursively
-// (references/gauge/util/util.go GetSpecFiles). Looking only at the directory's
+// (getgauge/gauge/util/util.go GetSpecFiles). Looking only at the directory's
 // own entries meant Run Specification on a folder whose specs live one level
 // down did nothing: the target was filtered out and no run started.
 const MAX_SPEC_DIRECTORY_DEPTH = 8;
@@ -1039,7 +1039,7 @@ function createGaugeExecutionController(options = {}) {
         }
         if (typeof activeDebugger.registerStopDebugger === "function") {
           // This fires on the NORMAL end of a debug run too: gauge kills the
-          // runner (references/gauge/execution/simpleExecution.go
+          // runner (getgauge/gauge/execution/simpleExecution.go
           // stopAllPlugins), the JVM exits, and VS Code terminates the session
           // while gauge is still polling Alive() and printing its summary. Stop
           // the run, but do not report it as cancelled: that told the Test UI the
@@ -1555,7 +1555,7 @@ function createGaugeExecutionController(options = {}) {
 
     // gauge/scenarios answers with a single ScenarioInfo rather than a list
     // whenever a scenario's span covers the requested line
-    // (references/gauge/api/lang/customResponses.go getScenarioAt returns `info`
+    // (getgauge/gauge/api/lang/customResponses.go getScenarioAt returns `info`
     // as soon as `sce.InSpan(line + 1)` is true). Only the at-cursor branch
     // handled that shape, so Run Scenarios silently did nothing.
     if (!Array.isArray(scenarios)) {
@@ -1628,7 +1628,7 @@ function createGaugeExecutionController(options = {}) {
       return undefined;
     }
     // The command is in the palette whenever Gauge is active, with no guard on
-    // having run anything. references/gauge-vscode hands its unset report path
+    // having run anything. getgauge/gauge-vscode hands its unset report path
     // straight to Uri.file, which turns "you have not run anything yet" into a
     // raw TypeError in the error toast.
     const reportPath = getReportPath();

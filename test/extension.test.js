@@ -3172,7 +3172,7 @@ test("activation starts Gauge workspace services for Gauge projects", async () =
         scenario: { foreground: "#66d9ef" },
         gaugeComment: { foreground: "#cccccc" },
         // The teardown separator is a comment line to Gauge
-        // (references/gauge-vscode/src/semanticTokensProvider.ts colours it
+        // (getgauge/gauge-vscode/src/semanticTokensProvider.ts colours it
         // through gaugeComment), so it follows the same setting rather than
         // rendering unthemed.
         teardownIdentifier: { foreground: "#cccccc" },
@@ -4205,7 +4205,7 @@ test("activation shows install guidance when Gauge is unavailable", () => {
 });
 
 // A Gauge manifest always names the runner language: it is what Gauge resolves a
-// runner with (references/gauge/manifest/manifest.go Manifest.Language), and a
+// runner with (getgauge/gauge/manifest/manifest.go Manifest.Language), and a
 // project without one cannot run at all. The activation event is
 // workspaceContains:manifest.json, so a Chrome extension, a PWA or any other
 // project with an unrelated manifest.json at its root started the whole Gauge

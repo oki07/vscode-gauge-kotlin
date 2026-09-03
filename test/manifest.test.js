@@ -10,8 +10,11 @@ function readPackageJson() {
   return JSON.parse(fs.readFileSync(packagePath, "utf8"));
 }
 
+// The official Gauge extension's manifest, kept as a fixture so the parity
+// checks below run in any checkout rather than only beside a copy of that
+// project. Refresh it when the upstream revision this project tracks moves.
 function readReferencePackageJson() {
-  const packagePath = path.join(root, "..", "references", "gauge-vscode", "package.json");
+  const packagePath = path.join(root, "test", "fixtures", "gauge-vscode-manifest.json");
   return JSON.parse(fs.readFileSync(packagePath, "utf8"));
 }
 
@@ -242,7 +245,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   ]);
 
   // `when` is not a field of a commands contribution, so VS Code ignores it
-  // there; references/gauge-vscode/package.json carries one on this command and
+  // there; getgauge/gauge-vscode/package.json carries one on this command and
   // it has never had an effect. `enablement` is the field that exists, and
   // gauge:executing is already maintained by src/execution/executor.js.
   assert.equal(commandById(manifest, "gauge.stopExecution").when, undefined);
@@ -319,7 +322,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
       command: "gauge.execute.specification",
       // No `.md` arm: a when-clause cannot read gauge_specs_dir, so the entry
       // cannot tell a specification from a README, and running a README parses
-      // the prose as a specification. references/gauge-vscode contributes no
+      // the prose as a specification. getgauge/gauge-vscode contributes no
       // explorer/context menu at all.
       when: "gauge:activated && (explorerResourceIsFolder || resourceExtname == .spec)",
       group: "gauge@3",
@@ -370,7 +373,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
   });
   assert.equal(configuration["gauge.specExplorer.enabled"].default, true);
   assert.equal(configuration["gauge.execution.debugPort"].default, 9229);
-  // references/gauge-vscode/package.json declares this as "int", which is not a
+  // getgauge/gauge-vscode/package.json declares this as "int", which is not a
   // JSON Schema type, so VS Code cannot build a Settings UI widget for it and
   // the port can only be changed by hand-editing settings.json.
   assert.equal(configuration["gauge.execution.debugPort"].type, "integer");
@@ -1200,10 +1203,15 @@ test("third-party notices cover every bundled runtime dependency", () => {
 // An asset shipped byte-for-byte from another project is a redistribution, and
 // the notices are where its licence and copyright have to appear. The check is
 // on the bytes rather than on a list, so a file copied later cannot ship
-// uncredited.
+// uncredited. The digests of that project's own asset tree are a fixture, so
+// the check holds in any checkout instead of quietly passing wherever a copy of
+// that project is missing.
 test("every asset copied from the reference extension is credited", () => {
   const crypto = require("node:crypto");
-  const referenceRoot = path.join(root, "..", "references", "gauge-vscode");
+  const referenceDigests = JSON.parse(fs.readFileSync(
+    path.join(root, "test", "fixtures", "gauge-vscode-assets.json"),
+    "utf8",
+  ));
   const notices = fs.readFileSync(path.join(root, "THIRD_PARTY_NOTICES.md"), "utf8");
   const digest = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 
@@ -1228,11 +1236,11 @@ test("every asset copied from the reference extension is credited", () => {
   assert.ok(assets.length > 0);
 
   const uncredited = assets.filter((asset) => {
-    const reference = path.join(referenceRoot, asset);
-    if (!fs.existsSync(reference)) {
+    const referenceDigest = referenceDigests[asset];
+    if (!referenceDigest) {
       return false;
     }
-    if (digest(path.join(root, asset)) !== digest(reference)) {
+    if (digest(path.join(root, asset)) !== referenceDigest) {
       return false;
     }
     return !notices.includes(asset);
@@ -1408,7 +1416,7 @@ test("extension manifest drops the Gauge recommended settings surface", () => {
 
 // contributes.snippets is a static contribution: VS Code reads it at startup,
 // independently of activation, and applies it to every document of that
-// language in every workspace. references/gauge-vscode contributes snippets only
+// language in every workspace. getgauge/gauge-vscode contributes snippets only
 // for its own `gauge` language. Contributing them for `markdown` put `spec`,
 // `sce`, `cpt` and the table snippets into every Markdown file the user ever
 // opens, in any repository. Gauge Markdown specifications get them from
@@ -1425,9 +1433,8 @@ test("Gauge snippets are contributed once, at runtime", () => {
 });
 
 // The tree view must disappear with its setting. gauge:activated no longer
-// depends on gauge.specExplorer.enabled (see the 2026-08-27 spec explorer scope
-// entry in docs/parity-progress.md), so without the config clause the view would
-// render with no data provider registered behind it.
+// depends on gauge.specExplorer.enabled, so without the config clause the view
+// would render with no data provider registered behind it.
 test("the Gauge Specs view follows its own setting", () => {
   const manifest = readPackageJson();
   const view = manifest.contributes.views.test.find((entry) => entry.id === "gauge:specExplorer");
@@ -1450,7 +1457,7 @@ test("Gauge view title actions are scoped to the Gauge Specs view", () => {
 });
 
 // A when-clause cannot read gauge_specs_dir, so the Explorer entry cannot tell a
-// specification from a README. references/gauge-vscode contributes no
+// specification from a README. getgauge/gauge-vscode contributes no
 // explorer/context menu at all, so "right-click README.md -> Run Specification"
 // exists nowhere but here. The .spec arm and the folder arm stay.
 test("the Explorer run entry is not offered on Markdown files", () => {

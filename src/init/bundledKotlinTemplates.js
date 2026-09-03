@@ -1,6 +1,6 @@
 "use strict";
 
-// Gauge publishes no Kotlin project template. references/gauge/template/template.go
+// Gauge publishes no Kotlin project template. getgauge/gauge/template/template.go
 // `defaults()` seeds dotnet, java, java_gradle, java_maven, java_maven_selenium,
 // js, js_simple, python, python_selenium, ruby, ruby_selenium and ts, and the
 // list only grows through an explicit `gauge template <name> <url>`, which this
@@ -50,7 +50,7 @@ gauge_reports_dir = reports
 overwrite_reports = true
 
 # Capture a screenshot when a step fails. This is Gauge's own default
-# (references/gauge/env/env.go addEnvVar(ScreenshotOnFailure, "true")).
+# (getgauge/gauge/env/env.go addEnvVar(ScreenshotOnFailure, "true")).
 screenshot_on_failure = true
 
 # The directory Gauge writes logs to.

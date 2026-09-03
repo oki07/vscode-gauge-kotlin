@@ -477,7 +477,7 @@ test("GaugeSemanticTokensProvider distinguishes specification scenario and conce
   ]);
 });
 
-// references/gauge/parser/lex.go: isScenarioHeading rejects a third '#' and
+// getgauge/gauge/parser/lex.go: isScenarioHeading rejects a third '#' and
 // isStep rejects a second '*'. Both verified against the real parser through a
 // temporary Go module calling parser.SpecParser.Parse.
 test("GaugeSemanticTokensProvider treats triple-hash headings as comments", () => {
@@ -862,7 +862,7 @@ test("GaugeSemanticTokensProvider ignores concept equals underline after identif
   ]);
 });
 
-// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// Gauge compares the trimmed line (getgauge/gauge/parser/lex.go), so an
 // indented underline is still an underline. Verified against the real parser:
 // "Checkout / \u0020\u0020======== / ## Scenario / * a step" yields spec heading
 // "Checkout".

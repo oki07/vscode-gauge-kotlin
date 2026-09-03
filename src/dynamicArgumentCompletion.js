@@ -1,6 +1,6 @@
 "use strict";
 
-// references/gauge/parser/lex.go isDataTable matches
+// getgauge/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
 // keyword and the colon. Verified against the real parser.
 const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
@@ -228,7 +228,7 @@ function isLegacyScenarioHeadingAt(lines, lineNumber) {
     && /^-+$/.test(String(lines[lineNumber + 1] || "").trim());
 }
 
-// Gauge compares the trimmed line (references/gauge/parser/lex.go), so an
+// Gauge compares the trimmed line (getgauge/gauge/parser/lex.go), so an
 // indented underline or one with trailing whitespace still opens the heading.
 function isLegacySpecHeadingAt(lines, lineNumber) {
   return hasLegacyHeadingText(lines[lineNumber])
@@ -300,7 +300,7 @@ function isTableLine(line) {
 }
 
 // Gauge's lexer emits no token for a blank line following a step
-// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// (getgauge/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {
@@ -408,7 +408,7 @@ function isThenable(value) {
 
 function stepCompletionRange(line, position) {
   const markerStart = String(line || "").search(/\S/);
-  // references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+  // getgauge/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
   // bold line is a comment, not a step.
   if (
     markerStart === -1
@@ -481,7 +481,7 @@ function isTagContinuationBoundary(line) {
     || isDocStringFenceLine(text)
     || isTeardownLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // (getgauge/gauge/parser/helper.go isUnderline), and Gauge terminates the
     // step at it either way.
     || /^=+$/.test(text)
     || /^-+$/.test(text);
@@ -720,7 +720,7 @@ function parseCsvRecord(line, delimiter) {
 }
 
 // Gauge merges every *.properties file in the environment directory and the
-// directory itself is not fixed (references/gauge/env/env.go loadEnvDir,
+// directory itself is not fixed (getgauge/gauge/env/env.go loadEnvDir,
 // getEnvDir). The rule lives in src/gaugeSpecScope.js so every reader gives the
 // same answer for the same project.
 function projectDefaultProperty(options = {}, key) {
@@ -871,7 +871,7 @@ function isGaugeSyntaxBoundary(line) {
     || isTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and the teardown marker
+    // (getgauge/gauge/parser/helper.go isUnderline), and the teardown marker
     // ends the step too. Requiring three of each, and omitting the teardown
     // branch, let a multi-line step swallow "____" and offer it as a completion.
     || /^=+$/.test(text)

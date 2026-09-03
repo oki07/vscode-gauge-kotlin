@@ -1938,12 +1938,12 @@ test("execute node resolves Windows drive-letter spec paths to the matching work
 // scenarios away, running nothing.
 // gauge/scenarios answers with a single ScenarioInfo rather than a list whenever
 // a scenario's span covers the requested line: getScenarioAt in
-// references/gauge/api/lang/customResponses.go returns `info` as soon as
+// getgauge/gauge/api/lang/customResponses.go returns `info` as soon as
 // `sce.InSpan(line + 1)` is true. The at-cursor branch handled that shape;
 // Run Scenarios did not, and chooseAndExecuteScenario returns undefined for a
 // non-array, so the command silently did nothing.
 // A debug session terminates on the NORMAL end of a run: gauge kills the runner
-// (references/gauge/execution/simpleExecution.go stopAllPlugins), the JVM exits,
+// (getgauge/gauge/execution/simpleExecution.go stopAllPlugins), the JVM exits,
 // and VS Code fires onDidTerminateDebugSession while gauge is still polling
 // Alive() and printing its summary. Reporting that as onCancelled told the Test
 // UI the whole run was cancelled, and its per-project loop then skipped every
@@ -4199,9 +4199,9 @@ test("executor suppresses pending status and output after disposal", async () =>
 });
 
 // gauge/executionStatus is answered by execution.ReadLastExecutionResult
-// (references/gauge/api/lang/server.go), which calls logger.Fatalf when the
+// (getgauge/gauge/api/lang/server.go), which calls logger.Fatalf when the
 // status file cannot be read, and logger.Fatal ends with os.Exit(1)
-// (references/gauge/logger/gaugeLogger.go). Asking before any run has written
+// (getgauge/gauge/logger/gaugeLogger.go). Asking before any run has written
 // .gauge/executionStatus.json therefore kills the daemon and every language
 // feature with it, so do not ask until the file is there.
 test("executor does not ask for an execution status Gauge has never written", async () => {
@@ -5646,7 +5646,7 @@ test("report command shows an error when opening the html report fails", async (
 });
 
 // gauge.report.html sits in the command palette whenever Gauge is active, with
-// no guard on having run anything. references/gauge-vscode passes its unset
+// no guard on having run anything. getgauge/gauge-vscode passes its unset
 // report path straight into Uri.file, so the user gets a raw Node TypeError.
 test("report command explains that no run has produced a report yet", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
@@ -6309,7 +6309,7 @@ test("report command explains that the remembered report is gone", async () => {
 });
 
 // Gauge takes a directory as a run target and walks it recursively
-// (references/gauge/util/util.go GetSpecFiles). Testing only the directory's own
+// (getgauge/gauge/util/util.go GetSpecFiles). Testing only the directory's own
 // entries meant Run Specification on a folder whose specs live one level down -
 // specs/checkout/, the shape Gauge's own spec directories usually take - did
 // nothing at all: the target was filtered out and no run started.
@@ -6363,7 +6363,7 @@ test("execute specification runs a folder whose specs are in subdirectories", as
   assert.deepEqual(calls[0].args.slice(-1), ["/workspace/specs"]);
 });
 
-// Gauge takes a bare path verbatim: references/gauge/util/fileUtils.go
+// Gauge takes a bare path verbatim: getgauge/gauge/util/fileUtils.go
 // GetSpecFiles accepts any file whose extension is in gauge_spec_file_extensions,
 // which env.go defaults to ".spec, .md". So `gauge run <root>/README.md` parses
 // the prose as a specification and reports every bullet as a missing step. The

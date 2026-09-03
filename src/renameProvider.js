@@ -43,7 +43,7 @@ const WORKSPACE_SCAN_FILE_PATTERNS = [
   /\.java$/i,
 ];
 const ALIASED_STEP_RENAME_ERROR = "Refactoring for steps having aliases are not supported.";
-// references/gauge-java .../refactor/JavaRefactoring.java.
+// getgauge/gauge-java .../refactor/JavaRefactoring.java.
 const DUPLICATE_STEP_RENAME_ERROR = "Duplicate step implementation found.";
 const LSP_RENAME_REQUEST = "textDocument/rename";
 const CANCELLED_RENAME_OPERATION = Symbol("cancelled rename operation");
@@ -168,7 +168,7 @@ function isInlineTableLine(line) {
 }
 
 // Gauge's lexer emits no token for a blank line following a step
-// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// (getgauge/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {
@@ -224,11 +224,11 @@ function isGaugeSyntaxBoundary(line) {
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // (getgauge/gauge/parser/helper.go isUnderline), and Gauge terminates the
     // step at it either way.
     || /^=+$/.test(text)
     || /^-+$/.test(text)
-    // The teardown marker: references/gauge/parser/lex.go isTearDown ->
+    // The teardown marker: getgauge/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
     || isGaugeTeardownLine(text);
 }
@@ -397,7 +397,7 @@ function stepParameterSlots(text) {
   return slots;
 }
 
-// references/gauge/refactor/refactor.go createOrderOfArgs: for each parameter of
+// getgauge/gauge/refactor/refactor.go createOrderOfArgs: for each parameter of
 // the NEW step, the index of the identical parameter in the OLD step, or -1.
 // Matching is by the parameter's own text, and each old parameter is claimed
 // once so a repeated name does not map twice.
@@ -415,7 +415,7 @@ function createOrderOfArgs(oldName, newName) {
   });
 }
 
-// references/gauge/gauge/step.go getArgsInOrder: each usage keeps the argument it
+// getgauge/gauge/gauge/step.go getArgsInOrder: each usage keeps the argument it
 // already had, moved to wherever that parameter now sits. A parameter with no
 // counterpart in the old step keeps whatever the user typed. Writing the typed
 // text over every usage instead discarded each usage's arguments: a static
@@ -580,7 +580,7 @@ function gaugeStepOnLine(vscode, document, lineNumber, lines, options = {}) {
     ? sourceLines[startLine]
     : documentLine(document, startLine)).replace(/\r$/, "");
   const marker = line.search(/\S/);
-  // references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+  // getgauge/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
   // bold line is a comment. Without this F2 offered to rename it and rewrote the
   // comment into a step.
   if (marker === -1 || line[marker] !== "*" || line[marker + 1] === "*") {
@@ -1974,7 +1974,7 @@ class GaugeRenameProvider {
     const implementationDocuments = this.stepImplementationDocuments(documents);
     let sourceImplemented = false;
     // gauge-java refuses to refactor a step with more than one implementation
-    // (references/gauge-java .../refactor/JavaRefactoring.java answers
+    // (getgauge/gauge-java .../refactor/JavaRefactoring.java answers
     // "Duplicate step implementation found." when
     // registry.hasMultipleImplementations is true), the same guard it applies to
     // aliases. Count distinct annotation sites so a document reaching the scan
@@ -2126,7 +2126,7 @@ class GaugeRenameProvider {
       }
     }
     // Gauge LSP requests workspace/saveFiles before refactoring and does not run
-    // gauge validate here (references/gauge/api/lang/rename.go).
+    // gauge validate here (getgauge/gauge/api/lang/rename.go).
     return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 

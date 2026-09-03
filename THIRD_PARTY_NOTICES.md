@@ -25,6 +25,11 @@ Visual Studio Code:
 - `resources/dark/play.svg`
 - `resources/light/icon-list.svg`
 - `resources/light/play.svg`
+- `test/fixtures/gauge-vscode-manifest.json`
+
+`test/fixtures/gauge-vscode-assets.json` records the SHA-256 digests of that
+extension's own asset tree. Neither fixture is shipped: `.vscodeignore` keeps
+`test/` out of the package.
 
 Source: https://github.com/getgauge/gauge-vscode
 

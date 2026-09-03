@@ -141,7 +141,7 @@ function createCodeLens(vscode, range, command) {
     : { range, command };
 }
 
-// references/gauge/parser/lex.go isDataTable matches
+// getgauge/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
 // keyword and the colon. Verified against the real parser.
 const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
@@ -151,7 +151,7 @@ function isTableLine(line) {
   return isGaugeTableRowLine(text);
 }
 
-// references/gauge/parser/lex.go isStep requires the second character not to be
+// getgauge/gauge/parser/lex.go isStep requires the second character not to be
 // another '*', so "**bold text**" is a comment, not a step.
 function gaugeStepText(line) {
   const text = String(line || "");
@@ -174,11 +174,11 @@ function isGaugeSyntaxBoundary(line) {
     || isTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // (getgauge/gauge/parser/helper.go isUnderline), and Gauge terminates the
     // step at it either way.
     || /^=+$/.test(text)
     || /^-+$/.test(text)
-    // The teardown marker: references/gauge/parser/lex.go isTearDown ->
+    // The teardown marker: getgauge/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
     || isGaugeTeardownLine(text);
 }
@@ -247,7 +247,7 @@ function boolProperty(value) {
 }
 
 // Gauge merges every *.properties file in the environment directory and the
-// directory itself is not fixed (references/gauge/env/env.go loadEnvDir,
+// directory itself is not fixed (getgauge/gauge/env/env.go loadEnvDir,
 // getEnvDir). The rule lives in src/gaugeSpecScope.js so every reader gives the
 // same answer for the same project.
 function projectDefaultProperty(options = {}, key) {
@@ -301,9 +301,9 @@ function hasSpecificationDataTable(document, specificationLine) {
       return false;
     }
     // Gauge emits the parallel lens whenever spec.DataTable.IsInitialized()
-    // (references/gauge/api/lang/codeLens.go). An external `table: file.csv`
+    // (getgauge/gauge/api/lang/codeLens.go). An external `table: file.csv`
     // initializes it through AddExternalDataTable
-    // (references/gauge/parser/convert.go) exactly like an inline table.
+    // (getgauge/gauge/parser/convert.go) exactly like an inline table.
     if (isTableLine(lines[line]) || isExternalDataTableLine(lines[line])) {
       return true;
     }
@@ -317,7 +317,7 @@ function isExternalDataTableLine(line) {
 }
 
 // Gauge's lexer emits no token for a blank line following a step
-// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// (getgauge/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {

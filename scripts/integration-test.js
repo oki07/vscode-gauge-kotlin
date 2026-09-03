@@ -3,8 +3,8 @@
 // The integration tests drive the real Gauge CLI over a real Gradle build, so
 // they need a Gauge installation carrying the Java runner plugin. A machine
 // that already has one is used as it is; otherwise a pinned Gauge is placed in
-// a throwaway directory inside the checkout, with its own GAUGE_HOME so the
-// developer's own plugins and configuration are never touched.
+// the user's cache directory, with its own GAUGE_HOME so the developer's own
+// plugins and configuration are never touched.
 
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -43,7 +43,7 @@ const TEST_FILES = [
 
 // Gauge names its release assets <name>-<version>-<os>.<arch>.zip, and reads
 // that name back when installing a plugin from a file
-// (references/gauge/build/make.go, references/gauge-java/build/make.go).
+// (getgauge/gauge/build/make.go, getgauge/gauge-java/build/make.go).
 function assetPlatform() {
   const platform = { win32: "windows", darwin: "darwin", linux: "linux" }[os.platform()];
   const arch = { x64: "x86_64", arm64: "arm64", ia32: "x86" }[os.arch()];

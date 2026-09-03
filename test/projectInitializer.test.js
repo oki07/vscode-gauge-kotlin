@@ -732,7 +732,7 @@ test("ProjectInitializer offers only Kotlin project templates by configured pref
   assert.deepEqual(spawns, [["init", "kotlin_gradle"]]);
 });
 
-// Gauge publishes no Kotlin template. references/gauge/template/template.go
+// Gauge publishes no Kotlin template. getgauge/gauge/template/template.go
 // defaults() seeds dotnet, java, java_gradle, java_maven, java_maven_selenium,
 // js, js_simple, python, python_selenium, ruby, ruby_selenium and ts, and the
 // list only grows through an explicit `gauge template <name> <url>` this
@@ -1880,7 +1880,7 @@ test("bundled templates keep Gauge's own environment defaults", () => {
     });
 
     const properties = written.get("/p/env/default/default.properties");
-    // references/gauge/env/env.go addEnvVar(ScreenshotOnFailure, "true"): a
+    // getgauge/gauge/env/env.go addEnvVar(ScreenshotOnFailure, "true"): a
     // template that turns it off silently loses failure screenshots.
     assert.match(properties, /^screenshot_on_failure = true$/m, template.label);
 

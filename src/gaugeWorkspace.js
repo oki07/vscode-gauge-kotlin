@@ -135,12 +135,12 @@ function isExternalImplementationSourceError(error) {
 
 // Gauge appends this hint to every runner startup failure based solely on the
 // manifest language ("java"), not on the actual failure (see
-// references/gauge/api/lang/runner.go). The Java extension pack cannot build
+// getgauge/gauge/api/lang/runner.go). The Java extension pack cannot build
 // Kotlin step implementations, so the hint misleads in this extension's
 // projects; drop only that sentence and keep the rest of Gauge's message.
 //
 // Gauge reports a failed runner before it answers "initialize"
-// (references/gauge/api/lang/server.go Start), so this runs as a connection
+// (getgauge/gauge/api/lang/server.go Start), so this runs as a connection
 // message strategy: notification handlers are only attached once the handshake
 // has completed and would never see that message.
 function withoutMisleadingJavaExtensionHint(message) {
@@ -1190,12 +1190,12 @@ class GaugeWorkspace {
   }
 
   // Gauge documents only. Gauge LSP advertises DocumentFormattingProvider and
-  // CodeActionProvider (references/gauge/api/lang/capabilities.go) and treats
+  // CodeActionProvider (getgauge/gauge/api/lang/capabilities.go) and treats
   // every document it is offered as a Gauge specification, so offering it a
   // Kotlin or Java source registers Gauge as a formatter for that language:
   // Format Document would rewrite an implementation file as a specification,
   // and with no Kotlin extension installed Gauge would be the only formatter
-  // registered for `.kt`. references/gauge-vscode/src/gaugeWorkspace.ts selects
+  // registered for `.kt`. getgauge/gauge-vscode/src/gaugeWorkspace.ts selects
   // only `{ language: 'gauge' }`.
   //
   // Nothing is lost. Implementation-file references, definitions, diagnostics
@@ -1233,9 +1233,9 @@ class GaugeWorkspace {
       { scheme: "file", pattern: `${project.root()}/**/*.cpt` },
       // Scope the Markdown arm to the configured gauge_specs_dir. The daemon
       // classifies a document by extension alone
-      // (references/gauge/util/fileUtils.go IsValidSpecExtension, default list
+      // (getgauge/gauge/util/fileUtils.go IsValidSpecExtension, default list
       // ".spec, .md") and advertises CodeLensProvider
-      // (references/gauge/api/lang/capabilities.go), so a bare "**/*.md" put the
+      // (getgauge/gauge/api/lang/capabilities.go), so a bare "**/*.md" put the
       // daemon's Run Spec and Debug Spec lenses on any README in the project,
       // and an unparseable one made it answer with an error. The rule lives in
       // src/gaugeSpecScope.js so every surface gives the same answer.

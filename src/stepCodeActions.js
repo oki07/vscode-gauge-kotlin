@@ -142,7 +142,7 @@ function projectLanguage(document, projectFactory) {
   return undefined;
 }
 
-// references/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
+// getgauge/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
 // opening one, so "|name" is a comment and attaches no table to the step.
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
@@ -150,7 +150,7 @@ function isInlineTableLine(line) {
 }
 
 // Gauge's lexer emits no token for a blank line following a step
-// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// (getgauge/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 // A step may carry a doc string AND a table, in that order, so the scan resumes
@@ -196,11 +196,11 @@ function isGaugeSyntaxBoundary(line) {
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // (getgauge/gauge/parser/helper.go isUnderline), and Gauge terminates the
     // step at it either way.
     || /^=+$/.test(text)
     || /^-+$/.test(text)
-    // The teardown marker: references/gauge/parser/lex.go isTearDown ->
+    // The teardown marker: getgauge/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
     || isGaugeTeardownLine(text);
 }
@@ -367,7 +367,7 @@ function stepImplementationName(existingNames) {
 
 // A generated stub has to FAIL until someone writes the body. gauge-java's own
 // suggestion, which the reference extension inserts verbatim, throws
-// (references/gauge-java .../processor/ValidateStepProcessor.java validateStep);
+// (getgauge/gauge-java .../processor/ValidateStepProcessor.java validateStep);
 // an empty body reports the un-implemented step as passed, so a suite stubbed
 // this way is green while asserting nothing. gauge-java's MethodExecutor
 // catches Throwable, so Kotlin's TODO fails the step like any exception.
@@ -421,7 +421,7 @@ function diagnosticStubCode(diagnostic) {
 // The extension owns the step diagnostics it publishes itself; every other
 // "step implementation not found" on the line belongs to the Gauge runner,
 // which supplies its own stub through the diagnostic code
-// (references/gauge/api/lang/diagnostics.go createValidationDiagnostics) and
+// (getgauge/gauge/api/lang/diagnostics.go createValidationDiagnostics) and
 // answers its own code action requests.
 function isLocalStepCodeActionDiagnostic(diagnostic) {
   return Boolean(diagnostic && diagnostic.message === UNDEFINED_STEP_MESSAGE);

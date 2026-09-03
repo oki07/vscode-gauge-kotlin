@@ -100,11 +100,11 @@ function isWire(wireType, expected) {
   return wireType === expected;
 }
 
-// TableRowIndex is a proto3 int32 (references/gauge-proto/spec.proto), so the
+// TableRowIndex is a proto3 int32 (getgauge/gauge-proto/spec.proto), so the
 // field is absent from the wire exactly when its value is 0 - which is the FIRST
-// data-table row. references/gauge/execution/result/result.go
+// data-table row. getgauge/gauge/execution/result/result.go
 // GetProtoHookFailure writes -1 for a hook that belongs to no table, and only
-// references/gauge/execution/merge.go addHookFailure overwrites it with the real
+// getgauge/gauge/execution/merge.go addHookFailure overwrites it with the real
 // row, so an absent field cannot be told from row 0 on its own. The enclosing
 // ProtoSpec's isTableDriven decides, and a suite hook is never table driven.
 function decodeHookFailure(buffer) {
@@ -565,7 +565,7 @@ function scenarioInfo(item, filename) {
   let name = scenario.heading || id;
   if (table && (table.isScenarioTableDriven || table.isSpecTableDriven)) {
     // A nested run is N_spec x N_scenario executions and the proto carries both
-    // indices (references/gauge/execution/result/specResult.go sets
+    // indices (getgauge/gauge/execution/result/specResult.go sets
     // IsSpecTableDriven and, for a nested scenario, IsScenarioTableDriven with
     // ScenarioTableRowIndex). Keying on one of them collapsed the other's rows
     // onto each other and half the results were overwritten.

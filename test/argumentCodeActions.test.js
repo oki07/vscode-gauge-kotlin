@@ -378,7 +378,7 @@ test("GaugeArgumentCodeActionProvider preserves actions after unterminated docst
   assert.equal(actions[0].edit.replacements[0].newText, "<cart>");
 });
 
-// references/gauge/parser/lex.go: isScenarioHeading rejects a third '#' and
+// getgauge/gauge/parser/lex.go: isScenarioHeading rejects a third '#' and
 // isStep rejects a second '*'. Both verified against the real parser through a
 // temporary Go module calling parser.SpecParser.Parse.
 test("GaugeArgumentCodeActionProvider leaves double-star comment lines alone", () => {

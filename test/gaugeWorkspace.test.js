@@ -346,8 +346,8 @@ function createEmptyKotlinWorkspace(LanguageClient = FakeLanguageClient) {
 // Markdown arm follow, or Gauge specs written as Markdown lose every language
 // feature the daemon provides.
 // A project that narrows gauge_spec_file_extensions to ".spec" is saying its
-// Markdown is documentation (references/gauge/env/env.go GaugeSpecFileExtensions,
-// references/gauge/util/fileUtils.go IsValidSpecExtension). Offering those files
+// Markdown is documentation (getgauge/gauge/env/env.go GaugeSpecFileExtensions,
+// getgauge/gauge/util/fileUtils.go IsValidSpecExtension). Offering those files
 // to the daemon anyway would put its Run Spec lenses back on them.
 test("GaugeWorkspace drops the Markdown selector when gauge_spec_file_extensions excludes it", () => {
   const { GaugeWorkspace } = require("../src/gaugeWorkspace");
@@ -479,16 +479,16 @@ test("GaugeWorkspace starts Gauge LSP clients for workspace projects", async () 
     },
   });
   // Gauge documents only. Gauge LSP advertises DocumentFormattingProvider and
-  // CodeActionProvider (references/gauge/api/lang/capabilities.go), and it
+  // CodeActionProvider (getgauge/gauge/api/lang/capabilities.go), and it
   // treats every document it is offered as a Gauge specification. With .kt and
   // .java in the selector, VS Code registered Gauge as a formatter for Kotlin
   // and Java sources, so Format Document would rewrite an implementation file
-  // as a specification. references/gauge-vscode/src/gaugeWorkspace.ts selects
+  // as a specification. getgauge/gauge-vscode/src/gaugeWorkspace.ts selects
   // only { language: 'gauge' } for the same reason.
   // The Markdown arm is scoped to the configured gauge_specs_dir. The daemon
-  // classifies a document by extension alone (references/gauge/util/fileUtils.go
+  // classifies a document by extension alone (getgauge/gauge/util/fileUtils.go
   // IsValidSpecExtension, whose default list is ".spec, .md"), and it advertises
-  // CodeLensProvider (references/gauge/api/lang/capabilities.go), so with
+  // CodeLensProvider (getgauge/gauge/api/lang/capabilities.go), so with
   // "**/*.md" in the selector a README in the project got the daemon's Run Spec
   // and Debug Spec lenses even though this extension's own provider correctly
   // declines it.
@@ -3481,9 +3481,9 @@ test("GaugeWorkspace generates Java config for mixed-case Java plugins", async (
     },
   ]);
   // The Markdown arm is scoped to the configured gauge_specs_dir. The daemon
-  // classifies a document by extension alone (references/gauge/util/fileUtils.go
+  // classifies a document by extension alone (getgauge/gauge/util/fileUtils.go
   // IsValidSpecExtension, whose default list is ".spec, .md"), and it advertises
-  // CodeLensProvider (references/gauge/api/lang/capabilities.go), so with
+  // CodeLensProvider (getgauge/gauge/api/lang/capabilities.go), so with
   // "**/*.md" in the selector a README in the project got the daemon's Run Spec
   // and Debug Spec lenses even though this extension's own provider correctly
   // declines it.
@@ -5283,9 +5283,9 @@ test("GaugeWorkspace starts a client for the active Markdown Gauge specification
   const entry = clients.get("/workspace/gauge/specs/login.md");
   assert.equal(entry.client.started, true);
   // The Markdown arm is scoped to the configured gauge_specs_dir. The daemon
-  // classifies a document by extension alone (references/gauge/util/fileUtils.go
+  // classifies a document by extension alone (getgauge/gauge/util/fileUtils.go
   // IsValidSpecExtension, whose default list is ".spec, .md"), and it advertises
-  // CodeLensProvider (references/gauge/api/lang/capabilities.go), so with
+  // CodeLensProvider (getgauge/gauge/api/lang/capabilities.go), so with
   // "**/*.md" in the selector a README in the project got the daemon's Run Spec
   // and Debug Spec lenses even though this extension's own provider correctly
   // declines it.

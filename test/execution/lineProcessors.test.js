@@ -37,7 +37,7 @@ test("ReportEventProcessor stores html report paths from machine-readable output
 });
 
 // The test above builds the JSON with JavaScript's JSON.stringify, which leaves
-// ">" alone. Gauge encodes with Go's encoding/json (references/gauge/logger/logger.go
+// ">" alone. Gauge encodes with Go's encoding/json (getgauge/gauge/logger/logger.go
 // json.Marshal), which HTML-escapes ">" to \u003e by default, so the real line is
 //   {"type":"out","message":"Successfully generated html-report to =\u003e /p/..."}
 // and canProcess rejected it before the decode ever ran. Verified by encoding the

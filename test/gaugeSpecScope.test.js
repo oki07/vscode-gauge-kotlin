@@ -25,12 +25,12 @@ function properties(content) {
 }
 
 // Gauge decides which extensions count as specifications from
-// gauge_spec_file_extensions (references/gauge/env/env.go GaugeSpecFileExtensions,
+// gauge_spec_file_extensions (getgauge/gauge/env/env.go GaugeSpecFileExtensions,
 // default ".spec, .md"), and util.IsValidSpecExtension compares the lowercased
 // extension against that list. A project that narrows the list to ".spec" is
 // saying its Markdown is documentation, so no Gauge decoration belongs on it.
 // Gauge loads EVERY *.properties file in the environment directory, not just
-// default.properties: references/gauge/env/env.go loadEnvDir collects them with
+// default.properties: getgauge/gauge/env/env.go loadEnvDir collects them with
 // common.FindFilesInDir(envDirPath, isPropertiesFile) and merges them with
 // properties.MustLoadFiles, where a later file wins. The bundled Kotlin template
 // itself writes env/default/java.properties beside default.properties.
@@ -235,7 +235,7 @@ test("configuredSpecDirs ignores invalid property Unicode escapes", () => {
   );
 });
 
-// The environment directory itself is not fixed: references/gauge/env/env.go
+// The environment directory itself is not fixed: getgauge/gauge/env/env.go
 // getEnvDir prefers the gauge_env_dir variable and otherwise takes
 // EnvironmentDir from the project manifest.
 test("configuredSpecDirs honours a manifest EnvironmentDir", () => {
@@ -366,7 +366,7 @@ test("markdown spec scope follows every configured gauge_specs_dir", () => {
 
 // The point is that the scope resolves once and every later file reuses it, not
 // the absolute count: resolving now also reads the manifest to find the
-// environment directory (references/gauge/env/env.go getEnvDir).
+// environment directory (getgauge/gauge/env/env.go getEnvDir).
 test("markdown spec scope reads the project properties at most once", () => {
   let propertyReads = 0;
   const scope = createMarkdownSpecScope({

@@ -1864,7 +1864,7 @@ test("ExtractConceptCommandProvider rejects new concept files without cpt extens
 // normalizeConceptFilePath strips a leading root to force the path
 // project-relative, but pathModule.join then resolves "..", so "../evil.cpt"
 // landed outside the Gauge project. Gauge only reads concepts under the project
-// (references/gauge/util/util.go), so such a file is both invisible to Gauge and
+// (getgauge/gauge/util/util.go), so such a file is both invisible to Gauge and
 // written somewhere the user did not ask for.
 test("ExtractConceptCommandProvider keeps a new concept file inside the project", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
@@ -1995,7 +1995,7 @@ test("ExtractConceptCommandProvider rejects duplicate concept names", async () =
 // "# Shared login <user>". The guard compared the name before that append, so
 // the same extraction a second time saw no match and wrote a second
 // "# Shared login <user>" - which Gauge rejects with "Duplicate concept
-// definition found" (references/gauge/parser).
+// definition found" (getgauge/gauge/parser).
 test("ExtractConceptCommandProvider rejects a duplicate once parameters are appended", async () => {
   const { ExtractConceptCommandProvider } = require("../src/extractConcept");
   const requests = [];

@@ -1,6 +1,6 @@
 "use strict";
 
-// references/gauge/parser/lex.go isDataTable matches
+// getgauge/gauge/parser/lex.go isDataTable matches
 // /^\s*[tT][aA][bB][lL][eE]\s*:/, so any run of whitespace may sit between the
 // keyword and the colon. Verified against the real parser.
 const DATA_TABLE_KEYWORD_PATTERN = /^\s*table\s*:/i;
@@ -594,7 +594,7 @@ function gaugeStepMarker(line) {
   return marker !== -1 && text[marker] === "*" && text[marker + 1] !== "*" ? marker : -1;
 }
 
-// references/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
+// getgauge/gauge/parser/lex.go isTableRow requires a closing "|" as well as an
 // opening one, so "|name" is a comment and attaches no table to the step.
 function isInlineTableLine(line) {
   const text = String(line || "").trim();
@@ -602,7 +602,7 @@ function isInlineTableLine(line) {
 }
 
 // Gauge's lexer emits no token for a blank line following a step
-// (references/gauge/parser/lex.go sets the step token's Suffix and continues),
+// (getgauge/gauge/parser/lex.go sets the step token's Suffix and continues),
 // so a table separated from its step by blank lines still attaches to it.
 // Verified against parser.SpecParser.Parse.
 function inlineTableLineAfterStep(lines, endLine) {
@@ -653,11 +653,11 @@ function isGaugeSyntaxBoundary(line) {
     || isInlineTableLine(text)
     || isDocStringFenceLine(text)
     // A heading underline is one or more characters
-    // (references/gauge/parser/helper.go isUnderline), and Gauge terminates the
+    // (getgauge/gauge/parser/helper.go isUnderline), and Gauge terminates the
     // step at it either way.
     || /^=+$/.test(text)
     || /^-+$/.test(text)
-    // The teardown marker: references/gauge/parser/lex.go isTearDown ->
+    // The teardown marker: getgauge/gauge/parser/lex.go isTearDown ->
     // parser/helper.go isUnderline recognises a line of underscores.
     || isGaugeTeardownLine(text);
 }
@@ -708,7 +708,7 @@ function boolProperty(value) {
 }
 
 // Gauge merges every *.properties file in the environment directory and the
-// directory itself is not fixed (references/gauge/env/env.go loadEnvDir,
+// directory itself is not fixed (getgauge/gauge/env/env.go loadEnvDir,
 // getEnvDir). The rule lives in src/gaugeSpecScope.js so every reader gives the
 // same answer for the same project.
 function projectDefaultProperty(options = {}, key) {

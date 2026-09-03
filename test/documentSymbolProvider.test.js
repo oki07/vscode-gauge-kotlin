@@ -170,7 +170,7 @@ function createWorkspaceSymbolProjectScopeFixture() {
   };
 }
 
-// references/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
+// getgauge/gauge/parser/lex.go isScenarioHeading rejects a third '#', so
 // "### Third scenario" is a comment and gets no symbol. Verified against the
 // real parser.
 test("GaugeDocumentSymbolProvider lists specification and scenario symbols", () => {

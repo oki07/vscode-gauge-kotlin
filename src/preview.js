@@ -107,7 +107,7 @@ function showInformation(vscode, message, ...actions) {
 }
 
 // A Markdown file is a Gauge specification only inside the project's configured
-// gauge_specs_dir (references/gauge/util/util.go GetSpecDirs). The rule lives in
+// gauge_specs_dir (getgauge/gauge/util/util.go GetSpecDirs). The rule lives in
 // src/gaugeSpecScope.js so every surface gives the same answer for the same file.
 function activeGaugeFile(vscode, scopeOptions = {}) {
   const editor = vscode.window && vscode.window.activeTextEditor;

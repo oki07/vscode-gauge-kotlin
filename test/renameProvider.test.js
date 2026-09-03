@@ -446,7 +446,7 @@ test("GaugeRenameProvider keeps a new concept parameter dynamic", async () => {
 // `* Prepare cart` above its table: both have the step value "Prepare cart {}",
 // the heading's parameter being supplied by the usage's inline table. A rename
 // has to preserve that correspondence in both directions. Gauge's own LSP does
-// the same thing from the other side - references/gauge/api/lang/rename.go
+// the same thing from the other side - getgauge/gauge/api/lang/rename.go
 // getNewStepName appends " <table>" to the new name when step.HasInlineTable.
 test("GaugeRenameProvider keeps a concept table parameter out of its usages", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
@@ -2219,7 +2219,7 @@ test("GaugeRenameProvider keeps workspace documents within the source Gauge proj
 
 // A step whose text begins with "*" is written "* * Bold comment": the marker,
 // then the text. "** Bold comment" is a comment, because
-// references/gauge/parser/lex.go isStep requires text[1] != '*'.
+// getgauge/gauge/parser/lex.go isStep requires text[1] != '*'.
 test("GaugeRenameProvider prepares rename on a step whose text starts with a star", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -2295,7 +2295,7 @@ test("GaugeRenameProvider preserves inline table step identity when renaming", a
   );
 });
 
-// references/gauge/parser/lex.go isTableRow needs a closing "|" as well as an
+// getgauge/gauge/parser/lex.go isTableRow needs a closing "|" as well as an
 // opening one, probed twice: a spec row without it reports nothing where a
 // closed row warns, and in a concept "|table" reports nothing where "|table|"
 // reports "Table doesn't belong to any step". The coverage here is indentation
@@ -2469,7 +2469,7 @@ test("GaugeRenameProvider renames concept headings from concept files by extensi
 // "Duplicate step implementation found." when registry.hasMultipleImplementations
 // is true, the same guard it applies to aliases. Renaming locally would rewrite
 // one call site and leave the project in a state the runner rejects.
-// references/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
+// getgauge/gauge/parser/lex.go isStep requires text[1] != '*', so a Markdown
 // bold line is a comment. F2 offered to rename it and accepting rewrote the
 // comment into a Gauge step.
 test("GaugeRenameProvider refuses to rename a Markdown bold line", async () => {

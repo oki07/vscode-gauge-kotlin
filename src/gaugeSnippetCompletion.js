@@ -11,7 +11,7 @@ const {
 
 // contributes.snippets is a static contribution: VS Code reads it at startup,
 // independently of activation, and applies it to every document of that language
-// in every workspace. references/gauge-vscode contributes snippets only for its
+// in every workspace. getgauge/gauge-vscode contributes snippets only for its
 // own `gauge` language, which is bound to `.spec` and `.cpt`, so it has nowhere
 // to leak. This extension also treats Markdown inside a project's spec
 // directories as a specification, and contributing the snippets for `markdown`
