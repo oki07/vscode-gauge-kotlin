@@ -160,6 +160,31 @@ Gradle has to be on `PATH`, or named by `GAUGE_LIFECYCLE_GRADLE`. A Gauge on
 pinned Gauge and Java plugin are downloaded into the user's cache directory and
 given their own `GAUGE_HOME`, leaving an existing Gauge installation untouched.
 
+### VS Code Extension Host verification
+
+The unit tests use API doubles. To verify activation and editor behavior in a
+real VS Code process, create a bundled Kotlin project and compile it first
+(`mvn test-compile` or `gradle testClasses`). Build the extension with
+`npm run bundle`, then run from this repository:
+
+```sh
+code /path/to/compiled-kotlin-project \
+  --disable-extensions --disable-workspace-trust \
+  --user-data-dir=/path/to/temporary-vscode-profile \
+  --extensions-dir=/path/to/temporary-extensions \
+  --extensionDevelopmentPath="$PWD" \
+  --extensionTestsPath="$PWD/scripts/extension-host-suite.js"
+```
+
+Use fresh temporary directories to keep test settings separate from your normal
+editor profile. Gauge and the Java runner must be installed. The suite verifies
+activation, command registration, Kotlin definitions, step completion, symbols,
+execution code lenses, a successful specification run, and argument auto-closing
+for specifications and concepts.
+Run it with the minimum supported VS Code version as well as your current
+version. To verify a packaged extension, point `--extensionDevelopmentPath` at
+the `extension` directory extracted from the VSIX instead.
+
 ## License
 
 MIT. See [LICENSE](LICENSE) and

@@ -90,10 +90,6 @@ const GAUGE_BRACKET_PAIRS = [
   ["<", ">"],
   ["\"", "\""],
 ];
-const GAUGE_AUTO_CLOSING_PAIRS = GAUGE_BRACKET_PAIRS.map(([open, close]) => ({
-  open,
-  close,
-}));
 const SEMANTIC_TOKEN_COLOR_KEYS = [
   "argument",
   "stepMarker",
@@ -452,8 +448,6 @@ function registerGaugeLanguageConfiguration(context, vscode) {
       lineComment: "//",
     },
     brackets: GAUGE_BRACKET_PAIRS,
-    autoClosingPairs: GAUGE_AUTO_CLOSING_PAIRS,
-    surroundingPairs: GAUGE_BRACKET_PAIRS,
     wordPattern: GAUGE_WORD_PATTERN,
   };
   for (const language of [GAUGE_LANGUAGE, GAUGE_CONCEPT_LANGUAGE]) {

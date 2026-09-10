@@ -493,14 +493,11 @@ test("activation preserves Gauge editor language configuration", () => {
       ["<", ">"],
       ["\"", "\""],
     ]);
-    assert.deepEqual(entry.configuration.autoClosingPairs, [
-      { open: "<", close: ">" },
-      { open: "\"", close: "\"" },
-    ]);
-    assert.deepEqual(entry.configuration.surroundingPairs, [
-      ["<", ">"],
-      ["\"", "\""],
-    ]);
+    // microsoft/vscode/src/vs/workbench/api/common/extHostLanguageFeatures.ts:
+    // VS Code 1.82 rejects dynamic autoClosingPairs without a proposed API.
+    // Pair rules are supplied by the contributed language-configuration.json.
+    assert.equal(Object.hasOwn(entry.configuration, "autoClosingPairs"), false);
+    assert.equal(Object.hasOwn(entry.configuration, "surroundingPairs"), false);
     assert.equal(entry.configuration.wordPattern.source, "^(?:[*])([^*].*)$");
     assert.equal(entry.configuration.wordPattern.flags, "g");
   }
