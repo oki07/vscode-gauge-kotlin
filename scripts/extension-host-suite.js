@@ -117,6 +117,30 @@ async function run() {
     }
   }
 
+  const beforeMissingStep = document.getText();
+  try {
+    const missing = new vscode.WorkspaceEdit();
+    const missingLine = beforeMissingStep.split("\n").length - 1;
+    missing.insert(uri, document.positionAt(beforeMissingStep.length), '* Missing editor step "hello"\n');
+    assert.ok(await vscode.workspace.applyEdit(missing));
+    await vscode.window.showTextDocument(document);
+    await eventually("undefined step diagnostic", async () => vscode.languages.getDiagnostics(uri),
+      (entries) => entries.some((entry) => entry.range.start.line === missingLine && /not defined|undefined|implementation.*not found/i.test(entry.message)));
+    const actions = await eventually("undefined step quick fix", () => vscode.commands.executeCommand(
+      "vscode.executeCodeActionProvider", uri, new vscode.Range(missingLine, 0, missingLine, 29), "quickfix",
+    ), (entries) => entries && entries.some((entry) => entry.command && entry.command.command === "gauge.generate.step"));
+    const action = actions.find((entry) => entry.command && entry.command.command === "gauge.generate.step");
+    assert.match(action.command.arguments[0], /fun implementation/);
+    assert.match(action.command.arguments[0], /@(?:com\.thoughtworks\.gauge\.)?Step/);
+    process.stdout.write("PASS Kotlin quick fix payload\n");
+  } finally {
+    const restore = new vscode.WorkspaceEdit();
+    restore.replace(uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), beforeMissingStep);
+    assert.ok(await vscode.workspace.applyEdit(restore));
+  }
+  await eventually("undefined diagnostic clears after removal", async () => vscode.languages.getDiagnostics(uri),
+    (entries) => !entries.some((entry) => /not defined|undefined|implementation.*not found/i.test(entry.message)));
+
   // Gauge 1.6.35 CLI output, including table spacing, is recorded verbatim.
   const formatCase = require("../test/fixtures/format-parity.json").cases[0];
   const unformatted = formatCase.input;

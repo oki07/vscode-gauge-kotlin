@@ -181,7 +181,8 @@ editor profile. Set `update.mode` to `none` in the temporary profile to keep the
 editor version fixed. Gauge and the Java runner must be installed. The suite
 modifies and restores the example files. It verifies
 activation, command registration, Kotlin definitions, spec and Kotlin step
-references, applied step renames from either side, formatting followed by saving
+references, applied step renames from either side, undefined-step diagnostics and
+Kotlin quick-fix payloads, formatting followed by saving
 an edit, step completion, symbols, execution code lenses, a successful
 specification run, and argument auto-closing
 for specifications and concepts.
