@@ -68,6 +68,10 @@ async function run() {
     "vscode.executeCodeLensProvider", uri, 10,
   ), (value) => value && value.some((lens) => lens.command && /[Rr]un/.test(lens.command.title)));
 
+  await eventually("scenario folding range", () => vscode.commands.executeCommand(
+    "vscode.executeFoldingRangeProvider", uri,
+  ), (ranges) => ranges && ranges.some((range) => range.start === line - 2 && range.end === line + 1));
+
   const kotlinUri = vscode.Uri.file(path.join(
     projectRoot, "src", "test", "kotlin", "example", "StepImplementation.kt",
   ));
@@ -121,7 +125,7 @@ async function run() {
   try {
     const missing = new vscode.WorkspaceEdit();
     const missingLine = beforeMissingStep.split("\n").length - 1;
-    missing.insert(uri, document.positionAt(beforeMissingStep.length), '* Missing editor step "hello"\n');
+    missing.insert(uri, document.positionAt(beforeMissingStep.length), '* Missing editor step "hello"\n\n[Gauge](https://gauge.org)\n');
     assert.ok(await vscode.workspace.applyEdit(missing));
     await vscode.window.showTextDocument(document);
     await eventually("undefined step diagnostic", async () => vscode.languages.getDiagnostics(uri),
@@ -133,6 +137,11 @@ async function run() {
     assert.match(action.command.arguments[0], /fun implementation/);
     assert.match(action.command.arguments[0], /@(?:com\.thoughtworks\.gauge\.)?Step/);
     process.stdout.write("PASS Kotlin quick fix payload\n");
+    await eventually("specification web link", () => vscode.commands.executeCommand(
+      "vscode.executeLinkProvider", uri, 20,
+    ), (links) => links && links.some((link) => link.target
+      && link.target.scheme === "https" && link.target.authority === "gauge.org"
+      && link.range.start.line === missingLine + 2));
   } finally {
     const restore = new vscode.WorkspaceEdit();
     restore.replace(uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), beforeMissingStep);
@@ -182,6 +191,11 @@ async function run() {
     await vscode.commands.executeCommand("type", { text: "<" });
     assert.equal(empty.getText(), "<>", `${language} automatic argument pair`);
     process.stdout.write(`PASS ${language} automatic argument pair\n`);
+    await vscode.commands.executeCommand("editor.action.commentLine");
+    assert.equal(empty.getText(), "// <>", `${language} line comment`);
+    await vscode.commands.executeCommand("editor.action.commentLine");
+    assert.equal(empty.getText(), "<>", `${language} line comment toggle`);
+    process.stdout.write(`PASS ${language} comment toggle\n`);
   }
 }
 
