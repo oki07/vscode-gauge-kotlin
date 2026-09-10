@@ -417,38 +417,16 @@ function createOrderOfArgs(oldName, newName) {
   });
 }
 
-// getgauge/gauge/gauge/step.go getArgsInOrder: each usage keeps the argument it
-// already had, moved to wherever that parameter now sits. A parameter with no
-// counterpart in the old step keeps whatever the user typed. Writing the typed
-// text over every usage instead discarded each usage's arguments: a static
-// "gauge" became the template's <word>, which the parser then cannot resolve,
-// and a table-driven usage lost its binding to its own columns.
-// A parameter with no counterpart in the old step gets a FRESH argument, and
-// getArgsInOrder builds it in three steps: Static with the parameter's own name
-// as the value; overridden to the special form when the parameter is a
-// <file:...> or <table:...>; overridden to Dynamic when the step resolves to a
-// concept, whose usage supplies its heading's parameters by name.
-//
-// Probed with the real refactorer plus formatter.FormatStep:
-//   "... vowels." -> "... vowels in <language>."  over a static usage
-//     orderMap {0:0, 1:1, 2:-1}  ->  * The word "gauge" has "3" vowels in "language".
-//   "read" -> "read <file:nope.txt>"
-//     orderMap {0:-1}            ->  * read "file:nope.txt"
-// Leaving "<language>" behind made the specification stop parsing, because a
-// dynamic parameter with nothing to resolve against is an error.
-// A new parameter's argument, as getArgsInOrder builds it: Static, with the
-// parameter's own name as the value. A concept usage supplies its heading's
-// parameters by name, so there the dynamic form is kept instead.
-//
-// The special form (<file:...>, <table:...>) is NOT kept: getArgsInOrder keeps
-// it only when the parser RESOLVED the parameter, and a rename introduces a name
-// that almost never resolves yet. Probed - "read" -> "read <file:nope.txt>"
-// formats `* read "file:nope.txt"`. Writing the angled form leaves a dynamic
-// parameter the parser rejects, which is the failure this exists to avoid.
-function freshArgumentFor(slotRaw, isConcept) {
+// getgauge/gauge/gauge/step.go getArgsInOrder preserves matched usage values.
+// Gauge 1.6.35 textDocument/rename returns fresh static arguments in specs,
+// even for concept calls. Only concept calls inside a concept body keep a
+// fresh argument dynamic; ordinary implementation calls stay static there.
+// In specs, unresolved fresh <file:...> or <table:...> arguments are static:
+// renaming "read" to "read <file:nope.txt>" yields `* read "file:nope.txt"`.
+function freshArgumentFor(slotRaw, nestedConceptCall) {
   const rawName = slotRaw.slice(1, -1);
   const name = slotRaw.startsWith('"') ? unescapeQuotedStepParameter(rawName) : rawName;
-  if (isConcept) {
+  if (nestedConceptCall) {
     return slotRaw;
   }
   return `"${name.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
@@ -467,8 +445,8 @@ function freshArgumentFor(slotRaw, isConcept) {
 //   "Load the payload <table>" -> "Load the payload <mode> <table>"  {0:-1,1:0}
 //      -> * Load the payload "mode"
 //
-// getgauge/gauge/gauge/step.go creates a fresh static argument for every
-// unmatched slot, including replacements with the same parameter count.
+// getgauge/gauge/gauge/step.go creates a fresh argument for every unmatched
+// slot, including replacements with the same parameter count.
 function gaugeUsageReplacementName(newName, usageText, orderMap, options = {}) {
   if (!usageText || !orderMap || orderMap.length === 0) {
     return newName;
@@ -488,7 +466,7 @@ function gaugeUsageReplacementName(newName, usageText, orderMap, options = {}) {
     } else if (source !== -1 && options.hasInlineTable) {
       replacement = undefined;
     } else {
-      replacement = freshArgumentFor(newSlots[slot].raw, options.isConcept);
+      replacement = freshArgumentFor(newSlots[slot].raw, options.nestedConceptCall);
     }
     let start = newSlots[slot].start;
     if (replacement === undefined) {
@@ -509,7 +487,7 @@ function gaugeReplacementName(value, hasInlineTable, options = {}) {
   }
   return gaugeUsageReplacementName(text, options.usageText, options.orderMap, {
     hasInlineTable,
-    isConcept: options.isConcept,
+    nestedConceptCall: options.nestedConceptCall,
   });
 }
 
@@ -2123,7 +2101,7 @@ class GaugeRenameProvider {
     return this.isOperationActive(operation) ? undefined : CANCELLED_RENAME_OPERATION;
   }
 
-  addGaugeRenames(edit, document, template, newName, operation, oldName, isConcept) {
+  addGaugeRenames(edit, document, template, newName, operation, oldName, conceptTarget) {
     // Built once from the two templates: each usage then keeps the argument it
     // already had, moved to wherever that parameter now sits.
     const oldTemplate = oldName ? removeInlineTableSuffix(oldName) : undefined;
@@ -2148,7 +2126,7 @@ class GaugeRenameProvider {
             document.uri,
             step.range,
             gaugeReplacementName(newName, step.hasInlineTable, {
-              isConcept,
+              nestedConceptCall: conceptTarget && isConceptDocument(document),
               orderMap,
               usageText: step.text,
             }),
@@ -2541,9 +2519,8 @@ class GaugeRenameProvider {
       return CANCELLED_RENAME_OPERATION;
     }
     const implementationDocuments = this.stepImplementationDocuments(documents);
-    // A usage of a CONCEPT supplies its heading's parameters by name, so a newly
-    // added parameter stays dynamic there - getArgsInOrder's `if step.IsConcept`
-    // branch. Anywhere else the fresh argument is static.
+    // Concept identity and the containing document jointly determine whether
+    // a fresh usage argument remains dynamic.
     const templateIsConcept = documents.some((candidate) => (
       isConceptDocument(candidate)
       && findConceptHeadings(candidate.getText())

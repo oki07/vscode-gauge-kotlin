@@ -409,10 +409,9 @@ test("GaugeRenameProvider fills a new parameter with a static argument", async (
   );
 });
 
-// A step that resolves to a CONCEPT keeps the dynamic form: getArgsInOrder's
-// `if step.IsConcept` branch overrides the static default, because a concept
-// usage supplies its heading's parameters by name.
-test("GaugeRenameProvider keeps a new concept parameter dynamic", async () => {
+// Gauge 1.6.35 textDocument/rename adds a quoted static argument to a spec
+// calling a concept; only nested concept calls retain the dynamic form.
+test("GaugeRenameProvider adds a static concept argument in a specification", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -438,7 +437,7 @@ test("GaugeRenameProvider keeps a new concept parameter dynamic", async () => {
     edit.replacements
       .filter((replacement) => replacement.uri.fsPath.endsWith("checkout.spec"))
       .map((replacement) => replacement.newText),
-    ["Reuse payment \"visa\" now <mode>"],
+    ["Reuse payment \"visa\" now \"mode\""],
   );
 });
 
@@ -2365,6 +2364,7 @@ test("GaugeRenameProvider keeps indented table step identity", async () => {
   );
 });
 
+// Gauge 1.6.35 replaces an unmatched spec argument with a quoted static value.
 test("GaugeRenameProvider renames concept headings when renaming concept usages", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -2400,7 +2400,7 @@ test("GaugeRenameProvider renames concept headings when renaming concept usages"
           start: { line: 1, character: 2 },
           end: { line: 1, character: 22 },
         },
-        newText: "Shared payment <account>",
+        newText: 'Shared payment "account"',
       },
       {
         file: "/workspace/gauge/specs/concepts/payment.cpt",
@@ -2414,6 +2414,7 @@ test("GaugeRenameProvider renames concept headings when renaming concept usages"
   );
 });
 
+// Gauge 1.6.35 replaces an unmatched spec argument with a quoted static value.
 test("GaugeRenameProvider renames concept headings from concept files by extension", async () => {
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
@@ -2463,7 +2464,7 @@ test("GaugeRenameProvider renames concept headings from concept files by extensi
           start: { line: 1, character: 2 },
           end: { line: 1, character: 22 },
         },
-        newText: "Shared payment <account>",
+        newText: 'Shared payment "account"',
       },
       {
         file: "/workspace/gauge/specs/concepts/payment.cpt",
@@ -3859,4 +3860,36 @@ for (const fixture of require("./fixtures/rename-parity.json").cases) {
       provider.dispose();
     }
   });
+}
+
+// Gauge 1.6.35 textDocument/rename: a fresh argument is static in specs.
+// In a concept body it is dynamic for concept calls and static for ordinary
+// implementation calls. The corpus records all three actual returned forms.
+for (const fixture of require("./fixtures/concept-rename-parity.json")) {
+  for (const origin of fixture.conceptTarget ? ["heading", "usage"] : ["usage"]) {
+    test(`concept argument scope: ${fixture.name} from ${origin}`, async () => {
+      const { GaugeRenameProvider } = require("../src/renameProvider");
+      const spec = createDocument([
+        "# Checkout", "", "|amount|", "|---|", "|42|", "", "## One", "",
+        ...fixture.specUsages.map((usage) => `* ${usage}`),
+      ].join("\n"), "gauge", "/workspace/gauge/specs/checkout.spec");
+      const target = fixture.conceptTarget
+        ? createDocument(`# ${fixture.oldName}\n\n* noop\n`, "gauge-concept", "/workspace/gauge/concepts/payment.cpt")
+        : createDocument('@Step("noop")\nfun noop() {}\n', "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+      const outer = createDocument(`# Outer <amount>\n\n* ${fixture.bodyUsage}\n`,
+        "gauge-concept", "/workspace/gauge/concepts/outer.cpt");
+      const vscode = createFakeVscode([spec, target, outer]);
+      const provider = new GaugeRenameProvider({ vscode });
+      const source = origin === "heading" ? target : spec;
+      const line = origin === "heading" ? 0 : 8 + fixture.specUsages.length - 1;
+      const edit = await provider.provideRenameEdits(source, new vscode.Position(line, 4), fixture.newName);
+      const replacementsFor = (document) => edit.replacements
+        .filter((entry) => entry.uri.fsPath === document.uri.fsPath).map((entry) => entry.newText);
+      assert.deepEqual(replacementsFor(spec), fixture.specEdits);
+      assert.deepEqual(replacementsFor(outer), [fixture.bodyEdit]);
+      if (fixture.conceptTarget) {
+        assert.deepEqual(replacementsFor(target), [fixture.newName]);
+      }
+    });
+  }
 }

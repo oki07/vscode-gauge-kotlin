@@ -203,6 +203,12 @@ sets a Kotlin breakpoint, checks the source stack frame, resumes execution,
 and requires both bundled scenarios to pass. It has been verified with
 fwcd.kotlin 0.2.36 and Kotlin Debug Adapter 0.4.4.
 
+For concept navigation and refactoring, use
+`scripts/concept-extension-host-suite.js` as the host test entry point in a
+compiled bundled Maven project. It creates and removes a temporary concept
+fixture, verifies direct and nested calls, applies a heading rename with a new
+parameter, and executes the renamed specification.
+
 ## License
 
 MIT. See [LICENSE](LICENSE) and

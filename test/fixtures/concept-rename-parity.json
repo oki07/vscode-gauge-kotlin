@@ -1,0 +1,22 @@
+[
+  {
+    "name": "fresh concept argument differs between spec and nested concept",
+    "conceptTarget": true,
+    "oldName": "Pay with <amount>",
+    "newName": "Pay with <amount> in <mode>",
+    "specUsages": ["Pay with \"42\"", "Pay with <amount>"],
+    "bodyUsage": "Pay with <amount>",
+    "specEdits": ["Pay with \"42\" in \"mode\"", "Pay with <amount> in \"mode\""],
+    "bodyEdit": "Pay with <amount> in <mode>"
+  },
+  {
+    "name": "fresh implementation argument stays static inside a concept",
+    "conceptTarget": false,
+    "oldName": "noop",
+    "newName": "noop <mode>",
+    "specUsages": ["noop"],
+    "bodyUsage": "noop",
+    "specEdits": ["noop \"mode\""],
+    "bodyEdit": "noop \"mode\""
+  }
+]
