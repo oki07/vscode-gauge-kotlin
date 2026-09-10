@@ -3,6 +3,8 @@
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
 
 const nodeFs = require("node:fs");
+const nodeOs = require("node:os");
+const nodePath = require("node:path");
 const { envWithGaugeHome } = require("./config/gaugeConfig");
 
 const FORMAT_COMMAND = "format";
@@ -527,9 +529,9 @@ class GaugeFormatProvider {
       return [];
     }
 
-    // gauge format rewrites the file on disk and the result replaces the whole
-    // document, so an edit typed while the CLI runs would be discarded. VS Code
-    // guards its own formatting API by version, but gauge.format applies these
+    // The formatted result replaces the whole document, so an edit typed while
+    // the CLI runs must invalidate it. VS Code guards its own formatting API
+    // by version, but gauge.format applies these
     // edits directly (src/extension.js formatActiveGaugeDocument).
     const versionBeforeFormat = document.version;
     const documentChanged = () => (
@@ -541,8 +543,8 @@ class GaugeFormatProvider {
       try {
         const saved = await document.save();
         // TextDocument.save may return false for a clean document, which is
-        // already safe to format. A false return for a dirty document leaves the
-        // disk stale, so gauge format must not replace the user's buffer with it.
+        // already safe to format. An explicit format stops when a dirty
+        // document cannot be saved.
         if (wasDirty && !saved) {
           return [];
         }
@@ -593,42 +595,62 @@ class GaugeFormatProvider {
       };
     }
 
-    const formatArgs = [FORMAT_COMMAND];
-    if (skipEmptyLineInsertions(this.vscode)) {
-      formatArgs.push("--skip-empty-line-insertions");
-    }
-    formatArgs.push(filePath);
-
-    const result = await waitForProcess(command, formatArgs, processOptions, token);
-    if (result.cancelled || cancellationRequested(token)) {
-      return [];
-    }
-    if (result.code !== 0) {
-      showError(this.vscode, formatFailureMessage(result));
-      return [];
-    }
-
-    let formatted;
+    // getgauge/gauge/formatter/formatter.go writes its input file in place.
+    // An open editor keeps the original file's save metadata, so CLI writes
+    // there can make the next VS Code save fail with File Modified Since.
+    // Gauge 1.6.35 produces identical output for a temporary file when cwd and
+    // the extension are preserved, including project-relative file/table data.
+    const directory = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "vscode-gauge-format-"));
+    const extension = isConceptDocument(document, filePath) ? ".cpt" : markdownSpecDocument ? ".md" : ".spec";
+    const temporaryPath = nodePath.join(directory, `document${extension}`);
     try {
-      formatted = this.fileSystem.readFileSync(filePath).toString();
-    } catch (error) {
+      nodeFs.writeFileSync(temporaryPath, document.getText(), "utf8");
       if (cancellationRequested(token)) {
         return [];
       }
-      throw error;
+      const formatArgs = [FORMAT_COMMAND];
+      if (skipEmptyLineInsertions(this.vscode)) {
+        formatArgs.push("--skip-empty-line-insertions");
+      }
+      formatArgs.push(temporaryPath);
+
+      const result = await waitForProcess(command, formatArgs, processOptions, token);
+      if (result.cancelled || cancellationRequested(token)) {
+        return [];
+      }
+      if (result.code !== 0) {
+        showError(this.vscode, formatFailureMessage({
+          ...result,
+          stderr: result.stderr.split(temporaryPath).join(filePath),
+          stdout: result.stdout.split(temporaryPath).join(filePath),
+        }));
+        return [];
+      }
+
+      let formatted;
+      try {
+        formatted = this.fileSystem.readFileSync(temporaryPath).toString();
+      } catch (error) {
+        if (cancellationRequested(token)) {
+          return [];
+        }
+        throw error;
+      }
+      if (cancellationRequested(token)) {
+        return [];
+      }
+      if (formatted === document.getText() || documentChanged()) {
+        return [];
+      }
+      const edit = createTextEdit(
+        this.vscode,
+        fullDocumentRange(this.vscode, document),
+        formatted,
+      );
+      return cancellationRequested(token) ? [] : [edit];
+    } finally {
+      nodeFs.rmSync(directory, { recursive: true, force: true });
     }
-    if (cancellationRequested(token)) {
-      return [];
-    }
-    if (formatted === document.getText() || documentChanged()) {
-      return [];
-    }
-    const edit = createTextEdit(
-      this.vscode,
-      fullDocumentRange(this.vscode, document),
-      formatted,
-    );
-    return cancellationRequested(token) ? [] : [edit];
   }
 
   dispose() {

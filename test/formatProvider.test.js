@@ -172,9 +172,8 @@ test("GaugeFormatProvider drops its edit when the document changed during format
 });
 
 // vscode.d.ts declares TextDocument.save(): Thenable<boolean>. A false result
-// leaves the document's in-memory text unsaved, while gauge format rewrites the
-// file on disk. Formatting that stale file and returning it as a whole-document
-// edit would overwrite the user's unsaved text.
+// leaves a dirty document unsaved. The explicit format command stops when
+// this save prerequisite fails.
 test("GaugeFormatProvider does not format when saving the document fails", async () => {
   const { GaugeFormatProvider } = require("../src/formatProvider");
   const spawned = [];
@@ -232,7 +231,8 @@ test("GaugeFormatProvider returns full document edits from gauge format output",
     cli,
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        assert.notEqual(filename, "/workspace/gauge/specs/example.spec");
+        assert.equal(require("node:path").extname(filename), ".spec");
         return Buffer.from("# Example\n\n* formatted\n");
       },
     },
@@ -254,7 +254,7 @@ test("GaugeFormatProvider returns full document edits from gauge format output",
   assert.equal(provider.activeRequests.size, 0);
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/example.spec"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -300,7 +300,8 @@ test("GaugeFormatProvider formats Markdown language Gauge specs inside Gauge pro
     cli,
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/example.md");
+        assert.notEqual(filename, "/workspace/gauge/specs/example.md");
+        assert.equal(require("node:path").extname(filename), ".md");
         return Buffer.from("# Example\n\n* formatted\n");
       },
     },
@@ -325,7 +326,7 @@ test("GaugeFormatProvider formats Markdown language Gauge specs inside Gauge pro
 
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/example.md"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -359,7 +360,8 @@ test("GaugeFormatProvider formats concept files by extension", async () => {
     cli,
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/concepts.cpt");
+        assert.notEqual(filename, "/workspace/gauge/specs/concepts.cpt");
+        assert.equal(require("node:path").extname(filename), ".cpt");
         return Buffer.from("# Login flow\n\n* formatted\n");
       },
     },
@@ -384,7 +386,7 @@ test("GaugeFormatProvider formats concept files by extension", async () => {
 
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/concepts.cpt"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -418,7 +420,8 @@ test("GaugeFormatProvider formats gauge-concept documents by language id", async
     cli,
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/concepts");
+        assert.notEqual(filename, "/workspace/gauge/specs/concepts");
+        assert.equal(require("node:path").extname(filename), ".cpt");
         return Buffer.from("# Login flow\n\n* formatted\n");
       },
     },
@@ -443,7 +446,7 @@ test("GaugeFormatProvider formats gauge-concept documents by language id", async
 
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/concepts"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -477,7 +480,8 @@ test("GaugeFormatProvider formats spec files by extension", async () => {
     cli,
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/plain.spec");
+        assert.notEqual(filename, "/workspace/gauge/specs/plain.spec");
+        assert.equal(require("node:path").extname(filename), ".spec");
         return Buffer.from("# Example\n\n* formatted\n");
       },
     },
@@ -502,7 +506,7 @@ test("GaugeFormatProvider formats spec files by extension", async () => {
 
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/plain.spec"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -536,7 +540,8 @@ test("GaugeFormatProvider passes skip empty line insertion option to gauge forma
     cli,
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        assert.notEqual(filename, "/workspace/gauge/specs/example.spec");
+        assert.equal(require("node:path").extname(filename), ".spec");
         return Buffer.from("# Example\n");
       },
     },
@@ -554,7 +559,7 @@ test("GaugeFormatProvider passes skip empty line insertion option to gauge forma
   assert.deepEqual(edits, []);
   assert.deepEqual(spawned, [
     {
-      args: ["format", "--skip-empty-line-insertions", "/workspace/gauge/specs/example.spec"],
+      args: ["format", "--skip-empty-line-insertions", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -670,7 +675,8 @@ test("GaugeFormatProvider passes configured Gauge home and project environment",
     env: { PATH: "/bin" },
     fileSystem: {
       readFileSync(filename) {
-        assert.equal(filename, "/workspace/gauge/specs/example.spec");
+        assert.notEqual(filename, "/workspace/gauge/specs/example.spec");
+        assert.equal(require("node:path").extname(filename), ".spec");
         return Buffer.from("# Example\n");
       },
     },
@@ -688,7 +694,7 @@ test("GaugeFormatProvider passes configured Gauge home and project environment",
   assert.deepEqual(edits, []);
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/example.spec"],
+      args: ["format", spawned[0].args.at(-1)],
       options: {
         cwd: "/workspace/gauge",
         env: {
@@ -1566,3 +1572,65 @@ test("GaugeFormatProvider disposal cancels concurrent formats during synchronous
     spawnCalls: 2,
   });
 });
+
+// Gauge 1.6.35 formats an outside temporary .spec/.md/.cpt identically when
+// cwd remains the project root, including project-relative file/table values.
+// VS Code 1.137 rejects a save after the CLI rewrites an open file directly
+// with File Modified Since. Only VS Code may write the original document.
+const formatCorpus = require("./fixtures/format-parity.json");
+for (const [outcome, fixture] of [
+  ...["success", "failure", "cancel"].map((outcome) => [outcome, undefined]),
+  ...formatCorpus.cases.map((fixture) => [fixture.exitCode === 0 ? "success" : "failure", fixture]),
+]) {
+  test(`GaugeFormatProvider isolates CLI writes and cleans temporary files on ${fixture ? fixture.name : outcome}`, async () => {
+    const fs = require("node:fs");
+    const os = require("node:os");
+    const path = require("node:path");
+    const { GaugeFormatProvider } = require("../src/formatProvider");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-format-test-"));
+    fs.mkdirSync(path.join(root, "specs"));
+    const sourcePath = path.join(root, "specs", fixture ? fixture.name : "example.spec");
+    const original = fixture ? fixture.input : "# Specification\n## Scenario\n* Original\n";
+    const formatted = fixture ? fixture.formatted : "# Specification\n## Scenario\n* Formatted\n";
+    fs.writeFileSync(sourcePath, original);
+    const language = sourcePath.endsWith(".cpt") ? "gauge-concept" : sourcePath.endsWith(".md") ? "markdown" : "gauge";
+    const document = createDocument(original, sourcePath, language);
+    const cancellation = createCancellation();
+    const errors = [];
+    let formattedPath;
+    const provider = new GaugeFormatProvider({
+      cli: { gaugeCommand: () => ({ spawn(args, options) {
+        formattedPath = args.at(-1);
+        assert.equal(options.cwd, root);
+        assert.equal(path.extname(formattedPath), path.extname(sourcePath));
+        assert.equal(fs.readFileSync(formattedPath, "utf8"), original);
+        fs.writeFileSync(formattedPath, formatted);
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => child.emit("close", 1);
+        process.nextTick(() => {
+          if (outcome === "cancel") cancellation.cancel();
+          else {
+            if (outcome === "failure") child.stderr.emit("data", `Cannot format ${formattedPath}`);
+            child.emit("close", outcome === "failure" ? 1 : 0);
+          }
+        });
+        return child;
+      } }) },
+      projectFactory: { getGaugeRootFromFilePath: () => root },
+      vscode: createFakeVscode({ errors }),
+    });
+    try {
+      const edits = await provider.provideDocumentFormattingEdits(document, {}, cancellation.token);
+      assert.equal(fs.readFileSync(sourcePath, "utf8"), original, "CLI must preserve the editor's disk version");
+      assert.notEqual(formattedPath, sourcePath);
+      assert.equal(fs.existsSync(path.dirname(formattedPath)), false, "temporary directory is removed");
+      assert.deepEqual(edits.map((edit) => edit.newText), outcome === "success" && formatted !== original ? [formatted] : []);
+      assert.deepEqual(errors, outcome === "failure" ? [`Error on formatting spec. Cannot format ${sourcePath}`] : []);
+    } finally {
+      provider.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}

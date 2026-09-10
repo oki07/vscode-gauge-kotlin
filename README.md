@@ -163,7 +163,7 @@ given their own `GAUGE_HOME`, leaving an existing Gauge installation untouched.
 ### VS Code Extension Host verification
 
 The unit tests use API doubles. To verify activation and editor behavior in a
-real VS Code process, create a bundled Kotlin project and compile it first
+real VS Code process, create a disposable bundled Kotlin project and compile it first
 (`mvn test-compile` or `gradle testClasses`). Build the extension with
 `npm run bundle`, then run from this repository:
 
@@ -177,10 +177,13 @@ code /path/to/compiled-kotlin-project \
 ```
 
 Use fresh temporary directories to keep test settings separate from your normal
-editor profile. Gauge and the Java runner must be installed. The suite verifies
+editor profile. Set `update.mode` to `none` in the temporary profile to keep the
+editor version fixed. Gauge and the Java runner must be installed. The suite
+modifies and restores the example files. It verifies
 activation, command registration, Kotlin definitions, spec and Kotlin step
-references, step completion, symbols,
-execution code lenses, a successful specification run, and argument auto-closing
+references, applied step renames from either side, formatting followed by saving
+an edit, step completion, symbols, execution code lenses, a successful
+specification run, and argument auto-closing
 for specifications and concepts.
 Run it with the minimum supported VS Code version as well as your current
 version. To verify a packaged extension, point `--extensionDevelopmentPath` at

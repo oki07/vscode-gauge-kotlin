@@ -1924,7 +1924,8 @@ test("format command saves and runs gauge format for the active Gauge file", asy
     },
     fileSystem: {
       readFileSync(filePath) {
-        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        assert.notEqual(filePath, "/workspace/gauge/specs/example.spec");
+        assert.equal(require("node:path").extname(filePath), ".spec");
         return Buffer.from(formattedText);
       },
     },
@@ -1956,7 +1957,7 @@ test("format command saves and runs gauge format for the active Gauge file", asy
   assert.deepEqual(calls, ["document.save"]);
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/example.spec"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -2013,7 +2014,8 @@ test("format command saves and runs gauge format for active spec files by extens
     },
     fileSystem: {
       readFileSync(filePath) {
-        assert.equal(filePath, "/workspace/gauge/specs/example.spec");
+        assert.notEqual(filePath, "/workspace/gauge/specs/example.spec");
+        assert.equal(require("node:path").extname(filePath), ".spec");
         return Buffer.from(formattedText);
       },
     },
@@ -2046,7 +2048,7 @@ test("format command saves and runs gauge format for active spec files by extens
   assert.deepEqual(calls, ["document.save"]);
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/example.spec"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);
@@ -2091,7 +2093,8 @@ test("format command saves and runs gauge format for active Markdown Gauge specs
     },
     fileSystem: {
       readFileSync(filePath) {
-        assert.equal(filePath, "/workspace/gauge/specs/example.md");
+        assert.notEqual(filePath, "/workspace/gauge/specs/example.md");
+        assert.equal(require("node:path").extname(filePath), ".md");
         return Buffer.from(formattedText);
       },
     },
@@ -2124,7 +2127,7 @@ test("format command saves and runs gauge format for active Markdown Gauge specs
   assert.deepEqual(calls, ["document.save"]);
   assert.deepEqual(spawned, [
     {
-      args: ["format", "/workspace/gauge/specs/example.md"],
+      args: ["format", spawned[0].args.at(-1)],
       options: { cwd: "/workspace/gauge" },
     },
   ]);

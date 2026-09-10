@@ -1,0 +1,45 @@
+{
+  "gaugeVersion": "1.6.35",
+  "projectFiles": {
+    "data/value.txt": "relative project value",
+    "data/rows.csv": "name,count\na,1\nb,2\n"
+  },
+  "cases": [
+    {
+      "name": "table.spec",
+      "input": "#  Spec\n## Scenario\n* hello \"value\"\n|name|count|\n|---|---|\n|a|1|\n|long name|2|\n",
+      "formatted": "# Spec\n## Scenario\n* hello \"value\"\n\n   |name     |count|\n   |---------|-----|\n   |a        |1    |\n   |long name|2    |\n",
+      "exitCode": 0
+    },
+    {
+      "name": "table.md",
+      "input": "#  Spec\n## Scenario\n* hello \"value\"\n|name|count|\n|---|---|\n|a|1|\n|long name|2|\n",
+      "formatted": "# Spec\n## Scenario\n* hello \"value\"\n\n   |name     |count|\n   |---------|-----|\n   |a        |1    |\n   |long name|2    |\n",
+      "exitCode": 0
+    },
+    {
+      "name": "example.cpt",
+      "input": "#  Concept <value>\n* hello <value>\n* data <file:data/value.txt>\n",
+      "formatted": "# Concept <value>\n* hello <value>\n* data <file:data/value.txt>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "relative.spec",
+      "input": "# Spec\n## Scenario\n* data <file:data/value.txt>\n* rows <table:data/rows.csv>\n",
+      "formatted": "# Spec\n## Scenario\n* data <file:data/value.txt>\n* rows <table:data/rows.csv>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "relative-table.spec",
+      "input": "# Spec\n## Scenario\n* table\n|value|\n|---|\n|<file:data/value.txt>|\n",
+      "formatted": "# Spec\n## Scenario\n* table\n\n   |value                |\n   |---------------------|\n   |<file:data/value.txt>|\n",
+      "exitCode": 0
+    },
+    {
+      "name": "missing.spec",
+      "input": "# Spec\n## Scenario\n* data <file:data/missing.txt>\n* rows <table:data/missing.csv>\n",
+      "formatted": "# Spec\n## Scenario\n* data <file:data/missing.txt>\n* rows <table:data/missing.csv>\n",
+      "exitCode": 1
+    }
+  ]
+}
