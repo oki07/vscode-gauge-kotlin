@@ -566,6 +566,7 @@ test("GaugeRenameProvider writes a new special parameter as a static argument", 
 });
 
 test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge client is available", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -628,7 +629,7 @@ test("GaugeRenameProvider renames Kotlin-backed spec steps locally when a Gauge 
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -680,6 +681,7 @@ test("GaugeRenameProvider reports Gauge language server rename errors", async ()
 });
 
 test("GaugeRenameProvider saves local renames without waiting for Gauge validate", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -707,7 +709,7 @@ test("GaugeRenameProvider saves local renames without waiting for Gauge validate
 
   assert.deepEqual(saveAllCalls, [true]);
   assert.deepEqual(edit.replacements.map((replacement) => replacement.newText), [
-    "Pay with <value>",
+    'Pay with "value"',
     "Pay with <value>",
     "argValue: Any",
   ]);
@@ -829,6 +831,7 @@ test("GaugeRenameProvider does not validate or compile before language server re
 });
 
 test("GaugeRenameProvider does not reject renames for implementation diagnostics", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -881,13 +884,14 @@ test("GaugeRenameProvider does not reject renames for implementation diagnostics
   assert.deepEqual(saveAllCalls, [true]);
   assert.deepEqual(diagnosticCalls, []);
   assert.deepEqual(edit.replacements.map((replacement) => replacement.newText), [
-    "Pay with <value>",
+    'Pay with "value"',
     "Pay with <value>",
     "argValue: Any",
   ]);
 });
 
 test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -929,7 +933,7 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/specs/retry.spec",
@@ -937,7 +941,7 @@ test("GaugeRenameProvider renames Gauge steps and Kotlin Step annotations", asyn
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -1006,6 +1010,7 @@ test("GaugeRenameProvider skips starred docstring payloads during local rename",
 });
 
 test("GaugeRenameProvider renames multiline Gauge steps and Kotlin Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const originalAllowMultilineStep = process.env.allow_multiline_step;
   process.env.allow_multiline_step = "true";
@@ -1052,7 +1057,7 @@ test("GaugeRenameProvider renames multiline Gauge steps and Kotlin Step annotati
             start: { line: 1, character: 2 },
             end: { line: 2, character: 10 },
           },
-          newText: "Pay with <value>",
+          newText: "Pay with \"value\"",
         },
         {
           file: "/workspace/gauge/specs/retry.spec",
@@ -1060,7 +1065,7 @@ test("GaugeRenameProvider renames multiline Gauge steps and Kotlin Step annotati
             start: { line: 1, character: 2 },
             end: { line: 2, character: 10 },
           },
-          newText: "Pay with <value>",
+          newText: "Pay with \"value\"",
         },
         {
           file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -1266,6 +1271,7 @@ test("GaugeRenameProvider keeps existing Kotlin parameter names when renaming sp
 });
 
 test("GaugeRenameProvider replaces Kotlin parameters when dynamic argument names change", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1302,7 +1308,7 @@ test("GaugeRenameProvider replaces Kotlin parameters when dynamic argument names
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -1443,6 +1449,7 @@ test("GaugeRenameProvider escapes Kotlin string templates in Step annotations", 
 });
 
 test("GaugeRenameProvider renames Markdown Gauge steps and Kotlin Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1479,7 +1486,7 @@ test("GaugeRenameProvider renames Markdown Gauge steps and Kotlin Step annotatio
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -1502,6 +1509,7 @@ test("GaugeRenameProvider renames Markdown Gauge steps and Kotlin Step annotatio
 });
 
 test("GaugeRenameProvider renames spec files by extension and Kotlin Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1538,7 +1546,7 @@ test("GaugeRenameProvider renames spec files by extension and Kotlin Step annota
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -1561,6 +1569,7 @@ test("GaugeRenameProvider renames spec files by extension and Kotlin Step annota
 });
 
 test("GaugeRenameProvider renames Kotlin constants backing Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Login",
@@ -1608,7 +1617,7 @@ test("GaugeRenameProvider renames Kotlin constants backing Step annotations", as
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Sign in as <user>",
+        newText: "Sign in as \"user\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/steps/StepText.kt",
@@ -1706,6 +1715,7 @@ test("GaugeRenameProvider renames Kotlin constants from constant-backed Step ann
 });
 
 test("GaugeRenameProvider renames Java constants backing Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Login",
@@ -1755,7 +1765,7 @@ test("GaugeRenameProvider renames Java constants backing Step annotations", asyn
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Sign in as <user>",
+        newText: "Sign in as \"user\"",
       },
       {
         file: "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java",
@@ -1770,6 +1780,7 @@ test("GaugeRenameProvider renames Java constants backing Step annotations", asyn
 });
 
 test("GaugeRenameProvider scopes Java static-imported constant renames", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Login",
@@ -1831,7 +1842,7 @@ test("GaugeRenameProvider scopes Java static-imported constant renames", async (
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Sign in as <user>",
+        newText: "Sign in as \"user\"",
       },
       {
         file: "/workspace/gauge/src/test/java/fixtures/steps/JavaStepText.java",
@@ -1931,6 +1942,7 @@ test("GaugeRenameProvider renames Java constants from constant-backed Step annot
 });
 
 test("GaugeRenameProvider renames from Java Step annotations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -1973,7 +1985,7 @@ test("GaugeRenameProvider renames from Java Step annotations", async () => {
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/java/Steps.java",
@@ -1996,6 +2008,7 @@ test("GaugeRenameProvider renames from Java Step annotations", async () => {
 });
 
 test("GaugeRenameProvider updates Java Step method parameters when rename changes dynamic arguments", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -2037,7 +2050,7 @@ test("GaugeRenameProvider updates Java Step method parameters when rename change
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/java/Steps.java",
@@ -2606,6 +2619,7 @@ test("GaugeRenameProvider registers plaintext Kotlin file rename selector", () =
 });
 
 test("GaugeRenameProvider uses the shared document store without workspace scans", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
   const specDocument = createDocument([
@@ -2681,7 +2695,7 @@ test("GaugeRenameProvider uses the shared document store without workspace scans
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/specs/retry.spec",
@@ -2689,7 +2703,7 @@ test("GaugeRenameProvider uses the shared document store without workspace scans
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
         },
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -3620,6 +3634,7 @@ test("GaugeRenameProvider isolates concurrent request cancellation", async () =>
 });
 
 test("GaugeRenameProvider renames spec steps backed by Kotlin implementations without the Gauge engine", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -3671,7 +3686,7 @@ test("GaugeRenameProvider renames spec steps backed by Kotlin implementations wi
     [
       {
         file: "/workspace/gauge/specs/checkout.spec",
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
         range: {
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
@@ -3679,7 +3694,7 @@ test("GaugeRenameProvider renames spec steps backed by Kotlin implementations wi
       },
       {
         file: "/workspace/gauge/specs/concepts/payment.cpt",
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
         range: {
           start: { line: 1, character: 2 },
           end: { line: 1, character: 19 },
@@ -3758,6 +3773,7 @@ test("GaugeRenameProvider renames concept-backed spec steps through the Gauge en
 });
 
 test("GaugeRenameProvider renames concept file steps backed by Kotlin implementations", async () => {
+  // Gauge 1.6.35 refactorer supplies unmatched parameters as quoted usage values.
   const { GaugeRenameProvider } = require("../src/renameProvider");
   const specDocument = createDocument([
     "# Checkout",
@@ -3804,7 +3820,7 @@ test("GaugeRenameProvider renames concept file steps backed by Kotlin implementa
     [
       {
         file: "/workspace/gauge/specs/concepts/payment.cpt",
-        newText: "Pay with <value>",
+        newText: "Pay with \"value\"",
       },
       {
         file: "/workspace/gauge/src/test/kotlin/Steps.kt",
@@ -3817,3 +3833,30 @@ test("GaugeRenameProvider renames concept file steps backed by Kotlin implementa
     ],
   );
 });
+
+// Real Gauge 1.6.35 LSP and getgauge/gauge/gauge/step.go getArgsInOrder:
+// a slot absent from the old step supplies a fresh static argument even when
+// old and new parameter counts match. Exact matches keep each usage's value.
+for (const fixture of require("./fixtures/rename-parity.json").cases) {
+  test(`GaugeRenameProvider preserves fresh argument parity: ${fixture.label}`, async () => {
+    const { GaugeRenameProvider } = require("../src/renameProvider");
+    const spec = createDocument(fixture.spec, "gauge", "/workspace/gauge/specs/parity.spec");
+    const kotlin = createDocument([
+      "import com.thoughtworks.gauge.Step",
+      "",
+      `@Step(${JSON.stringify(fixture.implementation)})`,
+      `fun vowels(${fixture.implementation.match(/<([^>]+)>/)[1]}: String) {}`,
+    ].join("\n"), "kotlin", "/workspace/gauge/src/test/kotlin/Steps.kt");
+    const vscode = createFakeVscode([spec, kotlin]);
+    const provider = new GaugeRenameProvider({ vscode });
+    try {
+      const source = fixture.source === "kotlin" ? kotlin : spec;
+      const line = fixture.source === "kotlin" ? 2 : fixture.spec.split("\n").findIndex((text) => text.startsWith("* "));
+      const edit = await provider.provideRenameEdits(source, new vscode.Position(line, 8), fixture.new);
+      assert.deepEqual(edit.replacements.filter((item) => item.uri.fsPath === spec.uri.fsPath)
+        .map((item) => item.newText), fixture.expectedUsages);
+    } finally {
+      provider.dispose();
+    }
+  });
+}

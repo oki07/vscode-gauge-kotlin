@@ -290,8 +290,10 @@ function nextStepParameter(text, startIndex) {
   };
 }
 
+// getgauge/gauge/parser/stepParser.go consumes a backslash before any quoted
+// argument character. Gauge 1.6.35 consumes the slash in a backslash-b pair.
 function unescapeQuotedStepParameter(value) {
-  return String(value).replace(/\\(["\\])/g, "$1");
+  return String(value).replace(/\\(.)/g, "$1");
 }
 
 function specialTableParameterName(value, index) {
@@ -444,7 +446,8 @@ function createOrderOfArgs(oldName, newName) {
 // formats `* read "file:nope.txt"`. Writing the angled form leaves a dynamic
 // parameter the parser rejects, which is the failure this exists to avoid.
 function freshArgumentFor(slotRaw, isConcept) {
-  const name = slotRaw.slice(1, -1);
+  const rawName = slotRaw.slice(1, -1);
+  const name = slotRaw.startsWith('"') ? unescapeQuotedStepParameter(rawName) : rawName;
   if (isConcept) {
     return slotRaw;
   }
@@ -464,14 +467,8 @@ function freshArgumentFor(slotRaw, isConcept) {
 //   "Load the payload <table>" -> "Load the payload <mode> <table>"  {0:-1,1:0}
 //      -> * Load the payload "mode"
 //
-// DELIBERATE DIVERGENCE, the only one here. Gauge matches parameters by exact
-// text and so cannot tell a RENAMED parameter from a NEW one: probed,
-// "Pay with <amount>" -> "Pay with <value>" gives {0:-1} and rewrites
-// `* Pay with <amount>` as `* Pay with "value"`, destroying the binding. This
-// extension can tell them apart and already does - it renames the Kotlin method
-// parameter to match, a design fifteen tests describe. So when the two steps
-// carry the SAME number of parameters an unmatched slot is a rename and keeps
-// its dynamic form; only a step that gained parameters has genuinely new ones.
+// getgauge/gauge/gauge/step.go creates a fresh static argument for every
+// unmatched slot, including replacements with the same parameter count.
 function gaugeUsageReplacementName(newName, usageText, orderMap, options = {}) {
   if (!usageText || !orderMap || orderMap.length === 0) {
     return newName;
@@ -481,7 +478,6 @@ function gaugeUsageReplacementName(newName, usageText, orderMap, options = {}) {
   if (newSlots.length !== orderMap.length) {
     return newName;
   }
-  const renamedInPlace = newSlots.length === options.oldParameterCount;
   let result = "";
   let index = 0;
   for (let slot = 0; slot < newSlots.length; slot += 1) {
@@ -491,8 +487,6 @@ function gaugeUsageReplacementName(newName, usageText, orderMap, options = {}) {
       replacement = usageSlots[source].raw;
     } else if (source !== -1 && options.hasInlineTable) {
       replacement = undefined;
-    } else if (renamedInPlace) {
-      replacement = newSlots[slot].raw;
     } else {
       replacement = freshArgumentFor(newSlots[slot].raw, options.isConcept);
     }
@@ -516,7 +510,6 @@ function gaugeReplacementName(value, hasInlineTable, options = {}) {
   return gaugeUsageReplacementName(text, options.usageText, options.orderMap, {
     hasInlineTable,
     isConcept: options.isConcept,
-    oldParameterCount: options.oldParameterCount,
   });
 }
 
@@ -2137,7 +2130,6 @@ class GaugeRenameProvider {
     const orderMap = oldTemplate
       ? createOrderOfArgs(oldTemplate, removeInlineTableSuffix(newName))
       : undefined;
-    const oldParameterCount = oldTemplate ? stepParameterSlots(oldTemplate).length : 0;
     const lines = documentLines(document);
     const allowMultiline = this.allowsMultilineStep(document);
     const docStringLines = closedDocStringLines(lines);
@@ -2157,7 +2149,6 @@ class GaugeRenameProvider {
             step.range,
             gaugeReplacementName(newName, step.hasInlineTable, {
               isConcept,
-              oldParameterCount,
               orderMap,
               usageText: step.text,
             }),

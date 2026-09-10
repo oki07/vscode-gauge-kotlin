@@ -87,6 +87,7 @@ async function run() {
   for (const [label, sourceUri, position] of [
     ["spec", uri, new vscode.Position(line, 12)],
     ["Kotlin", kotlinUri, new vscode.Position(kotlinLine - 1, 15)],
+    ["spec fresh argument", uri, new vscode.Position(line, 12)],
   ]) {
     const newName = label === "spec"
       ? 'Language vowels are "aeiou".' : "Language vowels are <vowelString>.";
@@ -102,7 +103,8 @@ async function run() {
     }
     try {
       assert.ok(await vscode.workspace.applyEdit(edit));
-      assert.equal(document.getText().split('* Language vowels are "aeiou".').length - 1, 2);
+      const argument = label === "spec fresh argument" ? "vowelString" : "aeiou";
+      assert.equal(document.getText().split(`* Language vowels are "${argument}".`).length - 1, 2);
       assert.ok(kotlinDocument.getText().includes('@Step("Language vowels are <vowelString>.")'));
       process.stdout.write(`PASS ${label} applied step rename\n`);
     } finally {

@@ -1,0 +1,124 @@
+{
+  "cases": [
+    {
+      "label": "literal-to-literal",
+      "old": "Vowels in English language are \"aeiou\".",
+      "new": "Language vowels are \"aeiou\".",
+      "spec": "# Probe\n\n## Scenario\n* Vowels in English language are \"aeiou\".\n* Vowels in English language are \"xyz\".\n",
+      "source": "spec",
+      "implementation": "Vowels in English language are <vowelString>.",
+      "expectedUsages": [
+        "Language vowels are \"aeiou\".",
+        "Language vowels are \"xyz\"."
+      ]
+    },
+    {
+      "label": "literal-to-template",
+      "old": "Vowels in English language are \"aeiou\".",
+      "new": "Language vowels are <vowelString>.",
+      "spec": "# Probe\n\n## Scenario\n* Vowels in English language are \"aeiou\".\n* Vowels in English language are \"xyz\".\n",
+      "source": "spec",
+      "implementation": "Vowels in English language are <vowelString>.",
+      "expectedUsages": [
+        "Language vowels are \"vowelString\".",
+        "Language vowels are \"vowelString\"."
+      ]
+    },
+    {
+      "label": "template-to-template",
+      "old": "Vowels in English language are <vowelString>.",
+      "new": "Language vowels are <vowelString>.",
+      "spec": "# Probe\n\n## Scenario\n* Vowels in English language are \"aeiou\".\n* Vowels in English language are \"xyz\".\n",
+      "source": "kotlin",
+      "implementation": "Vowels in English language are <vowelString>.",
+      "expectedUsages": [
+        "Language vowels are \"aeiou\".",
+        "Language vowels are \"xyz\"."
+      ]
+    },
+    {
+      "label": "pay-template-slot-rename",
+      "old": "Pay with <amount>",
+      "new": "Pay with <value>",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "kotlin",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Pay with \"value\"",
+        "Pay with \"value\""
+      ]
+    },
+    {
+      "label": "pay-literal-to-template",
+      "old": "Pay with \"42\"",
+      "new": "Pay with <value>",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "spec",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Pay with \"value\"",
+        "Pay with \"value\""
+      ]
+    },
+    {
+      "label": "pay-literal-replacement",
+      "old": "Pay with \"42\"",
+      "new": "Pay with \"43\"",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "spec",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Pay with \"43\"",
+        "Pay with \"43\""
+      ]
+    },
+    {
+      "label": "pay-matched-template",
+      "old": "Pay with <amount>",
+      "new": "Settle with <amount>",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "kotlin",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Settle with \"42\"",
+        "Settle with <amount>"
+      ]
+    },
+    {
+      "label": "pay-literal-backslash",
+      "old": "Pay with \"42\"",
+      "new": "Pay with \"a\\\\b\"",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "spec",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Pay with \"a\\\\b\"",
+        "Pay with \"a\\\\b\""
+      ]
+    },
+    {
+      "label": "pay-literal-escaped-quote",
+      "old": "Pay with \"42\"",
+      "new": "Pay with \"a\\\"b\"",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "spec",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Pay with \"a\\\"b\"",
+        "Pay with \"a\\\"b\""
+      ]
+    },
+    {
+      "label": "pay-literal-single-backslash",
+      "old": "Pay with \"42\"",
+      "new": "Pay with \"a\\b\"",
+      "spec": "# Checkout\n\n|amount|\n|---|\n|42|\n\n## Payment\n* Pay with \"42\"\n* Pay with <amount>\n",
+      "source": "spec",
+      "implementation": "Pay with <amount>",
+      "expectedUsages": [
+        "Pay with \"ab\"",
+        "Pay with \"ab\""
+      ]
+    }
+  ]
+}
