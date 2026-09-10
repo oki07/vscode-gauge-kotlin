@@ -106,7 +106,16 @@ function createFakeVscode(overrides = {}) {
   const commands = [];
   const information = [];
   const registered = [];
-  const activeText = overrides.activeText || "";
+  // Gauge 1.6.35 stepValueAt probes return values only for runner source
+  // positions; cursor reference tests use an actual Gauge annotation locally.
+  const activeText = overrides.activeText ?? [
+    "import com.thoughtworks.gauge.Step",
+    "",
+    "class Steps {",
+    '  @Step("Say hello")',
+    "  fun hello() {}",
+    "}",
+  ].join("\n");
   const activeDocument = overrides.activeDocument || {
     languageId: "kotlin",
     uri: {
@@ -237,7 +246,6 @@ test("ReferenceProvider shows references for the step at the active cursor", asy
   const { calls, vscode } = createFakeVscode();
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": "Say hello",
     "gauge/stepReferences": [
       { uri: "file:///workspace/specs/example.spec", range: { start: { line: 2, character: 0 } } },
     ],
@@ -252,14 +260,9 @@ test("ReferenceProvider shows references for the step at the active cursor", asy
 
   assert.equal(result, true);
   assert.deepEqual(requestCalls.map((entry) => entry.method), [
-    "gauge/stepValueAt",
     "gauge/stepReferences",
   ]);
-  assert.deepEqual(requestCalls[0].params, {
-    textDocument: { uri: "file:///workspace/tests/Steps.kt" },
-    position: { line: 4, character: 2 },
-  });
-  assert.equal(requestCalls[1].params, "Say hello");
+  assert.equal(requestCalls[0].params, "Say hello");
   assert.deepEqual(calls.commands, [
     {
       command: "editor.action.showReferences",
@@ -389,10 +392,9 @@ test("ReferenceProvider does not show references outside step context", async ()
   const { ReferenceProvider } = require("../src/gaugeReference");
   const { GaugeProject } = require("../src/project/gaugeProject");
   const requestCalls = [];
-  const { calls, vscode } = createFakeVscode();
+  const { calls, vscode } = createFakeVscode({ activeText: "" });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -405,10 +407,9 @@ test("ReferenceProvider does not show references outside step context", async ()
 
   assert.equal(result, false);
   assert.deepEqual(requestCalls.map((entry) => entry.method), [
-    "gauge/stepValueAt",
     "gauge/stepReferences",
   ]);
-  assert.equal(requestCalls[1].params, null);
+  assert.equal(requestCalls[0].params, undefined);
   assert.deepEqual(calls.commands, []);
   assert.deepEqual(calls.information, ["Action NA: Try this on an implementation."]);
 });
@@ -429,7 +430,6 @@ test("ReferenceProvider falls back to Kotlin Step aliases at the active cursor",
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": [
       { uri: "file:///workspace/specs/example.spec", range: { start: { line: 2, character: 0 } } },
     ],
@@ -444,10 +444,9 @@ test("ReferenceProvider falls back to Kotlin Step aliases at the active cursor",
 
   assert.equal(result, true);
   assert.deepEqual(requestCalls.map((entry) => entry.method), [
-    "gauge/stepValueAt",
     "gauge/stepReferences",
   ]);
-  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.equal(requestCalls[0].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
@@ -468,7 +467,6 @@ test("ReferenceProvider uses the Kotlin Step alias under the active cursor", asy
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": [
       { uri: "file:///workspace/specs/second.spec", range: { start: { line: 4, character: 0 } } },
     ],
@@ -482,8 +480,8 @@ test("ReferenceProvider uses the Kotlin Step alias under the active cursor", asy
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.equal(requestCalls[1].params, "Second alias <name>");
+  assert.equal(requestCalls[0].method, "gauge/stepReferences");
+  assert.equal(requestCalls[0].params, "Second alias <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
@@ -542,7 +540,6 @@ test("ReferenceProvider falls back to unopened workspace Kotlin constants", asyn
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": [
       { uri: "file:///workspace/specs/login.spec", range: { start: { line: 3, character: 0 } } },
     ],
@@ -556,8 +553,8 @@ test("ReferenceProvider falls back to unopened workspace Kotlin constants", asyn
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.equal(requestCalls[1].params, "Log in as <user>");
+  assert.equal(requestCalls[0].method, "gauge/stepReferences");
+  assert.equal(requestCalls[0].params, "Log in as <user>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
 });
@@ -615,7 +612,6 @@ test("ReferenceProvider skips unopened Step sources resolved to non-Gauge projec
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": [
       { uri: "file:///workspace/gauge/specs/example.spec", range: { start: { line: 2, character: 0 } } },
     ],
@@ -646,7 +642,7 @@ test("ReferenceProvider skips unopened Step sources resolved to non-Gauge projec
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.equal(requestCalls[0].params, "Say hello to <name>");
   assert.equal(calls.commands[0].command, "editor.action.showReferences");
   assert.deepEqual(openedFiles, []);
 });
@@ -708,7 +704,6 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -720,8 +715,8 @@ test("ReferenceProvider falls back to local Gauge references for Kotlin Step ali
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.equal(requestCalls[0].method, "gauge/stepReferences");
+  assert.equal(requestCalls[0].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.deepEqual(calls.commands, [
     {
@@ -1627,7 +1622,6 @@ test("ReferenceProvider accepts plaintext .kt documents for local Kotlin Step re
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -1639,7 +1633,7 @@ test("ReferenceProvider accepts plaintext .kt documents for local Kotlin Step re
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].params, "Say hello to <name>");
+  assert.equal(requestCalls[0].params, "Say hello to <name>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/example.spec");
 });
@@ -2022,7 +2016,6 @@ test("ReferenceProvider supplements Gauge references with the requested concept 
   clients.set("/workspace", {
     project: new GaugeProject("/workspace", { Language: "kotlin", Plugins: [] }),
     client: createClient({
-      "gauge/stepValueAt": "Shared checkout <item>",
       "gauge/stepReferences": [
         {
           uri: "file:///workspace/specs/concepts/shared.cpt",
@@ -2080,9 +2073,7 @@ test("ReferenceProvider supplements Gauge references with the requested concept 
     },
   ]);
   assert.deepEqual(requestCalls.map((entry) => entry.method), [
-    "gauge/stepValueAt",
     "gauge/stepReferences",
-    "gauge/stepValueAt",
     "gauge/stepReferences",
   ]);
 });
@@ -2228,10 +2219,8 @@ test("ReferenceProvider includes dependency Step declarations only when requeste
         };
       },
     },
-    sendRequest(method) {
-      return Promise.resolve(method === "gauge/stepValueAt"
-        ? "Send the \"request\""
-        : [usage]);
+    sendRequest() {
+      return Promise.resolve([usage]);
     },
   };
   const provider = new ReferenceProvider({ get: () => ({ client }) }, {
@@ -2326,10 +2315,7 @@ test("ReferenceProvider cancels pending declaration lookups", async () => {
             return location;
           },
         },
-        sendRequest(method) {
-          if (method === "gauge/stepValueAt") {
-            return Promise.resolve("Open cart");
-          }
+        sendRequest() {
           return Promise.resolve([{
             uri: "file:///workspace/specs/cart.spec",
             range: {
@@ -2397,7 +2383,7 @@ test("ReferenceProvider cancels pending declaration lookups", async () => {
       assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
       assert.equal(converterCalls, 0);
       assert.equal(provider.activeOperations.size, 0);
-      assert.deepEqual(sources.map((source) => source.disposeCalls), [1, 1]);
+      assert.deepEqual(sources.map((source) => source.disposeCalls), [1]);
       assert.equal(cancellation.registrations(), 1);
       assert.equal(cancellation.listenerDisposals(), 1);
       assert.equal(cancellation.listenerCount(), 0);
@@ -2421,10 +2407,7 @@ test("ReferenceProvider preserves live declaration lookup failures", async () =>
   };
   const { vscode } = createFakeVscode();
   const client = {
-    sendRequest(method) {
-      if (method === "gauge/stepValueAt") {
-        return Promise.resolve("Open cart");
-      }
+    sendRequest() {
       return Promise.resolve([]);
     },
   };
@@ -2605,7 +2588,6 @@ test("ReferenceProvider resolves package wildcard const Step aliases for local r
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace/gauge", {
@@ -2617,8 +2599,8 @@ test("ReferenceProvider resolves package wildcard const Step aliases for local r
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].method, "gauge/stepReferences");
-  assert.equal(requestCalls[1].params, "Log in as <user>");
+  assert.equal(requestCalls[0].method, "gauge/stepReferences");
+  assert.equal(requestCalls[0].params, "Log in as <user>");
   assert.deepEqual(calls.information, []);
   assert.deepEqual(calls.commands, [
     {
@@ -2747,7 +2729,6 @@ test("ReferenceProvider resolves grouped and accessor Kotlin Step aliases for lo
     });
     const clients = new GaugeClients();
     const client = createClient({
-      "gauge/stepValueAt": null,
       "gauge/stepReferences": null,
     }, requestCalls);
     clients.set("/workspace/gauge", {
@@ -2769,8 +2750,8 @@ test("ReferenceProvider resolves grouped and accessor Kotlin Step aliases for lo
     const result = await provider.showStepReferencesAtCursor();
 
     assert.equal(result, true);
-    assert.equal(requestCalls[1].method, "gauge/stepReferences");
-    assert.equal(requestCalls[1].params, entry.alias);
+    assert.equal(requestCalls[0].method, "gauge/stepReferences");
+    assert.equal(requestCalls[0].params, entry.alias);
     assert.equal(calls.commands[0].command, "editor.action.showReferences");
     assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/gauge/specs/login.spec");
     assert.deepEqual(calls.information, []);
@@ -2836,7 +2817,6 @@ test("ReferenceProvider matches local Gauge inline table references for Kotlin S
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -2848,7 +2828,7 @@ test("ReferenceProvider matches local Gauge inline table references for Kotlin S
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].params, "Compare <table>");
+  assert.equal(requestCalls[0].params, "Compare <table>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/table.spec");
   assert.deepEqual(calls.commands[0].args[2][0].range, {
@@ -2918,7 +2898,6 @@ test("ReferenceProvider keeps indented table Gauge references", async () => {
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -2930,7 +2909,7 @@ test("ReferenceProvider keeps indented table Gauge references", async () => {
   const result = await provider.showStepReferencesAtCursor();
 
   assert.equal(result, true);
-  assert.equal(requestCalls[1].params, "Compare <table>");
+  assert.equal(requestCalls[0].params, "Compare <table>");
   assert.deepEqual(calls.information, []);
   assert.equal(calls.commands[0].args[2][0].uri, "file:///workspace/specs/table.spec");
   assert.deepEqual(calls.commands[0].args[2][0].range, {
@@ -3000,7 +2979,6 @@ test("ReferenceProvider falls back to unopened local Gauge references for Kotlin
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -3077,7 +3055,6 @@ test("ReferenceProvider falls back to unopened local Markdown Gauge references",
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -3193,7 +3170,7 @@ test("ReferenceProvider ignores retained command handlers after disposal", async
         client: {
           sendRequest(method) {
             requestCalls += 1;
-            return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : []);
+            return Promise.resolve([]);
           },
         },
       };
@@ -3308,6 +3285,7 @@ test("ReferenceProvider stops cursor reference lookup when disposed during step 
     },
   };
   const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+  provider.localStepValuesAt = () => requestGate.promise;
   let outcome;
   const invocation = provider.showStepReferencesAtCursor();
   invocation.then(
@@ -3325,15 +3303,13 @@ test("ReferenceProvider stops cursor reference lookup when disposed during step 
     await nextTurn();
     observedBeforeRelease = outcome;
   } finally {
-    requestGate.resolve("Say hello");
+    requestGate.resolve(["Say hello"]);
     await Promise.allSettled([invocation]);
   }
 
   assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
-  assert.deepEqual(requestCalls.map((entry) => entry.method), ["gauge/stepValueAt"]);
-  assert.equal(sources.length, 1);
-  assert.equal(sources[0].cancelCalls, 1);
-  assert.equal(sources[0].disposeCalls, 1);
+  assert.deepEqual(requestCalls.map((entry) => entry.method), []);
+  assert.equal(sources.length, 0);
   assert.equal(provider.activeOperations.size, 0);
   assert.deepEqual(calls.commands, []);
   assert.deepEqual(calls.information, []);
@@ -3350,9 +3326,6 @@ test("ReferenceProvider stops cursor reference lookup when disposed during refer
   const client = {
     sendRequest(method, params, token) {
       requestCalls.push({ method, params, token });
-      if (method === "gauge/stepValueAt") {
-        return Promise.resolve("Say hello");
-      }
       referenceEntered.resolve();
       return referenceGate.promise;
     },
@@ -3384,12 +3357,11 @@ test("ReferenceProvider stops cursor reference lookup when disposed during refer
 
   assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: undefined });
   assert.deepEqual(requestCalls.map((entry) => entry.method), [
-    "gauge/stepValueAt",
     "gauge/stepReferences",
   ]);
-  assert.equal(sources.length, 2);
-  assert.deepEqual(sources.map((source) => source.cancelCalls), [0, 1]);
-  assert.deepEqual(sources.map((source) => source.disposeCalls), [1, 1]);
+  assert.equal(sources.length, 1);
+  assert.deepEqual(sources.map((source) => source.cancelCalls), [1]);
+  assert.deepEqual(sources.map((source) => source.disposeCalls), [1]);
   assert.equal(provider.activeOperations.size, 0);
   assert.deepEqual(calls.commands, []);
   assert.deepEqual(calls.information, []);
@@ -3883,7 +3855,7 @@ test("ReferenceProvider returns no references for pre-cancelled or disposed call
           client: {
             sendRequest(method) {
               requestCalls += 1;
-              return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : []);
+              return Promise.resolve([]);
             },
           },
         };
@@ -3913,10 +3885,10 @@ test("ReferenceProvider returns no references for pre-cancelled or disposed call
   }
 });
 
-test("ReferenceProvider cancels pending LSP callbacks from host or provider shutdown", async () => {
+test("ReferenceProvider cancels pending step and reference callbacks from host or provider shutdown", async () => {
   const { ReferenceProvider } = require("../src/gaugeReference");
   const lateError = new Error("late reference provider request failed");
-  for (const pendingMethod of ["gauge/stepValueAt", "gauge/stepReferences"]) {
+  for (const pendingMethod of ["localStepValues", "gauge/stepReferences"]) {
     for (const trigger of ["hostCancel", "providerDispose"]) {
       for (const settlement of ["resolve", "reject"]) {
       const requestEntered = deferred();
@@ -3956,6 +3928,12 @@ test("ReferenceProvider cancels pending LSP callbacks from host or provider shut
         },
       };
       const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+      if (pendingMethod === "localStepValues") {
+        provider.localStepValuesAt = () => {
+          requestEntered.resolve();
+          return requestGate.promise;
+        };
+      }
       let outcome;
       const invocation = provider.provideReferences(
         document,
@@ -3984,8 +3962,8 @@ test("ReferenceProvider cancels pending LSP callbacks from host or provider shut
         observedBeforeRelease = outcome;
       } finally {
         if (settlement === "resolve") {
-          requestGate.resolve(pendingMethod === "gauge/stepValueAt"
-            ? "Say hello"
+          requestGate.resolve(pendingMethod === "localStepValues"
+            ? ["Say hello"]
             : [
               {
                 uri: "file:///workspace/specs/example.spec",
@@ -4001,11 +3979,11 @@ test("ReferenceProvider cancels pending LSP callbacks from host or provider shut
       assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
       assert.deepEqual(
         requests.map((request) => request.method),
-        pendingMethod === "gauge/stepValueAt"
-          ? ["gauge/stepValueAt"]
-          : ["gauge/stepValueAt", "gauge/stepReferences"],
+        pendingMethod === "localStepValues"
+          ? []
+          : ["gauge/stepReferences"],
       );
-      assert.equal(sources.length, pendingMethod === "gauge/stepValueAt" ? 1 : 2);
+      assert.equal(sources.length, pendingMethod === "localStepValues" ? 0 : 1);
       assert.deepEqual(
         requests.map((request) => request.token),
         sources.map((source) => source.token),
@@ -4013,11 +3991,11 @@ test("ReferenceProvider cancels pending LSP callbacks from host or provider shut
       assert.equal(requests.some((request) => request.token === cancellation.token), false);
       assert.deepEqual(
         sources.map((source) => source.cancelCalls),
-        pendingMethod === "gauge/stepValueAt" ? [1] : [0, 1],
+        pendingMethod === "localStepValues" ? [] : [1],
       );
       assert.deepEqual(sources.map((source) => source.disposeCalls),
-        pendingMethod === "gauge/stepValueAt" ? [1] : [1, 1]);
-      assert.equal(sources.at(-1).token.isCancellationRequested, true);
+        pendingMethod === "localStepValues" ? [] : [1]);
+      assert.equal(sources.every((source) => source.token.isCancellationRequested), true);
       assert.equal(provider.activeOperations.size, 0);
       assert.equal(cancellation.registrations(), 1);
       assert.equal(cancellation.listenerDisposals(), 1);
@@ -4057,7 +4035,7 @@ test("ReferenceProvider cancels pending local callbacks from host or provider sh
       const client = {
         sendRequest(method, params, token) {
           requests.push({ method, params, token });
-          return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : []);
+          return Promise.resolve([]);
         },
         protocol2CodeConverter: {
           asLocation(location) {
@@ -4114,12 +4092,11 @@ test("ReferenceProvider cancels pending local callbacks from host or provider sh
 
       assert.deepEqual(observedBeforeRelease, { status: "fulfilled", value: [] });
       assert.deepEqual(requests.map((request) => request.method), [
-        "gauge/stepValueAt",
         "gauge/stepReferences",
       ]);
-      assert.equal(sources.length, 2);
-      assert.deepEqual(sources.map((source) => source.cancelCalls), [0, 0]);
-      assert.deepEqual(sources.map((source) => source.disposeCalls), [1, 1]);
+      assert.equal(sources.length, 1);
+      assert.deepEqual(sources.map((source) => source.cancelCalls), [0]);
+      assert.deepEqual(sources.map((source) => source.disposeCalls), [1]);
       assert.equal(provider.activeOperations.size, 0);
       assert.equal(cancellation.registrations(), 1);
       assert.equal(cancellation.listenerDisposals(), 1);
@@ -4260,11 +4237,6 @@ test("ReferenceProvider preserves live callback results and errors", async () =>
     const client = {
       sendRequest(method, params, token) {
         requests.push({ method, params, token });
-        if (method === "gauge/stepValueAt") {
-          return scenario === "stepValueError"
-            ? Promise.reject(stepValueError)
-            : Promise.resolve("Say hello");
-        }
         return scenario === "referencesError"
           ? Promise.reject(referencesError)
           : Promise.resolve(scenario === "localError" ? [] : [location]);
@@ -4289,6 +4261,9 @@ test("ReferenceProvider preserves live callback results and errors", async () =>
       } : undefined,
     });
 
+    if (scenario === "stepValueError") {
+      provider.localStepValuesAt = () => Promise.reject(stepValueError);
+    }
     const outcome = await Promise.allSettled([
       provider.provideReferences(
         document,
@@ -4310,13 +4285,13 @@ test("ReferenceProvider preserves live callback results and errors", async () =>
     assert.deepEqual(
       requests.map((request) => request.method),
       scenario === "stepValueError"
-        ? ["gauge/stepValueAt"]
-        : ["gauge/stepValueAt", "gauge/stepReferences"],
+        ? []
+        : ["gauge/stepReferences"],
     );
     assert.deepEqual(sources.map((source) => source.cancelCalls),
-      scenario === "stepValueError" ? [0] : [0, 0]);
+      scenario === "stepValueError" ? [] : [0]);
     assert.deepEqual(sources.map((source) => source.disposeCalls),
-      scenario === "stepValueError" ? [1] : [1, 1]);
+      scenario === "stepValueError" ? [] : [1]);
     assert.equal(converterCalls, scenario === "success" || scenario === "converterError" ? 1 : 0);
     assert.equal(cancellation.registrations(), 1);
     assert.equal(cancellation.listenerDisposals(), 1);
@@ -4360,7 +4335,7 @@ test("ReferenceProvider normalizes synchronous host cancellation boundaries", as
           cancellation.cancel();
           return Promise.reject(lateError);
         }
-        return Promise.resolve(method === "gauge/stepValueAt" ? "Say hello" : locations);
+        return Promise.resolve(locations);
       },
       protocol2CodeConverter: {
         asLocation(location) {
@@ -4389,11 +4364,11 @@ test("ReferenceProvider normalizes synchronous host cancellation boundaries", as
     assert.equal(cancellation.registrations(), 1);
     assert.equal(cancellation.listenerDisposals(), 1);
     assert.equal(cancellation.listenerCount(), 0);
-    assert.equal(requests.length, boundary === "registration" ? 0 : boundary === "request" ? 1 : 2);
+    assert.equal(requests.length, boundary === "registration" ? 0 : 1);
     assert.deepEqual(sources.map((source) => source.cancelCalls),
-      boundary === "registration" ? [] : boundary === "request" ? [1] : [0, 0]);
+      boundary === "registration" ? [] : boundary === "request" ? [1] : [0]);
     assert.deepEqual(sources.map((source) => source.disposeCalls),
-      boundary === "registration" ? [] : boundary === "request" ? [1] : [1, 1]);
+      boundary === "registration" ? [] : [1]);
     assert.equal(converterCalls, boundary === "converter" ? 1 : 0);
   }
 });
@@ -4448,6 +4423,8 @@ test("ReferenceProvider isolates concurrent callback cancellation", async () => 
   let afterHostCancel;
   let afterProviderDispose;
   try {
+    await nextTurn();
+    assert.equal(requestIndex, 2);
     assert.equal(provider.activeOperations.size, 2);
     cancellations[0].cancel();
     await nextTurn();
@@ -4555,7 +4532,6 @@ test("ReferenceProvider filters unopened local Gauge references outside Gauge pr
   });
   const clients = new GaugeClients();
   const client = createClient({
-    "gauge/stepValueAt": null,
     "gauge/stepReferences": null,
   }, requestCalls);
   clients.set("/workspace", {
@@ -4771,3 +4747,68 @@ test("ReferenceProvider uses the shared document store without workspace scans",
   );
   assert.deepEqual(openedFiles, []);
 });
+
+// Gauge 1.6.35 gauge/stepValueAt returns null for spec/concept step positions,
+// but "hello {}" for a Java @Step method (getgauge/gauge/api/lang/references.go).
+// gauge-java 1.0.1 can exit when that implementation-only request scans Kotlin
+// reflection entries without source filenames. Editor step values are local.
+for (const [languageId, file, text, line] of [
+  ["gauge", "/workspace/specs/example.spec", "# Specification\n## Scenario\n* Say hello", 2],
+  ["gauge-concept", "/workspace/specs/example.cpt", "# Greeting\n* Say hello", 1],
+  ["markdown", "/workspace/specs/example.md", "# Specification\n## Scenario\n* Say hello", 2],
+]) {
+  test(`ReferenceProvider resolves ${languageId} step values without implementation requests`, async () => {
+    const { ReferenceProvider } = require("../src/gaugeReference");
+    const document = {
+      languageId,
+      uri: { fsPath: file, toString: () => `file://${file}` },
+      getText: () => text,
+    };
+    const { vscode } = createFakeVscode({ activeDocument: document, activePosition: { line, character: 4 } });
+    const client = { sendRequest(method) { throw new Error(`Unexpected implementation request: ${method}`); } };
+    const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+    try {
+      assert.deepEqual(await provider.stepValuesAt(document, { line, character: 4 }, client), ["Say hello"]);
+    } finally { provider.dispose(); }
+  });
+}
+
+for (const [languageId, file, text, line] of [
+  ["gauge", "/workspace/specs/example.spec", "# Specification\n## Scenario\n* Say hello", 2],
+  ["gauge-concept", "/workspace/specs/example.cpt", "# Greeting\n* Say hello", 1],
+  ["markdown", "/workspace/specs/example.md", "# Specification\n## Scenario\n* Say hello", 2],
+  ["kotlin", "/workspace/tests/Steps.kt", 'import com.thoughtworks.gauge.Step\nclass Steps {\n @Step("Say hello")\n fun hello() {}\n}', 3],
+  ["java", "/workspace/tests/Steps.java", 'import com.thoughtworks.gauge.Step;\nclass Steps {\n @Step("Say hello")\n public void hello() {}\n}', 3],
+]) {
+  test(`ReferenceProvider command and provider agree on ${languageId} without implementation requests`, async () => {
+    const { ReferenceProvider } = require("../src/gaugeReference");
+    const document = {
+      languageId,
+      uri: { fsPath: file, toString: () => `file://${file}` },
+      getText: () => text,
+    };
+    const position = { line, character: 4 };
+    const { vscode, calls } = createFakeVscode({ activeDocument: document, activePosition: position });
+    const requests = [];
+    const client = {
+      sendRequest(method, params) {
+        requests.push({ method, params });
+        assert.equal(method, "gauge/stepReferences");
+        assert.equal(params, "Say hello");
+        return [{ uri: "file:///workspace/specs/example.spec", range: {
+          start: { line: 2, character: 0 }, end: { line: 2, character: 11 },
+        } }];
+      },
+    };
+    const provider = new ReferenceProvider({ get: () => ({ client }) }, { vscode });
+    try {
+      assert.equal(await provider.showStepReferencesAtCursor(), true);
+      const references = await provider.provideReferences(document, position, { includeDeclaration: false });
+      assert.equal(references.length, 1);
+      assert.equal(calls.commands[0].command, "editor.action.showReferences");
+      assert.equal(requests.length, 2);
+    } finally {
+      provider.dispose();
+    }
+  });
+}

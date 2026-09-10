@@ -2,6 +2,7 @@
 
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { realpathSync } = require("node:fs");
 const vscode = require("vscode");
 
 async function eventually(label, operation, accept) {
@@ -65,6 +66,22 @@ async function run() {
   await eventually("execution code lenses", () => vscode.commands.executeCommand(
     "vscode.executeCodeLensProvider", uri, 10,
   ), (value) => value && value.some((lens) => lens.command && /[Rr]un/.test(lens.command.title)));
+
+  const kotlinUri = vscode.Uri.file(path.join(
+    folder.uri.fsPath, "src", "test", "kotlin", "example", "StepImplementation.kt",
+  ));
+  const kotlinDocument = await vscode.workspace.openTextDocument(kotlinUri);
+  const kotlinLine = kotlinDocument.getText().split("\n")
+    .findIndex((text) => text.includes("fun setLanguageVowels"));
+  assert.ok(kotlinLine >= 0, "The bundled Kotlin step implementation exists");
+  for (const [label, sourceUri, position] of [
+    ["spec", uri, new vscode.Position(line, 12)],
+    ["Kotlin", kotlinUri, new vscode.Position(kotlinLine, 12)],
+  ]) {
+    await eventually(`${label} step references`, () => vscode.commands.executeCommand(
+      "vscode.executeReferenceProvider", sourceUri, position,
+    ), (value) => value && value.filter((entry) => realpathSync(entry.uri.fsPath) === realpathSync(uri.fsPath)).length === 2);
+  }
 
   let runTimer;
   try {

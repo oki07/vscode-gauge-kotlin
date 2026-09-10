@@ -16,7 +16,6 @@ const SHOW_REFERENCES = "editor.action.showReferences";
 const SHOW_REFERENCES_AT_CURSOR = "gauge.showReferences.atCursor";
 const SHOW_REFERENCES_FOR_STEP = "gauge.showReferences";
 const STEP_REFERENCES_REQUEST = "gauge/stepReferences";
-const STEP_VALUE_AT_REQUEST = "gauge/stepValueAt";
 const GAUGE_LANGUAGE = "gauge";
 const GAUGE_CONCEPT_LANGUAGE = "gauge-concept";
 const MARKDOWN_LANGUAGE = "markdown";
@@ -1300,43 +1299,11 @@ class ReferenceProvider {
       return CANCELLED_REFERENCE_OPERATION;
     }
     const { documentId, languageClient, position } = commandState;
-    const params = { textDocument: documentId, position };
-
-    if (!languageClient || typeof languageClient.sendRequest !== "function") {
-      const stepValues = await this.callForOperation(
-        operation,
-        () => this.localStepValuesAt(editor.document, position, operation),
-      );
-      if (stepValues === CANCELLED_REFERENCE_OPERATION) {
-        return CANCELLED_REFERENCE_OPERATION;
-      }
-      return this.showStepReferencesForOperation(operation, documentId.uri, position, stepValues);
-    }
-
-    const stepValue = await this.requestForOperation(
-      operation,
-      languageClient,
-      STEP_VALUE_AT_REQUEST,
-      params,
-    );
-    if (stepValue === CANCELLED_REFERENCE_OPERATION) {
+    const stepValues = await this.stepValuesAt(editor.document, position, languageClient, operation);
+    if (stepValues === CANCELLED_REFERENCE_OPERATION) {
       return CANCELLED_REFERENCE_OPERATION;
     }
-    const localStepValues = stepValue
-      ? undefined
-      : await this.callForOperation(
-        operation,
-        () => this.localStepValuesAt(editor.document, position, operation),
-      );
-    if (localStepValues === CANCELLED_REFERENCE_OPERATION) {
-      return CANCELLED_REFERENCE_OPERATION;
-    }
-    return this.showStepReferencesForOperation(
-      operation,
-      documentId.uri,
-      position,
-      stepValue || (localStepValues && localStepValues.length > 0 ? localStepValues : stepValue),
-    );
+    return this.showStepReferencesForOperation(operation, documentId.uri, position, stepValues);
   }
 
   registerReferenceProvider() {
@@ -1514,47 +1481,16 @@ class ReferenceProvider {
     return stepValues[0];
   }
 
-  async stepValuesAt(document, position, languageClient, operation) {
-    if (operation && !this.isOperationActive(operation)) {
-      return CANCELLED_REFERENCE_OPERATION;
-    }
-    if (!document || !position) {
-      return [];
-    }
-    if (isStepImplementationDocument(document)) {
-      return operation
-        ? this.callForOperation(
-          operation,
-          () => this.stepImplementationValuesAt(document, position, operation),
-        )
-        : this.stepImplementationValuesAt(document, position);
-    }
-    if (!isGaugeReferenceDocument(document)) {
-      return [];
-    }
-    if (!languageClient || typeof languageClient.sendRequest !== "function") {
-      return valuesForStep(this.stepTextAt(document, position) || conceptHeadingTextAt(document, position));
-    }
-    const params = {
-      textDocument: textDocumentIdentifier(documentUri(document)),
-      position,
-    };
-    const stepValue = operation
-      ? await this.requestForOperation(
+  async stepValuesAt(document, position, _languageClient, operation) {
+    // getgauge/gauge/api/lang/references.go resolves stepValueAt through runner-owned
+    // implementation positions. Parse supported documents locally: Gauge Java
+    // reflection entries for Kotlin steps can have no source filename.
+    return operation
+      ? this.callForOperation(
         operation,
-        languageClient,
-        STEP_VALUE_AT_REQUEST,
-        params,
+        () => this.localStepValuesAt(document, position, operation),
       )
-      : await languageClient.sendRequest(
-        STEP_VALUE_AT_REQUEST,
-        params,
-        createCancellationToken(this.vscode),
-      );
-    if (stepValue === CANCELLED_REFERENCE_OPERATION) {
-      return CANCELLED_REFERENCE_OPERATION;
-    }
-    return valuesForStep(stepValue || this.stepTextAt(document, position) || conceptHeadingTextAt(document, position));
+      : this.localStepValuesAt(document, position);
   }
 
   async localStepValueAt(document, position) {

@@ -178,7 +178,8 @@ code /path/to/compiled-kotlin-project \
 
 Use fresh temporary directories to keep test settings separate from your normal
 editor profile. Gauge and the Java runner must be installed. The suite verifies
-activation, command registration, Kotlin definitions, step completion, symbols,
+activation, command registration, Kotlin definitions, spec and Kotlin step
+references, step completion, symbols,
 execution code lenses, a successful specification run, and argument auto-closing
 for specifications and concepts.
 Run it with the minimum supported VS Code version as well as your current
