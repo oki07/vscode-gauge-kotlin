@@ -8,6 +8,7 @@
   "generatedSource": "build/generated/source-model/Generated.kt",
   "additionalSource": "notes/Scratch.kt",
   "additionalClass": "kotlin/test/Scratch.class",
+  "argumentModuleName": "LooksLikeSource.kt",
   "compiledClasses": [
     "java/test/JavaStep.class",
     "kotlin/main/Main.class",

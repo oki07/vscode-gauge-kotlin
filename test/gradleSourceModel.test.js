@@ -40,6 +40,7 @@ function model(root) {
       sourceFiles: [path.join(root, "custom-tests/Custom.kt")],
       javaSourceFiles: [path.join(root, "src/test/java/JavaStep.java")],
       additionalArguments: [],
+      additionalSourcePaths: [],
       outputDirectory: path.join(root, "build/classes/kotlin/test"),
     }],
   };
@@ -72,6 +73,11 @@ for (const [name, response, exitCode] of [
     value.compilations[0].additionalArguments = [null];
     return JSON.stringify(value);
   }, 0],
+  ["relative argument source", (root) => {
+    const value = model(root);
+    value.compilations[0].additionalSourcePaths = ["relative.kt"];
+    return JSON.stringify(value);
+  }, 0],
 ]) {
   test(`Gradle source model keeps ${name} distinct from an empty source set`, async (t) => {
     const { root, project } = await fixture(t, response, exitCode);
@@ -93,4 +99,17 @@ test("Gradle source model accepts an empty compiler source collection", async (t
   const result = await project.sourceModelAsync({}, { temporaryDirectory: root });
   assert.equal(result.status, "available");
   assert.deepEqual(result.compilations[0].sourceFiles, []);
+});
+
+test("Gradle source model preserves unparsed Java arguments as unknown source paths", async (t) => {
+  const { project } = await fixture(t, (directory) => {
+    const value = model(directory);
+    value.compilations[0].language = "java";
+    value.compilations[0].additionalArguments = ["@sources.args"];
+    value.compilations[0].additionalSourcePaths = null;
+    return JSON.stringify(value);
+  });
+  const result = await project.sourceModelAsync({});
+  assert.equal(result.status, "available", result.reason);
+  assert.equal(result.compilations[0].additionalSourcePaths, null);
 });
