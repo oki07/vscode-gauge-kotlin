@@ -1,5 +1,6 @@
 "use strict";
 
+const { readMavenSourceModel } = require("./mavenSourceModel");
 const { BuildToolProject } = require("./buildToolProject");
 
 // A Maven project may ship only the Maven Wrapper, which is the whole point of
@@ -65,6 +66,10 @@ class MavenProject extends BuildToolProject {
 
   envsAsync(cli) {
     return this.classpathEnvAsync(this.buildCommand(cli), "-q gauge:classpath");
+  }
+
+  sourceModelAsync(cli, options = {}) {
+    return readMavenSourceModel(this.root(), this.buildCommand(cli), options);
   }
 
   executionEnvs(cli) {

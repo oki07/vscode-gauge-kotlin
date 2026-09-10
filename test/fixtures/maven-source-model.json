@@ -1,0 +1,170 @@
+[
+  {
+    "name": "default",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Default.class"
+    ]
+  },
+  {
+    "name": "execution-source-dirs",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class"
+    ]
+  },
+  {
+    "name": "custom-execution-id",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>compile-gauge-tests</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "compile-gauge-tests"
+    ],
+    "classes": [
+      "test-classes/Custom.class"
+    ]
+  },
+  {
+    "name": "plugin-source-dirs",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs></configuration><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class"
+    ]
+  },
+  {
+    "name": "plugin-java-style-excludes",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs><excludes><exclude>**/Custom.kt</exclude></excludes></configuration><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class"
+    ]
+  },
+  {
+    "name": "single-file",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests/Custom.kt</sourceDir>\n</sourceDirs></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class"
+    ]
+  },
+  {
+    "name": "argument-source",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs><args><arg>-jvm-target</arg><arg>17</arg><arg>${project.basedir}/notes/Scratch.kt</arg></args></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class",
+      "test-classes/Scratch.class"
+    ]
+  },
+  {
+    "name": "argument-file",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs><args><arg>@${project.basedir}/arguments.txt</arg></args></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class",
+      "test-classes/Scratch.class"
+    ]
+  },
+  {
+    "name": "skip-tests",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.test.skip>true</maven.test.skip><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": []
+  },
+  {
+    "name": "empty-roots-with-argument",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/empty-tests</sourceDir>\n</sourceDirs><args><arg>${project.basedir}/notes/Scratch.kt</arg></args></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": []
+  },
+  {
+    "name": "main-root-union",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><sourceDirectory>src/main/kotlin</sourceDirectory><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>compile-main</id><phase>test-compile</phase>\n<goals><goal>compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "compile-main"
+    ],
+    "classes": [
+      "classes/Custom.class",
+      "classes/Main.class"
+    ]
+  },
+  {
+    "name": "multiple-executions",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>custom-tests</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs></configuration>\n</execution><execution><id>notes-tests</id><phase>test-compile</phase><goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/notes</sourceDir>\n</sourceDirs></configuration></execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "custom-tests",
+      "notes-tests"
+    ],
+    "classes": [
+      "test-classes/Custom.class",
+      "test-classes/Scratch.class"
+    ]
+  },
+  {
+    "name": "relative-source",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><kotlin.compiler.daemon>false</kotlin.compiler.daemon><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs><args><arg>-jvm-target</arg><arg>17</arg><arg>notes/Scratch.kt</arg></args></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class",
+      "test-classes/Scratch.class"
+    ],
+    "relativeArgumentContent": true
+  },
+  {
+    "name": "relative-argfile",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><kotlin.compiler.daemon>false</kotlin.compiler.daemon><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs><args><arg>@arguments.txt</arg></args></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class",
+      "test-classes/Scratch.class"
+    ],
+    "relativeArgumentContent": true
+  },
+  {
+    "name": "absolute-argfile-relative-source",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><kotlin.compiler.daemon>false</kotlin.compiler.daemon><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.2.21</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.2.21</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals><configuration><sourceDirs>\n<sourceDir>${project.basedir}/custom-tests</sourceDir>\n</sourceDirs><args><arg>@${project.basedir}/arguments.txt</arg></args></configuration>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Custom.class",
+      "test-classes/Scratch.class"
+    ],
+    "relativeArgumentContent": true
+  },
+  {
+    "name": "unsupported-observer-version",
+    "pom": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n<modelVersion>4.0.0</modelVersion>\n<groupId>probe</groupId><artifactId>membership</artifactId><version>1</version>\n<properties><maven.compiler.release>17</maven.compiler.release></properties>\n<dependencies><dependency><groupId>org.jetbrains.kotlin</groupId>\n<artifactId>kotlin-stdlib</artifactId><version>2.3.0</version>\n</dependency></dependencies>\n<build><testSourceDirectory>src/test/kotlin</testSourceDirectory><plugins><plugin>\n<groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId>\n<version>2.3.0</version><executions><execution>\n<id>test-compile</id><phase>test-compile</phase>\n<goals><goal>test-compile</goal></goals>\n</execution></executions></plugin></plugins></build></project>\n",
+    "executionIds": [
+      "test-compile"
+    ],
+    "classes": [
+      "test-classes/Default.class"
+    ],
+    "unavailable": "Unsupported Kotlin Maven compiler version"
+  }
+]
