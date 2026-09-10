@@ -1,5 +1,7 @@
 "use strict";
 
+const { specFileFromExecutionIdentifier } = require("./gaugeExecutionIdentifier");
+
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
@@ -325,14 +327,6 @@ function canBatchSpecificationTargets(targets, executionKind) {
   return executionKind !== "gradle" && executionKind !== "maven";
 }
 
-function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
-  const value = String(executionIdentifier || "");
-  const suffix = `:${lineNo}`;
-  if (value.endsWith(suffix)) {
-    return value.slice(0, -suffix.length);
-  }
-  return value.replace(/:\d+$/, "");
-}
 
 function lineNoToZeroBased(lineNo) {
   const value = Number.parseInt(lineNo, 10);

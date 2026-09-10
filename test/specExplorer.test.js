@@ -2141,3 +2141,61 @@ test("SpecNodeProvider disposal during activation refresh does not queue context
     timers: 0,
   });
 });
+
+// Gauge 1.6.35 gauge/scenarios returns suite:12/spec.spec:12 for a heading
+// on line 12 in suite:12/spec.spec (getgauge/gauge/api/lang/customResponses.go).
+// Both trees must preserve the filename before the final line suffix.
+for (const file of [
+  "/workspace/gauge/specs/checkout.spec",
+  "/workspace/gauge/suite:12/spec.spec",
+  "/workspace/gauge/suite:123/spec:12.spec",
+  "C:\\workspace\\gauge\\specs\\checkout.spec",
+]) {
+  test(`scenario trees preserve the execution path ${file}`, async () => {
+    const { SpecNodeProvider } = require("../src/explorer/specExplorer");
+    const { GaugeTestController } = require("../src/testController");
+    const { vscode, documents } = createFakeVscode();
+    const executionIdentifier = `${file}:12`;
+    const client = createFakeClient();
+    client.sendRequest = async (method) => method === "gauge/specs"
+      ? [{ heading: "Checkout", executionIdentifier: file }]
+      : [{ heading: "Scenario twelve", lineNo: 12, executionIdentifier }];
+    const runs = [];
+    const provider = new SpecNodeProvider(createFakeWorkspace(client), {
+      vscode,
+      setTimeout() {},
+      executionController: { handleCommand(...args) { runs.push(args); } },
+    });
+    const gaugeTests = new GaugeTestController({
+      vscode,
+      clientsMap: new Map([["/workspace/gauge", { client }]]),
+    });
+    gaugeTests.controller = {
+      items: new Map(),
+      createTestItem(id, label, uri) {
+        return { id, label, uri, children: new Map() };
+      },
+    };
+    try {
+      await provider.ready();
+      const [spec] = await provider.getChildren();
+      const [scenario] = await provider.getChildren(spec);
+      await gaugeTests.discoverWorkspaceTests();
+      const testItem = gaugeTests.items.get(executionIdentifier);
+      assert.equal(testItem.uri.fsPath, file);
+      assert.equal(scenario.file, testItem.uri.fsPath);
+      assert.equal(scenario.executionIdentifier, testItem.id);
+      await provider.openNode(scenario);
+      provider.runNode(scenario, false);
+      provider.runNode(scenario, true);
+      assert.deepEqual(documents, [file]);
+      assert.deepEqual(runs.map(([command, node]) => [command, node.executionIdentifier]), [
+        ["gauge.specexplorer.runNode", executionIdentifier],
+        ["gauge.specexplorer.debugNode", executionIdentifier],
+      ]);
+    } finally {
+      provider.dispose();
+      gaugeTests.dispose();
+    }
+  });
+}

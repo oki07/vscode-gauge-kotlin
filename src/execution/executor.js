@@ -1,5 +1,7 @@
 "use strict";
 
+const { specFileFromExecutionIdentifier: getScenarioSpecPath } = require("../gaugeExecutionIdentifier");
+
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const { createGaugeDebugger } = require("./debug");
@@ -673,16 +675,6 @@ function namesScenarioLines(spec) {
   return isScenarioTarget(spec);
 }
 
-function getScenarioSpecPath(executionIdentifier) {
-  if (!/:\d+$/.test(executionIdentifier)) {
-    return executionIdentifier;
-  }
-  const separatorIndex = executionIdentifier.lastIndexOf(":");
-  if (separatorIndex < 0) {
-    return executionIdentifier;
-  }
-  return executionIdentifier.slice(0, separatorIndex);
-}
 
 function defaultOpener(vscode) {
   return function openReportPath(reportPath) {

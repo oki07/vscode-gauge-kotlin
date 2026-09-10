@@ -1,5 +1,7 @@
 "use strict";
 
+const { specFileFromExecutionIdentifier } = require("../gaugeExecutionIdentifier");
+
 const nodePath = require("node:path");
 
 const ACTIVATED_CONTEXT = "gauge:activated";
@@ -69,9 +71,6 @@ function cancellationRequested(token) {
   return Boolean(token && token.isCancellationRequested);
 }
 
-function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
-  return executionIdentifier.split(`:${lineNo}`)[0];
-}
 
 class GaugeNode {
   constructor(label, file, vscode) {
