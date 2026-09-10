@@ -1,0 +1,18 @@
+{
+  "beforeGeneration": [
+    "custom-tests/Custom.kt",
+    "src/main/kotlin/Main.kt",
+    "src/test/java/JavaStep.java",
+    "src/test/kotlin/Default.kt"
+  ],
+  "generatedSource": "build/generated/source-model/Generated.kt",
+  "additionalSource": "notes/Scratch.kt",
+  "additionalClass": "kotlin/test/Scratch.class",
+  "compiledClasses": [
+    "java/test/JavaStep.class",
+    "kotlin/main/Main.class",
+    "kotlin/test/Custom.class",
+    "kotlin/test/Default.class",
+    "kotlin/test/Generated.class"
+  ]
+}

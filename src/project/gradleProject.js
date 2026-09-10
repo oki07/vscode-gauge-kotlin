@@ -2,6 +2,7 @@
 
 const { Command } = require("../cli");
 const { BuildToolProject } = require("./buildToolProject");
+const { readGradleSourceModel } = require("./gradleSourceModel");
 
 const GRADLE_COMMAND = "gradle";
 const GRADLE_CLASSPATH_ARGS = "-q classpath --rerun";
@@ -53,6 +54,10 @@ class GradleProject extends BuildToolProject {
 
   envsAsync(cli) {
     return this.classpathEnvAsync(this.getBuildCommand(cli), GRADLE_CLASSPATH_ARGS);
+  }
+
+  sourceModelAsync(cli, options = {}) {
+    return readGradleSourceModel(this.root(), this.getBuildCommand(cli), options);
   }
 
   executionEnvs(cli) {
