@@ -51,7 +51,7 @@ function createVscode() {
   };
 }
 
-test("ProjectEnvironmentService reuses Maven preparation until source inputs change", async () => {
+test("ProjectEnvironmentService reuses opted-in preparation until source inputs change", async () => {
   const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
   const calls = [];
   const project = {
@@ -117,7 +117,7 @@ test("ProjectEnvironmentService reuses Maven preparation until source inputs cha
   ]);
 });
 
-test("ProjectEnvironmentService preserves source invalidation during in-flight Maven preparation", async () => {
+test("ProjectEnvironmentService preserves source invalidation during in-flight cacheable preparation", async () => {
   const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
   const buildEntered = deferred();
   const releaseBuild = deferred();
@@ -224,7 +224,7 @@ test("ProjectEnvironmentService keeps another root prepared when one in-flight M
   assert.deepEqual(calls.get("/workspace/b"), [false, true]);
 });
 
-test("ProjectEnvironmentService keeps a newer Maven preparation after a stale build fails", async () => {
+test("ProjectEnvironmentService keeps a newer cacheable preparation after a stale build fails", async () => {
   const { ProjectEnvironmentService } = require("../src/projectEnvironmentService");
   const firstBuildEntered = deferred();
   const releaseFirstBuild = deferred();

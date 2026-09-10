@@ -59,10 +59,6 @@ class MavenProject extends BuildToolProject {
     return "gauge";
   }
 
-  executionPreparationCacheable() {
-    return true;
-  }
-
   envs(cli) {
     return this.classpathEnv(this.buildCommand(cli), "-q gauge:classpath");
   }

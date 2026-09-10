@@ -6234,7 +6234,10 @@ test("execute shows the running status before any build tool work", async () => 
   assert.equal(buildToolCalls[0].stopShown, true);
 });
 
-test("back-to-back Maven runs reuse compiled classes and the execution classpath", async () => {
+// Gauge 1.6.35 runs with an external Kotlin edit fail against cached classes
+// and pass after Maven test-compile. Maven owns incremental compilation even
+// when no editor event reports a build input change.
+test("back-to-back Maven runs prepare classes and reuse the execution classpath", async () => {
   const { buildToolCalls, controller } = createMavenExecutionFixture();
 
   await controller.handleCommand("gauge.execute.specification");
@@ -6243,7 +6246,7 @@ test("back-to-back Maven runs reuse compiled classes and the execution classpath
   const classpathResolutions = buildToolCalls.filter((call) => call.command.includes("classpath"));
   const compiles = buildToolCalls.filter((call) => call.command.includes("test-compile"));
   assert.equal(classpathResolutions.length, 1);
-  assert.equal(compiles.length, 1);
+  assert.equal(compiles.length, 2);
 });
 
 test("Maven source changes recompile without recalculating the classpath", async () => {

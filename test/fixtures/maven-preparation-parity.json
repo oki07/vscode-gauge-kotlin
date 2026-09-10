@@ -1,0 +1,7 @@
+[
+  { "name": "unchanged sources", "sourceDirectory": "src/test/kotlin", "change": "none" },
+  { "name": "external source edit", "sourceDirectory": "src/test/kotlin", "change": "edit" },
+  { "name": "external custom source edit", "sourceDirectory": "checks/kotlin", "change": "edit" },
+  { "name": "external generated source edit", "sourceDirectory": "target/generated-test-sources/kotlin", "change": "edit" },
+  { "name": "removed compiled output", "sourceDirectory": "src/test/kotlin", "change": "remove-output" }
+]
