@@ -3948,3 +3948,96 @@ test("GaugeTestController stops execution when the Test Results run is cancelled
   assert.equal(runCancellations[0].listenerCount, 0);
   assert.equal(runCancellations[0].disposalCalls, 1);
 });
+
+// Real Gauge can name a physical path while VS Code opens its directory alias.
+// TestItem ids must identify one runnable file across discovery and execution.
+function aliasSpecificationFixture(t) {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-test-alias-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const directory = path.join(temporary, "physical");
+  const alias = path.join(temporary, "linked");
+  fs.mkdirSync(directory);
+  fs.symlinkSync(directory, alias, process.platform === "win32" ? "junction" : "dir");
+  const text = "# Checkout\n\n## Pay\n\n* Pay now\n";
+  const physical = path.join(fs.realpathSync(directory), "checkout.spec");
+  const linked = path.join(alias, "checkout.spec");
+  fs.writeFileSync(physical, text);
+  return { fs, directory, physical, linked, document: createDocument(text, linked) };
+}
+
+test("GaugeTestController merges directory aliases across document and server discovery", async (t) => {
+  const { GaugeTestController } = require("../src/testController");
+  const fixture = aliasSpecificationFixture(t);
+  const { controller, vscode } = createFakeVscode({ textDocuments: [fixture.document] });
+  const client = { sendRequest(method) {
+    return Promise.resolve(method === "gauge/specs"
+      ? [{ heading: "Checkout", executionIdentifier: fixture.physical }]
+      : [{ heading: "Pay", executionIdentifier: `${fixture.physical}:3`, lineNo: 3 }]);
+  } };
+  const gaugeTests = new GaugeTestController({ vscode, clientsMap: new Map([["project", { client }]]) });
+  t.after(() => gaugeTests.dispose());
+  gaugeTests.register();
+  await gaugeTests.discoverWorkspaceTests();
+  assert.equal(controller.items.size, 1);
+  const spec = collectionItems(controller.items)[0];
+  assert.equal(spec.children.size, 1);
+  gaugeTests.removeDocumentItems(fixture.document, gaugeTests.workspaceDiscoveredIdsForPath(fixture.linked));
+  assert.equal(controller.items.size, 1, "Closing the alias retains server-owned discovery");
+  fixture.fs.unlinkSync(fixture.physical);
+  gaugeTests.removePathItems(fixture.linked);
+  assert.equal(controller.items.size, 0, "Deleting through the alias removes the physical item");
+  assert.equal(gaugeTests.items.size, 0);
+});
+
+test("GaugeTestController applies physical execution events to directory-alias items", (t) => {
+  const { GaugeTestController } = require("../src/testController");
+  const fixture = aliasSpecificationFixture(t);
+  const { calls, controller, vscode } = createFakeVscode({ textDocuments: [fixture.document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+  t.after(() => gaugeTests.dispose());
+  gaugeTests.register();
+  const spec = collectionItems(controller.items)[0];
+  const scenario = collectionItems(spec.children)[0];
+  gaugeTests.handleExecutionEvent({ type: "suiteStarted", id: fixture.physical, name: "Checkout" });
+  gaugeTests.handleExecutionEvent({ type: "testStarted", id: `${fixture.physical}:3`, parentId: fixture.physical, name: "Pay" });
+  gaugeTests.handleExecutionEvent({ type: "testFinished", id: `${fixture.linked}:3`, parentId: fixture.linked, name: "Pay", duration: 4 });
+  gaugeTests.handleExecutionEvent({ type: "suiteFinished" });
+  assert.equal(controller.items.size, 1);
+  assert.equal(spec.children.size, 1);
+  assert.deepEqual(calls.filter((call) => call[0] === "passed"), [["passed", scenario.id, 4]]);
+});
+
+
+test("GaugeTestController removes a directory-alias item after its target directory disappears", (t) => {
+  const { GaugeTestController } = require("../src/testController");
+  const fixture = aliasSpecificationFixture(t);
+  const { controller, vscode } = createFakeVscode({ textDocuments: [fixture.document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+  t.after(() => gaugeTests.dispose());
+  gaugeTests.register();
+  fixture.fs.rmSync(fixture.directory, { recursive: true });
+  gaugeTests.removePathItems(fixture.linked);
+  assert.equal(controller.items.size, 0);
+  assert.equal(gaugeTests.items.size, 0);
+});
+
+test("GaugeTestController keeps directory-alias suite failures under the selected physical project", (t) => {
+  const path = require("node:path");
+  const { GaugeTestController } = require("../src/testController");
+  const fixture = aliasSpecificationFixture(t);
+  const { controller, vscode } = createFakeVscode({ textDocuments: [fixture.document] });
+  const gaugeTests = new GaugeTestController({ vscode });
+  t.after(() => gaugeTests.dispose());
+  gaugeTests.register();
+  const spec = collectionItems(controller.items)[0];
+  gaugeTests.currentRequest = { include: [{ id: "/another/project.spec" }, spec] };
+  gaugeTests.handleExecutionEvent({
+    type: "testStarted", id: `${path.dirname(fixture.linked)}::hook:before-suite`,
+    name: "Before Suite", parentId: "suite", resultOnly: true,
+  });
+  assert.equal(collectionItems(spec.children).filter((item) => item.label === "Before Suite").length, 1);
+  assert.equal(controller.items.size, 1);
+});

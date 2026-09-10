@@ -1,6 +1,6 @@
 "use strict";
 
-const { specFileFromExecutionIdentifier } = require("./gaugeExecutionIdentifier");
+const { canonicalSpecFile, specFileFromExecutionIdentifier } = require("./gaugeExecutionIdentifier");
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
@@ -479,6 +479,7 @@ class GaugeTestController {
     this.currentRequest = undefined;
     this.testOutputShown = false;
     this.items = new Map();
+    this.canonicalFiles = new Map();
     this.pendingResults = new Map();
     this.resultOnlyItemIds = new Set();
     this.runnableTag = typeof this.vscode.TestTag === "function"
@@ -681,6 +682,7 @@ class GaugeTestController {
     if (this.disposed || !filename) {
       return;
     }
+    filename = this.canonicalFile(filename);
     for (const [id] of [...this.items]) {
       if ((id === filename || id.startsWith(`${filename}:`)) && !keepIds.has(id)) {
         this.removeItem(id);
@@ -693,6 +695,7 @@ class GaugeTestController {
     if (this.disposed || !filename) {
       return keepIds;
     }
+    filename = this.canonicalFile(filename);
     for (const ids of this.workspaceDiscoveredIdsByClient.values()) {
       for (const id of ids) {
         if (id === filename || id.startsWith(`${filename}:`)) {
@@ -829,8 +832,8 @@ class GaugeTestController {
       this.removeDocumentItems(document, this.workspaceDiscoveredIdsForPath(documentPath(document)));
       return [];
     }
-    const filename = documentPath(document);
-    const uri = fileUri(this.vscode, filename);
+    const filename = this.canonicalFile(documentPath(document));
+    const uri = fileUri(this.vscode, documentPath(document));
     const discoveredIds = new Set();
     const discoveredItems = [];
     let currentSpecId;
@@ -1006,7 +1009,7 @@ class GaugeTestController {
         if (!this.isCurrentWorkspaceDiscovery(generation, client)) {
           return [];
         }
-        const specId = spec.executionIdentifier;
+        const specId = this.canonicalFile(spec.executionIdentifier);
         discoveredIds.add(specId);
         const specItem = this.upsertItem(
           specId,
@@ -1029,13 +1032,15 @@ class GaugeTestController {
           if (!scenario || !scenario.heading || !scenario.executionIdentifier) {
             continue;
           }
-          discoveredIds.add(scenario.executionIdentifier);
-          const scenarioFile = specFileFromExecutionIdentifier(
+          const originalFile = specFileFromExecutionIdentifier(
             scenario.executionIdentifier,
             scenario.lineNo,
           ) || specId;
+          const scenarioFile = this.canonicalFile(originalFile);
+          const scenarioId = scenarioFile + scenario.executionIdentifier.slice(originalFile.length);
+          discoveredIds.add(scenarioId);
           const scenarioItem = this.upsertItem(
-            scenario.executionIdentifier,
+            scenarioId,
             scenario.heading,
             fileUri(this.vscode, scenarioFile),
             createRange(this.vscode, lineNoToZeroBased(scenario.lineNo)),
@@ -1141,6 +1146,7 @@ class GaugeTestController {
       }
     }
     this.items.clear();
+    this.canonicalFiles.clear();
     this.workspaceDiscoveredIdsByClient.clear();
     this.clientsMap = undefined;
 
@@ -2006,10 +2012,46 @@ class GaugeTestController {
     }
   }
 
+  canonicalFile(file) {
+    // A file-deletion event can arrive after the alias target directory itself
+    // has disappeared. Retain known identities until a live path resolves anew.
+    if (this.canonicalFiles.has(file) && typeof this.fileSystem.existsSync === "function") {
+      try {
+        if (!this.fileSystem.existsSync(file)) return this.canonicalFiles.get(file);
+      } catch (_error) {
+        return this.canonicalFiles.get(file);
+      }
+    }
+    const canonical = canonicalSpecFile(file, this.fileSystem, this.pathModule);
+    if (canonical !== file) this.canonicalFiles.set(file, canonical);
+    else this.canonicalFiles.delete(file);
+    return canonical;
+  }
+
+  canonicalEvent(event) {
+    const location = parseGaugeLocation(event.location);
+    const id = event.id;
+    const projectRoot = suiteEventProjectRoot(event);
+    let file = id;
+    if (projectRoot) {
+      file = projectRoot;
+    } else if (id && location && id.startsWith(location.file)) {
+      file = location.file;
+    } else if (id && String(event.type).startsWith("test")) {
+      file = specFileFromExecutionIdentifier(id);
+    }
+    return {
+      ...event,
+      id: id && file ? this.canonicalFile(file) + id.slice(file.length) : id,
+      parentId: this.canonicalFile(event.parentId),
+    };
+  }
+
   handleExecutionEvent(event) {
     if (this.disposed || !event || !event.type) {
       return;
     }
+    event = this.canonicalEvent(event);
     const run = this.ensureRun();
     if (this.disposed) {
       return;
