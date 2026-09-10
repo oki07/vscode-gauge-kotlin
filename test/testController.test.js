@@ -192,6 +192,7 @@ function createFakeVscode(options = {}) {
         },
       },
       workspace: {
+        fs: { async stat() { return { type: 1 }; } },
         textDocuments: options.textDocuments || [],
         onDidChangeTextDocument() {
           return { dispose() {} };

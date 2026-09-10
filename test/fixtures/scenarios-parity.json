@@ -1,0 +1,11 @@
+{
+  "source": "Gauge 1.6.35 gauge/scenarios",
+  "specificationText": "# Probe\n\n\n\n\n\n\n\n\n\n\n## Scenario twelve\n* unknown step\n",
+  "response": [
+    {
+      "heading": "Scenario twelve",
+      "lineNo": 12,
+      "executionIdentifier": "<spec>:12"
+    }
+  ]
+}

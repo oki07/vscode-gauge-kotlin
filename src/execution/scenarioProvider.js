@@ -2,7 +2,7 @@
 
 const { createLspRequestOwner } = require("./lspRequestOwner");
 
-const SCENARIOS_REQUEST = "gauge/scenarios";
+const { SCENARIOS_REQUEST, requestGaugeScenarios } = require("../gaugeScenarios");
 
 function getVscode(vscodeApi) {
   return vscodeApi || require("vscode");
@@ -91,11 +91,11 @@ function createGaugeScenariosProvider(clientsMap, options = {}) {
     if (owner.operationStopped(operation)) {
       return undefined;
     }
-    return entry.client.sendRequest(
-      SCENARIOS_REQUEST,
-      params,
-      source && source.token,
-    );
+    return requestGaugeScenarios(entry.client, params, {
+      vscode,
+      token: source && source.token,
+      isCurrent: () => !owner.operationStopped(operation),
+    });
   });
   provideGaugeScenarios.dispose = owner.dispose;
   return provideGaugeScenarios;

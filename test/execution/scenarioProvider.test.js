@@ -41,6 +41,7 @@ function nextTurn() {
 
 function createFakeVscode(overrides = {}) {
   return {
+    workspace: { fs: { async stat() { return { type: 1 }; } } },
     CancellationTokenSource: class CancellationTokenSource {
       constructor() {
         this.token = { cancelled: false };

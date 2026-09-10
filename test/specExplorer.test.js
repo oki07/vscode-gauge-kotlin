@@ -104,6 +104,7 @@ function createFakeVscode(overrides = {}) {
       },
     },
     workspace: {
+      fs: { async stat() { return { type: 1 }; } },
       createFileSystemWatcher(pattern, ignoreCreate, ignoreChange, ignoreDelete) {
         const watcher = {
           pattern,
@@ -2196,6 +2197,104 @@ for (const file of [
     } finally {
       provider.dispose();
       gaugeTests.dispose();
+    }
+  });
+}
+
+// Gauge 1.6.35 exits 1 for a closed specification deleted after gauge/specs
+// (getgauge/gauge/api/lang/customResponses.go scenarios). File absence must
+// suppress that request in each client surface.
+for (const surface of ["specs", "tests", "execution"]) {
+  test(`scenario availability agreement: ${surface} skips deleted and renamed paths`, async () => {
+    const fs = require("node:fs/promises");
+    const fixture = require("./fixtures/scenarios-parity.json");
+    const os = require("node:os");
+    const { SpecNodeProvider, Spec } = require("../src/explorer/specExplorer");
+    const { GaugeTestController } = require("../src/testController");
+    const { createGaugeScenariosProvider } = require("../src/execution/scenarioProvider");
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "gauge-scenario-availability-"));
+    let file = path.join(directory, "before:12 file.spec");
+    const { vscode } = createFakeVscode();
+    vscode.Uri.file = (filename) => ({
+      fsPath: filename,
+      toString() { return `file://${filename.split("/").map(encodeURIComponent).join("/")}`; },
+    });
+    vscode.workspace.fs = { async stat(uri) {
+      const stat = await fs.stat(uri.fsPath);
+      return { type: stat.isFile() ? 1 : 2 };
+    } };
+    const requests = [];
+    const client = createFakeClient();
+    client.sendRequest = async (method, params) => {
+      if (method === "gauge/specs") {
+        return [{ heading: "Specification", executionIdentifier: file }];
+      }
+      assert.equal(params.textDocument.uri, vscode.Uri.file(file).toString());
+      requests.push(file);
+      return fixture.response.map((entry) => ({
+        ...entry, executionIdentifier: entry.executionIdentifier.replace("<spec>", file),
+      }));
+    };
+    const clientsMap = new Map([["/workspace/gauge", { client }]]);
+    const specs = new SpecNodeProvider(createFakeWorkspace(client), { vscode, setTimeout() {} });
+    const tests = new GaugeTestController({ clientsMap, vscode });
+    tests.controller = {
+      items: new Map(),
+      createTestItem(id, label, uri) { return { id, label, uri, children: new Map() }; },
+    };
+    const execution = createGaugeScenariosProvider({ get() { return { client }; } }, { vscode });
+    const query = () => surface === "specs"
+      ? specs.getChildren(new Spec("Specification", file, vscode))
+      : surface === "tests" ? tests.discoverWorkspaceTests() : execution({ spec: file });
+    try {
+      await specs.ready();
+      await fs.writeFile(file, fixture.specificationText);
+      await query();
+      assert.deepEqual(requests, [file]);
+      requests.length = 0;
+      const renamed = path.join(directory, "after.spec");
+      await fs.rename(file, renamed);
+      await query();
+      assert.deepEqual(requests, [], "the old path must not reach Gauge");
+      file = renamed;
+      await query();
+      assert.deepEqual(requests, [file]);
+      requests.length = 0;
+      await fs.unlink(file);
+      await query();
+      assert.deepEqual(requests, [], "a deleted specification must not reach Gauge");
+      await fs.mkdir(file);
+      await query();
+      assert.deepEqual(requests, [], "a directory must not reach Gauge");
+      await fs.rmdir(file);
+      const document = { uri: { ...vscode.Uri.file(file), scheme: "file" }, isClosed: false };
+      vscode.workspace.textDocuments = [document];
+      await query();
+      assert.deepEqual(requests, [file], "an open buffer remains available after deletion");
+      requests.length = 0;
+      document.uri.scheme = "git";
+      await query();
+      assert.deepEqual(requests, [], "a revision buffer must not make a deleted spec available");
+      document.uri.scheme = "file";
+      document.isClosed = true;
+      await query();
+      assert.deepEqual(requests, [], "a closed buffer must not make a deleted spec available");
+      const entered = deferred();
+      const release = deferred();
+      vscode.workspace.fs.stat = () => { entered.resolve(); return release.promise; };
+      const pending = query();
+      await entered.promise;
+      if (surface === "specs") specs.dispose();
+      else if (surface === "tests") tests.dispose();
+      else execution.dispose();
+      release.resolve({ type: 1 });
+      await pending;
+      assert.deepEqual(requests, [], "disposal during stat must suppress the request");
+    } finally {
+      specs.dispose();
+      tests.dispose();
+      execution.dispose();
+      await fs.rm(directory, { recursive: true, force: true });
     }
   });
 }

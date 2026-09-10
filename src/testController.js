@@ -4,6 +4,7 @@ const { specFileFromExecutionIdentifier } = require("./gaugeExecutionIdentifier"
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { requestGaugeScenarios } = require("./gaugeScenarios");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { executionKindForRoot } = require("./execution/projectKind");
 const { headingMarkers } = require("./gaugeHeadings");
@@ -23,7 +24,6 @@ const REPEAT_PROFILE_LABEL = "Run Repeat";
 const RUN_PROFILE_LABEL = "Run";
 const RUNNABLE_TAG_ID = "gauge-runnable";
 const ROOT_PARENT_ID = "suite";
-const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPECS_REQUEST = "gauge/specs";
 const SPEC_WATCH_PATTERN = "**/*.{spec,md}";
 const ATTEMPT_ID_SEPARATOR = "#attempt=";
@@ -971,13 +971,17 @@ class GaugeTestController {
           }
           let request;
           try {
-            request = client.sendRequest(
-              SCENARIOS_REQUEST,
+            request = requestGaugeScenarios(
+              client,
               {
                 textDocument: { uri: spec.executionIdentifier },
                 position: createPosition(this.vscode, 1, 1),
               },
-              token,
+              {
+                vscode: this.vscode,
+                token,
+                isCurrent: () => this.isCurrentWorkspaceDiscovery(generation, client),
+              },
             );
           } catch (_error) {
             return [];

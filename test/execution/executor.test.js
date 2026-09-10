@@ -82,6 +82,7 @@ function createFakeVscode(overrides = {}) {
         },
       },
       workspace: {
+        fs: { async stat() { return { type: 1 }; } },
         workspaceFolders,
         saveAll: overrides.saveAll,
         getConfiguration(section) {

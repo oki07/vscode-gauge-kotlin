@@ -254,6 +254,7 @@ function createFakeVscode(overrides = {}) {
       },
     },
     workspace: {
+      fs: { async stat() { return { type: 1 }; } },
       getConfiguration(section) {
         if (section === "gauge.semanticTokenColors") {
           return {

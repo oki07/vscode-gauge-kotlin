@@ -3,10 +3,10 @@
 const { specFileFromExecutionIdentifier } = require("../gaugeExecutionIdentifier");
 
 const nodePath = require("node:path");
+const { requestGaugeScenarios } = require("../gaugeScenarios");
 
 const ACTIVATED_CONTEXT = "gauge:activated";
 const OPEN_COMMAND = "gauge.open";
-const SCENARIOS_REQUEST = "gauge/scenarios";
 const SPEC_EXPLORER_VIEW = "gauge:specExplorer";
 const SPECS_REQUEST = "gauge/specs";
 const SPEC_EXTENSIONS = new Set([".spec", ".md"]);
@@ -321,13 +321,17 @@ class SpecNodeProvider {
     try {
       let values;
       try {
-        values = await client.sendRequest(
-          SCENARIOS_REQUEST,
+        values = await requestGaugeScenarios(
+          client,
           {
             textDocument: { uri: spec.file },
             position: createPosition(this.vscode, 1, 1),
           },
-          token,
+          {
+            vscode: this.vscode,
+            token,
+            isCurrent: () => this.isActiveRequestCurrent(projectFolder, client, activeGeneration, requestGeneration),
+          },
         );
       } catch (error) {
         if (
