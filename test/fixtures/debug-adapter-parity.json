@@ -1,0 +1,8 @@
+[
+  { "name": "Kotlin runner with Kotlin adapter", "language": "kotlin", "adapters": ["kotlin"], "type": "kotlin" },
+  { "name": "Java runner for Kotlin sources with Kotlin adapter", "language": "java", "adapters": ["kotlin"], "type": "kotlin" },
+  { "name": "Java adapter preferred when both exist", "language": "kotlin", "adapters": ["kotlin", "java"], "type": "java" },
+  { "name": "Java adapter alone", "language": "java", "adapters": ["java"], "type": "java" },
+  { "name": "Missing JVM adapter retains Java installation path", "language": "kotlin", "adapters": [], "type": "java" },
+  { "name": "Non-JVM runner keeps its own adapter", "language": "python", "adapters": ["kotlin"], "type": "python" }
+]

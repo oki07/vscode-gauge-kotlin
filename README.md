@@ -76,7 +76,9 @@ both are bundled with this extension; any Kotlin template you register with
   `gauge.report.html` to open the last HTML report.
 - Debugging attaches to the JVM the runner starts; the port is
   `gauge.execution.debugPort`. A Kotlin or Java debug extension must be
-  installed for the attach to succeed.
+  installed for the attach to succeed. A Java adapter is preferred when both
+  types are available; a Kotlin adapter receives the project root and JVM
+  endpoint required for attach.
 - A Test Explorer selection of several specifications or scenarios runs in one
   Gauge process. A Kotlin project executes through the Gauge CLI with the
   classpath its build tool computed, and the CLI takes each target as its own
@@ -189,6 +191,17 @@ for specifications and concepts.
 Run it with the minimum supported VS Code version as well as your current
 version. To verify a packaged extension, point `--extensionDevelopmentPath` at
 the `extension` directory extracted from the VSIX instead.
+
+For the separate JVM debug check, run
+`scripts/debug-extension-host-suite.js` through `--extensionTestsPath` with
+extensions enabled. The isolated profile must contain an initialized
+`fwcd.kotlin` extension with `kotlin.debugAdapter.enabled` enabled. Set
+`kotlin.debugAdapter.path` to the adapter executable and
+`kotlin.languageServer.enabled` to `false` to test debugging independently of
+language-server analysis. The suite targets a compiled bundled Maven project,
+sets a Kotlin breakpoint, checks the source stack frame, resumes execution,
+and requires both bundled scenarios to pass. It has been verified with
+fwcd.kotlin 0.2.36 and Kotlin Debug Adapter 0.4.4.
 
 ## License
 

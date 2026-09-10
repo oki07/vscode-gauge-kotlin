@@ -15,6 +15,15 @@ function javaLike(language) {
   return language === "java" || language === "kotlin";
 }
 
+function hasDebugAdapter(vscode, type) {
+  const extensions = vscode && vscode.extensions && vscode.extensions.all;
+  return Array.isArray(extensions) && extensions.some((extension) => {
+    const contributions = extension && extension.packageJSON && extension.packageJSON.contributes;
+    return contributions && Array.isArray(contributions.debuggers)
+      && contributions.debuggers.some((adapter) => adapter && adapter.type === type);
+  });
+}
+
 function csharpLike(language) {
   return language === "csharp" || language === "dotnet";
 }
@@ -387,6 +396,19 @@ function createGaugeDebugger(options = {}) {
         };
       default:
         if (javaLike(language)) {
+          // fwcd/vscode-kotlin package.json declares a distinct attach type
+          // with projectRoot and timeout required in addition to the endpoint.
+          if (!hasDebugAdapter(vscode, "java") && hasDebugAdapter(vscode, "kotlin")) {
+            return {
+              name: DEBUGGER_NAME,
+              type: "kotlin",
+              request: REQUEST_TYPE,
+              hostName: "127.0.0.1",
+              port: debugPort,
+              projectRoot,
+              timeout: 30000,
+            };
+          }
           return {
             name: DEBUGGER_NAME,
             type: "java",
