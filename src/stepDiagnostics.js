@@ -9125,6 +9125,8 @@ class GaugeStepDiagnosticsProvider {
   }
 
   isGaugeProjectDocument(document) {
+    const store = this.activeDocumentStore();
+    if (store?.allowsSourceDocument && !store.allowsSourceDocument(document)) return false;
     if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return true;
     }
@@ -9147,6 +9149,8 @@ class GaugeStepDiagnosticsProvider {
   }
 
   belongsToSourceGaugeProject(candidate, sourceRoot) {
+    const store = this.activeDocumentStore();
+    if (store?.allowsSourceDocument && !store.allowsSourceDocument(candidate)) return false;
     if (sourceRoot === undefined) {
       return this.isGaugeProjectDocument(candidate);
     }

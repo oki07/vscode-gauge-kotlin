@@ -293,7 +293,9 @@ class WorkspaceStepIndex {
       : [];
     const result = documents.filter((document) => this.belongsToRoot(document, root));
     const sourcePath = documentPath(sourceDocument);
-    if (sourceDocument && sourcePath && !result.some((document) => documentPath(document) === sourcePath)) {
+    if (sourceDocument && sourcePath
+      && (!this.documentStore.allowsSourceDocument || this.documentStore.allowsSourceDocument(sourceDocument))
+      && !result.some((document) => documentPath(document) === sourcePath)) {
       result.push(sourceDocument);
     }
     return result;

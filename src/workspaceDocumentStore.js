@@ -86,6 +86,7 @@ class WorkspaceDocumentStore {
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
+    this.sourceScope = options.sourceScope;
     this.initialReadConcurrency = concurrencyLimit(
       options.initialReadConcurrency,
       DEFAULT_INITIAL_READ_CONCURRENCY,
@@ -102,6 +103,12 @@ class WorkspaceDocumentStore {
     this.disposalSignal = new Promise((resolve) => {
       this.resolveDisposal = resolve;
     });
+  }
+
+  allowsSourceDocument(document) {
+    const file = typeof document === "string" ? document : documentPath(document);
+    return !/\.(?:kt|java)$/i.test(file || "") || !this.sourceScope
+      || this.sourceScope.allows(canonicalFilePath(file, this.fileSystem, this.pathModule)) !== false;
   }
 
   rootForFile(file) {
@@ -454,6 +461,9 @@ class WorkspaceDocumentStore {
         resolveReady(undefined);
         return ready;
       }
+      if (this.sourceScope && typeof this.sourceScope.onDidChange === "function") {
+        this.disposables.push(this.sourceScope.onDidChange(() => this.notifyChange(undefined)));
+      }
       const scan = this.scanWorkspace();
       Promise.race([scan, this.disposalSignal]).then(
         () => resolveReady(undefined),
@@ -490,7 +500,8 @@ class WorkspaceDocumentStore {
     const openDocuments = [...(workspace.textDocuments || [])]
       .sort((left, right) => Number(Boolean(right && right.isDirty)) - Number(Boolean(left && left.isDirty)));
     for (const document of openDocuments) {
-      if (!document || typeof document.getText !== "function" || !isFileSchemeDocument(document)) {
+      if (!document || typeof document.getText !== "function" || !isFileSchemeDocument(document)
+        || !this.allowsSourceDocument(document)) {
         continue;
       }
       const file = canonicalFilePath(documentPath(document), this.fileSystem, this.pathModule);
@@ -503,6 +514,7 @@ class WorkspaceDocumentStore {
       documents.push(document);
     }
     for (const [file, document] of this.diskDocuments) {
+      if (!this.allowsSourceDocument(file)) continue;
       const identity = canonicalFilePath(file, this.fileSystem, this.pathModule);
       if (!seenPaths.has(identity)) {
         seenPaths.add(identity);

@@ -684,6 +684,7 @@ class GaugeCodeLensProvider {
   }
 
   isGaugeProjectDocument(document) {
+    if (this.documentStore?.allowsSourceDocument && !this.documentStore.allowsSourceDocument(document)) return false;
     return this.isGaugeProjectFile(documentPath(document));
   }
 

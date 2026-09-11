@@ -114,18 +114,17 @@ both are bundled with this extension; any Kotlin template you register with
   answers before they reach the editor. A Gauge project with neither `pom.xml`
   nor `build.gradle` has no pre-run build, so there a step added after the last
   compile stays unknown to the run until you compile it yourself.
-- This extension indexes every `.kt` and `.java` file under the project root,
-  not only the files the build compiles. A `@Step` in a file outside the
-  project's source sets - a scratch directory, or a generated copy under a build
-  output directory - is treated as implemented: it gets no `Undefined Step`, and
-  Gauge's own missing-implementation error for that line is suppressed as a
-  stale runner verdict, so nothing in the editor flags it while `gauge run`
-  fails on it. The Gauge Java runner bounds its own source scope to
-  `src/main/java` and `src/test/java`, overridable with
-  `gauge_custom_compile_dir`. Both bundled templates put step implementations in
-  `src/test/kotlin`: under the Gradle template a `@Step` in `src/main/kotlin`
-  does not compile, because `gauge-java` is a test dependency there, and the
-  Maven template compiles `src/test/kotlin` only.
+- When Kotlin by JetBrains provides an imported workspace model, Gauge uses its
+  source roots and exclusions for Kotlin/Java step candidates, including open
+  and unsaved documents. The model is checked every five seconds. An import
+  failure can retain the IDE's preceding model. Module dependency selection and
+  source discovery outside the Gauge project remain limited to the existing
+  project index.
+- Without a supported imported model, every `.kt` and `.java` file under the
+  Gauge project remains a candidate. A scratch file can therefore appear to
+  implement a step that the build does not compile. Keep step implementations
+  in the configured source roots. Both bundled templates use `src/test/kotlin`;
+  their Gauge dependency is available to test sources.
 - The Gauge Java runner constructs the class that declares a step, with
   `Class.forName(name).getDeclaredConstructor().newInstance()`. Kotlin's file
   class has no constructor, and the constructors of an `object` and of a

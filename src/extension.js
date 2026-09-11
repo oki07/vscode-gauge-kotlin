@@ -43,6 +43,7 @@ const {
   GaugeUnusedReferenceDiagnosticsProvider,
 } = require("./unusedReferenceDiagnosticsProvider");
 const { WorkspaceDocumentStore } = require("./workspaceDocumentStore");
+const { KotlinSourceScope } = require("./kotlinSourceScope");
 const { WorkspaceStepIndex } = require("./workspaceStepIndex");
 const { SpecificationProvider } = require("./specification");
 const { GaugeRenameProvider } = require("./renameProvider");
@@ -1115,8 +1116,11 @@ function startGaugeServices(context, vscode, options = {}) {
   }
   registerDebugConfigurationProvider(context, vscode);
   registerGaugeLanguageConfiguration(context, vscode);
+  const sourceScope = options.sourceScope || new KotlinSourceScope({ vscode });
+  if (!options.sourceScope) context.subscriptions.push(sourceScope);
   const WorkspaceDocumentStoreCtor = options.WorkspaceDocumentStore || WorkspaceDocumentStore;
   const documentStore = options.documentStore || new WorkspaceDocumentStoreCtor({
+    sourceScope,
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     projectFactory,
@@ -1126,6 +1130,7 @@ function startGaugeServices(context, vscode, options = {}) {
     context.subscriptions.push(documentStore);
   }
   documentStore.start();
+  sourceScope.start?.();
   const StepDiagnosticsProviderCtor = options.GaugeStepDiagnosticsProvider
     || GaugeStepDiagnosticsProvider;
   const stepDiagnosticsProvider = options.stepDiagnosticsProvider

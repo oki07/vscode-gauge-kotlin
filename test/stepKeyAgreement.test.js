@@ -320,3 +320,80 @@ test("directory aliases agree on project membership across step surfaces", async
   assert.equal((await index.stepEntriesForDocument(aliasSpec, physicalKotlin)).length, 1);
   assert.deepEqual(new GaugeStepDiagnosticsProvider(options).provideDiagnostics(physicalKotlin, store.documents()), []);
 });
+
+test("imported source membership agrees across disk and open-document consumers", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java
+  // searches IDE source scope: IDEA 2020.1 excludes content-only Kotlin files.
+  // Kotlin LSP 0.0.12 exportWorkspace and workspace/symbol also exclude notes.
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const spec = createDocument("# Scope\n\n## Example\n\n* source\n* notes", "gauge", SPEC_PATH);
+  const source = createDocument(kotlinSource("source"), "kotlin", KOTLIN_PATH);
+  const notes = createDocument(kotlinSource("notes"), "kotlin", "/workspace/gauge/notes/Notes.kt");
+  for (const document of [spec, source, notes]) document.uri.scheme = "file";
+  const vscode = createFakeVscode([spec, source, notes]);
+  vscode.commands = { registerCommand: () => ({ dispose() {} }) };
+  vscode.languages.registerReferenceProvider = () => ({ dispose() {} });
+  const projectFactory = createProjectFactory();
+  let includeNotes = false;
+  let changed;
+  const sourceScope = {
+    allows(file) { return !file.endsWith("/notes/Notes.kt") || includeNotes; },
+    onDidChange(listener) { changed = listener; return { dispose() {} }; },
+  };
+  vscode.workspace.findFiles = async () => [spec.uri, source.uri, notes.uri];
+  const files = new Map([spec, source, notes].map((document) => [document.uri.fsPath, document.getText()]));
+  const fileSystem = { promises: { readFile: async (file) => files.get(file) } };
+  const store = new WorkspaceDocumentStore({ sourceScope, vscode, projectFactory, fileSystem });
+  await store.start();
+  const options = { documentStore: store, vscode, projectFactory };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definitions = new GaugeStepDefinitionProvider(options);
+  const lenses = new GaugeCodeLensProvider(options);
+  const rename = new GaugeRenameProvider(options);
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const references = new ReferenceProvider(new GaugeClients(), options);
+  const index = new WorkspaceStepIndex(options);
+  index.start();
+  try {
+    for (const [allowed, open] of [[false, false], [false, true], [true, false], [true, true], [false, true]]) {
+      vscode.workspace.textDocuments = [spec, source, ...(open ? [notes] : [])];
+      includeNotes = allowed;
+      if (changed) changed();
+      const messages = diagnostics.provideDiagnostics(spec, [spec, source, notes]);
+      const locations = await definitions.provideDefinition(spec, { line: 5, character: 4 });
+      const sourceLocations = await definitions.provideDefinition(spec, { line: 4, character: 4 });
+      const noteLenses = await lenses.provideCodeLenses(notes);
+      const noteEdit = await rename.provideRenameEdits(notes, { line: 5, character: 12 }, "notes renamed");
+      const entries = await index.definitionEntries(spec, ["notes"]);
+      const noteReferences = await references.provideReferences(notes, { line: 5, character: 12 });
+      assert.deepEqual({
+        undefinedNotes: messages.some((entry) => entry.message === "Undefined Step" && entry.range.start.line === 5),
+        definitions: (locations || []).length,
+        sourceDefinitions: (sourceLocations || []).length,
+        referenceLenses: (noteLenses || []).filter((lens) => lens.command?.title.includes("reference")).length,
+        renamesSpec: Boolean(noteEdit?.replacements.some((entry) => entry.uri.fsPath === SPEC_PATH)),
+        indexedNotes: entries.length,
+        cachedNotes: store.documents().some((document) => document.uri.fsPath === notes.uri.fsPath),
+        references: (noteReferences || []).length,
+      }, {
+        undefinedNotes: !allowed,
+        definitions: Number(allowed),
+        sourceDefinitions: 1,
+        referenceLenses: Number(allowed),
+        renamesSpec: allowed,
+        indexedNotes: Number(allowed),
+        cachedNotes: allowed,
+        references: Number(allowed),
+      });
+    }
+  } finally {
+    index.dispose();
+    store.dispose();
+    definitions.dispose();
+    lenses.dispose();
+    rename.dispose();
+    references.dispose();
+  }
+});

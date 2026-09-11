@@ -1877,6 +1877,9 @@ class GaugeRenameProvider {
   }
 
   async stepAt(document, position, operation) {
+    if (this.documentStore?.allowsSourceDocument && !this.documentStore.allowsSourceDocument(document)) {
+      return { documents: [], step: undefined };
+    }
     const documents = await this.workspaceDocuments(document, operation);
     if (documents === CANCELLED_RENAME_OPERATION) {
       return CANCELLED_RENAME_OPERATION;

@@ -1499,6 +1499,7 @@ class ReferenceProvider {
   }
 
   async localStepValuesAt(document, position, operation) {
+    if (this.documentStore?.allowsSourceDocument && !this.documentStore.allowsSourceDocument(document)) return [];
     if (operation && !this.isOperationActive(operation)) {
       return CANCELLED_REFERENCE_OPERATION;
     }

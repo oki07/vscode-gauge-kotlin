@@ -716,6 +716,7 @@ class GaugeStepDefinitionProvider {
   }
 
   belongsToSourceGaugeProject(candidate, sourceRoot) {
+    if (this.documentStore?.allowsSourceDocument && !this.documentStore.allowsSourceDocument(candidate)) return false;
     if (sourceRoot === undefined) {
       return this.isGaugeProjectDocument(candidate);
     }
@@ -927,7 +928,8 @@ class GaugeStepDefinitionProvider {
       if (sameDocument(candidate, sourceDocument)) {
         return;
       }
-      if (!isStepImplementationDocument(candidate)) {
+      if (!isStepImplementationDocument(candidate)
+        || (this.documentStore?.allowsSourceDocument && !this.documentStore.allowsSourceDocument(candidate))) {
         return;
       }
       if (typeof candidate.getText !== "function") {
