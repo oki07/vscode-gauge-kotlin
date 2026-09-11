@@ -67,12 +67,9 @@ class OutputChannel {
       return;
     }
 
-    if (code) {
-      this.channel.appendLine(failureMessage);
-    } else {
-      this.channel.appendLine(successMessage);
-    }
-    resolve(code === 0);
+    const passed = code === 0;
+    this.channel.appendLine(passed ? successMessage : failureMessage);
+    resolve(passed);
   }
 }
 

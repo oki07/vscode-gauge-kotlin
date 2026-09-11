@@ -761,3 +761,18 @@ test("process runner keeps raw JSON out of the test UI", async () => {
   assert.equal(outputChannel.lines.join("").includes("visible output"), true);
   assert.equal(outputChannel.lines.join("").includes("specStart"), false);
 });
+
+test("process runner reports a signal-terminated automatic stop as failure", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  for (const code of [null, undefined, 1, 0]) {
+    const child = createChildProcess();
+    const outputChannel = new FakeOutputChannel();
+    const runner = createGaugeProcessRunner({ outputChannel, spawn: () => child, killProcess() {}, platform: "darwin" });
+    const run = runner({ command: "gauge", args: ["run"], cwd: "/workspace" });
+    run.cancel(false);
+    child.emit("exit", code, code === null ? "SIGTERM" : null);
+    child.emit("close", code);
+    assert.equal(await run, code === 0);
+    assert.equal(outputChannel.lines.at(-1), code === 0 ? "Success: Tests passed." : "Error: Tests failed.");
+  }
+});
