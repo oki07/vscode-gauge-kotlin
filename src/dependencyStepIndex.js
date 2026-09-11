@@ -323,6 +323,34 @@ function readStream(stream) {
   });
 }
 
+async function scanClassDirectory(root, visit) {
+  const fileSystem = nodeFs.promises;
+  const walk = async (directory, relative, ancestors) => {
+    let physical;
+    let children;
+    try {
+      physical = await fileSystem.realpath(directory);
+      if (ancestors.has(physical)) return;
+      children = await fileSystem.readdir(directory, { withFileTypes: true });
+    } catch (_error) { return; }
+    const parents = new Set([...ancestors, physical]);
+    for (const child of children) {
+      const file = nodePath.join(directory, child.name);
+      const name = relative ? `${relative}/${child.name}` : child.name;
+      let stat;
+      try { stat = await fileSystem.stat(file); } catch (_error) { continue; }
+      if (stat.isDirectory()) {
+        await walk(file, name, parents);
+      } else if (stat.isFile() && name.endsWith(".class") && stat.size <= MAX_CLASS_BYTES) {
+        let data;
+        try { data = await fileSystem.readFile(file); } catch (_error) { continue; }
+        if (data.length <= MAX_CLASS_BYTES) await visit(name, data);
+      }
+    }
+  };
+  await walk(root, "", new Set());
+}
+
 function scanJarArchive(archivePath, visit) {
   const yauzl = require("yauzl");
   return new Promise((resolve, reject) => {
@@ -437,6 +465,7 @@ class DependencyStepIndex {
     this.projectFactory = options.projectFactory;
     this.projectEnvironmentService = options.projectEnvironmentService;
     this.scanArchive = options.scanArchive || scanJarArchive;
+    this.scanDirectory = options.scanDirectory || scanClassDirectory;
     this.vscode = getVscode(options.vscode);
     this.classpathProvider = options.classpathProvider || ((root) => this.projectClasspath(root));
     this.contents = new Map();
@@ -487,9 +516,12 @@ class DependencyStepIndex {
     if (this.disposed) {
       return undefined;
     }
-    const archives = [...new Set((Array.isArray(classpath) ? classpath : [])
+    const directories = new Set((this.sourceScope?.concreteLibraryRoots?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || []).filter((entry) => {
+      try { return this.fileSystem.statSync?.(entry).isDirectory(); } catch (_error) { return false; }
+    }));
+    const archives = [...new Set([...(Array.isArray(classpath) ? classpath : [])
       .filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".jar"))
-      .filter((entry) => this.fileSystem.existsSync(entry)))];
+      .filter((entry) => this.fileSystem.existsSync(entry)), ...directories])];
     const classpathKey = archives.join("\n");
     const previous = this.indices.get(root);
     if (previous && previous.classpathKey === classpathKey) {
@@ -504,7 +536,7 @@ class DependencyStepIndex {
       // A classpath routinely holds jars this process cannot open: a truncated
       // download, a permission-denied artifact, a native jar. One of them must
       // not throw away every other dependency's steps.
-      const includesClass = this.sourceScope?.libraryClassFilter?.(root, archive) || (() => true);
+      const includesClass = this.sourceScope?.libraryClassFilter?.(root, archive, directories.has(archive)) || (() => true);
       await this.scanArchiveSafely(archive, async (fileName, data) => {
         if (this.disposed || !includesClass(fileName)) {
           return;
@@ -528,10 +560,12 @@ class DependencyStepIndex {
             if (!entriesByTemplate.has(normalized)) {
               entriesByTemplate.set(normalized, []);
             }
-            entriesByTemplate.get(normalized).push(entry);
+            const candidates = entriesByTemplate.get(normalized);
+            if (!candidates.some((candidate) => candidate.artifact === entry.artifact && candidate.className === entry.className
+              && candidate.methodName === entry.methodName && candidate.descriptor === entry.descriptor)) candidates.push(entry);
           }
         }
-      });
+      }, directories.has(archive));
       if (this.disposed) {
         return undefined;
       }
@@ -542,9 +576,9 @@ class DependencyStepIndex {
     return { classpathKey, entriesByTemplate };
   }
 
-  async scanArchiveSafely(archive, visit) {
+  async scanArchiveSafely(archive, visit, directory = false) {
     try {
-      await this.scanArchive(archive, visit);
+      await (directory ? this.scanDirectory : this.scanArchive)(archive, visit);
     } catch (_error) {
       // Skipping one archive keeps the rest of the classpath indexed.
     }
@@ -787,4 +821,5 @@ module.exports = {
   normalizeStepTemplate,
   parseDependencyClass,
   scanJarArchive,
+  scanClassDirectory,
 };

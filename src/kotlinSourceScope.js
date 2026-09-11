@@ -115,6 +115,12 @@ class KotlinSourceScope {
         unsupported: Boolean(entry.inclusionOptions && entry.inclusionOptions !== "root_itself") })));
   }
 
+  concreteLibraryRoots(root, classpath) {
+    const roots = (this.libraryRoots(root) || []).filter((entry) => entry.selected && !entry.ambiguous && !entry.unsupported);
+    return [...new Set(roots.flatMap((entry) => path.isAbsolute(entry.path) ? [entry.path]
+      : classpath.filter((file) => typeof file === "string" && libraryPathMatches(file, entry.path))).map((file) => canonicalFilePath(file)))];
+  }
+
   libraryClasspath(root, classpath) {
     const roots = this.libraryRoots(root);
     if (!roots) return classpath;
@@ -127,18 +133,25 @@ class KotlinSourceScope {
       return matching.some((entry) => entry.selected || entry.ambiguous)
         || roots.some((entry) => entry.selected && matches(file, entry) === undefined);
     });
-    return [...new Set([...retained.map((file) => canonicalFilePath(file)), ...roots.filter((entry) => entry.selected && !entry.ambiguous && !entry.unsupported
-      && path.isAbsolute(entry.path) && /\.jar$/i.test(entry.path)
-      && (!entry.inclusionOptions || entry.inclusionOptions === "root_itself")).map((entry) => entry.path)])];
+    return [...new Set([...retained.map((file) => canonicalFilePath(file)), ...this.concreteLibraryRoots(root, []).filter((file) => /\.jar$/i.test(file))])];
   }
 
-  libraryClassFilter(root, archive) {
+  libraryClassFilter(root, archive, directory = false) {
     const roots = this.libraryRoots(root);
     if (!roots) return () => true;
     const matching = roots.filter((entry) => libraryPathMatches(archive, entry.path));
     if (matching.some((entry) => entry.ambiguous || entry.selected && entry.unsupported)
       || roots.some((entry) => entry.selected && (entry.unsupported || libraryPathMatches(archive, entry.path) === undefined))) return () => true;
     const contributions = matching.filter((entry) => entry.selected).map((entry) => (entry.excludedRoots || []).flatMap((excluded) => {
+      if (directory) {
+        const physicalRoot = canonicalFilePath(archive);
+        if (path.isAbsolute(excluded)) {
+          const physicalExcluded = canonicalFilePath(excluded);
+          return inside(physicalExcluded, physicalRoot) ? [path.relative(physicalRoot, physicalExcluded).split(path.sep).join("/")] : [];
+        }
+        if (excluded === entry.path) return [""];
+        return excluded.startsWith(`${entry.path}/`) ? [excluded.slice(entry.path.length + 1)] : [];
+      }
       const internal = excluded.match(/^(.*\.jar)!(?:\/(.*))?$/i);
       const file = internal ? internal[1] : excluded;
       return libraryPathMatches(archive, file) ? [internal ? internal[2] || "" : ""] : [];

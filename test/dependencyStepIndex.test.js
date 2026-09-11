@@ -890,3 +890,94 @@ test("imported library exclusions agree across definitions and diagnostics", asy
     }
   } finally { definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose(); }
 });
+
+test("imported directory libraries agree across definitions and diagnostics", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation searches include compiled directory libraries,
+  // exclude class/package roots, and union unexcluded shared-library classes.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const root = "/workspace/gauge";
+  let binaryRoot = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-directory-library-"));
+  const originalBinaryRoot = binaryRoot;
+  const owners = { Hidden: "hidden/Hidden.class", Kept: "kept/Kept.class", Nested: "hidden/deep/Nested.class", Sibling: "hiddenExtra/Sibling.class" };
+  const names = Object.keys(owners);
+  let current;
+  const vscode = createFakeVscode();
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => {
+    const libraries = [{ name: "Steps", roots: [{ path: binaryRoot }], excludedRoots: current.exclusions.map((suffix) => binaryRoot + suffix) }];
+    if (current.secondExclusions !== null) libraries.push({ name: "Shared", roots: [{ path: binaryRoot }], excludedRoots: current.secondExclusions.map((suffix) => binaryRoot + suffix) });
+    await fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify({ libraries, modules: [{ name: "main", contentRoots: [{ path: root }], dependencies: libraries.map(({ name }) => ({ type: "library", name, scope: "compile" })) }] }));
+  } };
+  const scope = new KotlinSourceScope({ vscode });
+  for (const [name, entry] of Object.entries(owners)) {
+    await fs.mkdir(path.dirname(path.join(binaryRoot, entry)), { recursive: true });
+    await fs.writeFile(path.join(binaryRoot, entry), dependencyStepClass(name));
+  }
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope, classpathProvider: async () => [] });
+  const registration = index.register();
+  const text = `# Libraries\n\n## Example\n\n${names.map((name) => `* ${name}`).join("\n")}`;
+  const spec = { languageId: "gauge", uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: 8 };
+  vscode.workspace = { textDocuments: [spec], getConfiguration: () => ({ get: () => undefined }) };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false }, projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (current of require("./fixtures/directory-library-parity.json")) {
+      await scope.refresh();
+      await index.findDefinitions(root, names);
+      assert.deepEqual([...index.stepTemplates(root)].sort(), current.expected, current.name);
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => current.expected.includes(name) ? [] : [i + 4]), current.name);
+      for (let i = 0; i < names.length; i += 1) {
+        const targets = await definition.provideDefinition(spec, { line: i + 4, character: 3 });
+        assert.equal((targets || []).length, Number(current.expected.includes(names[i])), `${current.name} ${names[i]}`);
+      }
+    }
+    const replacement = path.join(originalBinaryRoot, "replacement");
+    await fs.mkdir(replacement);
+    await fs.writeFile(path.join(replacement, "Steps.class"), dependencyStepClass("Replacement"));
+    binaryRoot = replacement;
+    current = { exclusions: [], secondExclusions: null };
+    await scope.refresh();
+    assert.equal((await index.findDefinitions(root, ["Replacement"])).length, 1);
+    assert.deepEqual([...index.stepTemplates(root)], ["Replacement"]);
+  } finally {
+    definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose();
+    await fs.rm(originalBinaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("compiled directory scanning isolates invalid classes and terminates link cycles", async () => {
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const directory = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-class-directory-"));
+  const index = new DependencyStepIndex({ vscode: createFakeVscode(), classpathProvider: async () => [],
+    sourceScope: { concreteLibraryRoots: () => [directory] } });
+  try {
+    const nested = path.join(directory, "nested");
+    await fs.mkdir(nested);
+    await fs.writeFile(path.join(nested, "Steps.class"), dependencyStepClass("Directory step"));
+    await fs.writeFile(path.join(nested, "Broken.class"), "invalid class");
+    await fs.writeFile(path.join(directory, "NotAClass.java"), dependencyStepClass("Not bytecode input"));
+    const oversized = await fs.open(path.join(directory, "Oversized.class"), "w");
+    await oversized.truncate(16 * 1024 * 1024 + 1);
+    await oversized.close();
+    await fs.symlink(directory, path.join(nested, "cycle"));
+    await fs.symlink(nested, path.join(directory, "alias"));
+    await fs.symlink(path.join(directory, "absent"), path.join(directory, "broken-link"));
+    assert.equal((await index.findDefinitions(directory, ["Directory step"])).length, 1);
+    assert.deepEqual([...index.stepTemplates(directory)], ["Directory step"]);
+    const fallback = new DependencyStepIndex({ vscode: createFakeVscode(), classpathProvider: async () => [directory] });
+    try { assert.equal((await fallback.findDefinitions(directory, ["Directory step"])).length, 0); }
+    finally { fallback.dispose(); }
+  } finally { index.dispose(); await fs.rm(directory, { recursive: true, force: true }); }
+});

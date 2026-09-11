@@ -122,16 +122,19 @@ both are bundled with this extension; any Kotlin template you register with
   require exported edges, and Runtime edges are excluded. Imported source roots
   outside the editor workspace are searched and watched. References and rename
   from a shared dependency include its consuming Gauge projects. This source
-  graph also scopes JAR step candidates to eligible library dependencies and
-  adds absolute JAR roots missing from the execution classpath. Maven/HOME
+  graph also scopes compiled step candidates to eligible library dependencies and
+  adds absolute JAR or compiled-class directory roots missing from the execution
+  classpath. Imported class directories are searched recursively; source files
+  and oversized or malformed class files do not contribute binary steps. Maven/HOME
   macro paths are matched to supplied classpath entries; their base directories
   are not guessed. Ambiguous library names, unsupported macros, archive-directory
   roots retain available execution-classpath candidates. Library exclusions remove
-  whole JARs, individual classes, or package subtrees from step candidates.
-  Shared JARs contribute the union of each eligible library's unexcluded classes,
+  whole library roots, individual classes, or package subtrees from step candidates.
+  Shared binary roots contribute the union of each eligible library's unexcluded classes,
   following Gauge annotation-search scope; ordinary Kotlin type navigation can
   differ. Exclusion paths use the imported archive path, optionally followed
-  by `!/` and the class or package path.
+  by `!/` and the class or package path for JAR entries. Directory exclusions
+  use ordinary paths within the imported binary root.
   Imported membership does not prove successful build execution.
 - Without a supported imported model, every `.kt` and `.java` file under the
   Gauge project remains a candidate. A scratch file can therefore appear to

@@ -1,0 +1,160 @@
+[
+  {
+    "name": "none",
+    "exclusions": [],
+    "secondExclusions": null,
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "package",
+    "exclusions": [
+      "/hidden"
+    ],
+    "secondExclusions": null,
+    "expected": [
+      "Kept",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "class",
+    "exclusions": [
+      "/hidden/Hidden.class"
+    ],
+    "secondExclusions": null,
+    "expected": [
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "missing",
+    "exclusions": [
+      "/hidden/Missing.class"
+    ],
+    "secondExclusions": null,
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "partial",
+    "exclusions": [
+      "/hidd"
+    ],
+    "secondExclusions": null,
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "two-packages",
+    "exclusions": [
+      "/hidden",
+      "/kept"
+    ],
+    "secondExclusions": null,
+    "expected": [
+      "Sibling"
+    ]
+  },
+  {
+    "name": "directory-root",
+    "exclusions": [
+      ""
+    ],
+    "secondExclusions": null,
+    "expected": []
+  },
+  {
+    "name": "parent",
+    "exclusions": [
+      "/.."
+    ],
+    "secondExclusions": null,
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "restored",
+    "exclusions": [],
+    "secondExclusions": null,
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "shared-unexcluded",
+    "exclusions": [
+      "/hidden"
+    ],
+    "secondExclusions": [],
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "shared-complementary",
+    "exclusions": [
+      "/hidden"
+    ],
+    "secondExclusions": [
+      "/kept",
+      "/hiddenExtra"
+    ],
+    "expected": [
+      "Hidden",
+      "Kept",
+      "Nested",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "shared-identical",
+    "exclusions": [
+      "/hidden"
+    ],
+    "secondExclusions": [
+      "/hidden"
+    ],
+    "expected": [
+      "Kept",
+      "Sibling"
+    ]
+  },
+  {
+    "name": "shared-full-second",
+    "exclusions": [
+      "/hidden"
+    ],
+    "secondExclusions": [
+      "/"
+    ],
+    "expected": [
+      "Kept",
+      "Sibling"
+    ]
+  }
+]
