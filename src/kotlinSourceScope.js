@@ -49,11 +49,11 @@ function modulesFrom(model, directory) {
         }),
       };
     });
-    const dependencies = (module.dependencies || []).filter((entry) => entry.type === "module").map((entry) => {
+    const dependencies = (module.dependencies || []).filter((entry) => ["module", "library"].includes(entry.type)).map((entry) => {
       if (typeof entry.name !== "string" || !["compile", "test", "provided", "runtime"].includes(entry.scope)) {
         throw new Error("Invalid Kotlin module dependency.");
       }
-      return { name: entry.name, scope: entry.scope, exported: entry.isExported === true };
+      return { type: entry.type, name: entry.name, scope: entry.scope, exported: entry.isExported === true };
     });
     return { name: module.name ?? String(index), contents, dependencies, root: contents[0]?.root };
   });
@@ -68,6 +68,7 @@ class KotlinSourceScope {
     this.refreshIntervalMs = options.refreshIntervalMs ?? 5000;
     this.contents = [];
     this.modules = [];
+    this.libraries = [];
     this.listeners = new Set();
     this.disposed = false;
     this.pending = undefined;
@@ -84,12 +85,41 @@ class KotlinSourceScope {
       if (selected.has(module)) continue;
       selected.add(module);
       for (const edge of module.dependencies) {
-        if (edge.scope === "runtime" || (!initial.includes(module) && !edge.exported)) continue;
+        if (edge.type !== "module" || edge.scope === "runtime" || (!initial.includes(module) && !edge.exported)) continue;
         const dependency = byName.get(edge.name);
         if (dependency) pending.push(dependency);
       }
     }
     return [...selected];
+  }
+
+  libraryClasspath(root, classpath) {
+    const modules = this.modulesFor(root);
+    if (!modules.length) return classpath;
+    const identity = canonicalFilePath(root);
+    const selected = new Set(modules.flatMap((module) => module.dependencies
+      .filter((edge) => edge.type === "library" && edge.scope !== "runtime"
+        && (module.root && inside(module.root, identity) || edge.exported))
+      .map((edge) => edge.name)));
+    const roots = this.libraries.flatMap((library) => library.roots
+      .filter((entry) => (entry.type || "CLASSES") === "CLASSES")
+      .map((entry) => ({ ...entry, selected: selected.has(library.name),
+        ambiguous: this.libraries.filter((other) => other.name === library.name).length > 1,
+        unsupported: Boolean(library.excludedRoots?.length || entry.inclusionOptions && entry.inclusionOptions !== "root_itself") })));
+    const matches = (file, entry) => {
+      if (entry.unsupported) return undefined;
+      if (path.isAbsolute(entry.path)) return canonicalFilePath(file) === entry.path;
+      const macro = entry.path.match(/^<(?:MAVEN_REPO|HOME)>\/(.+)$/);
+      return macro ? file.replace(/\\/g, "/").endsWith(`/${macro[1]}`) : undefined;
+    };
+    const retained = classpath.filter((file) => typeof file === "string").filter((file) => {
+      const matching = roots.filter((entry) => matches(file, entry));
+      return matching.some((entry) => entry.selected || entry.ambiguous)
+        || roots.some((entry) => entry.selected && matches(file, entry) === undefined);
+    });
+    return [...new Set([...retained.map((file) => canonicalFilePath(file)), ...roots.filter((entry) => entry.selected && !entry.ambiguous && !entry.unsupported
+      && path.isAbsolute(entry.path) && /\.jar$/i.test(entry.path)
+      && (!entry.inclusionOptions || entry.inclusionOptions === "root_itself")).map((entry) => entry.path)])];
   }
 
   moduleRoots() {
@@ -163,8 +193,16 @@ class KotlinSourceScope {
       if (this.disposed) return;
       await this.vscode.commands.executeCommand("exportWorkspace", directory);
       if (this.disposed) return;
-      const modules = modulesFrom(JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8")), directory);
-      if (this.disposed || JSON.stringify(modules) === JSON.stringify(this.modules)) return;
+      const model = JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8"));
+      const modules = modulesFrom(model, directory);
+      const libraries = (model.libraries || []).map((library) => ({ ...library, roots: library.roots.map((entry) => {
+        if (typeof entry.path !== "string") throw new Error("Invalid Kotlin library path.");
+        let resolved = entry.path;
+        try { resolved = exportedPath(entry.path, directory); } catch (_error) { /* Macro paths can be matched to an existing execution classpath entry. */ }
+        return { ...entry, path: resolved };
+      }) }));
+      if (this.disposed || JSON.stringify([modules, libraries]) === JSON.stringify([this.modules, this.libraries])) return;
+      this.libraries = libraries;
       this.modules = modules;
       this.contents = modules.flatMap((module) => module.contents);
       for (const listener of [...this.listeners]) {
@@ -184,6 +222,7 @@ class KotlinSourceScope {
     this.listeners.clear();
     this.contents = [];
     this.modules = [];
+    this.libraries = [];
   }
 }
 

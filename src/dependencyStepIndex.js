@@ -431,6 +431,7 @@ function projectForRoot(projectFactory, root) {
 class DependencyStepIndex {
   constructor(options = {}) {
     this.cli = options.cli;
+    this.sourceScope = options.sourceScope;
     this.fileSystem = options.fileSystem || nodeFs;
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
@@ -481,7 +482,8 @@ class DependencyStepIndex {
     if (this.disposed) {
       return undefined;
     }
-    const classpath = await this.classpathProvider(root);
+    const executionClasspath = await this.classpathProvider(root);
+    const classpath = this.sourceScope?.libraryClasspath?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || executionClasspath;
     if (this.disposed) {
       return undefined;
     }
@@ -734,6 +736,7 @@ class DependencyStepIndex {
     const workspace = this.vscode.workspace || {};
     const disposables = [];
     let registrationDisposed = false;
+    if (this.sourceScope?.onDidChange) disposables.push(this.sourceScope.onDidChange(() => this.invalidate()));
     if (
       this.projectEnvironmentService
       && typeof this.projectEnvironmentService.onDidInvalidate === "function"

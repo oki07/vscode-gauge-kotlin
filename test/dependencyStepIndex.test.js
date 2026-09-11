@@ -36,7 +36,7 @@ function classInfo(nameIndex) {
   return Buffer.concat([u1(7), u2(nameIndex)]);
 }
 
-function dependencyStepClass() {
+function dependencyStepClass(alias = "Send the <request>") {
   const constantPool = [
     utf8("steps/RequestSteps"),
     classInfo(1),
@@ -47,7 +47,7 @@ function dependencyStepClass() {
     utf8("RuntimeVisibleAnnotations"),
     utf8("Lcom/thoughtworks/gauge/Step;"),
     utf8("value"),
-    utf8("Send the <request>"),
+    utf8(alias),
     utf8("SourceFile"),
     utf8("RequestSteps.kt"),
   ];
@@ -772,4 +772,71 @@ test("DependencyStepIndex does not scan after disposal during classpath lookup",
     pending: 0,
     scanCalls: 0,
   });
+});
+
+test("imported library scope updates definitions and diagnostic candidates together", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation searches exclude Runtime and private transitive libraries.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const root = "/workspace/gauge";
+  const vscode = createFakeVscode();
+  let phase = "private";
+  const names = ["Direct", "Transitive", "Unrelated"];
+  let libraryPath = "/repo/Direct.jar";
+  const model = () => ({
+    modules: [
+      { name: "main", contentRoots: [{ path: root }], dependencies: phase === "removed" ? [] : [
+        { type: "library", name: "Direct", scope: phase === "direct-runtime" ? "runtime" : "compile" },
+        { type: "module", name: "dependency", scope: "compile" },
+      ] },
+      { name: "dependency", contentRoots: [{ path: "/other" }], dependencies: [
+        { type: "library", name: "Transitive", scope: phase === "transitive-runtime" ? "runtime" : "test", isExported: phase !== "private" },
+      ] },
+    ],
+    libraries: names.map((name) => ({ name, type: null, roots: [{ path: name === "Direct" ? libraryPath : `/repo/${name}.jar` }] })),
+  });
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify(model())) };
+  const scope = new KotlinSourceScope({ vscode });
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope,
+    fileSystem: { existsSync: () => true },
+    classpathProvider: async () => [...names.map((name) => `/repo/${name}.jar`), "/repo/../repo/Direct.jar"],
+    scanArchive: async (archive, visit) => visit("Steps.class", dependencyStepClass(path.basename(archive, ".jar"))),
+  });
+  const registration = index.register();
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const text = "# Libraries\n\n## Example\n\n* Direct\n* Transitive\n* Unrelated";
+  const spec = { languageId: "gauge", uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: 7 };
+  vscode.workspace = { textDocuments: [spec], getConfiguration: () => ({ get: () => undefined }) };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false },
+    projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (phase of ["private", "exported", "direct-runtime", "transitive-runtime", "removed"]) {
+      await scope.refresh();
+      const expected = phase === "removed" ? [] : names.slice(0, 2).filter((name) => name === "Direct" ? phase !== "direct-runtime" : !["private", "transitive-runtime"].includes(phase));
+      const definitions = await index.findDefinitions(root, names);
+      assert.deepEqual(definitions.map((entry) => index.content(entry.uri).match(/Artifact: ([^\n]+)/)[1]).sort(), expected.map((name) => `/repo/${name}.jar`).sort());
+      assert.deepEqual([...index.stepTemplates(root)].sort(), expected.sort());
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => expected.includes(name) ? [] : [i + 4]));
+      for (let i = 0; i < names.length; i += 1) {
+        const targets = await definition.provideDefinition(spec, { line: i + 4, character: 3 });
+        assert.equal((targets || []).length, Number(expected.includes(names[i])));
+      }
+    }
+    phase = "private";
+    libraryPath = "/external/Replaced.jar";
+    await scope.refresh();
+    const definitions = await index.findDefinitions(root, ["Replaced"]);
+    assert.equal(definitions.length, 1);
+    assert.deepEqual([...index.stepTemplates(root)], ["Replaced"]);
+  } finally { definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose(); }
 });

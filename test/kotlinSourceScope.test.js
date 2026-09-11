@@ -161,3 +161,30 @@ test("Kotlin module candidates follow the measured IDEA dependency scope", async
     }
   } finally { scope.dispose(); }
 });
+
+test("Kotlin library paths match supplied classpaths without guessing macro bases", async () => {
+  const { state, scope } = fixture();
+  const root = "/workspace/gauge";
+  state.model.modules[0].dependencies = [{ type: "library", name: "steps", scope: "compile" }];
+  state.model.libraries = [{ name: "steps", type: null, roots: [{ path: "<MAVEN_REPO>/group/steps/1/steps-1.jar" }] }];
+  try {
+    await scope.refresh();
+    const archive = "/custom/repository/group/steps/1/steps-1.jar";
+    assert.deepEqual(scope.libraryClasspath(root, [archive, "/other.jar", null, 1]), [archive]);
+    assert.deepEqual(scope.libraryClasspath(root, []), []);
+    state.model.libraries[0].roots[0].path = "<HOME>/libs/steps.jar";
+    await scope.refresh();
+    assert.deepEqual(scope.libraryClasspath(root, ["/server-home/libs/steps.jar", archive]), ["/server-home/libs/steps.jar"]);
+    state.model.libraries[0].roots[0].path = "<UNKNOWN>/steps.jar";
+    await scope.refresh();
+    assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
+    state.model.libraries[0].roots[0].path = "/archives";
+    state.model.libraries[0].roots[0].inclusionOptions = "archives_under_root";
+    await scope.refresh();
+    assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
+    state.model.libraries[0].roots[0].path = null;
+    await scope.refresh();
+    assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
+    assert.deepEqual(scope.libraryClasspath("/unimported", [archive]), [archive]);
+  } finally { scope.dispose(); }
+});

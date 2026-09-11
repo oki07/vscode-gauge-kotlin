@@ -1090,8 +1090,11 @@ function startGaugeServices(context, vscode, options = {}) {
 
   const GaugeClientsCtor = options.GaugeClients || GaugeClients;
   const clientsMap = options.clientsMap || new GaugeClientsCtor();
+  const sourceScope = options.sourceScope || new KotlinSourceScope({ vscode });
+  if (!options.sourceScope) context.subscriptions.push(sourceScope);
   const DependencyStepIndexCtor = options.DependencyStepIndex || DependencyStepIndex;
   const dependencyStepIndex = options.dependencyStepIndex || new DependencyStepIndexCtor({
+    sourceScope,
     cli,
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
@@ -1116,8 +1119,6 @@ function startGaugeServices(context, vscode, options = {}) {
   }
   registerDebugConfigurationProvider(context, vscode);
   registerGaugeLanguageConfiguration(context, vscode);
-  const sourceScope = options.sourceScope || new KotlinSourceScope({ vscode });
-  if (!options.sourceScope) context.subscriptions.push(sourceScope);
   const WorkspaceDocumentStoreCtor = options.WorkspaceDocumentStore || WorkspaceDocumentStore;
   const documentStore = options.documentStore || new WorkspaceDocumentStoreCtor({
     sourceScope,
