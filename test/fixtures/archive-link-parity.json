@@ -1,0 +1,155 @@
+[
+  {
+    "phase": "direct",
+    "recursive": false,
+    "expected": {
+      "Direct": [
+        "direct.jar",
+        "duplicate.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": []
+    }
+  },
+  {
+    "phase": "recursive",
+    "recursive": true,
+    "expected": {
+      "Direct": [
+        "direct.jar",
+        "duplicate.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "excluded-alias",
+    "recursive": true,
+    "exclusion": "duplicate.jar!/Steps.class",
+    "expected": {
+      "Direct": [
+        "direct.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "excluded-direct",
+    "recursive": true,
+    "exclusion": "direct.jar!/Steps.class",
+    "expected": {
+      "Direct": [
+        "duplicate.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "excluded-alias-root",
+    "recursive": true,
+    "exclusion": "duplicate.jar",
+    "expected": {
+      "Direct": [
+        "direct.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "excluded-direct-root",
+    "recursive": true,
+    "exclusion": "direct.jar",
+    "expected": {
+      "Direct": [
+        "duplicate.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "excluded-physical",
+    "recursive": true,
+    "exclusion": "../external.data!/Steps.class",
+    "expected": {
+      "Direct": [
+        "direct.jar",
+        "duplicate.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "restored",
+    "recursive": true,
+    "expected": {
+      "Direct": [
+        "direct.jar",
+        "duplicate.jar"
+      ],
+      "LinkedFile": [
+        "file.jar"
+      ],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "removed-file-link",
+    "remove": "file.jar",
+    "expected": {
+      "Direct": [
+        "direct.jar",
+        "duplicate.jar"
+      ],
+      "LinkedFile": [],
+      "LinkedFolder": [
+        "folder/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "removed-folder-link",
+    "remove": "folder",
+    "expected": {
+      "Direct": [
+        "direct.jar",
+        "duplicate.jar"
+      ],
+      "LinkedFile": [],
+      "LinkedFolder": []
+    }
+  }
+]

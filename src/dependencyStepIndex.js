@@ -353,27 +353,56 @@ async function scanClassDirectory(root, visit) {
   await walk(root, "", new Set());
 }
 
-async function discoverArchives(root, recursive) {
+function logicalFilePath(file) {
+  return nodePath.join(canonicalFilePath(nodePath.dirname(file)), nodePath.basename(file));
+}
+
+async function discoverArchives(root, recursive, onWatch) {
   const found = new Set();
+  const watches = new Map();
+  const watch = (value) => {
+    const key = JSON.stringify(value);
+    if (watches.has(key)) return;
+    watches.set(key, value);
+    onWatch([value]);
+  };
+  const followLinks = async (file) => {
+    const seen = new Set();
+    while (true) {
+      const logical = logicalFilePath(file);
+      if (seen.has(logical)) return;
+      seen.add(logical);
+      let stat;
+      try { stat = await nodeFs.promises.lstat(file); } catch (_error) { watch(file); return; }
+      if (!stat.isSymbolicLink()) { watch(file); return; }
+      watch({ path: logical, logical: true });
+      try { file = nodePath.resolve(nodePath.dirname(file), await nodeFs.promises.readlink(file)); } catch (_error) { return; }
+    }
+  };
   const walk = async (directory, ancestors) => {
     let physical;
     let children;
     try {
       physical = await nodeFs.promises.realpath(directory);
       if (ancestors.has(physical)) return;
+      watch(physical);
       children = await nodeFs.promises.readdir(directory, { withFileTypes: true });
     } catch (_error) { return; }
     const parents = new Set([...ancestors, physical]);
     for (const child of children) {
       const file = nodePath.join(directory, child.name);
+      if (child.isSymbolicLink() && (recursive || isArchiveFile(file))) await followLinks(file);
       let stat;
       try { stat = await nodeFs.promises.stat(file); } catch (_error) { continue; }
       if (stat.isDirectory() && recursive) await walk(file, parents);
-      else if (stat.isFile() && isArchiveFile(file)) found.add(canonicalFilePath(file));
+      else if (stat.isFile() && isArchiveFile(file)) {
+        watch(file);
+        found.add(file);
+      }
     }
   };
   await walk(root, new Set());
-  return [...found].sort();
+  return { files: [...found].sort(), watches: [...watches.values()] };
 }
 
 function scanJarArchive(archivePath, visit) {
@@ -513,14 +542,14 @@ class DependencyStepIndex {
   updateTrackedDeclarations(root, index, changedArtifact) {
     if (!index && !changedArtifact) return;
     const entries = new Map();
-    for (const candidates of index?.entriesByTemplate.values() || []) for (const entry of candidates) entries.set(dependencyIdentity(entry), entry);
+    for (const candidates of (index || changedArtifact && this.indices.get(root))?.entriesByTemplate.values() || []) for (const entry of candidates) entries.set(dependencyIdentity(entry), entry);
     for (const [key, tracked] of this.declarations) {
       if (root !== undefined && tracked.root !== root) continue;
-      if (changedArtifact && !isWithinRoot(canonicalFilePath(tracked.artifact), changedArtifact, this.pathModule)) continue;
+      if (changedArtifact && !entries.has(tracked.identity) && ![tracked.artifact, tracked.physicalArtifact].some((file) => file && isWithinRoot(file, changedArtifact, this.pathModule))) continue;
       if (changedArtifact) tracked.dirty = true;
-      const entry = entries.get(tracked.identity);
+      const entry = index ? entries.get(tracked.identity) : undefined;
       if (!entry && !tracked.dirty) continue;
-      if (entry) tracked.dirty = false;
+      if (entry) { tracked.dirty = false; tracked.physicalArtifact = canonicalFilePath(entry.artifact); }
       const next = entry ? declarationFor(entry).content : undefined;
       const previous = this.contents.get(key);
       if (next === undefined) {
@@ -544,11 +573,12 @@ class DependencyStepIndex {
     this.binaryWatchers.clear();
   }
 
-  syncBinaryWatches(root, files) {
+  syncBinaryWatches(root, files, retainExisting = false) {
     const workspace = this.vscode.workspace || {};
     if (this.disposed || !workspace.createFileSystemWatcher || !this.vscode.RelativePattern) return;
-    const selected = new Set(files.filter((file) => typeof file === "string").map((file) => canonicalFilePath(file)));
-    for (const [file, entry] of this.binaryWatchers) {
+    const selected = new Set(files.flatMap((file) => typeof file === "string" ? [canonicalFilePath(file)]
+      : file?.logical && typeof file.path === "string" ? [logicalFilePath(file.path)] : []));
+    if (!retainExisting) for (const [file, entry] of this.binaryWatchers) {
       if (!selected.has(file)) entry.roots.delete(root);
       if (!entry.roots.size) {
         for (const disposable of entry.disposables) disposable?.dispose();
@@ -571,13 +601,13 @@ class DependencyStepIndex {
           }
           const watcher = workspace.createFileSystemWatcher(new this.vscode.RelativePattern(base, "**/*"));
           disposables.push(watcher);
-          entry = { roots: new Set(), disposables };
+          entry = { roots: new Set(), disposables, directory };
           const tracked = entry;
           const changed = (uri) => {
             const candidate = uri?.fsPath || uri?.path;
             if (this.disposed || typeof candidate !== "string") return;
-            const identity = canonicalFilePath(candidate);
-            if (identity !== file && !(directory && isWithinRoot(identity, file, this.pathModule))) return;
+            const identities = [canonicalFilePath(candidate), logicalFilePath(candidate)];
+            if (!identities.some((identity) => identity === file || tracked.directory && isWithinRoot(identity, file, this.pathModule))) return;
             for (const consumer of [...tracked.roots]) this.invalidate(consumer, file);
           };
           for (const event of ["onDidCreate", "onDidChange", "onDidDelete"]) if (watcher[event]) disposables.push(watcher[event](changed));
@@ -587,6 +617,7 @@ class DependencyStepIndex {
           continue;
         }
       }
+      try { entry.directory = this.fileSystem.statSync?.(file).isDirectory() ?? entry.directory; } catch (_error) { /* Retain the last known kind while a target is absent. */ }
       entry.roots.add(root);
     }
   }
@@ -634,8 +665,12 @@ class DependencyStepIndex {
     const jarPaths = (Array.isArray(classpath) ? classpath : []).filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".jar"));
     const discoveryRoots = this.sourceScope?.archiveDirectoryRoots?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || [];
     // Watch discovery roots before enumeration so new archives cannot be missed.
-    this.syncBinaryWatches(root, [...jarPaths, ...concreteRoots, ...discoveryRoots.map((entry) => entry.path)]);
-    const discovered = (await Promise.all(discoveryRoots.map((entry) => discoverArchives(entry.path, entry.recursive)))).flat();
+    const baseWatches = [...jarPaths, ...concreteRoots, ...discoveryRoots.map((entry) => entry.path)];
+    this.syncBinaryWatches(root, baseWatches, true);
+    const discovery = await Promise.all(discoveryRoots.map((entry) => discoverArchives(entry.path, entry.recursive,
+      (files) => this.syncBinaryWatches(root, files, true))));
+    this.syncBinaryWatches(root, [...baseWatches, ...discovery.flatMap((entry) => entry.watches)]);
+    const discovered = discovery.flatMap((entry) => entry.files);
     const directories = new Set(concreteRoots.filter((entry) => {
       try { return this.fileSystem.statSync?.(entry).isDirectory(); } catch (_error) { return false; }
     }));
@@ -781,6 +816,7 @@ class DependencyStepIndex {
     if (this.disposed) {
       return;
     }
+    this.updateTrackedDeclarations(root, undefined, changedArtifact);
     if (root) {
       this.rootInvalidationGenerations.set(
         root,
@@ -794,7 +830,6 @@ class DependencyStepIndex {
       this.indices.clear();
     }
     this.generation += 1;
-    this.updateTrackedDeclarations(root, undefined, changedArtifact);
     for (const listener of [...this.invalidationListeners]) {
       try { listener(root); } catch (_error) { /* Other consumers must still receive invalidation. */ }
     }
@@ -854,7 +889,7 @@ class DependencyStepIndex {
         seen.add(identity);
         const uri = this.uriFor(entry, root);
         const declaration = declarationFor(entry);
-        pendingDeclarations.push({ root, uri, identity, artifact: entry.artifact });
+        pendingDeclarations.push({ root, uri, identity, artifact: entry.artifact, physicalArtifact: canonicalFilePath(entry.artifact) });
         pendingContents.push([uri.toString(), declaration.content]);
         pendingContents.push([uri.query, declaration.content]);
         definitions.push({

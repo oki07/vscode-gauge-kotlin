@@ -35,12 +35,19 @@ function isArchiveDirectory(entry) {
 
 function archiveParent(file, entry) {
   if (!isArchiveFile(file)) return undefined;
-  let parent = path.dirname(canonicalFilePath(file));
+  let parent = path.dirname(path.resolve(file));
   while (true) {
     if (libraryPathMatches(parent, entry.path)) return parent;
     if (entry.inclusionOptions !== "archives_under_root_recursively" || parent === path.dirname(parent)) return undefined;
     parent = path.dirname(parent);
   }
+}
+
+function sameLibraryArchive(archive, excluded, entry) {
+  if (!isArchiveDirectory(entry) || !path.isAbsolute(excluded)) return libraryPathMatches(archive, excluded);
+  const archiveRoot = archiveParent(archive, entry);
+  const excludedRoot = archiveParent(excluded, entry);
+  return Boolean(archiveRoot && excludedRoot && path.relative(archiveRoot, archive) === path.relative(excludedRoot, excluded));
 }
 
 function libraryRootMatches(file, entry) {
@@ -188,7 +195,7 @@ class KotlinSourceScope {
       const parts = excluded.match(/^(.*)!(?:\/(.*))?$/);
       const internal = parts && isArchiveFile(parts[1]) ? parts : undefined;
       const file = internal ? internal[1] : excluded;
-      return (internal || /\.jar$/i.test(file)) && libraryPathMatches(archive, file) ? [internal ? internal[2] || "" : ""] : [];
+      return (internal || /\.jar$/i.test(file)) && sameLibraryArchive(archive, file, entry) ? [internal ? internal[2] || "" : ""] : [];
     }));
     // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
     // IDEA annotation search includes the union of unexcluded library classes.
@@ -275,7 +282,11 @@ class KotlinSourceScope {
       };
       const libraries = (model.libraries || []).map((library) => ({ ...library,
         roots: library.roots.map((entry) => ({ ...entry, path: libraryPath(entry.path) })),
-        excludedRoots: (library.excludedRoots || []).map(libraryPath),
+        excludedRoots: (library.excludedRoots || []).map((value) => {
+          if (typeof value !== "string") throw new Error("Invalid Kotlin library exclusion.");
+          const expanded = value.replace(/^<WORKSPACE>(?=\/|$)/, directory);
+          return path.isAbsolute(expanded) ? path.resolve(expanded) : value;
+        }),
       }));
       if (this.disposed || JSON.stringify([modules, libraries]) === JSON.stringify([this.modules, this.libraries])) return;
       this.libraries = libraries;

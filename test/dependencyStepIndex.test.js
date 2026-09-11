@@ -1241,3 +1241,178 @@ test("archive directory discovery agrees across definitions diagnostics and temp
     await fs.rm(binary, { recursive: true, force: true });
   }
 });
+
+test("archive links preserve logical definitions and per-alias exclusions", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation search preserves linked archive roots as
+  // distinct methods and applies entry exclusions to the named alias only.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const temporary = await fs.realpath(await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-archive-links-")));
+  const binary = path.join(temporary, "discovery");
+  const external = path.join(temporary, "external");
+  await fs.mkdir(binary);
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(binary, "direct.jar"), dependencyStepClass("Direct"));
+  await fs.writeFile(path.join(temporary, "external.data"), dependencyStepClass("LinkedFile"));
+  await fs.writeFile(path.join(external, "nested.jar"), dependencyStepClass("LinkedFolder"));
+  await fs.symlink(path.join(binary, "direct.jar"), path.join(binary, "duplicate.jar"));
+  await fs.symlink(path.join(temporary, "external.data"), path.join(binary, "file.jar"));
+  await fs.symlink(path.join(temporary, "external.data"), path.join(binary, "plain.txt"));
+  await fs.symlink(external, path.join(binary, "folder"));
+  await fs.symlink(path.join(temporary, "missing.jar"), path.join(binary, "broken.jar"));
+  const root = "/projects/linked";
+  const names = ["Direct", "LinkedFile", "LinkedFolder"];
+  let current;
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => {
+    await fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify({
+      libraries: [{ name: "Steps", roots: [{ path: binary, inclusionOptions: current.recursive ? "archives_under_root_recursively" : "archives_under_root" }], excludedRoots: current.exclusion ? [path.resolve(binary, current.exclusion)] : [] }],
+      modules: [{ name: "main", contentRoots: [{ path: root }], dependencies: [{ type: "library", name: "Steps", scope: "compile" }] }],
+    }));
+  } };
+  const scope = new KotlinSourceScope({ vscode });
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope, classpathProvider: async () => [path.join(binary, "direct.jar"), path.join(binary, "duplicate.jar")],
+    scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  const registration = index.register();
+  const text = `# Links\n\n## Discovery\n\n${names.map((name) => `* ${name}`).join("\n")}`;
+  const spec = { languageId: "gauge", version: 1, uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: names.length + 4 };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  vscode.workspace.textDocuments = documents;
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false }, projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (const row of require("./fixtures/archive-link-parity.json")) {
+      if (row.remove) { await fs.unlink(path.join(binary, row.remove)); host.emit("onDidDelete", path.join(binary, row.remove)); }
+      else { current = row; await scope.refresh(); }
+      await index.findDefinitions(root, names);
+      for (let i = 0; i < names.length; i += 1) {
+        const targets = await definition.provideDefinition(spec, { line: i + 4, character: 3 });
+        assert.deepEqual((targets || []).map(({ uri }) => path.relative(binary, JSON.parse(Buffer.from(uri.query, "base64url").toString())[1]).split(path.sep).join("/")).sort(), row.expected[names[i]], `${row.phase} ${names[i]}`);
+      }
+      const present = names.filter((name) => row.expected[name].length > 0);
+      assert.deepEqual([...index.stepTemplates(root)].sort(), present.sort(), row.phase);
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => row.expected[name].length ? [] : [i + 4]), row.phase);
+    }
+    assert.ok(await fs.stat(path.join(temporary, "external.data")));
+    assert.ok(await fs.stat(path.join(external, "nested.jar")));
+  } finally {
+    definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose();
+    assert.ok(host.watchers.every((watcher) => watcher.disposed));
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("archive link targets refresh consumers through changes recreation and retargeting", async () => {
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const temporary = await fs.realpath(await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-link-events-")));
+  const binary = path.join(temporary, "discovery");
+  const external = path.join(temporary, "external");
+  const target = path.join(temporary, "target.data");
+  const intermediate = path.join(temporary, "intermediate");
+  await fs.mkdir(binary);
+  await fs.mkdir(external);
+  await fs.writeFile(target, dependencyStepClass("Old"));
+  await fs.symlink(target, intermediate);
+  await fs.symlink(intermediate, path.join(binary, "file.jar"));
+  await fs.symlink(external, path.join(binary, "folder"));
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  vscode.EventEmitter = class {
+    constructor() { this.listeners = new Set(); this.event = (listener) => { this.listeners.add(listener); return { dispose: () => this.listeners.delete(listener) }; }; }
+    fire(value) { for (const listener of this.listeners) listener(value); }
+    dispose() { this.listeners.clear(); }
+  };
+  let provider;
+  vscode.workspace.registerTextDocumentContentProvider = (_scheme, value) => { provider = value; return { dispose() {} }; };
+  const index = new DependencyStepIndex({ vscode, classpathProvider: async () => [], sourceScope: { archiveDirectoryRoots: () => [{ path: binary, recursive: true }] },
+    scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  const registration = index.register();
+  const roots = ["/first", "/second"];
+  const expectTemplates = async (expected) => {
+    for (const root of roots) {
+      await index.findDefinitions(root, expected);
+      assert.deepEqual([...index.stepTemplates(root)].sort(), [...expected].sort(), root);
+    }
+  };
+  try {
+    await expectTemplates(["Old"]);
+    const [{ uri }] = await index.findDefinitions(roots[0], ["Old"]);
+    let displayed = provider.provideTextDocumentContent(uri);
+    provider.onDidChange((changed) => { if (changed.toString() === uri.toString()) displayed = provider.provideTextDocumentContent(uri); });
+    await fs.writeFile(target, dependencyStepClass("New"));
+    host.emit("onDidChange", target);
+    await expectTemplates(["New"]);
+    assert.match(displayed, /@Step\("New"\)/);
+    await fs.unlink(target);
+    // A native watcher can report the intermediate link before the target.
+    host.emit("onDidChange", intermediate);
+    await expectTemplates([]);
+    assert.equal(displayed, "Dependency step declaration is unavailable.");
+    await fs.writeFile(target, dependencyStepClass("Old"));
+    host.emit("onDidCreate", target);
+    await expectTemplates(["Old"]);
+    assert.match(displayed, /@Step\("Old"\)/);
+    const replacement = path.join(temporary, "replacement.data");
+    await fs.writeFile(replacement, dependencyStepClass("Replacement"));
+    await fs.unlink(intermediate);
+    await fs.symlink(replacement, intermediate);
+    host.emit("onDidChange", intermediate);
+    await expectTemplates(["Replacement"]);
+    assert.match(displayed, /@Step\("Replacement"\)/);
+    assert.equal(index.binaryWatchers.has(target), false);
+    const added = path.join(external, "added.jar");
+    await fs.writeFile(added, dependencyStepClass("Added"));
+    host.emit("onDidCreate", added);
+    await expectTemplates(["Replacement", "Added"]);
+    await fs.symlink(binary, path.join(external, "cycle"));
+    host.emit("onDidCreate", path.join(external, "cycle"));
+    await expectTemplates(["Replacement", "Added"]);
+    await fs.unlink(path.join(binary, "folder"));
+    host.emit("onDidDelete", path.join(binary, "folder"));
+    await expectTemplates(["Replacement"]);
+    assert.equal(index.binaryWatchers.has(external), false);
+    await fs.unlink(path.join(binary, "file.jar"));
+    host.emit("onDidDelete", path.join(binary, "file.jar"));
+    await expectTemplates([]);
+    assert.equal(displayed, "Dependency step declaration is unavailable.");
+    assert.equal(index.binaryWatchers.has(replacement), false);
+  } finally {
+    registration.dispose();
+    assert.ok(host.watchers.every((watcher) => watcher.disposed));
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a missing archive-named discovery directory watches children after creation", async () => {
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const temporary = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-future-discovery-"));
+  const binary = path.join(temporary, "future.jar");
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  const index = new DependencyStepIndex({ vscode, classpathProvider: async () => [], sourceScope: { archiveDirectoryRoots: () => [{ path: binary, recursive: true }] },
+    scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  try {
+    assert.equal((await index.findDefinitions(temporary, ["Added"])).length, 0);
+    await fs.mkdir(binary);
+    host.emit("onDidCreate", binary);
+    assert.equal((await index.findDefinitions(temporary, ["Added"])).length, 0);
+    const added = path.join(binary, "added.jar");
+    await fs.writeFile(added, dependencyStepClass("Added"));
+    host.emit("onDidCreate", added);
+    assert.equal((await index.findDefinitions(temporary, ["Added"])).length, 1);
+  } finally { index.dispose(); await fs.rm(temporary, { recursive: true, force: true }); }
+});
