@@ -1,0 +1,78 @@
+[
+  {
+    "kind": "directory",
+    "phase": "baseline",
+    "expected": [
+      "Old",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "directory",
+    "phase": "changed",
+    "expected": [
+      "New",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "directory",
+    "phase": "restored",
+    "expected": [
+      "Old",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "directory",
+    "phase": "deleted",
+    "expected": [
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "directory",
+    "phase": "recreated",
+    "expected": [
+      "Old",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "jar",
+    "phase": "baseline",
+    "expected": [
+      "Old",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "jar",
+    "phase": "changed",
+    "expected": [
+      "New",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "jar",
+    "phase": "restored",
+    "expected": [
+      "Old",
+      "Sibling"
+    ]
+  },
+  {
+    "kind": "jar",
+    "phase": "deleted",
+    "expected": []
+  },
+  {
+    "kind": "jar",
+    "phase": "recreated",
+    "expected": [
+      "Old",
+      "Sibling"
+    ]
+  }
+]

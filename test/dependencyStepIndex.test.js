@@ -981,3 +981,199 @@ test("compiled directory scanning isolates invalid classes and terminates link c
     finally { fallback.dispose(); }
   } finally { index.dispose(); await fs.rm(directory, { recursive: true, force: true }); }
 });
+
+function binaryWatchHost(vscode) {
+  const watchers = [];
+  vscode.RelativePattern = class { constructor(base, pattern) { this.base = base; this.pattern = pattern; } };
+  vscode.workspace = { createFileSystemWatcher(pattern) {
+    const listeners = new Map();
+    const watcher = { pattern, disposed: false, dispose() { this.disposed = true; }, listeners };
+    for (const event of ["onDidCreate", "onDidChange", "onDidDelete"]) watcher[event] = (listener) => {
+      listeners.set(event, listener);
+      return { dispose() { listeners.delete(event); } };
+    };
+    watchers.push(watcher);
+    return watcher;
+  } };
+  return { watchers, emit(event, file) {
+    for (const watcher of [...watchers]) if (!watcher.disposed) watcher.listeners.get(event)?.({ fsPath: file });
+  } };
+}
+
+for (const kind of ["directory", "jar"]) test(`binary ${kind} events refresh both consumers and their published diagnostics`, async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation search reflects binary changes, deletion, and recreation.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const temporary = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-binary-events-"));
+  let artifact = path.join(temporary, kind === "jar" ? "steps.jar" : "classes");
+  const prepare = async () => {
+    if (kind === "directory") {
+      await fs.mkdir(artifact);
+      await fs.writeFile(path.join(artifact, "Sibling.class"), dependencyStepClass("Sibling"));
+    }
+    await fs.writeFile(kind === "jar" ? artifact : path.join(artifact, "Steps.class"), dependencyStepClass("Old"));
+  };
+  await prepare();
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  let modelChanged;
+  const index = new DependencyStepIndex({ vscode,
+    sourceScope: { concreteLibraryRoots: () => [artifact], onDidChange: (listener) => { modelChanged = listener; return { dispose() {} }; } },
+    classpathProvider: async () => kind === "jar" ? [artifact] : [],
+    scanArchive: async (file, visit) => { await visit("Steps.class", await fs.readFile(file)); await visit("Sibling.class", dependencyStepClass("Sibling")); },
+  });
+  const registration = index.register();
+  const roots = ["/projects/first", "/projects/second"];
+  const names = ["Old", "New", "Sibling"];
+  const text = `# Binary\n\n## Example\n\n${names.map((name) => `* ${name}`).join("\n")}`;
+  const documents = markWorkspaceStepImplementationScanComplete(roots.map((root) => ({ languageId: "gauge", version: 1,
+    uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: 7 })));
+  vscode.workspace.textDocuments = documents;
+  const published = new Map();
+  vscode.languages = { createDiagnosticCollection: () => ({ set(uri, values) { published.set(uri.fsPath, values); }, dispose() {} }) };
+  const options = { vscode, dependencyStepIndex: index, refreshDelayMs: 0, fileSystem: { existsSync: () => false },
+    projectFactory: { getGaugeRootFromFilePath: (file) => roots.find((root) => file.startsWith(root)), isGaugeProject: () => true },
+    documentStore: { whenReady: async () => documents, documents: () => documents, cachedDocuments: documents, isScanComplete: () => true, start() {}, onDidChangeDocuments: () => ({ dispose() {} }) },
+  };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  diagnostics.register();
+  try {
+    for (const row of require("./fixtures/binary-refresh-parity.json").filter((row) => row.kind === kind)) {
+      const file = kind === "jar" ? artifact : path.join(artifact, "Steps.class");
+      if (row.phase !== "baseline") {
+        if (row.phase === "deleted") await fs.unlink(file);
+        else await fs.writeFile(file, dependencyStepClass(row.phase === "changed" ? "New" : "Old"));
+        host.emit(row.phase === "deleted" ? "onDidDelete" : row.phase === "recreated" ? "onDidCreate" : "onDidChange", file);
+      }
+      const expectedLines = names.flatMap((name, i) => row.expected.includes(name) ? [] : [i + 4]);
+      const actualLines = () => documents.map((doc) => published.get(doc.uri.fsPath)?.filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line));
+      const deadline = Date.now() + 2000;
+      while (JSON.stringify(actualLines()) !== JSON.stringify([expectedLines, expectedLines]) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.deepEqual(actualLines(), [expectedLines, expectedLines], `${kind} ${row.phase} published diagnostics`);
+      for (const document of documents) for (let i = 0; i < names.length; i += 1) {
+        assert.equal((await definition.provideDefinition(document, { line: i + 4, character: 3 }) || []).length, Number(row.expected.includes(names[i])), `${row.phase} ${names[i]}`);
+      }
+    }
+    assert.equal(host.watchers.filter((watcher) => !watcher.disposed).length, 1);
+    const oldWatchers = [...host.watchers];
+    artifact = path.join(temporary, kind === "jar" ? "replacement.jar" : "replacement");
+    await prepare();
+    modelChanged();
+    await Promise.all(roots.map((root) => index.refresh(root)));
+    assert.ok(oldWatchers.every((watcher) => watcher.disposed));
+    assert.equal(host.watchers.filter((watcher) => !watcher.disposed).length, 1);
+  } finally {
+    definition.dispose(); diagnostics.dispose(); registration.dispose();
+    assert.ok(host.watchers.every((watcher) => watcher.disposed));
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("binary events update already opened virtual declarations", async () => {
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const directory = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-binary-content-"));
+  const artifact = path.join(directory, "steps.jar");
+  await fs.writeFile(artifact, dependencyStepClass("Old"));
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  vscode.EventEmitter = class {
+    constructor() { this.listeners = new Set(); this.event = (listener) => { this.listeners.add(listener); return { dispose: () => this.listeners.delete(listener) }; }; }
+    fire(value) { for (const listener of this.listeners) listener(value); }
+    dispose() { this.listeners.clear(); }
+  };
+  let provider;
+  vscode.workspace.registerTextDocumentContentProvider = (_scheme, value) => { provider = value; return { dispose() {} }; };
+  const index = new DependencyStepIndex({ vscode, classpathProvider: async () => [artifact], scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  const registration = index.register();
+  try {
+    const [{ uri }] = await index.findDefinitions(directory, ["Old"]);
+    let displayed = provider.provideTextDocumentContent(uri);
+    provider.onDidChange?.((changed) => { if (changed.toString() === uri.toString()) displayed = provider.provideTextDocumentContent(uri); });
+    assert.match(displayed, /@Step\("Old"\)/);
+    await fs.writeFile(artifact, dependencyStepClass("New"));
+    host.emit("onDidChange", artifact);
+    await index.refresh(directory);
+    assert.match(displayed, /@Step\("New"\)/);
+    await fs.unlink(artifact);
+    host.emit("onDidDelete", artifact);
+    await index.refresh(directory);
+    assert.equal(displayed, "Dependency step declaration is unavailable.");
+    await fs.writeFile(artifact, dependencyStepClass("Old"));
+    host.emit("onDidCreate", artifact);
+    await index.refresh(directory);
+    assert.match(displayed, /@Step\("Old"\)/);
+  } finally { registration.dispose(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("a binary event during a scan cannot publish stale methods", async () => {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  const started = deferred();
+  const release = deferred();
+  let scans = 0;
+  let alias = "Old";
+  const artifact = "/external/steps.jar";
+  const index = new DependencyStepIndex({ vscode, fileSystem: { existsSync: () => true }, classpathProvider: async () => [artifact], scanArchive: async (_file, visit) => {
+    const bytes = dependencyStepClass(alias);
+    scans += 1;
+    if (scans === 1) { started.resolve(); await release.promise; }
+    await visit("Steps.class", bytes);
+  } });
+  try {
+    const pending = index.findDefinitions("/project", ["Old", "New"]);
+    await started.promise;
+    alias = "New";
+    host.emit("onDidChange", artifact);
+    release.resolve();
+    await pending;
+    assert.deepEqual([...index.stepTemplates("/project")], ["New"]);
+    assert.equal(scans, 2);
+  } finally { release.resolve(); index.dispose(); }
+});
+
+test("a missing binary root is watched from an existing ancestor", async () => {
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const directory = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-future-binary-"));
+  const binary = path.join(directory, "future/build/classes");
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  const index = new DependencyStepIndex({ vscode, sourceScope: { concreteLibraryRoots: () => [binary] }, classpathProvider: async () => [] });
+  try {
+    await index.refresh("/project");
+    assert.equal(host.watchers[0].pattern.base, await fs.realpath(directory));
+    await fs.mkdir(binary, { recursive: true });
+    const file = path.join(binary, "Steps.class");
+    await fs.writeFile(file, dependencyStepClass("Created"));
+    host.emit("onDidCreate", file);
+    assert.equal((await index.findDefinitions("/project", ["Created"])).length, 1);
+  } finally { index.dispose(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("binary directory events include children of a filesystem root", async () => {
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  let alias = "Old";
+  const index = new DependencyStepIndex({ vscode, sourceScope: { concreteLibraryRoots: () => ["/"] },
+    fileSystem: { statSync: () => ({ isDirectory: () => true }), existsSync: () => true }, classpathProvider: async () => [],
+    scanDirectory: async (_root, visit) => visit("Steps.class", dependencyStepClass(alias)),
+  });
+  try {
+    assert.equal((await index.findDefinitions("/project", ["Old"])).length, 1);
+    alias = "New";
+    host.emit("onDidChange", "/Steps.class");
+    assert.equal((await index.findDefinitions("/project", ["New"])).length, 1);
+  } finally { index.dispose(); }
+});

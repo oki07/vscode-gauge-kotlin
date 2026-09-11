@@ -135,7 +135,10 @@ both are bundled with this extension; any Kotlin template you register with
   differ. Exclusion paths use the imported archive path, optionally followed
   by `!/` and the class or package path for JAR entries. Directory exclusions
   use ordinary paths within the imported binary root.
-  Imported membership does not prove successful build execution.
+  Indexed binary roots are watched, including roots outside the editor workspace.
+  Changes, deletion, and recreation refresh consuming projects' definitions,
+  diagnostics, and open dependency declarations. Model changes release obsolete
+  binary watches. Imported membership does not prove successful build execution.
 - Without a supported imported model, every `.kt` and `.java` file under the
   Gauge project remains a candidate. A scratch file can therefore appear to
   implement a step that the build does not compile. Keep step implementations

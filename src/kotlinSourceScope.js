@@ -7,8 +7,8 @@ const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 
 const SOURCE_TYPES = new Set(["java-source", "java-test", "java-resource", "java-test-resource"]);
 
-function inside(file, root) {
-  return file === root || file.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
+function inside(file, root, pathModule = path) {
+  return file === root || file.startsWith(root.endsWith(pathModule.sep) ? root : `${root}${pathModule.sep}`);
 }
 
 function exportedPath(value, directory) {
@@ -268,4 +268,4 @@ class KotlinSourceScope {
   }
 }
 
-module.exports = { KotlinSourceScope };
+module.exports = { KotlinSourceScope, isWithinRoot: inside };

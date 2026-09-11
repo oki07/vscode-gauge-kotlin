@@ -10339,6 +10339,9 @@ class GaugeStepDiagnosticsProvider {
       }
     }
 
+    if (this.dependencyStepIndex?.onDidInvalidate) {
+      disposables.push(this.dependencyStepIndex.onDidInvalidate(() => this.scheduleRefresh(collection, store, undefined)));
+    }
     const subscription = store.onDidChangeDocuments((change) => {
       this.scheduleRefresh(collection, store, change);
     });

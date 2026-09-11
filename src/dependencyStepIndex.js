@@ -4,6 +4,8 @@ const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
 const { GAUGE_CUSTOM_CLASSPATH } = require("./project/classpath");
+const { isWithinRoot } = require("./kotlinSourceScope");
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 
 const GAUGE_DEPENDENCY_SCHEME = "gauge-dependency";
@@ -416,6 +418,10 @@ function quote(value) {
   return JSON.stringify(value);
 }
 
+function dependencyIdentity(entry) {
+  return JSON.stringify([entry.artifact, entry.className, entry.methodName, entry.descriptor]);
+}
+
 function declarationFor(entry) {
   const classParts = entry.className.split(".");
   const simpleClassName = classParts.pop();
@@ -468,13 +474,98 @@ class DependencyStepIndex {
     this.scanDirectory = options.scanDirectory || scanClassDirectory;
     this.vscode = getVscode(options.vscode);
     this.classpathProvider = options.classpathProvider || ((root) => this.projectClasspath(root));
+    this.binaryWatchers = new Map();
+    this.invalidationListeners = new Set();
     this.contents = new Map();
+    this.declarations = new Map();
+    this.contentChanges = this.vscode.EventEmitter ? new this.vscode.EventEmitter() : undefined;
     this.globalInvalidationGeneration = 0;
     this.indices = new Map();
     this.pending = new Map();
     this.rootInvalidationGenerations = new Map();
     this.generation = 0;
     this.disposed = false;
+  }
+
+  updateTrackedDeclarations(root, index, changedArtifact) {
+    if (!index && !changedArtifact) return;
+    const entries = new Map();
+    for (const candidates of index?.entriesByTemplate.values() || []) for (const entry of candidates) entries.set(dependencyIdentity(entry), entry);
+    for (const [key, tracked] of this.declarations) {
+      if (root !== undefined && tracked.root !== root) continue;
+      if (changedArtifact && canonicalFilePath(tracked.artifact) !== changedArtifact) continue;
+      if (changedArtifact) tracked.dirty = true;
+      const entry = entries.get(tracked.identity);
+      if (!entry && !tracked.dirty) continue;
+      if (entry) tracked.dirty = false;
+      const next = entry ? declarationFor(entry).content : undefined;
+      const previous = this.contents.get(key);
+      if (next === undefined) {
+        this.contents.delete(key);
+        this.contents.delete(tracked.uri.query);
+      } else {
+        this.contents.set(key, next);
+        this.contents.set(tracked.uri.query, next);
+      }
+      if (previous !== next) this.contentChanges?.fire(tracked.uri);
+    }
+  }
+
+  onDidInvalidate(listener) {
+    this.invalidationListeners.add(listener);
+    return { dispose: () => this.invalidationListeners.delete(listener) };
+  }
+
+  clearBinaryWatches() {
+    for (const entry of this.binaryWatchers.values()) for (const disposable of entry.disposables) disposable?.dispose();
+    this.binaryWatchers.clear();
+  }
+
+  syncBinaryWatches(root, files) {
+    const workspace = this.vscode.workspace || {};
+    if (this.disposed || !workspace.createFileSystemWatcher || !this.vscode.RelativePattern) return;
+    const selected = new Set(files.filter((file) => typeof file === "string").map((file) => canonicalFilePath(file)));
+    for (const [file, entry] of this.binaryWatchers) {
+      if (!selected.has(file)) entry.roots.delete(root);
+      if (!entry.roots.size) {
+        for (const disposable of entry.disposables) disposable?.dispose();
+        this.binaryWatchers.delete(file);
+      }
+    }
+    for (const file of selected) {
+      let entry = this.binaryWatchers.get(file);
+      if (!entry) {
+        const disposables = [];
+        try {
+          let directory = !/\.jar$/i.test(file);
+          try { directory = this.fileSystem.statSync?.(file).isDirectory() ?? directory; } catch (_error) { /* Missing roots still need recreation events. */ }
+          let base = this.pathModule.dirname(file);
+          while (base !== this.pathModule.dirname(base)) {
+            let exists = false;
+            try { exists = this.fileSystem.statSync ? this.fileSystem.statSync(base).isDirectory() : this.fileSystem.existsSync(base); } catch (_error) { /* Watch an ancestor until the build creates its output directories. */ }
+            if (exists) break;
+            base = this.pathModule.dirname(base);
+          }
+          const watcher = workspace.createFileSystemWatcher(new this.vscode.RelativePattern(base, "**/*"));
+          disposables.push(watcher);
+          entry = { roots: new Set(), disposables };
+          const tracked = entry;
+          const changed = (uri) => {
+            const candidate = uri?.fsPath || uri?.path;
+            if (this.disposed || typeof candidate !== "string") return;
+            const identity = canonicalFilePath(candidate);
+            if (identity !== file && !(directory && isWithinRoot(identity, file, this.pathModule))) return;
+            for (const consumer of [...tracked.roots]) this.invalidate(consumer, file);
+          };
+          for (const event of ["onDidCreate", "onDidChange", "onDidDelete"]) if (watcher[event]) disposables.push(watcher[event](changed));
+          this.binaryWatchers.set(file, entry);
+        } catch (_error) {
+          for (const disposable of disposables) disposable?.dispose();
+          continue;
+        }
+      }
+      entry.roots.add(root);
+    }
   }
 
   async projectClasspath(root) {
@@ -516,12 +607,13 @@ class DependencyStepIndex {
     if (this.disposed) {
       return undefined;
     }
-    const directories = new Set((this.sourceScope?.concreteLibraryRoots?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || []).filter((entry) => {
+    const concreteRoots = this.sourceScope?.concreteLibraryRoots?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || [];
+    const jarPaths = (Array.isArray(classpath) ? classpath : []).filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".jar"));
+    this.syncBinaryWatches(root, [...jarPaths, ...concreteRoots]);
+    const directories = new Set(concreteRoots.filter((entry) => {
       try { return this.fileSystem.statSync?.(entry).isDirectory(); } catch (_error) { return false; }
     }));
-    const archives = [...new Set([...(Array.isArray(classpath) ? classpath : [])
-      .filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".jar"))
-      .filter((entry) => this.fileSystem.existsSync(entry)), ...directories])];
+    const archives = [...new Set([...jarPaths.filter((entry) => this.fileSystem.existsSync(entry)), ...directories])];
     const classpathKey = archives.join("\n");
     const previous = this.indices.get(root);
     if (previous && previous.classpathKey === classpathKey) {
@@ -561,8 +653,7 @@ class DependencyStepIndex {
               entriesByTemplate.set(normalized, []);
             }
             const candidates = entriesByTemplate.get(normalized);
-            if (!candidates.some((candidate) => candidate.artifact === entry.artifact && candidate.className === entry.className
-              && candidate.methodName === entry.methodName && candidate.descriptor === entry.descriptor)) candidates.push(entry);
+            if (!candidates.some((candidate) => dependencyIdentity(candidate) === dependencyIdentity(entry))) candidates.push(entry);
           }
         }
       }, directories.has(archive));
@@ -620,6 +711,7 @@ class DependencyStepIndex {
       if (index && this.indices.get(root) !== index) {
         this.indices.set(root, index);
         this.generation += 1;
+        this.updateTrackedDeclarations(root, index);
       }
       return index;
     }
@@ -659,7 +751,7 @@ class DependencyStepIndex {
     return refresh;
   }
 
-  invalidate(root) {
+  invalidate(root, changedArtifact) {
     if (this.disposed) {
       return;
     }
@@ -670,11 +762,16 @@ class DependencyStepIndex {
       );
       this.indices.delete(root);
     } else {
+      this.clearBinaryWatches();
       this.globalInvalidationGeneration += 1;
       this.rootInvalidationGenerations.clear();
       this.indices.clear();
     }
     this.generation += 1;
+    this.updateTrackedDeclarations(root, undefined, changedArtifact);
+    for (const listener of [...this.invalidationListeners]) {
+      try { listener(root); } catch (_error) { /* Other consumers must still receive invalidation. */ }
+    }
   }
 
   stepTemplates(root) {
@@ -720,16 +817,18 @@ class DependencyStepIndex {
     }
     const definitions = [];
     const pendingContents = [];
+    const pendingDeclarations = [];
     const seen = new Set();
     for (const normalized of normalizedSteps || []) {
       for (const entry of index.entriesByTemplate.get(normalized) || []) {
-        const identity = [entry.artifact, entry.className, entry.methodName, entry.descriptor].join("\n");
+        const identity = dependencyIdentity(entry);
         if (seen.has(identity)) {
           continue;
         }
         seen.add(identity);
         const uri = this.uriFor(entry, root);
         const declaration = declarationFor(entry);
+        pendingDeclarations.push({ root, uri, identity, artifact: entry.artifact });
         pendingContents.push([uri.toString(), declaration.content]);
         pendingContents.push([uri.query, declaration.content]);
         definitions.push({
@@ -749,6 +848,7 @@ class DependencyStepIndex {
     if (this.indices.get(root) !== index) {
       return this.findDefinitions(root, normalizedSteps);
     }
+    for (const tracked of pendingDeclarations) this.declarations.set(tracked.uri.toString(), tracked);
     for (const [key, content] of pendingContents) {
       this.contents.set(key, content);
     }
@@ -783,6 +883,7 @@ class DependencyStepIndex {
     if (typeof workspace.registerTextDocumentContentProvider === "function") {
       disposables.push(workspace.registerTextDocumentContentProvider(GAUGE_DEPENDENCY_SCHEME, {
         provideTextDocumentContent: (uri) => this.content(uri),
+        ...(this.contentChanges ? { onDidChange: this.contentChanges.event } : {}),
       }));
     }
     return {
@@ -806,10 +907,14 @@ class DependencyStepIndex {
       return;
     }
     this.disposed = true;
+    this.clearBinaryWatches();
+    this.invalidationListeners.clear();
     this.generation += 1;
     this.globalInvalidationGeneration += 1;
     this.rootInvalidationGenerations.clear();
     this.contents.clear();
+    this.declarations.clear();
+    this.contentChanges?.dispose();
     this.indices.clear();
     this.pending.clear();
   }
