@@ -179,15 +179,17 @@ test("Kotlin library paths match supplied classpaths without guessing macro base
     await scope.refresh();
     assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
     assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), true);
+    // Real IDEA 2020.1 archive-directory annotation search contributes only
+    // archives inside its configured discovery directory.
     state.model.libraries[0].roots[0].path = "/archives";
     state.model.libraries[0].roots[0].inclusionOptions = "archives_under_root";
     await scope.refresh();
-    assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
-    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), true);
+    assert.deepEqual(scope.libraryClasspath(root, [archive]), []);
+    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), false);
     state.model.libraries[0].roots[0].path = null;
     await scope.refresh();
-    assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
-    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), true);
+    assert.deepEqual(scope.libraryClasspath(root, [archive]), []);
+    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), false);
     assert.deepEqual(scope.libraryClasspath("/unimported", [archive]), [archive]);
   } finally { scope.dispose(); }
 });
@@ -231,4 +233,29 @@ test("archive-entry exclusions use the physical JAR behind a path alias", async 
     assert.equal(scope.libraryClassFilter("/workspace/gauge", archive)("hidden/Step.class"), false);
     assert.equal(scope.libraryClassFilter("/workspace/gauge", alias)("kept/Step.class"), true);
   } finally { scope.dispose(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("archive discovery macros use supplied archive parents and preserve depth", async () => {
+  const { state, scope } = fixture();
+  const root = "/workspace/gauge";
+  const top = "/server-home/archives/top.zip";
+  const nested = "/server-home/archives/sub/nested.jar";
+  state.model.modules[0].dependencies = [{ type: "library", name: "steps", scope: "compile" }];
+  const entry = { path: "<HOME>/archives", inclusionOptions: "archives_under_root" };
+  state.model.libraries = [{ name: "steps", roots: [entry] }];
+  try {
+    await scope.refresh();
+    assert.deepEqual(scope.archiveDirectoryRoots(root, []), []);
+    assert.deepEqual(scope.archiveDirectoryRoots(root, [top, nested]), [{ path: "/server-home/archives", recursive: false }]);
+    assert.deepEqual(scope.libraryClasspath(root, [top, nested, "/outside.jar"]), [top]);
+    assert.equal(scope.libraryClassFilter(root, nested)("Steps.class"), false);
+    entry.inclusionOptions = "archives_under_root_recursively";
+    await scope.refresh();
+    assert.deepEqual(scope.archiveDirectoryRoots(root, [top, nested]), [{ path: "/server-home/archives", recursive: true }]);
+    assert.deepEqual(scope.libraryClasspath(root, [top, nested, "/outside.jar"]), [top, nested]);
+    assert.equal(scope.libraryClassFilter(root, nested)("Steps.class"), true);
+    entry.path = "<UNKNOWN>/archives";
+    await scope.refresh();
+    assert.deepEqual(scope.archiveDirectoryRoots(root, [top, nested]), []);
+  } finally { scope.dispose(); }
 });

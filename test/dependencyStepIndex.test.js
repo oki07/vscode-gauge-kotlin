@@ -1076,7 +1076,7 @@ for (const kind of ["directory", "jar"]) test(`binary ${kind} events refresh bot
   }
 });
 
-test("binary events update already opened virtual declarations", async () => {
+for (const discovery of [false, true]) test(`binary events update already opened virtual declarations${discovery ? " from archive directories" : ""}`, async () => {
   const fs = require("node:fs/promises");
   const path = require("node:path");
   const { DependencyStepIndex } = require("../src/dependencyStepIndex");
@@ -1092,7 +1092,7 @@ test("binary events update already opened virtual declarations", async () => {
   };
   let provider;
   vscode.workspace.registerTextDocumentContentProvider = (_scheme, value) => { provider = value; return { dispose() {} }; };
-  const index = new DependencyStepIndex({ vscode, classpathProvider: async () => [artifact], scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  const index = new DependencyStepIndex({ vscode, sourceScope: discovery ? { archiveDirectoryRoots: () => [{ path: directory, recursive: false }] } : undefined, classpathProvider: async () => discovery ? [] : [artifact], scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
   const registration = index.register();
   try {
     const [{ uri }] = await index.findDefinitions(directory, ["Old"]);
@@ -1176,4 +1176,68 @@ test("binary directory events include children of a filesystem root", async () =
     host.emit("onDidChange", "/Steps.class");
     assert.equal((await index.findDefinitions("/project", ["New"])).length, 1);
   } finally { index.dispose(); }
+});
+
+test("archive directory discovery agrees across definitions diagnostics and templates", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation search distinguishes direct/recursive archive
+  // roots, loose classes, archive suffixes, and VFS additions/removals.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const binary = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-discovery-"));
+  const files = { DirectJar: "direct.jar", DirectZip: "direct.zip", DirectWar: "direct.war", UpperJar: "upper.JAR", DirectSwc: "direct.swc", DirectApk: "direct.apk", DirectEgg: "direct.egg", DirectAne: "direct.ane", DirectEar: "direct.ear", DirectKlib: "direct.klib", NoSuffix: "no-suffix", TextArchive: "archive.txt", NestedJar: "nested/nested.jar", DeepJar: "nested/deep/deep.jar", LooseClass: "LooseClass.class" };
+  for (const [owner, file] of Object.entries(files)) {
+    await fs.mkdir(path.dirname(path.join(binary, file)), { recursive: true });
+    await fs.writeFile(path.join(binary, file), dependencyStepClass(owner));
+  }
+  await fs.writeFile(path.join(binary, "broken.jar"), Buffer.from([1, 2, 3]));
+  const root = "/projects/discovery";
+  const names = [...Object.keys(files), "AddedJar"];
+  let option;
+  let exclusions = [];
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => {
+    await fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify({
+      libraries: [{ name: "Steps", roots: [{ path: binary, inclusionOptions: option }], excludedRoots: exclusions.map((suffix) => binary + suffix) }],
+      modules: [{ name: "main", contentRoots: [{ path: root }], dependencies: [{ type: "library", name: "Steps", scope: "compile" }] }],
+    }));
+  } };
+  const scope = new KotlinSourceScope({ vscode });
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope, classpathProvider: async () => [],
+    scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  const registration = index.register();
+  const text = `# Archives\n\n## Discovery\n\n${names.map((name) => `* ${name}`).join("\n")}`;
+  const spec = { languageId: "gauge", version: 1, uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: names.length + 4 };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  vscode.workspace.textDocuments = documents;
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false }, projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (const row of require("./fixtures/archive-directory-parity.json")) {
+      if (row.option) { option = row.option; exclusions = row.exclusions || []; await scope.refresh(); }
+      else {
+        const added = path.join(binary, "added.jar");
+        if (row.phase === "added") await fs.writeFile(added, dependencyStepClass("AddedJar"));
+        else await fs.unlink(added);
+        host.emit(row.phase === "added" ? "onDidCreate" : "onDidDelete", added);
+      }
+      await index.findDefinitions(root, names);
+      assert.deepEqual([...index.stepTemplates(root)].sort(), row.expected, row.phase);
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => row.expected.includes(name) ? [] : [i + 4]), row.phase);
+      for (let i = 0; i < names.length; i += 1) assert.equal((await definition.provideDefinition(spec, { line: i + 4, character: 3 }) || []).length, Number(row.expected.includes(names[i])), `${row.phase} ${names[i]}`);
+    }
+  } finally {
+    definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose();
+    assert.ok(host.watchers.every((watcher) => watcher.disposed));
+    await fs.rm(binary, { recursive: true, force: true });
+  }
 });

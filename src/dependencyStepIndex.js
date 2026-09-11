@@ -4,7 +4,7 @@ const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
 const { GAUGE_CUSTOM_CLASSPATH } = require("./project/classpath");
-const { isWithinRoot } = require("./kotlinSourceScope");
+const { isWithinRoot, isArchiveFile } = require("./kotlinSourceScope");
 const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 const { annotationStepTemplate } = require("./gaugeStepValue");
 
@@ -353,6 +353,29 @@ async function scanClassDirectory(root, visit) {
   await walk(root, "", new Set());
 }
 
+async function discoverArchives(root, recursive) {
+  const found = new Set();
+  const walk = async (directory, ancestors) => {
+    let physical;
+    let children;
+    try {
+      physical = await nodeFs.promises.realpath(directory);
+      if (ancestors.has(physical)) return;
+      children = await nodeFs.promises.readdir(directory, { withFileTypes: true });
+    } catch (_error) { return; }
+    const parents = new Set([...ancestors, physical]);
+    for (const child of children) {
+      const file = nodePath.join(directory, child.name);
+      let stat;
+      try { stat = await nodeFs.promises.stat(file); } catch (_error) { continue; }
+      if (stat.isDirectory() && recursive) await walk(file, parents);
+      else if (stat.isFile() && isArchiveFile(file)) found.add(canonicalFilePath(file));
+    }
+  };
+  await walk(root, new Set());
+  return [...found].sort();
+}
+
 function scanJarArchive(archivePath, visit) {
   const yauzl = require("yauzl");
   return new Promise((resolve, reject) => {
@@ -493,7 +516,7 @@ class DependencyStepIndex {
     for (const candidates of index?.entriesByTemplate.values() || []) for (const entry of candidates) entries.set(dependencyIdentity(entry), entry);
     for (const [key, tracked] of this.declarations) {
       if (root !== undefined && tracked.root !== root) continue;
-      if (changedArtifact && canonicalFilePath(tracked.artifact) !== changedArtifact) continue;
+      if (changedArtifact && !isWithinRoot(canonicalFilePath(tracked.artifact), changedArtifact, this.pathModule)) continue;
       if (changedArtifact) tracked.dirty = true;
       const entry = entries.get(tracked.identity);
       if (!entry && !tracked.dirty) continue;
@@ -537,7 +560,7 @@ class DependencyStepIndex {
       if (!entry) {
         const disposables = [];
         try {
-          let directory = !/\.jar$/i.test(file);
+          let directory = !isArchiveFile(file);
           try { directory = this.fileSystem.statSync?.(file).isDirectory() ?? directory; } catch (_error) { /* Missing roots still need recreation events. */ }
           let base = this.pathModule.dirname(file);
           while (base !== this.pathModule.dirname(base)) {
@@ -609,11 +632,14 @@ class DependencyStepIndex {
     }
     const concreteRoots = this.sourceScope?.concreteLibraryRoots?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || [];
     const jarPaths = (Array.isArray(classpath) ? classpath : []).filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".jar"));
-    this.syncBinaryWatches(root, [...jarPaths, ...concreteRoots]);
+    const discoveryRoots = this.sourceScope?.archiveDirectoryRoots?.(root, Array.isArray(executionClasspath) ? executionClasspath : []) || [];
+    // Watch discovery roots before enumeration so new archives cannot be missed.
+    this.syncBinaryWatches(root, [...jarPaths, ...concreteRoots, ...discoveryRoots.map((entry) => entry.path)]);
+    const discovered = (await Promise.all(discoveryRoots.map((entry) => discoverArchives(entry.path, entry.recursive)))).flat();
     const directories = new Set(concreteRoots.filter((entry) => {
       try { return this.fileSystem.statSync?.(entry).isDirectory(); } catch (_error) { return false; }
     }));
-    const archives = [...new Set([...jarPaths.filter((entry) => this.fileSystem.existsSync(entry)), ...directories])];
+    const archives = [...new Set([...jarPaths.filter((entry) => this.fileSystem.existsSync(entry)), ...directories, ...discovered])];
     const classpathKey = archives.join("\n");
     const previous = this.indices.get(root);
     if (previous && previous.classpathKey === classpathKey) {

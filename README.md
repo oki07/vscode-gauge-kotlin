@@ -127,13 +127,17 @@ both are bundled with this extension; any Kotlin template you register with
   classpath. Imported class directories are searched recursively; source files
   and oversized or malformed class files do not contribute binary steps. Maven/HOME
   macro paths are matched to supplied classpath entries; their base directories
-  are not guessed. Ambiguous library names, unsupported macros, archive-directory
-  roots retain available execution-classpath candidates. Library exclusions remove
+  are not guessed. Archive-directory library roots discover JAR, ZIP, WAR, EAR,
+  SWC, APK, EGG, ANE, and KLIB files directly or recursively according to the
+  imported option; loose classes
+  belong to ordinary class-directory roots. Discovery directories are watched
+  for new and removed archives. Ambiguous library names and unsupported macros
+  retain available execution-classpath candidates. Library exclusions remove
   whole library roots, individual classes, or package subtrees from step candidates.
   Shared binary roots contribute the union of each eligible library's unexcluded classes,
   following Gauge annotation-search scope; ordinary Kotlin type navigation can
   differ. Exclusion paths use the imported archive path, optionally followed
-  by `!/` and the class or package path for JAR entries. Directory exclusions
+  by `!/` and the class or package path for archive entries. Directory exclusions
   use ordinary paths within the imported binary root.
   Indexed binary roots are watched, including roots outside the editor workspace.
   Changes, deletion, and recreation refresh consuming projects' definitions,

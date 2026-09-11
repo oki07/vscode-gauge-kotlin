@@ -24,6 +24,31 @@ function libraryPathMatches(file, exported) {
   return macro ? file.replace(/\\/g, "/").endsWith(`/${macro[1]}`) : undefined;
 }
 
+function isArchiveFile(file) {
+  // IDEA 2020.1 archive file-type associations and annotation-search probes.
+  return /\.(?:ane|apk|ear|egg|jar|klib|swc|war|zip)$/i.test(file);
+}
+
+function isArchiveDirectory(entry) {
+  return ["archives_under_root", "archives_under_root_recursively"].includes(entry.inclusionOptions);
+}
+
+function archiveParent(file, entry) {
+  if (!isArchiveFile(file)) return undefined;
+  let parent = path.dirname(canonicalFilePath(file));
+  while (true) {
+    if (libraryPathMatches(parent, entry.path)) return parent;
+    if (entry.inclusionOptions !== "archives_under_root_recursively" || parent === path.dirname(parent)) return undefined;
+    parent = path.dirname(parent);
+  }
+}
+
+function libraryRootMatches(file, entry) {
+  if (!isArchiveDirectory(entry)) return libraryPathMatches(file, entry.path);
+  if (libraryPathMatches(file, entry.path) === undefined) return undefined;
+  return Boolean(archiveParent(file, entry));
+}
+
 function patternMatches(name, pattern) {
   const expression = pattern.split("").map((character) => {
     if (character === "*") return ".*";
@@ -112,13 +137,21 @@ class KotlinSourceScope {
       .map((entry) => ({ ...entry, selected: selected.has(library.name),
         ambiguous: this.libraries.filter((other) => other.name === library.name).length > 1,
         excludedRoots: library.excludedRoots,
-        unsupported: Boolean(entry.inclusionOptions && entry.inclusionOptions !== "root_itself") })));
+        unsupported: Boolean(entry.inclusionOptions && entry.inclusionOptions !== "root_itself" && !isArchiveDirectory(entry)) })));
   }
 
   concreteLibraryRoots(root, classpath) {
-    const roots = (this.libraryRoots(root) || []).filter((entry) => entry.selected && !entry.ambiguous && !entry.unsupported);
+    const roots = (this.libraryRoots(root) || []).filter((entry) => entry.selected && !entry.ambiguous && !entry.unsupported && !isArchiveDirectory(entry));
     return [...new Set(roots.flatMap((entry) => path.isAbsolute(entry.path) ? [entry.path]
       : classpath.filter((file) => typeof file === "string" && libraryPathMatches(file, entry.path))).map((file) => canonicalFilePath(file)))];
+  }
+
+  archiveDirectoryRoots(root, classpath) {
+    const roots = (this.libraryRoots(root) || []).filter((entry) => entry.selected && !entry.ambiguous && isArchiveDirectory(entry));
+    return roots.flatMap((entry) => {
+      const paths = path.isAbsolute(entry.path) ? [entry.path] : classpath.filter((file) => typeof file === "string").map((file) => archiveParent(file, entry)).filter(Boolean);
+      return [...new Set(paths.map((file) => canonicalFilePath(file)))].map((file) => ({ path: file, recursive: entry.inclusionOptions === "archives_under_root_recursively" }));
+    });
   }
 
   libraryClasspath(root, classpath) {
@@ -126,7 +159,7 @@ class KotlinSourceScope {
     if (!roots) return classpath;
     const matches = (file, entry) => {
       if (entry.unsupported) return undefined;
-      return libraryPathMatches(file, entry.path);
+      return libraryRootMatches(file, entry);
     };
     const retained = classpath.filter((file) => typeof file === "string").filter((file) => {
       const matching = roots.filter((entry) => matches(file, entry));
@@ -139,9 +172,9 @@ class KotlinSourceScope {
   libraryClassFilter(root, archive, directory = false) {
     const roots = this.libraryRoots(root);
     if (!roots) return () => true;
-    const matching = roots.filter((entry) => libraryPathMatches(archive, entry.path));
+    const matching = roots.filter((entry) => libraryRootMatches(archive, entry));
     if (matching.some((entry) => entry.ambiguous || entry.selected && entry.unsupported)
-      || roots.some((entry) => entry.selected && (entry.unsupported || libraryPathMatches(archive, entry.path) === undefined))) return () => true;
+      || roots.some((entry) => entry.selected && (entry.unsupported || libraryRootMatches(archive, entry) === undefined))) return () => true;
     const contributions = matching.filter((entry) => entry.selected).map((entry) => (entry.excludedRoots || []).flatMap((excluded) => {
       if (directory) {
         const physicalRoot = canonicalFilePath(archive);
@@ -152,9 +185,10 @@ class KotlinSourceScope {
         if (excluded === entry.path) return [""];
         return excluded.startsWith(`${entry.path}/`) ? [excluded.slice(entry.path.length + 1)] : [];
       }
-      const internal = excluded.match(/^(.*\.jar)!(?:\/(.*))?$/i);
+      const parts = excluded.match(/^(.*)!(?:\/(.*))?$/);
+      const internal = parts && isArchiveFile(parts[1]) ? parts : undefined;
       const file = internal ? internal[1] : excluded;
-      return libraryPathMatches(archive, file) ? [internal ? internal[2] || "" : ""] : [];
+      return (internal || /\.jar$/i.test(file)) && libraryPathMatches(archive, file) ? [internal ? internal[2] || "" : ""] : [];
     }));
     // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
     // IDEA annotation search includes the union of unexcluded library classes.
@@ -268,4 +302,4 @@ class KotlinSourceScope {
   }
 }
 
-module.exports = { KotlinSourceScope, isWithinRoot: inside };
+module.exports = { KotlinSourceScope, isWithinRoot: inside, isArchiveFile };

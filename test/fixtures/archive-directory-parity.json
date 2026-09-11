@@ -1,0 +1,159 @@
+[
+  {
+    "phase": "root",
+    "option": "root_itself",
+    "expected": [
+      "LooseClass"
+    ]
+  },
+  {
+    "phase": "direct",
+    "option": "archives_under_root",
+    "expected": [
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "recursive",
+    "option": "archives_under_root_recursively",
+    "expected": [
+      "DeepJar",
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "NestedJar",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "restored-direct",
+    "option": "archives_under_root",
+    "expected": [
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "added",
+    "expected": [
+      "AddedJar",
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "removed",
+    "expected": [
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "excluded-directory",
+    "option": "archives_under_root_recursively",
+    "exclusions": [
+      ""
+    ],
+    "expected": [
+      "DeepJar",
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "NestedJar",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "excluded-nested-directory",
+    "option": "archives_under_root_recursively",
+    "exclusions": [
+      "/nested"
+    ],
+    "expected": [
+      "DeepJar",
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "DirectZip",
+      "NestedJar",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "excluded-zip-class",
+    "option": "archives_under_root_recursively",
+    "exclusions": [
+      "/direct.zip!/Steps.class"
+    ],
+    "expected": [
+      "DeepJar",
+      "DirectAne",
+      "DirectApk",
+      "DirectEar",
+      "DirectEgg",
+      "DirectJar",
+      "DirectKlib",
+      "DirectSwc",
+      "DirectWar",
+      "NestedJar",
+      "UpperJar"
+    ]
+  },
+  {
+    "phase": "restored-root",
+    "option": "root_itself",
+    "expected": [
+      "LooseClass"
+    ]
+  }
+]
