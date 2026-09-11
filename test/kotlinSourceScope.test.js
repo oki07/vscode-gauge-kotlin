@@ -123,3 +123,41 @@ test("Kotlin source scope accepts omitted empty root collections", async () => {
     }
   }
 });
+
+test("Kotlin module candidates follow the measured IDEA dependency scope", async () => {
+  // IDEA 2020.1 AnnotatedElementsSearch with moduleWithDependenciesAndLibrariesScope
+  // includes ordinary/test sources in these nine executed dependency cases.
+  const { state, scope } = fixture();
+  const cases = [
+    ["compile", "compile", false, true, false],
+    ["test", "compile", false, true, false],
+    ["runtime", "compile", false, false, false],
+    ["provided", "compile", false, true, false],
+    ["compile", "compile", true, true, true],
+    ["compile", "test", true, true, true],
+    ["compile", "runtime", true, true, false],
+    ["compile", "provided", true, true, true],
+    [undefined, "provided", true, false, false],
+  ];
+  try {
+    for (const [direct, transitive, isExported, includeDirect, includeTransitive] of cases) {
+      state.model = { modules: ["root", "direct", "transitive", "sibling"].map((name, index) => ({
+        name,
+        contentRoots: [{ path: `/modules/${name}`, sourceRoots: [
+          { path: `/modules/${name}/main`, type: "java-source" },
+          { path: `/modules/${name}/test`, type: "java-test" },
+        ] }],
+        dependencies: index === 0 && direct ? [{ type: "module", name: "direct", scope: direct }]
+          : index === 1 ? [{ type: "module", name: "transitive", scope: transitive, isExported }] : [],
+      })) };
+      await scope.refresh();
+      for (const [name, included] of [["direct", includeDirect], ["transitive", includeTransitive], ["sibling", false]]) {
+        for (const source of ["main", "test", "notes"]) {
+          for (const language of ["kt", "java"]) {
+            assert.equal(scope.allows(`/modules/${name}/${source}/Steps.${language}`, "/modules/root"), included && source !== "notes", `${direct}/${transitive}/${isExported}: ${name}/${source}/${language}`);
+          }
+        }
+      }
+    }
+  } finally { scope.dispose(); }
+});

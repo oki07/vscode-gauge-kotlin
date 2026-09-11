@@ -1620,6 +1620,8 @@ class GaugeRenameProvider {
   }
 
   shouldOpenWorkspaceFile(file, sourceRoot) {
+    const membership = this.documentStore?.belongsToContext?.(file, sourceRoot);
+    if (membership !== undefined) return membership;
     if (
       !this.projectFactory
       || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"

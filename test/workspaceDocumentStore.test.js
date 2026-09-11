@@ -1562,3 +1562,40 @@ test("WorkspaceDocumentStore overlays dirty directory aliases once over clean an
   store.diskDocuments.set(clean.uri.fsPath, createDocument("disk", "kotlin", clean.uri.fsPath));
   assert.deepEqual(store.documents(), [dirty]);
 });
+
+test("WorkspaceDocumentStore tracks imported source roots outside the editor workspace", async () => {
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const files = { "/external/one/Steps.kt": "class Steps", "/external/two/Other.java": "class Other {}" };
+  const { vscode, state } = createFakeVscode();
+  vscode.RelativePattern = class { constructor(base, pattern) { this.base = base; this.pattern = pattern; } };
+  vscode.workspace.findFiles = async (pattern) => typeof pattern === "string" ? []
+    : Object.keys(files).filter((file) => file.startsWith(`${pattern.base}/`)).map(vscode.Uri.file);
+  let roots = ["/external/one"];
+  let changed;
+  const sourceScope = {
+    sourceRoots: () => roots,
+    allows: (file) => roots.some((root) => file.startsWith(`${root}/`)),
+    onDidChange: (listener) => { changed = listener; return { dispose() {} }; },
+  };
+  const store = new WorkspaceDocumentStore({ vscode, sourceScope, fileSystem: createFakeFileSystem(files), projectFactory: { getGaugeRootFromFilePath: () => undefined } });
+  try {
+    await store.start();
+    assert.deepEqual(store.documents().map((document) => document.uri.fsPath), ["/external/one/Steps.kt"]);
+    const watcher = state.watchers.find((watcher) => watcher.glob.base === roots[0]);
+    files["/external/one/New.kt"] = "class New";
+    await watcher.createListeners[0](vscode.Uri.file("/external/one/New.kt"));
+    assert.equal(store.documents().length, 2);
+    files["/external/one/New.kt"] = "class Changed";
+    await watcher.changeListeners[0](vscode.Uri.file("/external/one/New.kt"));
+    assert.equal(store.documents().find((document) => document.uri.fsPath.endsWith("New.kt")).getText(), "class Changed");
+    delete files["/external/one/New.kt"];
+    await watcher.deleteListeners[0](vscode.Uri.file("/external/one/New.kt"));
+    assert.equal(store.documents().length, 1);
+    roots = ["/external/two"];
+    changed();
+    await store.whenReady();
+    assert.equal(watcher.disposed, true);
+    assert.deepEqual(store.documents().map((document) => document.uri.fsPath), ["/external/two/Other.java"]);
+  } finally { store.dispose(); }
+  assert.ok(state.watchers.every((watcher) => watcher.disposed));
+});

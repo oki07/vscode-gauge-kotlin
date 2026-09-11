@@ -397,3 +397,88 @@ test("imported source membership agrees across disk and open-document consumers"
     references.dispose();
   }
 });
+
+test("imported dependencies agree across consumer projects and reverse references", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java
+  // uses module dependencies including tests. Real IDEA 2020.1 and Kotlin LSP
+  // 0.0.12 distinguish exported transitive edges from private/runtime edges.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const roots = ["/workspace/gauge", "/workspace/consumer", "/workspace/unrelated", "/shared/beta", "/shared/gamma"];
+  const specs = roots.slice(0, 3).map((root) => createDocument("# Modules\n\n## Example\n\n* beta\n* gamma", "gauge", `${root}/specs/example.spec`));
+  const implementations = roots.map((root, index) => createDocument(kotlinSource(["alpha", "consumer", "unrelated", "beta", "gamma"][index]), "kotlin", `${root}/src/Steps.kt`));
+  const documents = [...specs, ...implementations];
+  for (const document of documents) document.uri.scheme = "file";
+  const beta = implementations[3];
+  const vscode = createFakeVscode([specs[0]]);
+  vscode.Uri.parse = (value) => vscode.Uri.file(require("node:url").fileURLToPath(value));
+  let exported = false;
+  let consumeAlpha = true;
+  let gammaScope = "compile";
+  const modules = () => roots.map((root, index) => ({
+    name: String(index),
+    contentRoots: [{ path: root, sourceRoots: [{ path: `${root}/src`, type: "java-test" }] }],
+    dependencies: index === 0 && consumeAlpha || index === 1
+      ? [{ type: "module", name: "3", scope: index === 0 ? "compile" : "test" }]
+      : index === 3 ? [{ type: "module", name: "4", scope: gammaScope, isExported: exported }] : [],
+  }));
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = {
+    registerCommand: () => ({ dispose() {} }),
+    getCommands: async () => ["exportWorkspace"],
+    executeCommand: async (_command, directory) => fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify({ modules: modules() })),
+  };
+  vscode.languages.registerReferenceProvider = () => ({ dispose() {} });
+  vscode.RelativePattern = class { constructor(base, pattern) { this.base = typeof base === "string" ? base : base.fsPath; this.pattern = pattern; } };
+  vscode.workspace.findFiles = async (pattern) => documents.filter((document) => typeof pattern === "string"
+    ? document.uri.fsPath.startsWith("/workspace/")
+    : document.uri.fsPath.startsWith(`${pattern.base}/`)).map((document) => document.uri);
+  const projectFactory = {
+    getGaugeRootFromFilePath: (file) => roots.slice(0, 3).find((root) => file.startsWith(`${root}/`)),
+    isGaugeProject: (root) => roots.slice(0, 3).includes(root),
+  };
+  const fileSystem = { promises: { readFile: async (file) => documents.find((document) => document.uri.fsPath === file).getText() } };
+  const scope = new KotlinSourceScope({ vscode });
+  await scope.refresh();
+  const store = new WorkspaceDocumentStore({ vscode, sourceScope: scope, projectFactory, fileSystem });
+  await store.start();
+  const options = { vscode, documentStore: store, projectFactory, fileSystem };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const index = new WorkspaceStepIndex({ ...options, diagnosticsProvider: diagnostics });
+  index.start();
+  options.workspaceStepIndex = index;
+  const definition = new GaugeStepDefinitionProvider(options);
+  const references = new ReferenceProvider(new GaugeClients(), options);
+  const lenses = new GaugeCodeLensProvider(options);
+  const rename = new GaugeRenameProvider(options);
+  try {
+    for (const phase of ["private", "exported", "runtime", "removed"]) {
+      exported = phase !== "private";
+      gammaScope = phase === "runtime" ? "runtime" : "compile";
+      consumeAlpha = phase !== "removed";
+      await scope.refresh();
+      await store.whenReady();
+      const targets = await definition.provideDefinition(specs[0], { line: 4, character: 4 });
+      const gamma = await definition.provideDefinition(specs[0], { line: 5, character: 4 });
+      const unrelated = await definition.provideDefinition(specs[2], { line: 4, character: 4 });
+      const refs = await references.provideReferences(beta, { line: 5, character: 12 });
+      const codeLenses = await lenses.provideCodeLenses(beta);
+      const edits = await rename.provideRenameEdits(beta, { line: 5, character: 12 }, "beta renamed");
+      const expectedSpecs = specs.slice(consumeAlpha ? 0 : 1, 2).map((document) => document.uri.fsPath).sort();
+      assert.deepEqual((targets || []).map((entry) => entry.uri.fsPath), consumeAlpha ? [beta.uri.fsPath] : []);
+      assert.equal((gamma || []).length, Number(phase === "exported"));
+      assert.deepEqual(unrelated || [], []);
+      assert.deepEqual((refs || []).map((entry) => entry.uri.fsPath).sort(), expectedSpecs);
+      assert.deepEqual((codeLenses || []).map((entry) => entry.command?.title).filter((title) => title?.includes("reference")), [`${expectedSpecs.length} reference(s)`]);
+      assert.deepEqual(edits.replacements.filter((entry) => entry.uri.fsPath.endsWith(".spec")).map((entry) => entry.uri.fsPath).sort(), expectedSpecs);
+      assert.equal(diagnostics.provideDiagnostics(specs[0], store.documents()).some((entry) => entry.message === "Undefined Step" && entry.range.start.line === 4), !consumeAlpha);
+    }
+  } finally {
+    for (const disposable of [rename, lenses, references, definition, index, store, scope]) disposable.dispose();
+  }
+});

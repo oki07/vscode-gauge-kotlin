@@ -87,6 +87,8 @@ class WorkspaceDocumentStore {
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
     this.sourceScope = options.sourceScope;
+    this.sourceWatchers = [];
+    this.sourceRootKey = "[]";
     this.initialReadConcurrency = concurrencyLimit(
       options.initialReadConcurrency,
       DEFAULT_INITIAL_READ_CONCURRENCY,
@@ -109,6 +111,63 @@ class WorkspaceDocumentStore {
     const file = typeof document === "string" ? document : documentPath(document);
     return !/\.(?:kt|java)$/i.test(file || "") || !this.sourceScope
       || this.sourceScope.allows(canonicalFilePath(file, this.fileSystem, this.pathModule)) !== false;
+  }
+
+  gaugeRoots() {
+    const files = [...this.diskDocuments.keys(), ...(this.vscode.workspace?.textDocuments || []).map(documentPath)];
+    for (const root of this.sourceScope?.moduleRoots?.() || []) files.push(this.pathModule.join(root, ".gauge-source-context.kt"));
+    return [...new Set(files.map((file) => this.rootForFile(file)).filter(Boolean))];
+  }
+
+  consumerRoots(contextRoot) {
+    if (!this.sourceScope?.canUse) return [];
+    return this.gaugeRoots().filter((root) => this.sourceScope.canUse(root, contextRoot));
+  }
+
+  importedContext(file) {
+    return /\.(?:kt|java)$/i.test(file || "") ? this.sourceScope?.contextRoot?.(file) : undefined;
+  }
+
+  contextRootForFile(file) {
+    const ownRoot = this.rootForFile(file);
+    if (ownRoot) return ownRoot;
+    if (!/\.(?:kt|java)$/i.test(file || "") || this.sourceScope?.allows(file) !== true) return undefined;
+    return this.importedContext(file);
+  }
+
+  isGaugeSource(file) {
+    if (this.rootForFile(file)) return true;
+    const root = this.sourceScope?.contextRoot?.(file);
+    return Boolean(root && this.consumerRoots(root).length);
+  }
+
+  belongsToContext(document, root, includeConsumers = false) {
+    if (!root || !this.sourceScope?.modulesFor || !this.sourceScope.modulesFor(root).length) return undefined;
+    const file = typeof document === "string" ? document : documentPath(document);
+    const roots = includeConsumers ? [...new Set([root, ...this.consumerRoots(root)])] : [root];
+    if (/\.(?:kt|java)$/i.test(file || "")) return roots.some((context) => this.sourceScope.allows(file, context) === true);
+    const candidate = this.rootForFile(file);
+    return roots.includes(candidate);
+  }
+
+  syncSourceWatchers() {
+    const roots = [...(this.sourceScope?.sourceRoots?.() || [])].sort();
+    const key = JSON.stringify(roots);
+    if (key === this.sourceRootKey) return false;
+    this.sourceRootKey = key;
+    for (const disposable of this.sourceWatchers) this.disposeSafely(disposable);
+    this.sourceWatchers = [];
+    const workspace = this.vscode.workspace || {};
+    if (workspace.createFileSystemWatcher && this.vscode.RelativePattern) {
+      for (const root of roots) {
+        const watcher = workspace.createFileSystemWatcher(new this.vscode.RelativePattern(root, "**/*.{kt,java}"));
+        this.sourceWatchers.push(watcher);
+        for (const event of ["onDidCreate", "onDidChange", "onDidDelete"]) {
+          this.sourceWatchers.push(watcher[event]((uri) => event === "onDidDelete" ? this.handleFileDelete(uri) : this.handleFileEvent(uri)));
+        }
+      }
+    }
+    return true;
   }
 
   rootForFile(file) {
@@ -134,6 +193,7 @@ class WorkspaceDocumentStore {
   }
 
   belongsToGaugeProject(file) {
+    if (/\.(?:kt|java)$/i.test(file || "") && this.sourceScope?.allows(file) === true) return true;
     if (
       !this.projectFactory
       || typeof this.projectFactory.getGaugeRootFromFilePath !== "function"
@@ -388,6 +448,13 @@ class WorkspaceDocumentStore {
     let uris;
     try {
       uris = (await workspace.findFiles(WORKSPACE_DOCUMENT_GLOB)) || [];
+      if (this.vscode.RelativePattern) {
+        const additional = [];
+        await mapWithConcurrency(this.sourceScope?.sourceRoots?.() || [], this.initialReadConcurrency, async (root) => {
+          additional.push(...await workspace.findFiles(new this.vscode.RelativePattern(root, "**/*.{kt,java}")));
+        });
+        uris = [...uris, ...additional];
+      }
     } catch (_error) {
       // A search that failed is not a listing of "no files". Reconciling against
       // it would delete the whole index and then call it authoritative, so every
@@ -411,6 +478,7 @@ class WorkspaceDocumentStore {
       if (!file || !isWorkspaceDocumentPath(file) || !this.belongsToGaugeProject(file)) {
         return;
       }
+      if (seen.has(file)) return;
       seen.add(file);
       await this.loadDiskDocument(file, { silent: true });
     });
@@ -462,8 +530,12 @@ class WorkspaceDocumentStore {
         return ready;
       }
       if (this.sourceScope && typeof this.sourceScope.onDidChange === "function") {
-        this.disposables.push(this.sourceScope.onDidChange(() => this.notifyChange(undefined)));
+        this.disposables.push(this.sourceScope.onDidChange(() => {
+          if (this.syncSourceWatchers()) void this.rescanWorkspace();
+          else this.notifyChange(undefined);
+        }));
       }
+      this.syncSourceWatchers();
       const scan = this.scanWorkspace();
       Promise.race([scan, this.disposalSignal]).then(
         () => resolveReady(undefined),
@@ -479,8 +551,9 @@ class WorkspaceDocumentStore {
     }
   }
 
-  whenReady() {
-    return this.start();
+  async whenReady() {
+    await this.start();
+    if (this.pendingRescan) await this.pendingRescan;
   }
 
   isScanComplete() {
@@ -539,6 +612,8 @@ class WorkspaceDocumentStore {
       resolveDisposal(undefined);
     }
     this.changeListeners.clear();
+    for (const disposable of this.sourceWatchers) this.disposeSafely(disposable);
+    this.sourceWatchers = [];
     const disposables = this.disposables;
     this.disposables = [];
     this.diskDocuments.clear();

@@ -117,9 +117,12 @@ both are bundled with this extension; any Kotlin template you register with
 - When Kotlin by JetBrains provides an imported workspace model, Gauge uses its
   source roots and exclusions for Kotlin/Java step candidates, including open
   and unsaved documents. The model is checked every five seconds. An import
-  failure can retain the IDE's preceding model. Module dependency selection and
-  source discovery outside the Gauge project remain limited to the existing
-  project index.
+  failure can retain the IDE's preceding model. Direct Compile, Test, and
+  Provided module dependencies contribute sources; transitive dependencies
+  require exported edges, and Runtime edges are excluded. Imported source roots
+  outside the editor workspace are searched and watched. References and rename
+  from a shared dependency include its consuming Gauge projects. This source
+  graph does not establish library/JAR scope or successful build execution.
 - Without a supported imported model, every `.kt` and `.java` file under the
   Gauge project remains a candidate. A scratch file can therefore appear to
   implement a step that the build does not compile. Keep step implementations

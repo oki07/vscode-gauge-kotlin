@@ -218,6 +218,8 @@ class WorkspaceStepIndex {
   }
 
   rootForFile(file) {
+    const contextRoot = this.documentStore?.contextRootForFile?.(file);
+    if (contextRoot) return contextRoot;
     if (
       !file
       || !this.projectFactory
@@ -244,16 +246,17 @@ class WorkspaceStepIndex {
     return this.rootForFile(documentPath(document));
   }
 
-  belongsToRoot(document, root) {
+  belongsToRoot(document, root, includeConsumers = false) {
+    const membership = this.documentStore?.belongsToContext?.(document, root, includeConsumers);
+    if (membership !== undefined) return membership;
     const candidateRoot = this.rootForDocument(document);
     return candidateRoot !== undefined && candidateRoot === root;
   }
 
-  stateFor(root) {
-    if (!this.states.has(root)) {
-      this.states.set(root, emptyState(root));
-    }
-    return this.states.get(root);
+  stateFor(root, includeConsumers = false) {
+    const key = includeConsumers ? `${root}\0references` : root;
+    if (!this.states.has(key)) this.states.set(key, { ...emptyState(root), includeConsumers });
+    return this.states.get(key);
   }
 
   handleDocumentChange(change) {
@@ -261,7 +264,8 @@ class WorkspaceStepIndex {
     if (typeof this.diagnosticsProvider.bumpGenerationsForChange === "function") {
       this.diagnosticsProvider.bumpGenerationsForChange(file);
     }
-    if (!file) {
+    if (!file || (/\.(?:kt|java)$/i.test(file) && this.documentStore?.sourceScope?.allows(file) === true)) {
+      if (file && typeof this.diagnosticsProvider.bumpGenerationsForChange === "function") this.diagnosticsProvider.bumpGenerationsForChange(undefined);
       for (const state of this.states.values()) {
         state.fullDirty = true;
         state.dirtyFiles.clear();
@@ -281,7 +285,7 @@ class WorkspaceStepIndex {
     }
   }
 
-  async workspaceDocumentsFor(root, sourceDocument) {
+  async workspaceDocumentsFor(root, sourceDocument, includeConsumers = false) {
     if (!this.documentStore) {
       return [sourceDocument].filter(Boolean);
     }
@@ -291,7 +295,7 @@ class WorkspaceStepIndex {
     const documents = typeof this.documentStore.documents === "function"
       ? this.documentStore.documents()
       : [];
-    const result = documents.filter((document) => this.belongsToRoot(document, root));
+    const result = documents.filter((document) => this.belongsToRoot(document, root, includeConsumers));
     const sourcePath = documentPath(sourceDocument);
     if (sourceDocument && sourcePath
       && (!this.documentStore.allowsSourceDocument || this.documentStore.allowsSourceDocument(sourceDocument))
@@ -302,9 +306,10 @@ class WorkspaceStepIndex {
   }
 
   async analyzeDocument(document, documents, root) {
+    if (!isStepImplementationDocument(document)) root = this.rootForDocument(document) || root;
     const record = emptyRecord(document);
     if (isStepImplementationDocument(document)) {
-      record.stepEntries = await Promise.resolve(this.stepEntriesProvider(document, documents, root));
+      record.stepEntries = await Promise.resolve(this.stepEntriesProvider(document, this.documentStore?.importedContext?.(documentPath(document)) ? this.documentStore.documents() : documents, root));
     }
     // gauge_concepts_dir narrows where Gauge reads concepts from
     // (getgauge/gauge/util/fileUtils.go GetConceptFiles), and a concept
@@ -423,7 +428,7 @@ class WorkspaceStepIndex {
     const dirtyFiles = new Set(state.dirtyFiles);
     state.dirtyFiles.clear();
     try {
-      const documents = await this.workspaceDocumentsFor(state.root, sourceDocument);
+      const documents = await this.workspaceDocumentsFor(state.root, sourceDocument, state.includeConsumers);
       const currentByPath = new Map(documents.map((document) => [documentPath(document), document]));
       if (refreshAll) {
         for (const file of currentByPath.keys()) {
@@ -481,19 +486,19 @@ class WorkspaceStepIndex {
   async snapshotFor(sourceDocument) {
     this.start();
     const root = this.rootForDocument(sourceDocument);
-    return this.snapshotForRoot(root, sourceDocument);
+    return this.snapshotForRoot(root, sourceDocument, Boolean(this.documentStore?.importedContext?.(documentPath(sourceDocument))));
   }
 
   async snapshotForPath(file) {
     this.start();
-    return this.snapshotForRoot(this.rootForFile(file));
+    return this.snapshotForRoot(this.rootForFile(file), undefined, Boolean(this.documentStore?.importedContext?.(file)));
   }
 
-  async snapshotForRoot(root, sourceDocument) {
+  async snapshotForRoot(root, sourceDocument, includeConsumers = false) {
     if (root === undefined || this.disposed) {
       return emptyState(root);
     }
-    const state = this.stateFor(root);
+    const state = this.stateFor(root, includeConsumers);
     if (!state.pending && !state.fullDirty && state.dirtyFiles.size === 0) {
       return state;
     }
@@ -514,7 +519,7 @@ class WorkspaceStepIndex {
       return emptyState(root);
     }
     if (state.pending || state.fullDirty || state.dirtyFiles.size > 0) {
-      return this.snapshotForRoot(root, sourceDocument);
+      return this.snapshotForRoot(root, sourceDocument, includeConsumers);
     }
     return state;
   }

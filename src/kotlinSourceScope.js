@@ -27,12 +27,12 @@ function patternMatches(name, pattern) {
   return new RegExp(`^${expression}$`).test(name);
 }
 
-function contentsFrom(model, directory) {
+function modulesFrom(model, directory) {
   if (!Array.isArray(model?.modules)) throw new Error("Invalid Kotlin workspace model.");
-  return model.modules.flatMap((module) => {
+  return model.modules.map((module, index) => {
     const contentRoots = module.contentRoots === undefined ? [] : module.contentRoots;
     if (!Array.isArray(contentRoots)) throw new Error("Invalid Kotlin content roots.");
-    return contentRoots.map((content) => {
+    const contents = contentRoots.map((content) => {
       const sourceRoots = content.sourceRoots === undefined ? [] : content.sourceRoots;
       if (!Array.isArray(sourceRoots)) throw new Error("Invalid Kotlin source roots.");
       const patterns = content.excludedPatterns || [];
@@ -49,6 +49,13 @@ function contentsFrom(model, directory) {
         }),
       };
     });
+    const dependencies = (module.dependencies || []).filter((entry) => entry.type === "module").map((entry) => {
+      if (typeof entry.name !== "string" || !["compile", "test", "provided", "runtime"].includes(entry.scope)) {
+        throw new Error("Invalid Kotlin module dependency.");
+      }
+      return { name: entry.name, scope: entry.scope, exported: entry.isExported === true };
+    });
+    return { name: module.name ?? String(index), contents, dependencies, root: contents[0]?.root };
   });
 }
 
@@ -60,17 +67,58 @@ class KotlinSourceScope {
     this.vscode = options.vscode || require("vscode");
     this.refreshIntervalMs = options.refreshIntervalMs ?? 5000;
     this.contents = [];
+    this.modules = [];
     this.listeners = new Set();
     this.disposed = false;
     this.pending = undefined;
   }
 
-  allows(file) {
+  modulesFor(root) {
+    const identity = canonicalFilePath(root);
+    const initial = this.modules.filter((module) => module.root && inside(module.root, identity));
+    const byName = new Map(this.modules.map((module) => [module.name, module]));
+    const selected = new Set();
+    const pending = [...initial];
+    while (pending.length) {
+      const module = pending.pop();
+      if (selected.has(module)) continue;
+      selected.add(module);
+      for (const edge of module.dependencies) {
+        if (edge.scope === "runtime" || (!initial.includes(module) && !edge.exported)) continue;
+        const dependency = byName.get(edge.name);
+        if (dependency) pending.push(dependency);
+      }
+    }
+    return [...selected];
+  }
+
+  moduleRoots() {
+    return [...new Set(this.modules.map((module) => module.root).filter(Boolean))];
+  }
+
+  sourceRoots() {
+    return [...new Set(this.contents.flatMap((content) => content.sources.map((source) => source.root)))];
+  }
+
+  contextRoot(file) {
+    const identity = canonicalFilePath(file);
+    return this.modules.find((module) => module.contents.some((content) => content.sources.some((source) => inside(identity, source.root))))?.root;
+  }
+
+  canUse(root, dependencyRoot) {
+    const identity = canonicalFilePath(dependencyRoot);
+    return this.modulesFor(root).some((module) => module.root === identity);
+  }
+
+  allows(file, root) {
     if (this.disposed) return undefined;
     const identity = canonicalFilePath(file);
-    const candidates = this.contents.filter((content) => inside(identity, content.root)
+    const modules = root ? this.modulesFor(root) : undefined;
+    if (modules && !modules.length) return undefined;
+    const contents = modules ? modules.flatMap((module) => module.contents) : this.contents;
+    const candidates = contents.filter((content) => inside(identity, content.root)
       || content.sources.some((source) => inside(identity, source.root)));
-    if (!candidates.length) return undefined;
+    if (!candidates.length) return modules ? false : undefined;
     return candidates.some((content) => {
       if (content.excluded.some((root) => inside(identity, root))) return false;
       const names = path.relative(content.root, identity).split(path.sep);
@@ -115,9 +163,10 @@ class KotlinSourceScope {
       if (this.disposed) return;
       await this.vscode.commands.executeCommand("exportWorkspace", directory);
       if (this.disposed) return;
-      const contents = contentsFrom(JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8")), directory);
-      if (this.disposed || JSON.stringify(contents) === JSON.stringify(this.contents)) return;
-      this.contents = contents;
+      const modules = modulesFrom(JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8")), directory);
+      if (this.disposed || JSON.stringify(modules) === JSON.stringify(this.modules)) return;
+      this.modules = modules;
+      this.contents = modules.flatMap((module) => module.contents);
       for (const listener of [...this.listeners]) {
         try { listener(); } catch (_error) { /* One consumer cannot prevent the remaining consumers from refreshing. */ }
       }
@@ -134,6 +183,7 @@ class KotlinSourceScope {
     clearInterval(this.timer);
     this.listeners.clear();
     this.contents = [];
+    this.modules = [];
   }
 }
 

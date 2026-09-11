@@ -9110,6 +9110,8 @@ class GaugeStepDiagnosticsProvider {
   }
 
   rootForFile(file) {
+    const contextRoot = this.activeDocumentStore()?.contextRootForFile?.(file);
+    if (contextRoot) return contextRoot;
     if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return undefined;
     }
@@ -9127,6 +9129,7 @@ class GaugeStepDiagnosticsProvider {
   isGaugeProjectDocument(document) {
     const store = this.activeDocumentStore();
     if (store?.allowsSourceDocument && !store.allowsSourceDocument(document)) return false;
+    if (store?.importedContext?.(documentPath(document))) return store.isGaugeSource(documentPath(document));
     if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return true;
     }
@@ -9151,6 +9154,8 @@ class GaugeStepDiagnosticsProvider {
   belongsToSourceGaugeProject(candidate, sourceRoot) {
     const store = this.activeDocumentStore();
     if (store?.allowsSourceDocument && !store.allowsSourceDocument(candidate)) return false;
+    const membership = store?.belongsToContext?.(candidate, sourceRoot);
+    if (membership !== undefined) return membership;
     if (sourceRoot === undefined) {
       return this.isGaugeProjectDocument(candidate);
     }

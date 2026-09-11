@@ -685,6 +685,8 @@ class GaugeStepDefinitionProvider {
   }
 
   projectRootInfoForFile(file) {
+    const contextRoot = this.documentStore?.contextRootForFile?.(file);
+    if (contextRoot) return { root: contextRoot, type: PROJECT_ROOT_GAUGE };
     if (!this.projectFactory || typeof this.projectFactory.getGaugeRootFromFilePath !== "function") {
       return { root: undefined, type: PROJECT_ROOT_UNKNOWN };
     }
@@ -716,6 +718,8 @@ class GaugeStepDefinitionProvider {
   }
 
   belongsToSourceGaugeProject(candidate, sourceRoot) {
+    const membership = this.documentStore?.belongsToContext?.(candidate, sourceRoot);
+    if (membership !== undefined) return membership;
     if (this.documentStore?.allowsSourceDocument && !this.documentStore.allowsSourceDocument(candidate)) return false;
     if (sourceRoot === undefined) {
       return this.isGaugeProjectDocument(candidate);
@@ -738,6 +742,8 @@ class GaugeStepDefinitionProvider {
   }
 
   shouldOpenWorkspaceDocument(file, sourceRoot) {
+    const membership = this.documentStore?.belongsToContext?.(file, sourceRoot);
+    if (membership !== undefined) return membership;
     const projectRootInfo = this.projectRootInfoForFile(file);
     if (projectRootInfo.type === PROJECT_ROOT_NON_GAUGE) {
       return false;

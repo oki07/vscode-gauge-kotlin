@@ -663,6 +663,7 @@ class GaugeCodeLensProvider {
   }
 
   isGaugeProjectFile(file) {
+    if (this.documentStore?.importedContext?.(file)) return this.documentStore.isGaugeSource(file);
     if (!this.projectFactory) {
       return true;
     }
@@ -689,6 +690,8 @@ class GaugeCodeLensProvider {
   }
 
   belongsFileToSourceGaugeProject(file, sourceRoot) {
+    const membership = this.documentStore?.belongsToContext?.(file, sourceRoot);
+    if (membership !== undefined) return membership;
     if (
       !file
       || !this.projectFactory
