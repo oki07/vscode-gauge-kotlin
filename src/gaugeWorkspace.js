@@ -3,7 +3,7 @@
 const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
-const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
+const { workspaceFolderForPath, workspacePathMappings } = require("./workspacePaths");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
 const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
@@ -1228,17 +1228,10 @@ class GaugeWorkspace {
 
   clientOptionsFor(project, folder) {
     const roots = new Set([project.root()]);
-    const physicalRoot = canonicalFilePath(project.root(), this.fileSystem, this.pathModule);
-    let workspaceFolder = this.vscode.workspace.getWorkspaceFolder(this.vscode.Uri.file(folder));
-    const folders = [...(this.vscode.workspace.workspaceFolders || [])]
-      .sort((left, right) => right.uri.fsPath.length - left.uri.fsPath.length);
-    for (const candidate of folders) {
-      const physicalFolder = canonicalFilePath(candidate.uri.fsPath, this.fileSystem, this.pathModule);
-      const relative = this.pathModule.relative(physicalFolder, physicalRoot);
-      if (relative === ".." || relative.startsWith(`..${this.pathModule.sep}`)
-        || this.pathModule.isAbsolute(relative)) continue;
-      roots.add(this.pathModule.join(candidate.uri.fsPath, relative));
-      workspaceFolder ||= candidate;
+    const scopeOptions = { fileSystem: this.fileSystem, pathModule: this.pathModule };
+    const workspaceFolder = workspaceFolderForPath(this.vscode, folder, scopeOptions);
+    for (const mapping of workspacePathMappings(this.vscode, project.root(), scopeOptions)) {
+      roots.add(mapping.path);
     }
     const documentSelector = [...roots].flatMap((root) => [
       { scheme: "file", language: GAUGE_LANGUAGE, pattern: `${root}/**/*` },

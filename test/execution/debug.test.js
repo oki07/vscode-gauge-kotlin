@@ -965,3 +965,46 @@ test("GaugeDebugger owns only the debug session it starts", async () => {
     ["dispose", "terminate"],
   ]);
 });
+
+test("GaugeDebugger attaches directory aliases and reads their launch scope", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { createGaugeDebugger } = require("../../src/execution/debug");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-debug-folder-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const physical = path.join(fs.realpathSync(temporary), "project");
+  const alias = path.join(temporary, "alias");
+  fs.mkdirSync(physical);
+  fs.symlinkSync(physical, alias, process.platform === "win32" ? "junction" : "dir");
+  const folder = { uri: { fsPath: alias }, name: "project" };
+  const scopes = [];
+  const starts = [];
+  const vscode = {
+    Uri: { file: (fsPath) => ({ fsPath }) },
+    workspace: {
+      workspaceFolders: [{ uri: { fsPath: temporary }, name: "parent" }, folder],
+      getWorkspaceFolder: () => undefined,
+      getConfiguration(section, scope) {
+        scopes.push({ section, scope });
+        return { get: () => [{ justMyCode: false }] };
+      },
+    },
+    debug: { async startDebugging(selected, configuration) { starts.push({ selected, configuration }); return true; } },
+  };
+  const debuggerSession = createGaugeDebugger({
+    vscode, projectRoot: physical, language: "kotlin", sleep: async () => undefined,
+    debugPortProvider: async () => 5005,
+  });
+  await debuggerSession.addDebugEnv();
+  assert.equal(await debuggerSession.startDebugger(), true);
+  assert.equal(starts[0].selected, folder);
+  const csharp = createGaugeDebugger({ vscode, projectRoot: physical, language: "csharp" });
+  assert.equal(csharp.getDebuggerConfiguration().justMyCode, false);
+  assert.equal(scopes.find((entry) => entry.section === "launch").scope, folder.uri);
+  const outside = createGaugeDebugger({
+    vscode, projectRoot: path.join(path.dirname(fs.realpathSync(temporary)), "unrelated-gauge-project"),
+    language: "kotlin", sleep: async () => undefined,
+  });
+  await assert.rejects(outside.startDebugger(), /stand alone file/);
+});

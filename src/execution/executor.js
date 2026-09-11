@@ -1,5 +1,7 @@
 "use strict";
 
+const { workspaceFolderForPath } = require("../workspacePaths");
+
 const { specFileFromExecutionIdentifier: getScenarioSpecPath } = require("../gaugeExecutionIdentifier");
 
 const nodeFs = require("node:fs");
@@ -450,22 +452,12 @@ function saveWorkspaceDocuments(vscode) {
   return undefined;
 }
 
-function getWorkspaceFolderForProject(vscode, projectRoot) {
-  if (!vscode.workspace || typeof vscode.workspace.getWorkspaceFolder !== "function") {
-    return undefined;
-  }
-  const uri = vscode.Uri && typeof vscode.Uri.file === "function"
-    ? vscode.Uri.file(projectRoot)
-    : { fsPath: projectRoot, path: projectRoot };
-  return vscode.workspace.getWorkspaceFolder(uri);
-}
-
 function getLaunchConfigurations(vscode, projectRoot) {
   if (!vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
     return [];
   }
   const workspaceFolder = projectRoot
-    ? getWorkspaceFolderForProject(vscode, projectRoot)
+    ? workspaceFolderForPath(vscode, projectRoot)
     : undefined;
   const configuration = vscode.workspace.getConfiguration("launch", workspaceFolder);
   if (!configuration || typeof configuration.get !== "function") {

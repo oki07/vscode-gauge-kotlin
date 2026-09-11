@@ -6504,3 +6504,36 @@ test("a Markdown specification inside the spec directory stays runnable", async 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].args.slice(-1), ["/workspace/gauge/specs/login.md"]);
 });
+
+test("execute active project reads launch options through directory aliases", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-launch-folder-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const physical = path.join(fs.realpathSync(temporary), "project");
+  const alias = path.join(temporary, "alias");
+  fs.mkdirSync(physical);
+  fs.symlinkSync(physical, alias, process.platform === "win32" ? "junction" : "dir");
+  const folder = { uri: { fsPath: alias }, name: "project" };
+  const calls = [];
+  const vscode = {
+    Uri: { file: (fsPath) => ({ fsPath }) },
+    workspace: {
+      workspaceFolders: [folder],
+      getWorkspaceFolder: () => undefined,
+      getConfiguration(section, scope) {
+        return { get: () => section === "launch" && scope === folder
+          ? [{ type: "gauge", request: "test", name: "Gauge", tags: "selected" }] : undefined };
+      },
+    },
+    window: { async showErrorMessage() {} },
+  };
+  const controller = createGaugeExecutionController({
+    vscode, fileSystem: { existsSync: () => false },
+    async runner(command) { calls.push(command); return true; },
+  });
+  t.after(() => controller.dispose());
+  await controller.handleCommand("gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: physical });
+  assert.deepEqual(calls[0].args, ["run", "--hide-suggestion", "--simple-console", "--tags", "selected"]);
+});

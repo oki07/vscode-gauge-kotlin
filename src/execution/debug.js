@@ -1,5 +1,7 @@
 "use strict";
 
+const { workspaceFolderForPath } = require("../workspacePaths");
+
 const DEBUGGER_NAME = "Gauge Debugger";
 const REQUEST_TYPE = "attach";
 const DEFAULT_DEBUG_PORT = 9229;
@@ -72,21 +74,12 @@ function debugAttachAttempts(timeoutMs, retryDelayMs) {
   return Math.max(1, Math.ceil(timeoutMs / retryDelayMs));
 }
 
-function workspaceFolderUri(vscode, projectRoot) {
-  const folders = vscode && vscode.workspace && vscode.workspace.workspaceFolders;
-  if (!Array.isArray(folders)) {
-    return undefined;
-  }
-  const folder = folders.find((entry) => entry && entry.uri && entry.uri.fsPath === projectRoot);
-  return folder && folder.uri;
-}
-
 function csharpLaunchOptions(vscode, projectRoot) {
   if (!vscode || !vscode.workspace || typeof vscode.workspace.getConfiguration !== "function") {
     return {};
   }
   try {
-    const configuration = vscode.workspace.getConfiguration("launch", workspaceFolderUri(vscode, projectRoot));
+    const configuration = vscode.workspace.getConfiguration("launch", workspaceFolderForPath(vscode, projectRoot)?.uri);
     const launchConfigurations = configuration
       && typeof configuration.get === "function"
       && configuration.get("configurations");
@@ -435,7 +428,7 @@ function createGaugeDebugger(options = {}) {
     const operation = createAttachOperation();
     vscode = vscode || require("vscode");
     try {
-      const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(projectRoot));
+      const folder = workspaceFolderForPath(vscode, projectRoot);
       if (!operationIsCurrent(operation)) {
         return false;
       }
