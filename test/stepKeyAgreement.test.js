@@ -272,3 +272,51 @@ test("every step surface agrees about a bare pipe table row", async () => {
   await assertImplemented("bare pipe is a row", lines, "Pay the total amount <table>", 4);
   await assertUnimplemented("bare pipe is not a comment", lines, "Pay the total amount", 4);
 });
+
+test("directory aliases agree on project membership across step surfaces", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { createProjectFactory: realProjectFactory } = require("../src/project/projectFactory");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-scope-alias-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const root = path.join(fs.realpathSync(temporary), "physical");
+  const alias = path.join(temporary, "alias");
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(root, "manifest.json"), '{"Language":"java"}');
+  fs.symlinkSync(root, alias, process.platform === "win32" ? "junction" : "dir");
+  const factory = realProjectFactory();
+  t.after(() => factory.dispose());
+  // The real Gauge runner executes this annotation through either directory
+  // spelling. File identity must not split its editor project membership.
+  const spec = createDocument("# Agreement\n\n## Scenario\n\n* Known step\n", "gauge", path.join(root, "agreement.spec"));
+  const kotlin = createDocument(kotlinSource("Known step"), "kotlin", path.join(alias, "Steps.kt"));
+  const documents = [spec, kotlin];
+  require("../src/workspaceDocumentStore").markWorkspaceStepImplementationScanComplete(documents);
+  const vscode = createFakeVscode(documents);
+  const options = { vscode, projectFactory: factory };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options).provideDiagnostics(spec, documents);
+  const definitions = await new GaugeStepDefinitionProvider(options).provideDefinition(spec, { line: 4, character: 5 });
+  const lenses = await new GaugeCodeLensProvider(options).provideCodeLenses(kotlin);
+  const edit = await new GaugeRenameProvider(options).provideRenameEdits(kotlin, { line: 5, character: 12 }, "Renamed step");
+  assert.deepEqual({
+    undefinedStep: diagnostics.some((item) => item.message === "Undefined Step"),
+    definitions: (definitions || []).length,
+    references: lenses.filter((item) => item.command?.title?.includes("reference")).map((item) => item.command.title),
+    renamesSpec: (edit?.replacements || []).some((item) => item.uri.fsPath === spec.uri.fsPath),
+  }, { undefinedStep: false, definitions: 1, references: ["1 reference(s)"], renamesSpec: true });
+
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const aliasSpec = createDocument(spec.getText(), "gauge", path.join(alias, "agreement.spec"));
+  const physicalKotlin = createDocument(kotlin.getText(), "kotlin", path.join(root, "Steps.kt"));
+  documents.push(aliasSpec, physicalKotlin);
+  const store = new WorkspaceDocumentStore(options);
+  t.after(() => store.dispose());
+  const index = new WorkspaceStepIndex({ ...options, documentStore: store });
+  t.after(() => index.dispose());
+  assert.equal((await index.definitionEntries(aliasSpec, ["Known step"])).length, 1);
+  assert.equal(await index.referenceCount(physicalKotlin, "Known step"), 1);
+  assert.equal((await index.stepEntriesForDocument(aliasSpec, physicalKotlin)).length, 1);
+  assert.deepEqual(new GaugeStepDiagnosticsProvider(options).provideDiagnostics(physicalKotlin, store.documents()), []);
+});

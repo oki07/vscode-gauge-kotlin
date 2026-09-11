@@ -1,5 +1,7 @@
 "use strict";
 
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
+
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 
@@ -296,7 +298,8 @@ function configuredSpecDirs(options = {}) {
 function createMarkdownSpecScope(options = {}) {
   let directories;
   return {
-    projectRoot: options.projectRoot,
+    projectRoot: canonicalFilePath(options.projectRoot, options.fileSystem, options.pathModule),
+    canonicalPath: (file) => canonicalFilePath(file, options.fileSystem, options.pathModule),
     specDirs() {
       if (!directories) {
         directories = configuredSpecDirs(options);
@@ -328,8 +331,8 @@ function isConceptPathInScope(file, options = {}) {
   if (!directories) {
     return true;
   }
-  const projectRoot = options.projectRoot;
-  const segments = pathSegments(file).slice(0, -1);
+  const projectRoot = canonicalFilePath(options.projectRoot, options.fileSystem, options.pathModule);
+  const segments = pathSegments(canonicalFilePath(file, options.fileSystem, options.pathModule)).slice(0, -1);
   if (!projectRoot) {
     return true;
   }
@@ -342,6 +345,7 @@ function isConceptPathInScope(file, options = {}) {
 }
 
 function isMarkdownSpecPath(file, scope) {
+  file = scope && scope.canonicalPath ? scope.canonicalPath(file) : file;
   const directories = pathSegments(file).slice(0, -1);
   const projectRoot = scope && scope.projectRoot;
   if (!projectRoot) {

@@ -1,6 +1,6 @@
 "use strict";
 
-const { canonicalSpecFile, specFileFromExecutionIdentifier } = require("./gaugeExecutionIdentifier");
+const { canonicalFilePath, specFileFromExecutionIdentifier } = require("./gaugeExecutionIdentifier");
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
@@ -2022,7 +2022,7 @@ class GaugeTestController {
         return this.canonicalFiles.get(file);
       }
     }
-    const canonical = canonicalSpecFile(file, this.fileSystem, this.pathModule);
+    const canonical = canonicalFilePath(file, this.fileSystem, this.pathModule);
     if (canonical !== file) this.canonicalFiles.set(file, canonical);
     else this.canonicalFiles.delete(file);
     return canonical;

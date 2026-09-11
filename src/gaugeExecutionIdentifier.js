@@ -6,7 +6,7 @@ const nodePath = require("node:path");
 // Gauge discovery/reporting can return a physical path for a document opened
 // through a directory alias. Resolve its existing ancestor even after deletion
 // so the editor can remove the same TestItem it originally discovered.
-function canonicalSpecFile(file, fileSystem = nodeFs, pathModule = nodePath) {
+function canonicalFilePath(file, fileSystem = nodeFs, pathModule = nodePath) {
   if (!file || typeof fileSystem.realpathSync !== "function"
     || typeof pathModule.isAbsolute !== "function" || !pathModule.isAbsolute(file)) {
     return file;
@@ -37,4 +37,4 @@ function specFileFromExecutionIdentifier(executionIdentifier, lineNo) {
   return value.replace(/:\d+$/, "");
 }
 
-module.exports = { canonicalSpecFile, specFileFromExecutionIdentifier };
+module.exports = { canonicalFilePath, specFileFromExecutionIdentifier };

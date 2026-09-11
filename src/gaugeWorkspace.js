@@ -3,6 +3,7 @@
 const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
 const nodePath = require("node:path");
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 const { GaugeConfig, envWithGaugeHome } = require("./config/gaugeConfig");
 const { GaugeJavaProjectConfig } = require("./config/gaugeProjectConfig");
@@ -1226,11 +1227,24 @@ class GaugeWorkspace {
   }
 
   clientOptionsFor(project, folder) {
-    const documentSelector = [
-      { scheme: "file", language: GAUGE_LANGUAGE, pattern: `${project.root()}/**/*` },
-      { scheme: "file", language: GAUGE_CONCEPT_LANGUAGE, pattern: `${project.root()}/**/*` },
-      { scheme: "file", pattern: `${project.root()}/**/*.spec` },
-      { scheme: "file", pattern: `${project.root()}/**/*.cpt` },
+    const roots = new Set([project.root()]);
+    const physicalRoot = canonicalFilePath(project.root(), this.fileSystem, this.pathModule);
+    let workspaceFolder = this.vscode.workspace.getWorkspaceFolder(this.vscode.Uri.file(folder));
+    const folders = [...(this.vscode.workspace.workspaceFolders || [])]
+      .sort((left, right) => right.uri.fsPath.length - left.uri.fsPath.length);
+    for (const candidate of folders) {
+      const physicalFolder = canonicalFilePath(candidate.uri.fsPath, this.fileSystem, this.pathModule);
+      const relative = this.pathModule.relative(physicalFolder, physicalRoot);
+      if (relative === ".." || relative.startsWith(`..${this.pathModule.sep}`)
+        || this.pathModule.isAbsolute(relative)) continue;
+      roots.add(this.pathModule.join(candidate.uri.fsPath, relative));
+      workspaceFolder ||= candidate;
+    }
+    const documentSelector = [...roots].flatMap((root) => [
+      { scheme: "file", language: GAUGE_LANGUAGE, pattern: `${root}/**/*` },
+      { scheme: "file", language: GAUGE_CONCEPT_LANGUAGE, pattern: `${root}/**/*` },
+      { scheme: "file", pattern: `${root}/**/*.spec` },
+      { scheme: "file", pattern: `${root}/**/*.cpt` },
       // Scope the Markdown arm to the configured gauge_specs_dir. The daemon
       // classifies a document by extension alone
       // (getgauge/gauge/util/fileUtils.go IsValidSpecExtension, default list
@@ -1239,8 +1253,8 @@ class GaugeWorkspace {
       // daemon's Run Spec and Debug Spec lenses on any README in the project,
       // and an unparseable one made it answer with an error. The rule lives in
       // src/gaugeSpecScope.js so every surface gives the same answer.
-      ...this.markdownSpecSelectors(project.root()),
-    ];
+      ...this.markdownSpecSelectors(root),
+    ]);
     return {
       documentSelector,
       diagnosticCollectionName: "gauge",
@@ -1263,7 +1277,7 @@ class GaugeWorkspace {
       connectionOptions: {
         messageStrategy: serverMessageStrategy(),
       },
-      workspaceFolder: this.vscode.workspace.getWorkspaceFolder(this.vscode.Uri.file(folder)),
+      workspaceFolder,
     };
   }
 

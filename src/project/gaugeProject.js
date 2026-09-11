@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { canonicalFilePath } = require("../gaugeExecutionIdentifier");
 const { GaugeConfig } = require("../config/gaugeConfig");
 const {
   GAUGE_CUSTOM_CLASSPATH,
@@ -52,10 +53,12 @@ class GaugeProject {
   }
 
   hasFile(filename) {
-    if (this.root() === filename) {
+    filename = canonicalFilePath(filename, this.fileSystem, this.pathModule);
+    const root = canonicalFilePath(this.root(), this.fileSystem, this.pathModule);
+    if (root === filename) {
       return true;
     }
-    const relative = this.pathModule.relative(this.root(), filename);
+    const relative = this.pathModule.relative(root, filename);
     return !relative.startsWith("..") && !this.pathModule.isAbsolute(relative);
   }
 
@@ -83,7 +86,8 @@ class GaugeProject {
     if (other === this) {
       return true;
     }
-    return this.root() === other.root();
+    return canonicalFilePath(this.root(), this.fileSystem, this.pathModule)
+      === canonicalFilePath(other.root(), this.fileSystem, this.pathModule);
   }
 
   standardClasspathEntries() {

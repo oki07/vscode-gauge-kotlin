@@ -1,6 +1,7 @@
 "use strict";
 
 const nodeFs = require("node:fs");
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 const nodePath = require("node:path");
 const {
   isTagSourceDocument,
@@ -44,7 +45,7 @@ function documentLineText(document, line) {
 
 function documentPath(document) {
   const uri = document && document.uri;
-  return (uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "";
+  return canonicalFilePath((uri && (uri.fsPath || uri.path)) || (document && document.fileName) || "");
 }
 
 // An @Step alias is keyed the way the RUNNER keys it, not the way a spec step is
@@ -256,7 +257,7 @@ class WorkspaceStepIndex {
   }
 
   handleDocumentChange(change) {
-    const file = change && change.file;
+    const file = canonicalFilePath(change && change.file, this.fileSystem, this.pathModule);
     if (typeof this.diagnosticsProvider.bumpGenerationsForChange === "function") {
       this.diagnosticsProvider.bumpGenerationsForChange(file);
     }

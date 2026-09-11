@@ -423,3 +423,25 @@ test("isMarkdownGaugeSpecFile falls back to the default directory outside a Gaug
   assert.equal(isMarkdownGaugeSpecFile("/elsewhere/specs/a.md", options), true);
   assert.equal(isMarkdownGaugeSpecFile("/elsewhere/notes.md", options), false);
 });
+
+test("configured directories keep their scope across directory aliases", (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { isConceptPathInScope } = require("../src/gaugeSpecScope");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-directory-scope-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const root = fs.realpathSync(temporary);
+  const alias = path.join(root, "alias");
+  const physical = path.join(root, "project");
+  fs.mkdirSync(path.join(physical, "env/default"), { recursive: true });
+  fs.writeFileSync(path.join(physical, "env/default/default.properties"), "gauge_specs_dir=features\ngauge_concepts_dir=concepts\n");
+  fs.symlinkSync(physical, alias, process.platform === "win32" ? "junction" : "dir");
+  const options = { projectRoot: physical };
+  const answers = [physical, alias].map((directory) => ({
+    spec: isMarkdownGaugeSpecFile(path.join(directory, "features/check.md"), options),
+    excludedSpec: isMarkdownGaugeSpecFile(path.join(directory, "specs/check.md"), options),
+    concept: isConceptPathInScope(path.join(directory, "concepts/check.cpt"), options),
+    excludedConcept: isConceptPathInScope(path.join(directory, "notes/check.cpt"), options),
+  }));
+  assert.deepEqual(answers, Array(2).fill({ spec: true, excludedSpec: false, concept: true, excludedConcept: false }));
+});

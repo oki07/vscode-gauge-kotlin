@@ -1541,3 +1541,24 @@ test("WorkspaceDocumentStore exposes documents loaded during the initial scan", 
   // uses it for.
   assert.deepEqual(changes, []);
 });
+
+test("WorkspaceDocumentStore overlays dirty directory aliases once over clean and disk documents", (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-dirty-alias-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const root = fs.realpathSync(temporary);
+  const directory = path.join(root, "project");
+  const alias = path.join(root, "alias");
+  fs.mkdirSync(directory);
+  fs.symlinkSync(directory, alias, process.platform === "win32" ? "junction" : "dir");
+  const clean = createDocument("old", "kotlin", path.join(alias, "Steps.kt"));
+  const dirty = createDocument("edited", "kotlin", path.join(directory, "Steps.kt"));
+  dirty.isDirty = true;
+  const store = new WorkspaceDocumentStore({ vscode: { workspace: { textDocuments: [clean, dirty] } } });
+  t.after(() => store.dispose());
+  store.diskDocuments.set(clean.uri.fsPath, createDocument("disk", "kotlin", clean.uri.fsPath));
+  assert.deepEqual(store.documents(), [dirty]);
+});

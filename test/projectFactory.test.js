@@ -510,3 +510,31 @@ test("ProjectFactory keeps a valid manifest silent", () => {
   assert.equal(factory.get("/workspace/gauge").language(), "java");
   assert.deepEqual(errors, []);
 });
+
+test("ProjectFactory uses one identity for directory aliases and preserves neighboring projects", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { createProjectFactory } = require("../src/project/projectFactory");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-root-alias-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const root = path.join(fs.realpathSync(temporary), "physical");
+  const alias = path.join(temporary, "alias");
+  const neighbor = path.join(fs.realpathSync(temporary), "neighbor");
+  for (const directory of [root, neighbor]) {
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, "manifest.json"), '{"Language":"java"}');
+  }
+  fs.symlinkSync(root, alias, process.platform === "win32" ? "junction" : "dir");
+  const factory = createProjectFactory();
+  t.after(() => factory.dispose());
+  assert.equal(factory.getGaugeRootFromFilePath(path.join(alias, "new.spec")), root);
+  assert.equal(factory.getGaugeRootFromFilePath(path.join(root, "new.spec")), root);
+  assert.equal(factory.get(alias), factory.get(root));
+  const { GaugeProject } = require("../src/project/gaugeProject");
+  assert.equal(new GaugeProject(alias, { Language: "java" }).equals(factory.get(root)), true);
+  assert.equal(factory.get(root).hasFile(path.join(alias, "new.spec")), true);
+  assert.equal(factory.get(root).hasFile(path.join(neighbor, "new.spec")), false);
+  assert.notEqual(factory.get(neighbor), factory.get(root));
+  assert.deepEqual(factory.findGaugeProjectRoots(alias), [root]);
+  assert.deepEqual(await factory.findGaugeProjectRootsAsync(alias), [root]);
+});

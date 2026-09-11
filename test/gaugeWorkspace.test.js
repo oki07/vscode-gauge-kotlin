@@ -6519,3 +6519,25 @@ test("clientMiddleware leaves diagnostics for an unrelated file untouched", () =
   );
   assert.equal(forwarded.length, 1);
 });
+
+test("GaugeWorkspace selects directory aliases for the same physical project", (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { GaugeWorkspace } = require("../src/gaugeWorkspace");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gauge-client-alias-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const physical = path.join(fs.realpathSync(temporary), "project");
+  const alias = path.join(temporary, "alias");
+  fs.mkdirSync(physical);
+  fs.symlinkSync(physical, alias, process.platform === "win32" ? "junction" : "dir");
+  const folder = { uri: { fsPath: alias } };
+  const { vscode } = createFakeVscode({ workspaceFolders: [folder] });
+  const workspace = new GaugeWorkspace({ vscode, LanguageClient: FakeLanguageClient, RevealOutputChannelOn: { Never: 4 } });
+  t.after(() => workspace.dispose());
+  const options = workspace.clientOptionsFor({ root: () => physical }, physical);
+  assert.equal(options.workspaceFolder, folder);
+  for (const root of [physical, alias]) {
+    assert.ok(options.documentSelector.some((item) => item.pattern === `${root}/**/*.spec`));
+    assert.ok(options.documentSelector.some((item) => item.pattern === `${root}/specs/**/*.md`));
+  }
+});

@@ -1,6 +1,7 @@
 "use strict";
 
 const nodeFs = require("node:fs");
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 const nodePath = require("node:path");
 const { concurrencyLimit, mapWithConcurrency } = require("./asyncWork");
 
@@ -486,11 +487,13 @@ class WorkspaceDocumentStore {
     const workspace = this.vscode.workspace || {};
     const documents = [];
     const seenPaths = new Set();
-    for (const document of workspace.textDocuments || []) {
+    const openDocuments = [...(workspace.textDocuments || [])]
+      .sort((left, right) => Number(Boolean(right && right.isDirty)) - Number(Boolean(left && left.isDirty)));
+    for (const document of openDocuments) {
       if (!document || typeof document.getText !== "function" || !isFileSchemeDocument(document)) {
         continue;
       }
-      const file = documentPath(document);
+      const file = canonicalFilePath(documentPath(document), this.fileSystem, this.pathModule);
       if (file) {
         if (seenPaths.has(file)) {
           continue;
@@ -500,7 +503,9 @@ class WorkspaceDocumentStore {
       documents.push(document);
     }
     for (const [file, document] of this.diskDocuments) {
-      if (!seenPaths.has(file)) {
+      const identity = canonicalFilePath(file, this.fileSystem, this.pathModule);
+      if (!seenPaths.has(identity)) {
+        seenPaths.add(identity);
         documents.push(document);
       }
     }

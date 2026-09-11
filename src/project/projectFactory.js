@@ -2,6 +2,7 @@
 
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
+const { canonicalFilePath } = require("../gaugeExecutionIdentifier");
 const { concurrencyLimit, mapWithConcurrency } = require("../asyncWork");
 const { GaugeProject } = require("./gaugeProject");
 const { GradleProject } = require("./gradleProject");
@@ -194,6 +195,7 @@ function createProjectFactory(options = {}) {
   }
 
   function findGaugeProjectRoots(root) {
+    root = canonicalFilePath(root, fileSystem, pathModule);
     if (rootsDiscoveryCache.has(root)) {
       return rootsDiscoveryCache.get(root);
     }
@@ -301,6 +303,7 @@ function createProjectFactory(options = {}) {
   }
 
   function findGaugeProjectRootsAsync(root) {
+    root = canonicalFilePath(root, fileSystem, pathModule);
     if (rootsDiscoveryCache.has(root)) {
       return Promise.resolve(rootsDiscoveryCache.get(root));
     }
@@ -406,6 +409,7 @@ function createProjectFactory(options = {}) {
   }
 
   function get(root) {
+    root = canonicalFilePath(root, fileSystem, pathModule);
     if (!root) {
       throw invalidProjectError(root);
     }
@@ -450,6 +454,7 @@ function createProjectFactory(options = {}) {
       current = parent;
       visited.push(current);
     }
+    current = canonicalFilePath(current, fileSystem, pathModule);
     for (const entry of visited) {
       rootLookupCache.set(entry, current);
     }
