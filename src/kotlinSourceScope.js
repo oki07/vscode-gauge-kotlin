@@ -30,9 +30,11 @@ function patternMatches(name, pattern) {
 function contentsFrom(model, directory) {
   if (!Array.isArray(model?.modules)) throw new Error("Invalid Kotlin workspace model.");
   return model.modules.flatMap((module) => {
-    if (!Array.isArray(module.contentRoots)) throw new Error("Invalid Kotlin content roots.");
-    return module.contentRoots.map((content) => {
-      if (!Array.isArray(content.sourceRoots)) throw new Error("Invalid Kotlin source roots.");
+    const contentRoots = module.contentRoots === undefined ? [] : module.contentRoots;
+    if (!Array.isArray(contentRoots)) throw new Error("Invalid Kotlin content roots.");
+    return contentRoots.map((content) => {
+      const sourceRoots = content.sourceRoots === undefined ? [] : content.sourceRoots;
+      if (!Array.isArray(sourceRoots)) throw new Error("Invalid Kotlin source roots.");
       const patterns = content.excludedPatterns || [];
       const excluded = content.excludedUrls || [];
       if (!Array.isArray(patterns) || !patterns.every((entry) => typeof entry === "string")
@@ -41,7 +43,7 @@ function contentsFrom(model, directory) {
         root: exportedPath(content.path, directory),
         patterns,
         excluded: excluded.map((entry) => exportedPath(entry, directory)),
-        sources: content.sourceRoots.map((source) => {
+        sources: sourceRoots.map((source) => {
           if (!SOURCE_TYPES.has(source.type)) throw new Error("Unsupported Kotlin source root type.");
           return { root: exportedPath(source.path, directory), resource: source.type.includes("resource") };
         }),

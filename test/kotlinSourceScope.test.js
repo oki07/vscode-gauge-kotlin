@@ -89,3 +89,37 @@ test("Kotlin source scope does not publish an export after disposal", async () =
   assert.equal(scope.allows("/workspace/gauge/notes/Notes.kt"), undefined);
   for (const directory of state.exports) await assert.rejects(fs.stat(directory), { code: "ENOENT" });
 });
+
+test("Kotlin source scope accepts omitted empty root collections", async () => {
+  // Kotlin/kotlin-lsp/workspace-import/src/com/jetbrains/ls/imports/json/model.kt
+  // defines empty defaults. Real Kotlin LSP 0.0.12 exportWorkspace omits both
+  // collections in this fixture while workspace/symbol still finds SourceStep.
+  const exported = require("./fixtures/kotlin-source-empty-roots.json");
+  for (const explicit of [false, true]) {
+    const { state, scope } = fixture();
+    state.model = JSON.parse(JSON.stringify(exported));
+    if (explicit) {
+      for (const module of state.model.modules) {
+        module.contentRoots ||= [];
+        for (const content of module.contentRoots) content.sourceRoots ||= [];
+      }
+    }
+    try {
+      await scope.refresh();
+      assert.equal(scope.allows("/workspace/gauge/src/test/kotlin/SourceStep.kt"), true);
+      assert.equal(scope.allows("/workspace/gauge/notes/NotesStep.kt"), false);
+      assert.equal(scope.allows("/workspace/gauge/empty-content/NotesStep.kt"), false);
+      assert.equal(scope.allows("/workspace/other/SourceStep.kt"), undefined);
+      for (const invalid of [null, {}]) {
+        state.model = { modules: [{ contentRoots: invalid }] };
+        await scope.refresh();
+        assert.equal(scope.allows("/workspace/gauge/notes/NotesStep.kt"), false);
+        state.model = { modules: [{ contentRoots: [{ path: "/workspace/gauge", sourceRoots: invalid }] }] };
+        await scope.refresh();
+        assert.equal(scope.allows("/workspace/gauge/notes/NotesStep.kt"), false);
+      }
+    } finally {
+      scope.dispose();
+    }
+  }
+});

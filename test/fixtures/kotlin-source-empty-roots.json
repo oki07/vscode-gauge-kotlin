@@ -1,0 +1,43 @@
+{
+  "modules": [
+    {
+      "name": "empty-module"
+    },
+    {
+      "name": "project",
+      "contentRoots": [
+        {
+          "path": "/workspace/gauge",
+          "excludedPatterns": [
+            "patternExcluded"
+          ],
+          "sourceRoots": [
+            {
+              "path": "/workspace/gauge/src/main/java",
+              "type": "java-source"
+            },
+            {
+              "path": "/workspace/gauge/src/main/resources",
+              "type": "java-resource"
+            },
+            {
+              "path": "/workspace/gauge/src/main/kotlin",
+              "type": "java-source"
+            },
+            {
+              "path": "/workspace/gauge/src/test/kotlin",
+              "type": "java-test"
+            },
+            {
+              "path": "/workspace/gauge/src/test/resources",
+              "type": "java-test-resource"
+            }
+          ]
+        },
+        {
+          "path": "/workspace/gauge/empty-content"
+        }
+      ]
+    }
+  ]
+}
