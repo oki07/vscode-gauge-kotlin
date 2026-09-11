@@ -178,13 +178,57 @@ test("Kotlin library paths match supplied classpaths without guessing macro base
     state.model.libraries[0].roots[0].path = "<UNKNOWN>/steps.jar";
     await scope.refresh();
     assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
+    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), true);
     state.model.libraries[0].roots[0].path = "/archives";
     state.model.libraries[0].roots[0].inclusionOptions = "archives_under_root";
     await scope.refresh();
     assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
+    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), true);
     state.model.libraries[0].roots[0].path = null;
     await scope.refresh();
     assert.deepEqual(scope.libraryClasspath(root, [archive]), [archive]);
+    assert.equal(scope.libraryClassFilter(root, archive)("Steps.class"), true);
     assert.deepEqual(scope.libraryClasspath("/unimported", [archive]), [archive]);
   } finally { scope.dispose(); }
+});
+
+test("library exclusions resolve supported macros and retain valid snapshots", async () => {
+  const { state, scope } = fixture();
+  const root = "/workspace/gauge";
+  state.model.modules[0].dependencies = [{ type: "library", name: "steps", scope: "compile" }];
+  const library = { name: "steps", roots: [{ path: "<MAVEN_REPO>/group/steps.jar" }], excludedRoots: ["<MAVEN_REPO>/group/steps.jar!/hidden"] };
+  state.model.libraries = [library];
+  try {
+    const archive = "/custom/repository/group/steps.jar";
+    await scope.refresh();
+    assert.equal(scope.libraryClassFilter(root, archive)("hidden/Step.class"), false);
+    assert.equal(scope.libraryClassFilter(root, archive)("hiddenExtra/Step.class"), true);
+    library.excludedRoots = [null];
+    await scope.refresh();
+    assert.equal(scope.libraryClassFilter(root, archive)("hidden/Step.class"), false);
+    library.roots[0].path = "<WORKSPACE>/Steps.jar";
+    library.excludedRoots = ["<WORKSPACE>/Steps.jar!"];
+    await scope.refresh();
+    const workspaceArchive = path.join(state.exports.at(-1), "Steps.jar");
+    assert.equal(scope.libraryClassFilter(root, workspaceArchive)("Step.class"), false);
+    library.excludedRoots = [];
+    await scope.refresh();
+    assert.equal(scope.libraryClassFilter(root, path.join(state.exports.at(-1), "Steps.jar"))("Step.class"), true);
+  } finally { scope.dispose(); }
+});
+
+test("archive-entry exclusions use the physical JAR behind a path alias", async () => {
+  const { state, scope } = fixture();
+  const directory = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-library-alias-"));
+  try {
+    const archive = path.join(directory, "steps.jar");
+    const alias = path.join(directory, "alias.jar");
+    await fs.writeFile(archive, "");
+    await fs.symlink(archive, alias);
+    state.model.modules[0].dependencies = [{ type: "library", name: "steps", scope: "compile" }];
+    state.model.libraries = [{ name: "steps", roots: [{ path: archive }], excludedRoots: [alias + "!/hidden"] }];
+    await scope.refresh();
+    assert.equal(scope.libraryClassFilter("/workspace/gauge", archive)("hidden/Step.class"), false);
+    assert.equal(scope.libraryClassFilter("/workspace/gauge", alias)("kept/Step.class"), true);
+  } finally { scope.dispose(); await fs.rm(directory, { recursive: true, force: true }); }
 });

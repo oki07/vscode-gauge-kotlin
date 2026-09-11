@@ -504,8 +504,9 @@ class DependencyStepIndex {
       // A classpath routinely holds jars this process cannot open: a truncated
       // download, a permission-denied artifact, a native jar. One of them must
       // not throw away every other dependency's steps.
-      await this.scanArchiveSafely(archive, async (_fileName, data) => {
-        if (this.disposed) {
+      const includesClass = this.sourceScope?.libraryClassFilter?.(root, archive) || (() => true);
+      await this.scanArchiveSafely(archive, async (fileName, data) => {
+        if (this.disposed || !includesClass(fileName)) {
           return;
         }
         let parsed;

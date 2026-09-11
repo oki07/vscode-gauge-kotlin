@@ -840,3 +840,53 @@ test("imported library scope updates definitions and diagnostic candidates toget
     assert.deepEqual([...index.stepTemplates(root)], ["Replaced"]);
   } finally { definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose(); }
 });
+
+test("imported library exclusions agree across definitions and diagnostics", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation searches exclude class/package roots and union
+  // shared libraries. Kotlin 0.0.12 exports a whole-archive exclusion as its path.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const root = "/workspace/gauge";
+  const archive = "/repo/Steps.jar";
+  const owners = { Hidden: "hidden/Hidden.class", Kept: "kept/Kept.class", Nested: "hidden/deep/Nested.class", Sibling: "hiddenExtra/Sibling.class" };
+  const names = Object.keys(owners);
+  let current;
+  const vscode = createFakeVscode();
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => {
+    const libraries = [{ name: "Steps", roots: [{ path: archive }], excludedRoots: current.exclusions.map((suffix) => archive + suffix) }];
+    if (current.secondExclusions !== null) libraries.push({ name: "Shared", roots: [{ path: archive }], excludedRoots: current.secondExclusions.map((suffix) => archive + suffix) });
+    await fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify({ libraries, modules: [{ name: "main", contentRoots: [{ path: root }], dependencies: libraries.map(({ name }) => ({ type: "library", name, scope: "compile" })) }] }));
+  } };
+  const scope = new KotlinSourceScope({ vscode });
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope, fileSystem: { existsSync: () => true }, classpathProvider: async () => [archive],
+    scanArchive: async (_archive, visit) => { for (const [name, entry] of Object.entries(owners)) await visit(entry, dependencyStepClass(name)); },
+  });
+  const registration = index.register();
+  const text = `# Libraries\n\n## Example\n\n${names.map((name) => `* ${name}`).join("\n")}`;
+  const spec = { languageId: "gauge", uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: 8 };
+  vscode.workspace = { textDocuments: [spec], getConfiguration: () => ({ get: () => undefined }) };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false }, projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (current of require("./fixtures/library-exclusion-parity.json")) {
+      await scope.refresh();
+      await index.findDefinitions(root, names);
+      assert.deepEqual([...index.stepTemplates(root)].sort(), current.expected, current.name);
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => current.expected.includes(name) ? [] : [i + 4]), current.name);
+      for (let i = 0; i < names.length; i += 1) {
+        const targets = await definition.provideDefinition(spec, { line: i + 4, character: 3 });
+        assert.equal((targets || []).length, Number(current.expected.includes(names[i])), `${current.name} ${names[i]}`);
+      }
+    }
+  } finally { definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose(); }
+});

@@ -18,6 +18,12 @@ function exportedPath(value, directory) {
   return canonicalFilePath(expanded);
 }
 
+function libraryPathMatches(file, exported) {
+  if (path.isAbsolute(exported)) return canonicalFilePath(file) === canonicalFilePath(exported);
+  const macro = exported.match(/^<(?:MAVEN_REPO|HOME)>\/(.+)$/);
+  return macro ? file.replace(/\\/g, "/").endsWith(`/${macro[1]}`) : undefined;
+}
+
 function patternMatches(name, pattern) {
   const expression = pattern.split("").map((character) => {
     if (character === "*") return ".*";
@@ -93,24 +99,28 @@ class KotlinSourceScope {
     return [...selected];
   }
 
-  libraryClasspath(root, classpath) {
+  libraryRoots(root) {
     const modules = this.modulesFor(root);
-    if (!modules.length) return classpath;
+    if (!modules.length) return undefined;
     const identity = canonicalFilePath(root);
     const selected = new Set(modules.flatMap((module) => module.dependencies
       .filter((edge) => edge.type === "library" && edge.scope !== "runtime"
         && (module.root && inside(module.root, identity) || edge.exported))
       .map((edge) => edge.name)));
-    const roots = this.libraries.flatMap((library) => library.roots
+    return this.libraries.flatMap((library) => library.roots
       .filter((entry) => (entry.type || "CLASSES") === "CLASSES")
       .map((entry) => ({ ...entry, selected: selected.has(library.name),
         ambiguous: this.libraries.filter((other) => other.name === library.name).length > 1,
-        unsupported: Boolean(library.excludedRoots?.length || entry.inclusionOptions && entry.inclusionOptions !== "root_itself") })));
+        excludedRoots: library.excludedRoots,
+        unsupported: Boolean(entry.inclusionOptions && entry.inclusionOptions !== "root_itself") })));
+  }
+
+  libraryClasspath(root, classpath) {
+    const roots = this.libraryRoots(root);
+    if (!roots) return classpath;
     const matches = (file, entry) => {
       if (entry.unsupported) return undefined;
-      if (path.isAbsolute(entry.path)) return canonicalFilePath(file) === entry.path;
-      const macro = entry.path.match(/^<(?:MAVEN_REPO|HOME)>\/(.+)$/);
-      return macro ? file.replace(/\\/g, "/").endsWith(`/${macro[1]}`) : undefined;
+      return libraryPathMatches(file, entry.path);
     };
     const retained = classpath.filter((file) => typeof file === "string").filter((file) => {
       const matching = roots.filter((entry) => matches(file, entry));
@@ -120,6 +130,23 @@ class KotlinSourceScope {
     return [...new Set([...retained.map((file) => canonicalFilePath(file)), ...roots.filter((entry) => entry.selected && !entry.ambiguous && !entry.unsupported
       && path.isAbsolute(entry.path) && /\.jar$/i.test(entry.path)
       && (!entry.inclusionOptions || entry.inclusionOptions === "root_itself")).map((entry) => entry.path)])];
+  }
+
+  libraryClassFilter(root, archive) {
+    const roots = this.libraryRoots(root);
+    if (!roots) return () => true;
+    const matching = roots.filter((entry) => libraryPathMatches(archive, entry.path));
+    if (matching.some((entry) => entry.ambiguous || entry.selected && entry.unsupported)
+      || roots.some((entry) => entry.selected && (entry.unsupported || libraryPathMatches(archive, entry.path) === undefined))) return () => true;
+    const contributions = matching.filter((entry) => entry.selected).map((entry) => (entry.excludedRoots || []).flatMap((excluded) => {
+      const internal = excluded.match(/^(.*\.jar)!(?:\/(.*))?$/i);
+      const file = internal ? internal[1] : excluded;
+      return libraryPathMatches(archive, file) ? [internal ? internal[2] || "" : ""] : [];
+    }));
+    // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+    // IDEA annotation search includes the union of unexcluded library classes.
+    return (name) => contributions.some((exclusions) => !exclusions.some((excluded) =>
+      excluded === "" || name === excluded || name.startsWith(`${excluded}/`)));
   }
 
   moduleRoots() {
@@ -195,12 +222,14 @@ class KotlinSourceScope {
       if (this.disposed) return;
       const model = JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8"));
       const modules = modulesFrom(model, directory);
-      const libraries = (model.libraries || []).map((library) => ({ ...library, roots: library.roots.map((entry) => {
-        if (typeof entry.path !== "string") throw new Error("Invalid Kotlin library path.");
-        let resolved = entry.path;
-        try { resolved = exportedPath(entry.path, directory); } catch (_error) { /* Macro paths can be matched to an existing execution classpath entry. */ }
-        return { ...entry, path: resolved };
-      }) }));
+      const libraryPath = (value) => {
+        if (typeof value !== "string") throw new Error("Invalid Kotlin library path.");
+        try { return exportedPath(value, directory); } catch (_error) { return value; }
+      };
+      const libraries = (model.libraries || []).map((library) => ({ ...library,
+        roots: library.roots.map((entry) => ({ ...entry, path: libraryPath(entry.path) })),
+        excludedRoots: (library.excludedRoots || []).map(libraryPath),
+      }));
       if (this.disposed || JSON.stringify([modules, libraries]) === JSON.stringify([this.modules, this.libraries])) return;
       this.libraries = libraries;
       this.modules = modules;
