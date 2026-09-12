@@ -65,6 +65,12 @@ function patternMatches(name, pattern) {
   return new RegExp(`^${expression}$`).test(name);
 }
 
+// getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+// IDEA module scope includes every content root regardless of root order.
+function ownsContext(module, root) {
+  return module.contents.some((content) => inside(content.root, root));
+}
+
 function modulesFrom(model, directory) {
   if (!Array.isArray(model?.modules)) throw new Error("Invalid Kotlin workspace model.");
   return model.modules.map((module, index) => {
@@ -114,7 +120,7 @@ class KotlinSourceScope {
 
   modulesFor(root) {
     const identity = canonicalFilePath(root);
-    const initial = this.modules.filter((module) => module.root && inside(module.root, identity));
+    const initial = this.modules.filter((module) => ownsContext(module, identity));
     const byName = new Map(this.modules.map((module) => [module.name, module]));
     const selected = new Set();
     const pending = [...initial];
@@ -139,7 +145,7 @@ class KotlinSourceScope {
     const ambiguous = new Set();
     for (const module of modules) for (const edge of module.dependencies) {
       if (edge.type !== "library" || edge.scope === "runtime"
-        || !(module.root && inside(module.root, identity) || edge.exported)) continue;
+        || !(ownsContext(module, identity) || edge.exported)) continue;
       const candidates = this.libraries.filter((library) => library.name === edge.name
         && (library.level !== "module" || library.module === module.name));
       for (const library of candidates) {
@@ -212,7 +218,7 @@ class KotlinSourceScope {
   }
 
   moduleRoots() {
-    return [...new Set(this.modules.map((module) => module.root).filter(Boolean))];
+    return [...new Set(this.modules.flatMap((module) => module.contents.map((content) => content.root)))];
   }
 
   sourceRoots() {
@@ -226,7 +232,7 @@ class KotlinSourceScope {
 
   canUse(root, dependencyRoot) {
     const identity = canonicalFilePath(dependencyRoot);
-    return this.modulesFor(root).some((module) => module.root === identity);
+    return this.modulesFor(root).some((module) => module.contents.some((content) => content.root === identity));
   }
 
   allows(file, root) {

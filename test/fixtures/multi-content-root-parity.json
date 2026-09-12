@@ -1,0 +1,29 @@
+[
+  {
+    "phase": "alpha-first",
+    "reverse": false,
+    "expected": [
+      "alpha",
+      "beta",
+      "dependency"
+    ]
+  },
+  {
+    "phase": "beta-first",
+    "reverse": true,
+    "expected": [
+      "alpha",
+      "beta",
+      "dependency"
+    ]
+  },
+  {
+    "phase": "restored",
+    "reverse": false,
+    "expected": [
+      "alpha",
+      "beta",
+      "dependency"
+    ]
+  }
+]

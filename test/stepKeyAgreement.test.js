@@ -482,3 +482,84 @@ test("imported dependencies agree across consumer projects and reverse reference
     for (const disposable of [rename, lenses, references, definition, index, store, scope]) disposable.dispose();
   }
 });
+
+test("multiple content roots agree across module consumers and reverse references", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // actual IDEA 2020.1 scope and annotation search select both content roots,
+  // their private library and direct dependency in either root order.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const roots = ["/workspace/alpha", "/workspace/beta", "/workspace/unrelated", "/shared/dependency"];
+  const aliases = ["alpha", "beta", "unrelated", "dependency"];
+  const specs = roots.slice(0, 3).map(root => createDocument("# Roots\n\n## Example\n\n* alpha\n* beta\n* dependency", "gauge", `${root}/specs/example.spec`));
+  const implementations = roots.map((root, i) => createDocument(kotlinSource(aliases[i]), "kotlin", `${root}/src/Steps.kt`));
+  const documents = [...specs, ...implementations];
+  for (const document of documents) document.uri.scheme = "file";
+  const vscode = createFakeVscode([specs[0]]);
+  vscode.Uri.parse = value => vscode.Uri.file(require("node:url").fileURLToPath(value));
+  const content = root => ({ path: root, sourceRoots: [{ path: `${root}/src`, type: "java-test" }] });
+  let reverse = false;
+  const model = () => ({ modules: [
+    { name: "owner", contentRoots: (reverse ? roots.slice(0, 2).reverse() : roots.slice(0, 2)).map(content), dependencies: [{ type: "module", name: "dependency", scope: "compile" }, { type: "library", name: "private", scope: "compile" }] },
+    { name: "unrelated", contentRoots: [content(roots[2])], dependencies: [] },
+    { name: "dependency", contentRoots: [content(roots[3])], dependencies: [] },
+  ], libraries: [{ name: "private", roots: [{ path: "/library/private.jar" }] }] });
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = {
+    registerCommand: () => ({ dispose() {} }), getCommands: async () => ["exportWorkspace"],
+    executeCommand: async (_command, directory) => fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify(model())),
+  };
+  vscode.languages.registerReferenceProvider = () => ({ dispose() {} });
+  vscode.RelativePattern = class { constructor(base, pattern) { this.base = typeof base === "string" ? base : base.fsPath; this.pattern = pattern; } };
+  vscode.workspace.findFiles = async pattern => documents.filter(document => typeof pattern === "string"
+    ? document.uri.fsPath.startsWith("/workspace/") : document.uri.fsPath.startsWith(`${pattern.base}/`)).map(document => document.uri);
+  const projectFactory = {
+    getGaugeRootFromFilePath: file => roots.slice(0, 3).find(root => file.startsWith(`${root}/`)),
+    isGaugeProject: root => roots.slice(0, 3).includes(root),
+  };
+  const fileSystem = { promises: { readFile: async file => documents.find(document => document.uri.fsPath === file).getText() } };
+  const scope = new KotlinSourceScope({ vscode }); await scope.refresh();
+  const store = new WorkspaceDocumentStore({ vscode, sourceScope: scope, projectFactory, fileSystem }); await store.start();
+  const options = { vscode, documentStore: store, projectFactory, fileSystem };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const index = new WorkspaceStepIndex({ ...options, diagnosticsProvider: diagnostics }); index.start();
+  options.workspaceStepIndex = index;
+  const definition = new GaugeStepDefinitionProvider(options);
+  const references = new ReferenceProvider(new GaugeClients(), options);
+  const lenses = new GaugeCodeLensProvider(options);
+  const rename = new GaugeRenameProvider(options);
+  try {
+    for (const row of require("./fixtures/multi-content-root-parity.json")) {
+      reverse = row.reverse; await scope.refresh(); await store.whenReady();
+      for (const spec of specs.slice(0, 2)) {
+        for (const [line, source] of [[4, 0], [5, 1], [6, 3]]) {
+          const targets = await definition.provideDefinition(spec, { line, character: 3 });
+          assert.deepEqual((targets || []).map(entry => entry.uri.fsPath), [implementations[source].uri.fsPath], `${reverse} ${spec.uri.fsPath} ${line}`);
+        }
+        assert.equal(diagnostics.provideDiagnostics(spec, store.documents()).filter(entry => entry.message === "Undefined Step").length, 0);
+        assert.deepEqual((await index.completionEntries(spec, { line: 4, character: 2 })).map(entry => entry.label).sort(), row.expected);
+      }
+      assert.deepEqual(await definition.provideDefinition(specs[2], { line: 5, character: 3 }) || [], []);
+      const expectedSpecs = specs.slice(0, 2).map(document => document.uri.fsPath).sort();
+      for (const source of [implementations[1], implementations[3]]) {
+        const refs = await references.provideReferences(source, { line: 5, character: 12 });
+        assert.deepEqual((refs || []).map(entry => entry.uri.fsPath).sort(), expectedSpecs);
+        const codeLenses = await lenses.provideCodeLenses(source);
+        assert.deepEqual((codeLenses || []).map(entry => entry.command?.title).filter(title => title?.includes("reference")), ["2 reference(s)"]);
+        const edits = await rename.provideRenameEdits(source, { line: 5, character: 12 }, "renamed");
+        assert.deepEqual(edits.replacements.filter(entry => entry.uri.fsPath.endsWith(".spec")).map(entry => entry.uri.fsPath).sort(), expectedSpecs);
+      }
+      assert.deepEqual(scope.moduleRoots().sort(), [...roots].sort());
+      for (const root of roots.slice(0, 2)) {
+        assert.deepEqual(scope.libraryClasspath(root, []), ["/library/private.jar"]);
+        assert.equal(scope.canUse(root, roots[1]), true);
+        assert.equal(scope.allows(`${roots[2]}/src/Steps.kt`, root), false);
+      }
+    }
+  } finally { for (const value of [rename, lenses, references, definition, index, store, scope]) value.dispose(); }
+});
