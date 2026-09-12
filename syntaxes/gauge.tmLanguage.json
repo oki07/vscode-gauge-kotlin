@@ -902,6 +902,9 @@
           "contentName": "meta.embedded.block.php",
           "patterns": [
             {
+              "include": "text.html.basic"
+            },
+            {
               "include": "text.html.php#language"
             }
           ]

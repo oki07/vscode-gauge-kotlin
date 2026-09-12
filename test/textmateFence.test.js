@@ -55,3 +55,48 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
     }
   });
 }
+
+// Real TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage assigns HTML tag scopes inside PHP fences,
+// including when the external PHP grammar contributes no usable rules.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} resolves HTML inside PHP fences`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    for (const phpAvailable of [false, true]) {
+      const registry = new textmate.Registry({
+        onigLib: Promise.resolve(oniguruma),
+        loadGrammar: async (scope) => {
+          if (scope === raw.scopeName) return raw;
+          if (scope === "text.html.basic") return {
+            scopeName: scope,
+            patterns: [{ match: "</?(strong)", captures: { 1: { name: "entity.name.tag.html" } } }],
+          };
+          if (scope === "text.html.php" && phpAvailable) return {
+            scopeName: scope, patterns: [], repository: {
+              language: { patterns: [{ match: "echo", name: "keyword.control.php" }] },
+            },
+          };
+          return null;
+        },
+      });
+      try {
+        const grammar = await registry.loadGrammar(raw.scopeName);
+        for (const alias of ["php", "php3", "php4", "php5", "phpt", "phtml", "aw", "ctp"]) {
+          for (const fence of ["```", "~~~"]) {
+            let state = grammar.tokenizeLine(fence + alias, textmate.INITIAL).ruleStack;
+            const line = '<?php echo "hello"; ?><strong class="note">world</strong>';
+            const result = grammar.tokenizeLine(line, state);
+            const tags = result.tokens.filter((token) => token.scopes.includes("entity.name.tag.html"));
+            assert.deepEqual(tags.map((token) => line.slice(token.startIndex, token.endIndex)), ["strong", "strong"], alias);
+            assert.equal(result.tokens.some((token) => token.scopes.includes("keyword.control.php")), phpAvailable);
+            state = grammar.tokenizeLine(fence, result.ruleStack).ruleStack;
+            assert.ok(grammar.tokenizeLine("* After <argument>", state).tokens.some((token) => token.scopes.includes("keyword.operator.step.gauge")));
+          }
+        }
+      } finally {
+        registry.dispose();
+      }
+    }
+  });
+}

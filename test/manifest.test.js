@@ -1061,7 +1061,9 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assert.deepEqual(markdownJsonFence.patterns[0].patterns, [{ include: "source.json" }]);
   assertPatternMatches(markdownPhpFence, "```php", "```php");
   assert.equal(markdownPhpFence.patterns[0].contentName, "meta.embedded.block.php");
-  assert.deepEqual(markdownPhpFence.patterns[0].patterns, [{ include: "text.html.php#language" }]);
+  // Real TextMate execution of getgauge/gauge-vscode syntaxes/markdown.tmLanguage
+  // preserves HTML tag/attribute scopes in PHP fences through both includes.
+  assert.deepEqual(markdownPhpFence.patterns[0].patterns, [{ include: "text.html.basic" }, { include: "text.html.php#language" }]);
   assertPatternMatches(markdownPythonFence, "```python", "```python");
   assertPatternMatches(markdownPythonFence, "~~~py", "~~~py");
   assertPatternMatches(markdownPythonFence, "```gypi", "```gypi");
