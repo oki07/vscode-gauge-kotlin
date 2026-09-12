@@ -7612,6 +7612,7 @@ function collectPackageQualifiedStepTypeAliases(
   return aliases;
 }
 
+/** @param {{has(name: string): boolean}} localClassifierNames */
 function stepAnnotationClassifierNames(stepImports, localClassifierNames = new Set()) {
   return {
     has(name) {
@@ -7845,6 +7846,7 @@ function localClassifierNamesAtOffset(analysis, offset) {
   };
 }
 
+/** @param {{has(name: string): boolean}} localClassifierNames */
 function resolveStepAnnotationTarget(annotationName, namedImports, localClassifierNames = new Set(), seen = new Set()) {
   const normalizedName = normalizeKotlinIdentifierPath(annotationName);
   if (normalizedName === GAUGE_STEP_ANNOTATION) {
@@ -7860,6 +7862,7 @@ function resolveStepAnnotationTarget(annotationName, namedImports, localClassifi
   return resolveStepAnnotationTarget(namedImports.get(normalizedName), namedImports, localClassifierNames, seen);
 }
 
+/** @param {{has(name: string): boolean}} localClassifierNames */
 function isStepAnnotationAllowed(annotationName, stepImports, localClassifierNames = new Set()) {
   const normalizedName = normalizeKotlinIdentifierPath(annotationName);
   if (normalizedName === GAUGE_STEP_ANNOTATION) {

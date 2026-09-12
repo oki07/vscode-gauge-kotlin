@@ -427,6 +427,7 @@ class GaugeFormatProvider {
     );
   }
 
+  /** @this {GaugeFormatProvider & {pathModule?: typeof import("node:path")}} */
   markdownScopeOptions() {
     return {
       fileSystem: this.fileSystem,

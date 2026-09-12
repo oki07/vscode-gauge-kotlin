@@ -35,7 +35,7 @@ class BuildToolProject extends GaugeProject {
     if (other === this) {
       return true;
     }
-    return this.root() === other.root();
+    return this.root() === /** @type {BuildToolProject} */ (other).root();
   }
 
   showError(message) {
@@ -223,6 +223,7 @@ class BuildToolProject extends GaugeProject {
     });
   }
 
+  /** @this {BuildToolProject & {executionBuildTaskArgs?: () => string[]}} */
   async runBuildCommandAsync(command, args) {
     if (typeof this.executionBuildTaskArgs === "function") {
       try {
@@ -252,6 +253,13 @@ class BuildToolProject extends GaugeProject {
 
   // Compiles when the caller has not preserved a valid preparation, and only
   // resolves the build-tool classpath when this root has no cached value.
+  /**
+   * @this {BuildToolProject & {
+   *   executionBuildToolCommand(cli: unknown): {command: string},
+   *   executionBuildArgs(): string,
+   *   executionClasspathArgs(): string
+   * }}
+   */
   async executionEnvsAsync(cli, cachedEnv, options = {}) {
     const command = this.executionBuildToolCommand(cli);
     if (!command || !command.command) {

@@ -274,6 +274,7 @@ class GaugeSemanticTokensProvider {
   // configured gauge_specs_dir. Without this a README or CHANGELOG in a Gauge
   // project is decorated as a specification. The rule lives in
   // src/gaugeSpecScope.js so every provider gives the same answer.
+  /** @this {GaugeSemanticTokensProvider & {fileSystem?: typeof import("node:fs"), pathModule?: typeof import("node:path")}} */
   isMarkdownDocumentInScope(document) {
     const file = documentPath(document);
     if (!/\.md$/i.test(String(file || ""))) {

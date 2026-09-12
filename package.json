@@ -23,8 +23,11 @@
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
+    "@types/node": "16.18.126",
+    "@types/vscode": "1.82.0",
     "esbuild": "^0.28.1",
-    "eslint": "^9.39.5"
+    "eslint": "^9.39.5",
+    "typescript": "5.9.3"
   },
   "categories": [
     "Programming Languages",
@@ -62,8 +65,9 @@
     "test:vscode": "node --test test/extension.test.js test/manifest.test.js",
     "test:integration": "node scripts/run-integration.js",
     "package": "node scripts/package-vsix.js",
-    "check": "npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
-    "test": "npm run test:unit"
+    "check": "npm run typecheck && npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
+    "test": "npm run test:unit",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "contributes": {
     "views": {

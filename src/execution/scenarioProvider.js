@@ -43,6 +43,7 @@ function resolveClientsMap(clientsMap) {
 const LANGUAGE_CLIENT_UNAVAILABLE = "GAUGE_LANGUAGE_CLIENT_UNAVAILABLE";
 
 function missingClientError(spec) {
+  /** @type {Error & {code?: string}} */
   const error = new Error(`No Gauge language client available for ${spec}.`);
   error.code = LANGUAGE_CLIENT_UNAVAILABLE;
   return error;

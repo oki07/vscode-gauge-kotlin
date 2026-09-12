@@ -1035,7 +1035,7 @@ function staticArguments(text, options = {}) {
     if (excludeTeardown && isTeardownLine(line)) {
       break;
     }
-    if (!isStaticArgumentSourceLine(line, options)) {
+    if (!isStaticArgumentSourceLine(line)) {
       continue;
     }
     let openIndex = nextUnescapedCharacterIndex(line, "\"");
@@ -2058,7 +2058,7 @@ class GaugeDynamicArgumentCompletionProvider {
     if (argumentRange && !allowsDynamicArgumentCompletion(line, document, position.line)) {
       return [];
     }
-    if (quotedArgumentRange && !allowsStaticArgumentCompletion(line, document)) {
+    if (quotedArgumentRange && !allowsStaticArgumentCompletion(line)) {
       return [];
     }
     if (argumentRange || quotedArgumentRange) {

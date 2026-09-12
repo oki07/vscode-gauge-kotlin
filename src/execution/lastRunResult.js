@@ -678,6 +678,7 @@ function specFallbackEvents(result, filename, hasExplainingLeaf, representedErro
 
 function executionEventsFromLastRunResult(buffer, options = {}) {
   const suite = decodeSuiteResult(buffer);
+  /** @type {Array<ReturnType<typeof suiteHookEvents>[number] | ReturnType<typeof scenarioEvents>[number]>} */
   const events = [
     ...suiteHookEvents(suite.beforeHook, "Before Suite", options.projectRoot),
   ];

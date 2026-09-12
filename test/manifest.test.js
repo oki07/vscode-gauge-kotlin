@@ -150,6 +150,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     "vscode:prepublish": "npm run bundle",
     // Correctness rules, not style: the gate has to be able to fail on an
     // undeclared identifier or a duplicated key, which a syntax parse cannot see.
+    typecheck: "tsc -p tsconfig.json",
     lint: "eslint .",
     "test:unit": "node --test",
     "test:lsp": "node --test test/gaugeClients.test.js test/gaugeWorkspace.test.js",
@@ -158,7 +159,7 @@ test("extension manifest exposes the core Gauge VS Code surface for Kotlin proje
     // it stays out of `check`, which runs on the project's own dependencies.
     "test:integration": "node scripts/run-integration.js",
     package: "node scripts/package-vsix.js",
-    check: "npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
+    check: "npm run typecheck && npm run lint && npm run test:unit && npm run test:lsp && npm run test:vscode && npm run package",
     test: "npm run test:unit",
   });
   assert.equal(manifest.dependencies["vscode-languageclient"], "~9.0.1");

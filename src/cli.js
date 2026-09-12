@@ -323,6 +323,7 @@ class Command {
     );
   }
 
+  /** @this {Command & {childProcess?: typeof childProcess}} */
   processApi() {
     return this.childProcess || childProcess;
   }

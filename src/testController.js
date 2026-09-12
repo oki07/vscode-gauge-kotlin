@@ -1429,6 +1429,7 @@ class GaugeTestController {
       return undefined;
     }
     const request = testRunRequest(this.vscode, item);
+    /** @type {ReturnType<typeof testUiRunFlags> & {debug?: boolean, parallel?: boolean}} */
     const flags = command === "gauge.debug"
       ? testUiDebugFlags()
       : testUiRunFlags();

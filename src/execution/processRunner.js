@@ -179,6 +179,7 @@ function createGaugeProcessRunner(options = {}) {
     let child;
     let aborted = false;
     let settle;
+    /** @type {Promise<boolean> & {cancel?: (userAborted?: boolean) => void}} */
     const run = new Promise((resolve) => {
       settle = resolve;
       const displayArgs = command.tool && typeof command.tool.argsForSpawnType === "function"

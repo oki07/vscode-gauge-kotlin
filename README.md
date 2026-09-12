@@ -173,8 +173,10 @@ both are bundled with this extension; any Kotlin template you register with
 
 ## Development
 
-`npm run check` runs the lint, the unit and language server suites, and the
-packaging gate. It needs nothing beyond the project's own dependencies.
+`npm run check` runs TypeScript checking for the JavaScript implementation,
+lint, unit and language server suites, and the packaging gate. It needs
+nothing beyond the project's own dependencies. `npm run typecheck` checks
+`src/**/*.js` without emitting files, using Node 16 and VS Code 1.82 API types.
 
 The integration suite drives the real Gauge CLI over a real Gradle build, so it
 runs separately:
