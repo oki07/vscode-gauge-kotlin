@@ -1334,6 +1334,54 @@ test("GenerateStubCommandProvider ignores retained commands after disposal", asy
   });
 });
 
+// Executing getgauge/gauge-vscode/src/annotator/generateStub.ts with rejected
+// API promises and an undefined picker selection produces these boundary results.
+test("GenerateStubCommandProvider handles live picker cancellation and API failures", async (t) => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  const cases = require("./fixtures/stub-picker-boundaries.json");
+  for (const expected of cases) {
+    await t.test(`${expected.route} ${expected.boundary}`, async () => {
+      const effects = [];
+      const fake = createFakeVscode({ writeClipboard() { effects.push("clipboard"); } });
+      const sources = [];
+      trackCancellationSources(fake.vscode, sources);
+      const requests = [];
+      const failure = new Error(expected.boundary + " failed");
+      fake.vscode.window.showQuickPick = (items) => {
+        fake.quickPicks.push(items);
+        return expected.boundary === "picker" ? Promise.reject(failure) : Promise.resolve(undefined);
+      };
+      const provider = new GenerateStubCommandProvider({ get: () => ({
+        project: { root: () => "/workspace" },
+        client: { sendRequest(name) {
+          requests.push(name);
+          return expected.boundary === "files" ? Promise.reject(failure) : Promise.resolve([]);
+        } },
+      }) }, { pathModule: path.posix, vscode: fake.vscode });
+      const handler = fake.commands.find(entry => entry.command === `gauge.generate.${expected.route}`).handler;
+      await handler(expected.route === "step" ? "fun step() {}" : { conceptName: "# Shared" });
+      assert.deepEqual({
+        route: expected.route,
+        boundary: expected.boundary,
+        requests,
+        pickerCalls: fake.quickPicks.length,
+        errors: fake.errors,
+        effects,
+      }, expected);
+      assert.deepEqual(fake.appliedEdits, []);
+      assert.deepEqual(fake.openedDocuments, []);
+      assert.deepEqual(fake.shownDocuments, []);
+      assert.deepEqual(fake.inputBoxes, []);
+      assert.deepEqual(fake.information, []);
+      assert.equal(provider.activeOperations.size, 0);
+      assert.equal(sources.length, 1);
+      assert.equal(sources[0].cancelCalls, 0);
+      assert.equal(sources[0].disposeCalls, 1);
+      provider.dispose();
+    });
+  }
+});
+
 test("GenerateStubCommandProvider cancels pending file-list requests on disposal", async () => {
   const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
 

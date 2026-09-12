@@ -1,0 +1,70 @@
+[
+  {
+    "route": "step",
+    "boundary": "cancel",
+    "requests": [
+      "gauge/getImplFiles"
+    ],
+    "pickerCalls": 1,
+    "errors": [],
+    "effects": []
+  },
+  {
+    "route": "step",
+    "boundary": "files",
+    "requests": [
+      "gauge/getImplFiles"
+    ],
+    "pickerCalls": 0,
+    "errors": [
+      "Unable to generate implementation. Error: files failed"
+    ],
+    "effects": []
+  },
+  {
+    "route": "step",
+    "boundary": "picker",
+    "requests": [
+      "gauge/getImplFiles"
+    ],
+    "pickerCalls": 1,
+    "errors": [
+      "Unable to generate implementation. Error: picker failed"
+    ],
+    "effects": []
+  },
+  {
+    "route": "concept",
+    "boundary": "cancel",
+    "requests": [
+      "gauge/getImplFiles"
+    ],
+    "pickerCalls": 1,
+    "errors": [],
+    "effects": []
+  },
+  {
+    "route": "concept",
+    "boundary": "files",
+    "requests": [
+      "gauge/getImplFiles"
+    ],
+    "pickerCalls": 0,
+    "errors": [
+      "Unable to generate implementation. Error: files failed"
+    ],
+    "effects": []
+  },
+  {
+    "route": "concept",
+    "boundary": "picker",
+    "requests": [
+      "gauge/getImplFiles"
+    ],
+    "pickerCalls": 1,
+    "errors": [
+      "Unable to generate implementation. Error: picker failed"
+    ],
+    "effects": []
+  }
+]

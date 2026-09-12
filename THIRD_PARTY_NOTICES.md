@@ -33,6 +33,10 @@ extension's own asset tree. Neither fixture is shipped: `.vscodeignore` keeps
 
 Source: https://github.com/getgauge/gauge-vscode
 
+`test/fixtures/stub-picker-boundaries.json` records observed cancellation and
+API failure results from executing `src/annotator/generateStub.ts` in that
+repository. This fixture is excluded from the package.
+
 Copyright (c) 2017 Gauge
 
 Licensed under the MIT License. A copy of the license is available at
