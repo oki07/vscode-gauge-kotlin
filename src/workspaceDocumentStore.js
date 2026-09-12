@@ -9,6 +9,7 @@ const WORKSPACE_DOCUMENT_GLOB = "**/*.{kt,java,cpt,spec,md}";
 const WORKSPACE_STEP_IMPLEMENTATION_SCAN_COMPLETE = "__gaugeStepImplementationScanComplete";
 const DEFAULT_INITIAL_READ_CONCURRENCY = 16;
 
+/** @type {Array<[RegExp, string]>} */
 const LANGUAGE_IDS_BY_EXTENSION = [
   [/\.kts?$/i, "kotlin"],
   [/\.java$/i, "java"],
@@ -517,7 +518,9 @@ class WorkspaceDocumentStore {
     if (this.readyPromise) {
       return this.readyPromise;
     }
+    /** @type {(reason?: unknown) => void} */
     let rejectReady;
+    /** @type {(value: unknown) => void} */
     let resolveReady;
     const ready = new Promise((resolve, reject) => {
       rejectReady = reject;

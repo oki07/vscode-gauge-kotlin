@@ -1521,7 +1521,9 @@ function deactivate() {
     activeGaugeWorkspaceDisposal = Promise.resolve(undefined);
     return activeGaugeWorkspaceDisposal;
   }
+  /** @type {(value: unknown) => void} */
   let resolveDisposal;
+  /** @type {(reason?: unknown) => void} */
   let rejectDisposal;
   activeGaugeWorkspaceDisposal = new Promise((resolve, reject) => {
     resolveDisposal = resolve;

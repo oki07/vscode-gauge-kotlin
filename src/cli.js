@@ -157,7 +157,9 @@ class CLI {
     if (existingOperation) {
       return existingOperation;
     }
+    /** @type {(value: unknown) => void} */
     let resolveInstallation;
+    /** @type {(reason?: unknown) => void} */
     let rejectInstallation;
     const installation = new Promise((resolve, reject) => {
       resolveInstallation = resolve;

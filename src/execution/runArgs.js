@@ -197,6 +197,7 @@ function buildGaugeArgs(spec, option = {}) {
     return args.concat(rerunFlagTokens("repeat", option));
   }
 
+  /** @type {Record<string, unknown>} */
   const merged = {
     "hide-suggestion": true,
     "simple-console": !option.parallel,
@@ -233,11 +234,11 @@ function buildJavaRunArgs(spec, option = {}, prefix, additionalFlags) {
     n,
     env,
     ...rest
-  } = {
+  } = /** @type {Record<string, unknown>} */ ({
     "hide-suggestion": true,
     "simple-console": true,
     ...option,
-  };
+  });
   const prefixed = (value) => `${prefix}${value}`;
   const args = [];
 
