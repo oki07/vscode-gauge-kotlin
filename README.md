@@ -103,6 +103,11 @@ both are bundled with this extension; any Kotlin template you register with
 
 ## Known limitations
 
+- VS Code can open the same physical file through different paths as separate
+  documents. Saving two dirty copies can produce `File Modified Since`, even
+  with matching content in VS Code 1.82.0. This also occurs without Gauge.
+  Use one path for editing a file; review both buffers before resolving a
+  save conflict. The extension does not force an overwrite of conflicting edits.
 - The Gauge Java runner fills its step registry by reflection over the compiled
   classes each time a runner process starts, and afterwards updates it only from
   Java source, so a Kotlin `@Step` never reaches it incrementally. Runs started
