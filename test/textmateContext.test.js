@@ -170,3 +170,60 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
     }
   });
 }
+
+// Actual TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage distinguishes HTML comments, raw-text elements,
+// blank-line-terminated blocks and ordinary inline tags.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} preserves HTML container boundaries`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    const registry = new textmate.Registry({ onigLib: Promise.resolve(oniguruma),
+      loadGrammar: async scope => scope === "text.html.basic" ? {
+        scopeName: scope, patterns: [{ match: ".", name: "text.html.control" }],
+      } : loadGrammar(raw, scope) });
+    try {
+      const grammar = await registry.loadGrammar(raw.scopeName);
+      const mismatches = [];
+      for (const fixture of require("./fixtures/textmate-html-context.json")) {
+        let state = textmate.INITIAL;
+        const actual = fixture.lines.map(line => {
+          const result = grammar.tokenizeLine(line, state);
+          state = result.ruleStack;
+          return {
+            fenced: result.tokens.some(token => token.scopes.some(scope => scope.startsWith("markup.fenced_code.block.markdown"))),
+            htmlComment: result.tokens.some(token => token.scopes.includes("comment.block.html")),
+          };
+        });
+        if (JSON.stringify(actual) !== JSON.stringify(fixture.states)) mismatches.push({ ...fixture, actual });
+      }
+      assert.deepEqual(mismatches, []);
+    } finally { registry.dispose(); }
+  });
+}
+
+// Actual TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage gives every tag in this inline HTML line
+// the scopes supplied by the external HTML grammar.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} decorates line-start inline HTML without retaining a block`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    const registry = new textmate.Registry({ onigLib: Promise.resolve(oniguruma),
+      loadGrammar: async scope => scope === "text.html.basic" ? {
+        scopeName: scope, patterns: [{ match: "</?([A-Za-z]+)>", captures: { 1: { name: "entity.name.tag.html" } } }],
+      } : loadGrammar(raw, scope) });
+    try {
+      const grammar = await registry.loadGrammar(raw.scopeName);
+      for (const indent of ["", "   "]) {
+        const line = indent + "<span><b>text</b></span>";
+        const result = grammar.tokenizeLine(line, textmate.INITIAL);
+        assert.deepEqual(result.tokens.filter(token => token.scopes.includes("entity.name.tag.html"))
+          .map(token => line.slice(token.startIndex, token.endIndex)), ["span", "b", "b", "span"]);
+        const after = grammar.tokenizeLine("* After <value>", result.ruleStack);
+        assert.ok(after.tokens.some(token => token.scopes.includes("keyword.operator.step.gauge")));
+        assert.ok(after.tokens.some(token => token.scopes.includes("variable.parameter.dynamic.gauge")));
+      }
+    } finally { registry.dispose(); }
+  });
+}

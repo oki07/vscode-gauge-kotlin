@@ -1093,8 +1093,7 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   assertPatternMatches(markdownAutoLink, "<https://gauge.org>", "<https://gauge.org>");
   assertPatternMatches(markdownAutoLink, "<help@example.com>", "<help@example.com>");
   assertPatternMatches(markdownSeparator, "---", "---");
-  assertPatternMatches(markdownHtmlBlock, "<details>", "<details>");
-  assert.deepEqual(markdownHtmlBlock.patterns, [{ include: "text.html.basic" }]);
+  assert.deepEqual(markdownHtmlBlock.patterns, [{ include: "text.gauge.quoted.markdown#html" }]);
   assertPatternMatches(frontMatter, "---", "---");
   assert.equal(frontMatter.contentName, "meta.embedded.block.frontmatter");
   assert.equal(frontMatter.while, "^(?!(-{3}|\\.{3})\\s*$)");

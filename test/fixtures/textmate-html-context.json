@@ -1,0 +1,7310 @@
+[
+  {
+    "lines": [
+      "<!--",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!--",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!--",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!--",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!--",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!--",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!--",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!--",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!--",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!--",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!--",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!--",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "-->",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!-- closed -->",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!-- closed -->",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!-- closed -->",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!-- closed -->",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!-- closed -->",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!-- closed -->",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!-- closed -->",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!-- closed -->",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": true
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!-- closed -->",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!-- closed -->",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!-- closed -->",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!-- closed -->",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<details>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<details>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<details>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<details>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <details>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <details>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <details>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <details>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <details>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <details>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <details>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <details>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</details>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<DIV>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<DIV>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<DIV>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<DIV>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <DIV>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <DIV>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <DIV>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <DIV>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <DIV>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <DIV>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <DIV>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <DIV>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</DIV>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div class=\"note\">",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div class=\"note\">",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div class=\"note\">",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div class=\"note\">",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div class=\"note\">",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div class=\"note\">",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div class=\"note\">",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div class=\"note\">",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div class=\"note\">",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div class=\"note\">",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div class=\"note\">",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div class=\"note\">",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</div>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<widget>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<widget>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<widget>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<widget>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <widget>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <widget>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <widget>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <widget>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <widget>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <widget>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <widget>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <widget>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</widget>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<x>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<x>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<x>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<x>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <x>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <x>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <x>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <x>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <x>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <x>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <x>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <x>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</x>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<script>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<script>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<script>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<script>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <script>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <script>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <script>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <script>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <script>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <script>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <script>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <script>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</script>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<style>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<style>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<style>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<style>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <style>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <style>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <style>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <style>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <style>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <style>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <style>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <style>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</style>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<pre>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<pre>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<pre>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<pre>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <pre>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <pre>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <pre>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <pre>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <pre>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <pre>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <pre>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <pre>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "</pre>",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>closed</div>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>closed</div>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>closed</div>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<div>closed</div>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>closed</div>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>closed</div>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>closed</div>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <div>closed</div>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>closed</div>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>closed</div>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>closed</div>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <div>closed</div>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<?processing?>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<?processing?>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<?processing?>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<?processing?>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <?processing?>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <?processing?>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <?processing?>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <?processing?>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <?processing?>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <?processing?>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <?processing?>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <?processing?>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!DOCTYPE html>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!DOCTYPE html>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!DOCTYPE html>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "<!DOCTYPE html>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!DOCTYPE html>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!DOCTYPE html>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!DOCTYPE html>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   <!DOCTYPE html>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!DOCTYPE html>",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!DOCTYPE html>",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!DOCTYPE html>",
+      "",
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    <!DOCTYPE html>",
+      "",
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "",
+      "",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": true,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      },
+      {
+        "fenced": false,
+        "htmlComment": false
+      }
+    ]
+  }
+]

@@ -598,12 +598,9 @@
       "match": "(?:^|\\G)\\s{0,3}\\[[^\\]\\n]+\\]:\\s*\\S.*$"
     },
     "markdownHtmlBlock": {
-      "name": "text.html.markdown.gauge",
-      "begin": "(?:^|\\G)\\s{0,3}</?[A-Za-z][^>]*>",
-      "end": "$",
       "patterns": [
         {
-          "include": "text.html.basic"
+          "include": "text.gauge.quoted.markdown#html"
         }
       ]
     },
@@ -1560,7 +1557,7 @@
           "include": "#markdownLinkDefinition"
         },
         {
-          "include": "#markdownHtmlBlock"
+          "include": "#markdownInlineHtml"
         },
         {
           "include": "#markdownInline"
@@ -1740,6 +1737,15 @@
     "continuationComment": {
       "name": "comment.line.gauge",
       "match": "\\G(?<=\\s)\\S.*$"
+    },
+    "markdownInlineHtml": {
+      "begin": "(?:^|\\G)[ ]{0,3}(?=</?[A-Za-z])",
+      "end": "$",
+      "patterns": [
+        {
+          "include": "text.html.basic"
+        }
+      ]
     }
   }
 }

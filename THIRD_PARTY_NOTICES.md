@@ -45,7 +45,8 @@ and `syntaxes/gauge-concept.tmLanguage.json`, and the block/inline rules in
 `syntaxes/gauge-quoted-markdown.tmLanguage.json`, are adapted from the official
 Gauge VS Code extension's `syntaxes/markdown.tmLanguage`.
 `test/fixtures/textmate-fence-context.json` and
-`test/fixtures/textmate-quote-context.json` record observed container and fence
+`test/fixtures/textmate-quote-context.json` and
+`test/fixtures/textmate-html-context.json` record observed container and fence
 decisions from execution of that grammar; tests and fixtures are excluded from the VSIX.
 
 Source: https://github.com/getgauge/gauge-vscode/blob/master/syntaxes/markdown.tmLanguage

@@ -217,56 +217,6 @@
             }
           ]
         },
-        "html": {
-          "patterns": [
-            {
-              "begin": "(^|\\G)\\s*(<!--)",
-              "end": "(-->)",
-              "name": "comment.block.html",
-              "captures": {
-                "1": {
-                  "name": "punctuation.definition.comment.html"
-                },
-                "2": {
-                  "name": "punctuation.definition.comment.html"
-                }
-              }
-            },
-            {
-              "begin": "(^|\\G)\\s*(?=<(script|style|pre)(\\s|$|>)(?!.*?</(script|style|pre)>))",
-              "patterns": [
-                {
-                  "begin": "(\\s*|$)",
-                  "patterns": [
-                    {
-                      "include": "text.html.basic"
-                    }
-                  ],
-                  "while": "^(?!.*</(script|style|pre)>)"
-                }
-              ],
-              "end": "(?=.*</(script|style|pre)>)"
-            },
-            {
-              "begin": "(^|\\G)\\s*(?=</?(address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(\\s|$|/?>))",
-              "patterns": [
-                {
-                  "include": "text.html.basic"
-                }
-              ],
-              "while": "^(?!\\s*$)"
-            },
-            {
-              "begin": "(^|\\G)\\s*(?=(<[a-zA-Z0-9\\-](/?>|\\s.*?>)|</[a-zA-Z0-9\\-]>)\\s*$)",
-              "patterns": [
-                {
-                  "include": "text.html.basic"
-                }
-              ],
-              "while": "^(?!\\s*$)"
-            }
-          ]
-        },
         "link-def": {
           "captures": {
             "1": {
@@ -2250,6 +2200,56 @@
           "name": "markup.inline.raw.string.markdown"
         }
       }
+    },
+    "html": {
+      "patterns": [
+        {
+          "begin": "(^|\\G)\\s*(<!--)",
+          "end": "(-->)",
+          "name": "comment.block.html",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.html"
+            },
+            "2": {
+              "name": "punctuation.definition.comment.html"
+            }
+          }
+        },
+        {
+          "begin": "(^|\\G)\\s*(?=<(script|style|pre)(\\s|$|>)(?!.*?</(script|style|pre)>))",
+          "patterns": [
+            {
+              "begin": "(\\s*|$)",
+              "patterns": [
+                {
+                  "include": "text.html.basic"
+                }
+              ],
+              "while": "^(?!.*</(script|style|pre)>)"
+            }
+          ],
+          "end": "(?=.*</(script|style|pre)>)"
+        },
+        {
+          "begin": "(^|\\G)\\s*(?=</?(address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(\\s|$|/?>))",
+          "patterns": [
+            {
+              "include": "text.html.basic"
+            }
+          ],
+          "while": "^(?!\\s*$)"
+        },
+        {
+          "begin": "(^|\\G)\\s*(?=(<[a-zA-Z0-9\\-](/?>|\\s.*?>)|</[a-zA-Z0-9\\-]>)\\s*$)",
+          "patterns": [
+            {
+              "include": "text.html.basic"
+            }
+          ],
+          "while": "^(?!\\s*$)"
+        }
+      ]
     }
   }
 }
