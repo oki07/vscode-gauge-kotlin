@@ -1375,6 +1375,82 @@ test("archive links preserve logical definitions and per-alias exclusions", asyn
   }
 });
 
+test("archive discovery stops ancestor cycles and preserves independent aliases", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation search stops self, parent and mutual directory
+  // cycles while retaining separate non-cyclic logical paths to each archive.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const temporary = await fs.realpath(await fs.mkdtemp(path.join(require("node:os").tmpdir(), "gauge-archive-cycles-")));
+  const binary = path.join(temporary, "discovery");
+  const external = path.join(temporary, "external");
+  await fs.mkdir(binary);
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(binary, "direct.jar"), dependencyStepClass("Direct"));
+  await fs.writeFile(path.join(temporary, "external.data"), dependencyStepClass("LinkedFile"));
+  await fs.writeFile(path.join(external, "nested.jar"), dependencyStepClass("LinkedFolder"));
+  const nested = path.join(binary, "nested");
+  const first = path.join(binary, "first");
+  const second = path.join(binary, "second");
+  for (const directory of [nested, first, second]) await fs.mkdir(directory);
+  await fs.copyFile(path.join(external, "nested.jar"), path.join(nested, "nested.jar"));
+  await fs.copyFile(path.join(temporary, "external.data"), path.join(first, "first.jar"));
+  await fs.symlink(binary, path.join(binary, "self"));
+  await fs.symlink(binary, path.join(nested, "parent"));
+  await fs.symlink(second, path.join(first, "next"));
+  await fs.symlink(first, path.join(second, "next"));
+  await fs.symlink(nested, path.join(binary, "alias"));
+  const root = "/projects/linked";
+  const names = ["Direct", "LinkedFile", "LinkedFolder"];
+  let current;
+  const vscode = createFakeVscode();
+  const host = binaryWatchHost(vscode);
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => {
+    await fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify({
+      libraries: [{ name: "Steps", roots: [{ path: binary, inclusionOptions: current.recursive ? "archives_under_root_recursively" : "archives_under_root" }] }],
+      modules: [{ name: "main", contentRoots: [{ path: root }], dependencies: [{ type: "library", name: "Steps", scope: "compile" }] }],
+    }));
+  } };
+  const scope = new KotlinSourceScope({ vscode });
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope, classpathProvider: async () => [path.join(binary, "direct.jar")],
+    scanArchive: async (file, visit) => visit("Steps.class", await fs.readFile(file)) });
+  const registration = index.register();
+  const text = `# Links\n\n## Discovery\n\n${names.map((name) => `* ${name}`).join("\n")}`;
+  const spec = { languageId: "gauge", version: 1, uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: names.length + 4 };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  vscode.workspace.textDocuments = documents;
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false }, projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (const row of require("./fixtures/archive-cycle-parity.json")) {
+      if (row.remove) { await fs.unlink(path.join(binary, row.remove)); host.emit("onDidDelete", path.join(binary, row.remove)); }
+      else { current = row; await scope.refresh(); }
+      await index.findDefinitions(root, names);
+      for (let i = 0; i < names.length; i += 1) {
+        const targets = await definition.provideDefinition(spec, { line: i + 4, character: 3 });
+        assert.deepEqual((targets || []).map(({ uri }) => path.relative(binary, JSON.parse(Buffer.from(uri.query, "base64url").toString())[1]).split(path.sep).join("/")).sort(), row.expected[names[i]], `${row.phase} ${names[i]}`);
+      }
+      const present = names.filter((name) => row.expected[name].length > 0);
+      assert.deepEqual([...index.stepTemplates(root)].sort(), present.sort(), row.phase);
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => row.expected[name].length ? [] : [i + 4]), row.phase);
+    }
+    assert.ok(await fs.stat(path.join(temporary, "external.data")));
+    assert.ok(await fs.stat(path.join(external, "nested.jar")));
+  } finally {
+    definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose();
+    assert.ok(host.watchers.every((watcher) => watcher.disposed));
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("archive link targets refresh consumers through changes recreation and retargeting", async () => {
   const fs = require("node:fs/promises");
   const path = require("node:path");

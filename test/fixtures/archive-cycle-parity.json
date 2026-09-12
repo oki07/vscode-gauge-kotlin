@@ -1,0 +1,59 @@
+[
+  {
+    "phase": "direct",
+    "recursive": false,
+    "expected": {
+      "Direct": [
+        "direct.jar"
+      ],
+      "LinkedFile": [],
+      "LinkedFolder": []
+    }
+  },
+  {
+    "phase": "recursive",
+    "recursive": true,
+    "expected": {
+      "Direct": [
+        "direct.jar"
+      ],
+      "LinkedFile": [
+        "first/first.jar",
+        "second/next/first.jar"
+      ],
+      "LinkedFolder": [
+        "alias/nested.jar",
+        "nested/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "removed-self",
+    "recursive": true,
+    "remove": "self",
+    "expected": {
+      "Direct": [
+        "direct.jar"
+      ],
+      "LinkedFile": [
+        "first/first.jar",
+        "second/next/first.jar"
+      ],
+      "LinkedFolder": [
+        "alias/nested.jar",
+        "nested/nested.jar"
+      ]
+    }
+  },
+  {
+    "phase": "restored-direct",
+    "recursive": false,
+    "expected": {
+      "Direct": [
+        "direct.jar"
+      ],
+      "LinkedFile": [],
+      "LinkedFolder": []
+    }
+  }
+]
