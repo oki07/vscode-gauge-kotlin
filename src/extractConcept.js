@@ -960,6 +960,7 @@ class ExtractConceptCommandProvider {
     this.vscode = getVscode(options.vscode);
     this.pathModule = options.pathModule || nodePath;
     this.projectFactory = options.projectFactory;
+    this.workspaceReady = options.workspaceReady;
     this.workspaceEditorFactory = options.workspaceEditorFactory
       || ((edit) => defaultWorkspaceEditorFactory(this.vscode, edit));
     this.activeOperations = new Set();
@@ -1028,6 +1029,16 @@ class ExtractConceptCommandProvider {
       if (editor === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
       }
+      const selection = this.callSyncForOperation(operation, () => editor && editor.selection);
+      if (selection === DISPOSED_OPERATION) {
+        return DISPOSED_OPERATION;
+      }
+      if (this.workspaceReady) {
+        const ready = await this.callForOperation(operation, this.workspaceReady);
+        if (ready === DISPOSED_OPERATION) {
+          return DISPOSED_OPERATION;
+        }
+      }
       const activePath = this.callSyncForOperation(
         operation,
         () => documentPath(editor && editor.document),
@@ -1057,7 +1068,7 @@ class ExtractConceptCommandProvider {
 
       const extraction = this.callSyncForOperation(
         operation,
-        () => buildExtractSelection(editor.document, editor.selection, {
+        () => buildExtractSelection(editor.document, selection, {
           allowMultilineStep: this.allowsMultilineStep(projectClient),
         }),
       );

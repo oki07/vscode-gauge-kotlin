@@ -3083,3 +3083,50 @@ for (const destination of ["existing", "new"]) {
     assert.deepEqual(events, ["apply", "show", "information"]);
   });
 }
+
+test("concept extraction waits for workspace startup without retargeting the selection", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const startup = deferred();
+  const original = createDocument("# Spec\n## Scenario\n* First\n* Second\n");
+  const fake = createFakeVscode({ document: original,
+    selection: { start: { line: 2, character: 0 }, end: { line: 4, character: 0 } } });
+  let ready = false;
+  let requestedPath;
+  const provider = new ExtractConceptCommandProvider({ get(file) {
+    requestedPath = file;
+    return ready ? createClients([]).get(file) : undefined;
+  } }, { vscode: fake.vscode, workspaceReady: () => startup.promise });
+  const work = provider.extractConcept();
+  await nextTurn();
+  assert.deepEqual(fake.errors, []);
+  assert.equal(fake.inputs.length, 0);
+  fake.vscode.window.activeTextEditor.selection = {
+    start: { line: 0, character: 0 }, end: { line: 0, character: 0 },
+  };
+  fake.vscode.window.activeTextEditor = { document: createDocument("", "/other/specs/other.spec") };
+  ready = true;
+  startup.resolve();
+  await work;
+  assert.equal(requestedPath, original.uri.fsPath);
+  assert.equal(fake.inputs.length, 1);
+  assert.deepEqual(fake.errors, []);
+  provider.dispose();
+});
+
+test("concept extraction disposal releases pending workspace startup", async () => {
+  const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+  const startup = deferred();
+  const fake = createFakeVscode({ document: createDocument("# Spec\n## Scenario\n* Step\n"),
+    selection: { start: { line: 2, character: 0 }, end: { line: 3, character: 0 } } });
+  const provider = new ExtractConceptCommandProvider({ get() { return undefined; } },
+    { vscode: fake.vscode, workspaceReady: () => startup.promise });
+  const work = provider.extractConcept();
+  await nextTurn();
+  assert.deepEqual(fake.errors, []);
+  provider.dispose();
+  await work;
+  startup.resolve();
+  await nextTurn();
+  assert.deepEqual(fake.errors, []);
+  assert.equal(fake.inputs.length, 0);
+});

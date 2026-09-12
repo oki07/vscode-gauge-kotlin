@@ -1257,6 +1257,7 @@ function startGaugeServices(context, vscode, options = {}) {
     return undefined;
   }
   const extractConceptProvider = new ExtractConceptCommandProviderCtor(clientsMap, {
+    workspaceReady: () => (typeof gaugeWorkspace.ready === "function" ? gaugeWorkspace.ready() : undefined),
     fileSystem: options.fileSystem,
     pathModule: options.pathModule,
     projectFactory,
