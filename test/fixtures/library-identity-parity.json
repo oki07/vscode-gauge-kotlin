@@ -1,0 +1,46 @@
+[
+  {
+    "level": "module",
+    "phase": "private",
+    "expected": [
+      "Direct"
+    ]
+  },
+  {
+    "level": "module",
+    "phase": "exported",
+    "expected": [
+      "Direct",
+      "Transitive"
+    ]
+  },
+  {
+    "level": "module",
+    "phase": "transitive-runtime",
+    "expected": [
+      "Direct"
+    ]
+  },
+  {
+    "level": "project",
+    "phase": "private",
+    "expected": [
+      "Direct"
+    ]
+  },
+  {
+    "level": "project",
+    "phase": "exported",
+    "expected": [
+      "Direct",
+      "Transitive"
+    ]
+  },
+  {
+    "level": "project",
+    "phase": "transitive-runtime",
+    "expected": [
+      "Direct"
+    ]
+  }
+]

@@ -841,6 +841,69 @@ test("imported library scope updates definitions and diagnostic candidates toget
   } finally { definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose(); }
 });
 
+test("same-named library tables agree across definitions and diagnostics", async () => {
+  // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
+  // real IDEA 2020.1 annotation searches distinguish same-named module/project libraries.
+  const fs = require("node:fs/promises");
+  const path = require("node:path");
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { DependencyStepIndex } = require("../src/dependencyStepIndex");
+  const root = "/workspace/gauge";
+  const vscode = createFakeVscode();
+  let phase = "private";
+  let level = "module";
+  const names = ["Direct", "Transitive", "Unrelated"];
+  const model = () => ({
+    modules: [
+      { name: "main", contentRoots: [{ path: root }], dependencies: [
+        { type: "library", name: "steps", scope: "compile" },
+        { type: "module", name: "dependency", scope: "compile" },
+      ] },
+      { name: "dependency", contentRoots: [{ path: "/other" }], dependencies: [
+        { type: "library", name: "steps", scope: phase === "transitive-runtime" ? "runtime" : "compile", isExported: phase !== "private" },
+      ] },
+      { name: "sibling", contentRoots: [{ path: "/sibling" }], dependencies: [] },
+    ],
+    libraries: names.map((name, i) => ({ name: "steps", level: i === 0 ? level : "module", module: i === 0 && level === "project" ? null : ["main", "dependency", "sibling"][i], type: null, roots: [{ path: `/repo/${name}.jar` }] })),
+  });
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = { getCommands: async () => ["exportWorkspace"], executeCommand: async (_command, directory) => fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify(model())) };
+  const scope = new KotlinSourceScope({ vscode });
+  const index = new DependencyStepIndex({ vscode, sourceScope: scope,
+    fileSystem: { existsSync: () => true },
+    classpathProvider: async () => [...names.map((name) => `/repo/${name}.jar`), "/repo/../repo/Direct.jar"],
+    scanArchive: async (archive, visit) => visit("Steps.class", dependencyStepClass(path.basename(archive, ".jar"))),
+  });
+  const registration = index.register();
+  const { GaugeStepDiagnosticsProvider } = require("../src/stepDiagnostics");
+  const { GaugeStepDefinitionProvider } = require("../src/stepDefinitionProvider");
+  const { markWorkspaceStepImplementationScanComplete } = require("../src/workspaceDocumentStore");
+  const text = "# Libraries\n\n## Example\n\n* Direct\n* Transitive\n* Unrelated";
+  const spec = { languageId: "gauge", uri: { fsPath: `${root}/specs/example.spec`, scheme: "file" }, getText: () => text,
+    lineAt: (line) => ({ text: text.split("\n")[line] || "" }), lineCount: 7 };
+  vscode.workspace = { textDocuments: [spec], getConfiguration: () => ({ get: () => undefined }) };
+  const documents = markWorkspaceStepImplementationScanComplete([spec]);
+  const options = { vscode, dependencyStepIndex: index, fileSystem: { existsSync: () => false },
+    projectFactory: { getGaugeRootFromFilePath: () => root, isGaugeProject: () => true } };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const definition = new GaugeStepDefinitionProvider({ ...options, diagnosticsProvider: diagnostics });
+  try {
+    for (const entry of require("./fixtures/library-identity-parity.json")) {
+      ({ phase, level } = entry);
+      await scope.refresh();
+      const expected = [...entry.expected];
+      const definitions = await index.findDefinitions(root, names);
+      assert.deepEqual(definitions.map((entry) => index.content(entry.uri).match(/Artifact: ([^\n]+)/)[1]).sort(), expected.map((name) => `/repo/${name}.jar`).sort());
+      assert.deepEqual([...index.stepTemplates(root)].sort(), expected.sort());
+      assert.deepEqual(diagnostics.provideDiagnostics(spec, documents).filter((entry) => entry.message === "Undefined Step").map((entry) => entry.range.start.line), names.flatMap((name, i) => expected.includes(name) ? [] : [i + 4]));
+      for (let i = 0; i < names.length; i += 1) {
+        const targets = await definition.provideDefinition(spec, { line: i + 4, character: 3 });
+        assert.equal((targets || []).length, Number(expected.includes(names[i])));
+      }
+    }
+  } finally { definition.dispose(); diagnostics.dispose(); registration.dispose(); scope.dispose(); }
+});
+
 test("imported library exclusions agree across definitions and diagnostics", async () => {
   // getgauge/intellij-gauge-plugin/src/com/thoughtworks/gauge/util/StepUtil.java:
   // real IDEA 2020.1 annotation searches exclude class/package roots and union

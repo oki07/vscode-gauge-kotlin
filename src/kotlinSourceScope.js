@@ -135,14 +135,22 @@ class KotlinSourceScope {
     const modules = this.modulesFor(root);
     if (!modules.length) return undefined;
     const identity = canonicalFilePath(root);
-    const selected = new Set(modules.flatMap((module) => module.dependencies
-      .filter((edge) => edge.type === "library" && edge.scope !== "runtime"
-        && (module.root && inside(module.root, identity) || edge.exported))
-      .map((edge) => edge.name)));
+    const selected = new Set();
+    const ambiguous = new Set();
+    for (const module of modules) for (const edge of module.dependencies) {
+      if (edge.type !== "library" || edge.scope === "runtime"
+        || !(module.root && inside(module.root, identity) || edge.exported)) continue;
+      const candidates = this.libraries.filter((library) => library.name === edge.name
+        && (library.level !== "module" || library.module === module.name));
+      for (const library of candidates) {
+        selected.add(library);
+        if (candidates.length > 1) ambiguous.add(library);
+      }
+    }
     return this.libraries.flatMap((library) => library.roots
       .filter((entry) => (entry.type || "CLASSES") === "CLASSES")
-      .map((entry) => ({ ...entry, selected: selected.has(library.name),
-        ambiguous: this.libraries.filter((other) => other.name === library.name).length > 1,
+      .map((entry) => ({ ...entry, selected: selected.has(library),
+        ambiguous: ambiguous.has(library),
         excludedRoots: library.excludedRoots,
         unsupported: Boolean(entry.inclusionOptions && entry.inclusionOptions !== "root_itself" && !isArchiveDirectory(entry)) })));
   }
