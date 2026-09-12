@@ -58,18 +58,12 @@ function classNameForFile(pathModule, implementationFilePath) {
   return name || "StepImplementation";
 }
 
-// gauge-java answers gauge/putStubImpl by parsing the target with JavaParser
-// (getgauge/gauge-java .../connection/StubImplementationCodeProcessor.java).
-// Kotlin source is not valid Java, so an existing .kt file yields an empty
-// ParseResult and the processor throws on orElseThrow, and a new file gets Java
-// class scaffolding. This mirrors the same two branches for Kotlin: fill an
-// empty file with a class, otherwise insert before the closing brace of the
-// last top-level declaration, which is where gauge-java puts it for Java.
-// Kotlin allows top-level functions and properties after the class, so "the last
-// line that is exactly } at column 0" is often a function's closing brace and
-// the stub lands inside its body, where the annotation is not a class member.
-// Track brace depth instead and keep the closing brace of the last top-level
-// class, interface or object - the member container gauge-java inserts into.
+// getgauge/gauge-java/src/main/java/com/thoughtworks/gauge/connection/StubImplementationCodeProcessor.java
+// wraps an empty target in Java class syntax. Executed Kotlin payloads in that
+// wrapper fail javac; JavaParser recovery on existing Kotlin is not Kotlin parsing.
+// The Kotlin writer fills an empty file with a class or inserts into the last
+// top-level class, interface or object. Trailing top-level functions are separate
+// declarations, so their closing braces are not member insertion locations.
 const KOTLIN_TYPE_DECLARATION = /(^|\s)(class|interface|object)\s/;
 
 // A brace inside a string, a char literal or a comment is not a brace. Counting
@@ -324,7 +318,8 @@ function projectLanguage(project) {
 }
 
 function generatedCodeLanguage(code) {
-  const text = String(code || "");
+  const state = {};
+  const text = String(code).replace(/[^\n]+/g, (line) => stripKotlinNonCode(line, state));
   if (/\bpublic\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(text)) {
     return JAVA_LANGUAGE;
   }
@@ -335,7 +330,7 @@ function generatedCodeLanguage(code) {
 }
 
 function implementationDefaults(project, code) {
-  const language = projectLanguage(project) || generatedCodeLanguage(code);
+  const language = generatedCodeLanguage(code) || projectLanguage(project);
   if (language === JAVA_LANGUAGE) {
     return {
       defaultFile: DEFAULT_JAVA_IMPLEMENTATION_FILE,

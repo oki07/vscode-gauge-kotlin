@@ -1,0 +1,29 @@
+{
+  "reference": "getgauge/gauge-java/src/main/java/com/thoughtworks/gauge/connection/StubImplementationCodeProcessor.java",
+  "cases": [
+    {
+      "name": "Kotlin payload in a Java runner project",
+      "projectLanguage": "java",
+      "code": "@com.thoughtworks.gauge.Step(\"probe\")\nfun implementation() { throw UnsupportedOperationException() }",
+      "defaultPath": "src/test/kotlin/Steps.kt",
+      "label": "Kotlin",
+      "javaWrapperCompiles": false
+    },
+    {
+      "name": "Java payload in a Java runner project",
+      "projectLanguage": "java",
+      "code": "@com.thoughtworks.gauge.Step(\"probe\") public void implementation() { throw new UnsupportedOperationException(); }",
+      "defaultPath": "src/test/java/Steps.java",
+      "label": "Java",
+      "javaWrapperCompiles": true
+    },
+    {
+      "name": "Kotlin annotation text containing a Java declaration",
+      "projectLanguage": "java",
+      "code": "@com.thoughtworks.gauge.Step(\"public void misleading(\")\nfun implementation() { throw UnsupportedOperationException() }",
+      "defaultPath": "src/test/kotlin/Steps.kt",
+      "label": "Kotlin",
+      "javaWrapperCompiles": false
+    }
+  ]
+}

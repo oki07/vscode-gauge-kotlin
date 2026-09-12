@@ -2378,3 +2378,60 @@ test("GenerateStubCommandProvider explains a missing Gauge project for concepts 
     "Unable to generate implementation. No Gauge project is running for this file.",
   ]);
 });
+
+test("new implementation defaults follow the generated language in Java runner projects", async () => {
+  const { GenerateStubCommandProvider } = require("../src/annotator/generateStub");
+  // Executing gauge-java's StubImplementationCodeProcessor with an empty Java
+  // target wraps Kotlin payloads in Java class syntax; javac rejects that output.
+  // A Java payload control compiles. Kotlin payloads need the local Kotlin writer.
+  const cases = require("./fixtures/stub-language-parity.json").cases;
+  const generated = { ...cases[2], code: require("../src/stepCodeActions").stepStubCode("public void misleading()") };
+  for (const entry of [...cases, generated]) {
+    const { commands, vscode, errors } = createFakeVscode({
+      quickPickSelection: { value: "New File" },
+    });
+    let prompt;
+    vscode.window.showInputBox = async options => {
+      prompt = options;
+      return options.value;
+    };
+    const requests = [];
+    const edits = [];
+    const files = new Map();
+    const client = {
+      protocol2CodeConverter: { asWorkspaceEdit: async edit => edit },
+      sendRequest: async (method, params) => {
+        requests.push({ method, params });
+        return method === "gauge/getImplFiles" ? [] : { entries: () => [] };
+      },
+    };
+    const provider = new GenerateStubCommandProvider({ get: () => ({
+      project: { root: () => "/workspace", language: () => entry.projectLanguage }, client,
+    }) }, {
+      vscode, pathModule: path.posix,
+      fileSystem: {
+        existsSync: file => files.has(file), mkdirSync: () => {},
+        writeFileSync: (file, text) => files.set(file, text),
+        readFileSync: file => files.get(file),
+      },
+      workspaceEditorFactory: edit => ({ applyChanges: async () => { edits.push(edit); return true; } }),
+    });
+    try {
+      await commands.find(command => command.command === "gauge.generate.step").handler(entry.code);
+      assert.equal(prompt.value, entry.defaultPath, entry.name);
+      assert.equal(prompt.prompt, `Enter the new ${entry.label} implementation file path.`);
+      assert.deepEqual(errors, []);
+      assert.ok(files.has(`/workspace/${entry.defaultPath}`));
+      if (entry.label === "Kotlin") {
+        assert.deepEqual(requests.map(request => request.method), ["gauge/getImplFiles"]);
+        const [[uri, changes]] = edits[0].entries();
+        assert.equal(uri.fsPath, `/workspace/${entry.defaultPath}`);
+        assert.ok(changes[0].newText.includes("class Steps"));
+        assert.ok(changes[0].newText.includes(entry.code));
+      } else {
+        assert.equal(requests[1].method, "gauge/putStubImpl");
+        assert.equal(requests[1].params.implementationFilePath, `/workspace/${entry.defaultPath}`);
+      }
+    } finally { provider.dispose(); }
+  }
+});
