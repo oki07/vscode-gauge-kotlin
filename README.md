@@ -103,6 +103,10 @@ both are bundled with this extension; any Kotlin template you register with
 
 ## Known limitations
 
+- Automatic language-server recovery is bounded. After five Gauge daemon exits
+  within three minutes, the client reports that the server will not be
+  restarted. Inspect the server output for the cause; previously displayed
+  scenario entries can remain visible after the server stops.
 - VS Code can open the same physical file through different paths as separate
   documents. Saving two dirty copies can produce `File Modified Since`, even
   with matching content in VS Code 1.82.0. This also occurs without Gauge.
