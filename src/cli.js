@@ -180,8 +180,8 @@ class CLI {
       });
       const env = envWithGaugeHome(options.env || process.env, { vscode });
       const child = this.command.spawn([GAUGE_INSTALL_ARG, language], { env });
-      const onStdout = (chunk) => output.appendOutBuf(chunk.toString());
-      const onStderr = (chunk) => output.appendErrBuf(chunk.toString());
+      const onStdout = (chunk) => output.appendOutBuf(chunk);
+      const onStderr = (chunk) => output.appendErrBuf(chunk);
       let finished = false;
       let exitCode;
       let exitSignal;

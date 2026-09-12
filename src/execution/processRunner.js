@@ -6,6 +6,7 @@ const { StringDecoder } = require("node:string_decoder");
 const { envWithGaugeHome } = require("../config/gaugeConfig");
 const { parseMachineReadableEvent } = require("./lineProcessors");
 const { OutputChannel } = require("./outputChannel");
+const { createUtf8Emitter } = require("./utf8Emitter");
 
 const SUCCESS_MESSAGE = "Success: Tests passed.";
 const FAILURE_MESSAGE = "Error: Tests failed.";
@@ -23,7 +24,7 @@ function createDefaultOutputChannel(vscode) {
 
 // Decode with StringDecoder, not chunk.toString(): Gauge output is UTF-8 and a
 // multi-byte sequence split across a chunk boundary becomes two replacement
-// characters otherwise. createUtf8Emitter below already does this.
+// characters otherwise.
 function createLineEmitter(callback) {
   const decoder = new StringDecoder("utf8");
   let accumulated = "";
@@ -37,32 +38,6 @@ function createLineEmitter(callback) {
   };
 }
 
-function createUtf8Emitter(callback) {
-  const decoder = new StringDecoder("utf8");
-  let finished = false;
-  return {
-    write(chunk) {
-      if (finished) {
-        return;
-      }
-      const value = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-      const text = decoder.write(value);
-      if (text) {
-        callback(text);
-      }
-    },
-    finish() {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      const text = decoder.end();
-      if (text) {
-        callback(text);
-      }
-    },
-  };
-}
 
 function isMachineReadableCommand(command) {
   return Array.isArray(command && command.args)
@@ -254,7 +229,7 @@ function createGaugeProcessRunner(options = {}) {
         if (command.forwardOutput) {
           emitStderrChunk.write(chunk);
         }
-        channel.appendErrBuf(chunk.toString());
+        channel.appendErrBuf(chunk);
       });
       child.on("exit", (code) => {
         exitCode = code;

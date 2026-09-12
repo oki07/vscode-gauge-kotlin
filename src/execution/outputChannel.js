@@ -2,6 +2,7 @@
 
 const nodePath = require("node:path");
 const { LineBuffer } = require("./lineBuffer");
+const { createUtf8Emitter } = require("./utf8Emitter");
 
 class OutputChannel {
   constructor(outputChannel, initial, projectRoot, options = {}) {
@@ -10,6 +11,8 @@ class OutputChannel {
     this.pathModule = options.pathModule || nodePath;
     this.outBuffer = new LineBuffer();
     this.errBuffer = new LineBuffer();
+    this.outDecoder = createUtf8Emitter(text => this.outBuffer.append(this.absolutizeOutputPaths(text)));
+    this.errDecoder = createUtf8Emitter(text => this.errBuffer.append(text));
 
     this.channel.clear();
     this.channel.appendLine(initial);
@@ -50,14 +53,16 @@ class OutputChannel {
   }
 
   appendOutBuf(line) {
-    this.outBuffer.append(this.absolutizeOutputPaths(line));
+    this.outDecoder.write(line);
   }
 
   appendErrBuf(line) {
-    this.errBuffer.append(line);
+    this.errDecoder.write(line);
   }
 
   onFinish(resolve, code, successMessage, failureMessage, aborted) {
+    this.outDecoder.finish();
+    this.errDecoder.finish();
     this.outBuffer.done();
     this.errBuffer.done();
 
