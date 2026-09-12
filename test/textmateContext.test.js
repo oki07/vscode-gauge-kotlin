@@ -227,3 +227,51 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
     } finally { registry.dispose(); }
   });
 }
+
+// Actual TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage retains inline HTML state on space-indented
+// paragraph continuations and resolves Markdown code/links before HTML.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} preserves inline HTML in paragraph and list prose`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    const registry = new textmate.Registry({ onigLib: Promise.resolve(oniguruma),
+      loadGrammar: async scope => scope === "text.html.basic" ? {
+        scopeName: scope, patterns: [
+          { begin: "<!--", end: "-->", name: "comment.block.html" },
+          { begin: "</?([A-Za-z]+)", beginCaptures: { 1: { name: "entity.name.tag.html" } }, end: ">",
+            patterns: [{ match: "class", name: "entity.other.attribute-name.html" }] },
+        ],
+      } : loadGrammar(raw, scope) });
+    try {
+      const grammar = await registry.loadGrammar(raw.scopeName);
+      const fixtures = [
+        { lines: ["before <b>text</b> after"], tags: [["b", "b"]], attributes: [false], comments: [false] },
+        { lines: ["before **<b>text</b>** after"], tags: [["b", "b"]], attributes: [false], comments: [false] },
+        { lines: ["before `<b>text</b>` after"], tags: [[]], attributes: [false], comments: [false] },
+        { lines: ["before [<b>text</b>](https://example.test)"], tags: [[]], attributes: [false], comments: [false] },
+        { lines: ["before <!-- hidden", "    <b>hidden</b>", "    --> after <i>visible</i>"], tags: [[], [], ["i", "i"]], attributes: [false, false, false], comments: [true, true, true] },
+        { lines: ["before <span", "    class=\"note\">inside</span>"], tags: [["span"], ["span"]], attributes: [false, true], comments: [false, false] },
+      ];
+      for (const prefix of ["", "   ", "- ", "> "]) for (const fixture of fixtures) {
+        let state = textmate.INITIAL;
+        const actual = fixture.lines.map((source, index) => {
+          const line = (prefix === "- " && index > 0 ? "    " : prefix) + source;
+          const result = grammar.tokenizeLine(line, state); state = result.ruleStack;
+          return {
+            tags: result.tokens.filter(token => token.scopes.includes("entity.name.tag.html")).map(token => line.slice(token.startIndex, token.endIndex)),
+            attributes: result.tokens.some(token => token.scopes.includes("entity.other.attribute-name.html")),
+            comments: result.tokens.some(token => token.scopes.includes("comment.block.html")),
+          };
+        });
+        assert.deepEqual(actual.map(row => row.tags), fixture.tags, prefix + fixture.lines.join("\n"));
+        assert.deepEqual(actual.map(row => row.attributes), fixture.attributes);
+        assert.deepEqual(actual.map(row => row.comments), fixture.comments);
+        state = grammar.tokenizeLine("", state).ruleStack;
+        const after = grammar.tokenizeLine("* After <value>", state);
+        assert.ok(after.tokens.some(token => token.scopes.includes("keyword.operator.step.gauge")));
+        assert.ok(after.tokens.some(token => token.scopes.includes("variable.parameter.dynamic.gauge")));
+      }
+    } finally { registry.dispose(); }
+  });
+}

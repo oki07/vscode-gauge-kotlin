@@ -1470,39 +1470,13 @@
       ]
     },
     "markdownParagraphContext": {
-      "begin": "(?=(.*)$)(?:^|\\G)[ ]{0,3}(?=\\S)",
-      "beginCaptures": {
-        "1": {
-          "patterns": [
-            {
-              "begin": "(?=.)",
-              "end": "$",
-              "patterns": [
-                {
-                  "include": "#gaugeLine"
-                }
-              ]
-            }
-          ]
+      "begin": "(?:^|\\G)[ ]{0,3}(?=\\S)",
+      "while": "(?:^|\\G)(?:(?=\\s*[-=]{3,}\\s*$)|[ ]{4,}(?=\\S))",
+      "patterns": [
+        {
+          "include": "#markdownProse"
         }
-      },
-      "while": "(?=(.*)$)(?:^|\\G)(?:(?=\\s*[-=]{3,}\\s*$)|[ ]{4,}(?=\\S))",
-      "whileCaptures": {
-        "1": {
-          "patterns": [
-            {
-              "begin": "(?=.)",
-              "end": "$",
-              "patterns": [
-                {
-                  "include": "#gaugeLine"
-                }
-              ]
-            }
-          ]
-        }
-      },
-      "patterns": []
+      ]
     },
     "markdownRawContext": {
       "begin": "(?=(.*)$)(?:^|\\G)(?:[ ]{4}|\\t)",
@@ -1540,42 +1514,16 @@
       "patterns": []
     },
     "markdownListParagraphContext": {
-      "begin": "(?=(.*)$)(?:^|\\G)(?=\\S)(?![*+-]\\s|[0-9]+\\.\\s)",
-      "beginCaptures": {
-        "1": {
-          "patterns": [
-            {
-              "begin": "(?=.)",
-              "end": "$",
-              "patterns": [
-                {
-                  "include": "#gaugeLine"
-                }
-              ]
-            }
-          ]
+      "begin": "(?:^|\\G)(?=\\S)(?![*+-]\\s|[0-9]+\\.\\s)",
+      "while": "(?:^|\\G)(?!\\s*$|#|[ ]{0,3}([-*_][ ]{2,}){3,}[ \\t]*$\\n?|>|[ ]{0,3}[*+-]|[ ]{0,3}[0-9]+\\.)",
+      "patterns": [
+        {
+          "include": "#markdownProse"
         }
-      },
-      "while": "(?=(.*)$)(?:^|\\G)(?!\\s*$|#|[ ]{0,3}([-*_][ ]{2,}){3,}[ \\t]*$\\n?|>|[ ]{0,3}[*+-]|[ ]{0,3}[0-9]+\\.)",
-      "whileCaptures": {
-        "1": {
-          "patterns": [
-            {
-              "begin": "(?=.)",
-              "end": "$",
-              "patterns": [
-                {
-                  "include": "#gaugeLine"
-                }
-              ]
-            }
-          ]
-        }
-      },
-      "patterns": []
+      ]
     },
     "markdownListContext": {
-      "begin": "(?=(.*)$)(?:^|\\G)[ ]{0,3}(?:[*+-]|[0-9]+\\.)(?:[ ]{1,3}|\\t)",
+      "begin": "(?:^|\\G)(?:([ ]{0,3}\\*(?:[ ]{1,3}|\\t).*$)|([ ]{0,3}(?:[-+]|[0-9]+\\.)(?:[ ]{1,3}|\\t)))",
       "beginCaptures": {
         "1": {
           "patterns": [
@@ -1585,6 +1533,19 @@
               "patterns": [
                 {
                   "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        },
+        "2": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#markdownList"
                 }
               ]
             }
@@ -1631,7 +1592,7 @@
           "include": "#markdownParagraphContext"
         }
       ],
-      "comment": "Paragraph, list and raw-block continuation follow getgauge/gauge-vscode syntaxes/markdown.tmLanguage. Gauge line decoration is applied inside captures without replacing structural state."
+      "comment": "Paragraph, list and raw-block continuation follow getgauge/gauge-vscode syntaxes/markdown.tmLanguage. Paragraph prose keeps child grammar state; Gauge fields retain their language-specific decoration."
     },
     "continuationComment": {
       "name": "comment.line.gauge",
@@ -1643,6 +1604,35 @@
       "patterns": [
         {
           "include": "text.html.basic"
+        }
+      ]
+    },
+    "markdownProse": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#conceptHeading"
+        },
+        {
+          "include": "#step"
+        },
+        {
+          "include": "#table"
+        },
+        {
+          "include": "#markdownList"
+        },
+        {
+          "include": "text.gauge.quoted.markdown#inline"
+        },
+        {
+          "include": "text.html.basic"
+        },
+        {
+          "match": "[^&\\[\\]*_`\\\\<!\\r\\n]+|.",
+          "name": "comment.line.gauge"
         }
       ]
     }
