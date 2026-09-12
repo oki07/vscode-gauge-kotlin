@@ -477,10 +477,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.kotlin",
       "patterns": [
         {
-          "include": "source.kotlin"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.kotlin",
+          "patterns": [
+            {
+              "include": "source.kotlin"
+            }
+          ]
         }
       ]
     },
@@ -493,10 +499,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.java",
       "patterns": [
         {
-          "include": "source.java"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.java",
+          "patterns": [
+            {
+              "include": "source.java"
+            }
+          ]
         }
       ]
     },
@@ -509,10 +521,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.javascript",
       "patterns": [
         {
-          "include": "source.js"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.javascript",
+          "patterns": [
+            {
+              "include": "source.js"
+            }
+          ]
         }
       ]
     },
@@ -525,10 +543,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.json",
       "patterns": [
         {
-          "include": "source.json"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.json",
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
         }
       ]
     },
@@ -541,10 +565,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.python",
       "patterns": [
         {
-          "include": "source.python"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.python",
+          "patterns": [
+            {
+              "include": "source.python"
+            }
+          ]
         }
       ]
     },
@@ -557,10 +587,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.shellscript",
       "patterns": [
         {
-          "include": "source.shell"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.shellscript",
+          "patterns": [
+            {
+              "include": "source.shell"
+            }
+          ]
         }
       ]
     },
@@ -573,10 +609,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.yaml",
       "patterns": [
         {
-          "include": "source.yaml"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.yaml",
+          "patterns": [
+            {
+              "include": "source.yaml"
+            }
+          ]
         }
       ]
     },
@@ -677,10 +719,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.css",
       "patterns": [
         {
-          "include": "source.css"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.css",
+          "patterns": [
+            {
+              "include": "source.css"
+            }
+          ]
         }
       ]
     },
@@ -693,10 +741,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.html",
       "patterns": [
         {
-          "include": "text.html.basic"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.html",
+          "patterns": [
+            {
+              "include": "text.html.basic"
+            }
+          ]
         }
       ]
     },
@@ -709,10 +763,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.ini",
       "patterns": [
         {
-          "include": "source.ini"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.ini",
+          "patterns": [
+            {
+              "include": "source.ini"
+            }
+          ]
         }
       ]
     },
@@ -725,10 +785,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.lua",
       "patterns": [
         {
-          "include": "source.lua"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.lua",
+          "patterns": [
+            {
+              "include": "source.lua"
+            }
+          ]
         }
       ]
     },
@@ -741,10 +807,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.makefile",
       "patterns": [
         {
-          "include": "source.makefile"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.makefile",
+          "patterns": [
+            {
+              "include": "source.makefile"
+            }
+          ]
         }
       ]
     },
@@ -757,10 +829,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.perl",
       "patterns": [
         {
-          "include": "source.perl"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.perl",
+          "patterns": [
+            {
+              "include": "source.perl"
+            }
+          ]
         }
       ]
     },
@@ -773,10 +851,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.r",
       "patterns": [
         {
-          "include": "source.r"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.r",
+          "patterns": [
+            {
+              "include": "source.r"
+            }
+          ]
         }
       ]
     },
@@ -789,10 +873,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.ruby",
       "patterns": [
         {
-          "include": "source.ruby"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.ruby",
+          "patterns": [
+            {
+              "include": "source.ruby"
+            }
+          ]
         }
       ]
     },
@@ -805,10 +895,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.php",
       "patterns": [
         {
-          "include": "text.html.php#language"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.php",
+          "patterns": [
+            {
+              "include": "text.html.php#language"
+            }
+          ]
         }
       ]
     },
@@ -821,10 +917,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.sql",
       "patterns": [
         {
-          "include": "source.sql"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            {
+              "include": "source.sql"
+            }
+          ]
         }
       ]
     },
@@ -837,10 +939,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.vs_net",
       "patterns": [
         {
-          "include": "source.asp.vb.net"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.vs_net",
+          "patterns": [
+            {
+              "include": "source.asp.vb.net"
+            }
+          ]
         }
       ]
     },
@@ -853,10 +961,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.xml",
       "patterns": [
         {
-          "include": "text.xml"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.xml",
+          "patterns": [
+            {
+              "include": "text.xml"
+            }
+          ]
         }
       ]
     },
@@ -869,10 +983,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.xsl",
       "patterns": [
         {
-          "include": "text.xml.xsl"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.xsl",
+          "patterns": [
+            {
+              "include": "text.xml.xsl"
+            }
+          ]
         }
       ]
     },
@@ -885,10 +1005,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.dosbatch",
       "patterns": [
         {
-          "include": "source.dosbatch"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.dosbatch",
+          "patterns": [
+            {
+              "include": "source.dosbatch"
+            }
+          ]
         }
       ]
     },
@@ -901,10 +1027,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.clojure",
       "patterns": [
         {
-          "include": "source.clojure"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.clojure",
+          "patterns": [
+            {
+              "include": "source.clojure"
+            }
+          ]
         }
       ]
     },
@@ -917,10 +1049,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.coffee",
       "patterns": [
         {
-          "include": "source.coffee"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.coffee",
+          "patterns": [
+            {
+              "include": "source.coffee"
+            }
+          ]
         }
       ]
     },
@@ -933,10 +1071,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.c",
       "patterns": [
         {
-          "include": "source.c"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.c",
+          "patterns": [
+            {
+              "include": "source.c"
+            }
+          ]
         }
       ]
     },
@@ -949,10 +1093,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.cpp",
       "patterns": [
         {
-          "include": "source.cpp"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.cpp",
+          "patterns": [
+            {
+              "include": "source.cpp"
+            }
+          ]
         }
       ]
     },
@@ -965,10 +1115,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.diff",
       "patterns": [
         {
-          "include": "source.diff"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.diff",
+          "patterns": [
+            {
+              "include": "source.diff"
+            }
+          ]
         }
       ]
     },
@@ -981,10 +1137,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.dockerfile",
       "patterns": [
         {
-          "include": "source.dockerfile"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.dockerfile",
+          "patterns": [
+            {
+              "include": "source.dockerfile"
+            }
+          ]
         }
       ]
     },
@@ -997,10 +1159,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.git_commit",
       "patterns": [
         {
-          "include": "text.git-commit"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.git_commit",
+          "patterns": [
+            {
+              "include": "text.git-commit"
+            }
+          ]
         }
       ]
     },
@@ -1013,10 +1181,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.git_rebase",
       "patterns": [
         {
-          "include": "text.git-rebase"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.git_rebase",
+          "patterns": [
+            {
+              "include": "text.git-rebase"
+            }
+          ]
         }
       ]
     },
@@ -1029,10 +1203,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.go",
       "patterns": [
         {
-          "include": "source.go"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.go",
+          "patterns": [
+            {
+              "include": "source.go"
+            }
+          ]
         }
       ]
     },
@@ -1045,10 +1225,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.groovy",
       "patterns": [
         {
-          "include": "source.groovy"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.groovy",
+          "patterns": [
+            {
+              "include": "source.groovy"
+            }
+          ]
         }
       ]
     },
@@ -1061,10 +1247,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.jade",
       "patterns": [
         {
-          "include": "text.jade"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.jade",
+          "patterns": [
+            {
+              "include": "text.jade"
+            }
+          ]
         }
       ]
     },
@@ -1077,10 +1269,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.js_regexp",
       "patterns": [
         {
-          "include": "source.js.regexp"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.js_regexp",
+          "patterns": [
+            {
+              "include": "source.js.regexp"
+            }
+          ]
         }
       ]
     },
@@ -1093,10 +1291,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.less",
       "patterns": [
         {
-          "include": "source.css.less"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.less",
+          "patterns": [
+            {
+              "include": "source.css.less"
+            }
+          ]
         }
       ]
     },
@@ -1109,10 +1313,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.objc",
       "patterns": [
         {
-          "include": "source.objc"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.objc",
+          "patterns": [
+            {
+              "include": "source.objc"
+            }
+          ]
         }
       ]
     },
@@ -1125,10 +1335,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.scss",
       "patterns": [
         {
-          "include": "source.css.scss"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.scss",
+          "patterns": [
+            {
+              "include": "source.css.scss"
+            }
+          ]
         }
       ]
     },
@@ -1141,10 +1357,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.perl6",
       "patterns": [
         {
-          "include": "source.perl.6"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.perl6",
+          "patterns": [
+            {
+              "include": "source.perl.6"
+            }
+          ]
         }
       ]
     },
@@ -1157,10 +1379,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.powershell",
       "patterns": [
         {
-          "include": "source.powershell"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.powershell",
+          "patterns": [
+            {
+              "include": "source.powershell"
+            }
+          ]
         }
       ]
     },
@@ -1173,10 +1401,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.regexp_python",
       "patterns": [
         {
-          "include": "source.regexp.python"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.regexp_python",
+          "patterns": [
+            {
+              "include": "source.regexp.python"
+            }
+          ]
         }
       ]
     },
@@ -1189,10 +1423,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.rust",
       "patterns": [
         {
-          "include": "source.rust"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.rust",
+          "patterns": [
+            {
+              "include": "source.rust"
+            }
+          ]
         }
       ]
     },
@@ -1205,10 +1445,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.scala",
       "patterns": [
         {
-          "include": "source.scala"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.scala",
+          "patterns": [
+            {
+              "include": "source.scala"
+            }
+          ]
         }
       ]
     },
@@ -1221,10 +1467,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.typescript",
       "patterns": [
         {
-          "include": "source.ts"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.typescript",
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
         }
       ]
     },
@@ -1237,10 +1489,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.typescriptreact",
       "patterns": [
         {
-          "include": "source.tsx"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.typescriptreact",
+          "patterns": [
+            {
+              "include": "source.tsx"
+            }
+          ]
         }
       ]
     },
@@ -1253,10 +1511,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.csharp",
       "patterns": [
         {
-          "include": "source.cs"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.csharp",
+          "patterns": [
+            {
+              "include": "source.cs"
+            }
+          ]
         }
       ]
     },
@@ -1269,10 +1533,16 @@
         }
       },
       "end": "^\\s*(?:`{3,}|~{3,})\\s*$",
-      "contentName": "meta.embedded.block.fsharp",
       "patterns": [
         {
-          "include": "source.fsharp"
+          "begin": "(?=.)",
+          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "contentName": "meta.embedded.block.fsharp",
+          "patterns": [
+            {
+              "include": "source.fsharp"
+            }
+          ]
         }
       ]
     }

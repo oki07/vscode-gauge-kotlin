@@ -27,7 +27,9 @@
     "@types/vscode": "1.82.0",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.5",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vscode-oniguruma": "1.7.0",
+    "vscode-textmate": "9.3.2"
   },
   "categories": [
     "Programming Languages",
