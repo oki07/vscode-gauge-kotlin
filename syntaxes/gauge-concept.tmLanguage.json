@@ -10,22 +10,7 @@
       "include": "#frontMatter"
     },
     {
-      "include": "#comments"
-    },
-    {
-      "include": "#conceptHeading"
-    },
-    {
-      "include": "#step"
-    },
-    {
-      "include": "#table"
-    },
-    {
-      "include": "#markdown"
-    },
-    {
-      "include": "#fallbackComment"
+      "include": "#markdownContextBlock"
     }
   ],
   "repository": {
@@ -42,11 +27,11 @@
     },
     "comments": {
       "name": "comment.line.double-slash.gauge",
-      "match": "^\\s*//.*$"
+      "match": "(?:^|\\G)\\s*//.*$"
     },
     "conceptHeading": {
       "name": "markup.heading.concept.gauge",
-      "begin": "^(\\s*)(#)(\\s*)",
+      "begin": "(?:^|\\G)(\\s*)(#)(\\s*)",
       "beginCaptures": {
         "2": {
           "name": "punctuation.definition.heading.concept.gauge"
@@ -61,7 +46,7 @@
     },
     "step": {
       "name": "meta.step.gauge",
-      "begin": "^(\\s*)(\\*)(\\s*)",
+      "begin": "(?:^|\\G)(\\s*)(\\*)(\\s*)",
       "beginCaptures": {
         "2": {
           "name": "keyword.operator.step.gauge"
@@ -86,7 +71,7 @@
     },
     "tableSeparator": {
       "name": "meta.table.separator.gauge",
-      "begin": "^(\\s*\\|)(?=(?:\\s*-+\\s*\\|)+\\s*$)",
+      "begin": "(?:^|\\G)(\\s*\\|)(?=(?:\\s*-+\\s*\\|)+\\s*$)",
       "beginCaptures": {
         "1": {
           "name": "punctuation.separator.table.gauge"
@@ -106,7 +91,7 @@
     },
     "tableRow": {
       "name": "meta.table.row.gauge",
-      "begin": "^(\\s*\\|)",
+      "begin": "(?:^|\\G)(\\s*\\|)",
       "beginCaptures": {
         "1": {
           "name": "punctuation.separator.table.gauge"
@@ -202,12 +187,6 @@
     },
     "markdown": {
       "patterns": [
-        {
-          "include": "#markdownBlockquote"
-        },
-        {
-          "include": "#markdownSeparator"
-        },
         {
           "include": "#markdownKotlinFencedCode"
         },
@@ -345,24 +324,12 @@
         },
         {
           "include": "#markdownFencedCode"
-        },
-        {
-          "include": "#markdownLinkDefinition"
-        },
-        {
-          "include": "#markdownHtmlBlock"
-        },
-        {
-          "include": "#markdownList"
-        },
-        {
-          "include": "#markdownInline"
         }
       ]
     },
     "markdownBlockquote": {
       "name": "markup.quote.markdown.gauge",
-      "match": "^(>\\s?)",
+      "match": "(?:^|\\G)(>\\s?)",
       "captures": {
         "1": {
           "name": "punctuation.definition.blockquote.markdown.gauge"
@@ -371,21 +338,21 @@
     },
     "markdownSeparator": {
       "name": "meta.separator.markdown.gauge",
-      "match": "^\\s{0,3}(?:-{3,}|\\*{3,}|_{3,})\\s*$"
+      "match": "(?:^|\\G)\\s{0,3}(?:-{3,}|\\*{3,}|_{3,})\\s*$"
     },
     "markdownKotlinFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((\\s*)(`{3,}|~{3,})\\s*(?:[Kk][Oo][Tt][Ll][Ii][Nn]|[Kk][Tt][Ss]?)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:[Kk][Oo][Tt][Ll][Ii][Nn]|[Kk][Tt][Ss]?)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.kotlin",
           "patterns": [
             {
@@ -397,17 +364,17 @@
     },
     "markdownJavaFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:java|bsh)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:java|bsh)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.java",
           "patterns": [
             {
@@ -419,17 +386,17 @@
     },
     "markdownJavaScriptFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:js|jsx|javascript|es6|mjs)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:js|jsx|javascript|es6|mjs)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.javascript",
           "patterns": [
             {
@@ -441,17 +408,17 @@
     },
     "markdownJsonFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:json|sublime-settings|sublime-menu|sublime-keymap|sublime-mousemap|sublime-theme|sublime-build|sublime-project|sublime-completions)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:json|sublime-settings|sublime-menu|sublime-keymap|sublime-mousemap|sublime-theme|sublime-build|sublime-project|sublime-completions)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.json",
           "patterns": [
             {
@@ -463,17 +430,17 @@
     },
     "markdownPythonFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:python|py|py3|rpy|pyw|cpy|SConstruct|Sconstruct|sconstruct|SConscript|gyp|gypi)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:python|py|py3|rpy|pyw|cpy|SConstruct|Sconstruct|sconstruct|SConscript|gyp|gypi)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.python",
           "patterns": [
             {
@@ -485,17 +452,17 @@
     },
     "markdownShellFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:shell|sh|bash|zsh|bashrc|bash_profile|bash_login|profile|bash_logout|.textmate_init)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:shell|sh|bash|zsh|bashrc|bash_profile|bash_login|profile|bash_logout|.textmate_init)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.shellscript",
           "patterns": [
             {
@@ -507,17 +474,17 @@
     },
     "markdownYamlFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:yaml|yml)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:yaml|yml)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.yaml",
           "patterns": [
             {
@@ -529,21 +496,21 @@
     },
     "markdownFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "^((\\s*)(`{3,}|~{3,})[^`~]*)$",
+      "begin": "(?:^|\\G)((\\s*)(`{3,}|~{3,})[^`~]*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$"
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$"
     },
     "markdownLinkDefinition": {
       "name": "meta.link.reference.def.markdown.gauge",
-      "match": "^\\s{0,3}\\[[^\\]\\n]+\\]:\\s*\\S.*$"
+      "match": "(?:^|\\G)\\s{0,3}\\[[^\\]\\n]+\\]:\\s*\\S.*$"
     },
     "markdownHtmlBlock": {
       "name": "text.html.markdown.gauge",
-      "begin": "^\\s{0,3}</?[A-Za-z][^>]*>",
+      "begin": "(?:^|\\G)\\s{0,3}</?[A-Za-z][^>]*>",
       "end": "$",
       "patterns": [
         {
@@ -604,7 +571,7 @@
     },
     "markdownList": {
       "name": "markup.list.markdown.gauge",
-      "match": "^\\s*((?:[-+*]|\\d+\\.)(?:\\s+))",
+      "match": "(?:^|\\G)\\s*((?:[-+*]|\\d+\\.)(?:\\s+))",
       "captures": {
         "1": {
           "name": "punctuation.definition.list.begin.markdown.gauge"
@@ -613,21 +580,21 @@
     },
     "fallbackComment": {
       "name": "comment.line.gauge",
-      "match": "^\\s*\\S.*$"
+      "match": "(?:^|\\G)\\s*\\S.*$"
     },
     "markdownCssFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:css|css.erb)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:css|css.erb)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.css",
           "patterns": [
             {
@@ -639,17 +606,17 @@
     },
     "markdownBasicFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:html|htm|shtml|xhtml|inc|tmpl|tpl)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:html|htm|shtml|xhtml|inc|tmpl|tpl)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.html",
           "patterns": [
             {
@@ -661,17 +628,17 @@
     },
     "markdownIniFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:ini|conf)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:ini|conf)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.ini",
           "patterns": [
             {
@@ -683,17 +650,17 @@
     },
     "markdownLuaFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:lua)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:lua)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.lua",
           "patterns": [
             {
@@ -705,17 +672,17 @@
     },
     "markdownMakefileFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:Makefile|makefile|GNUmakefile|OCamlMakefile)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:Makefile|makefile|GNUmakefile|OCamlMakefile)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.makefile",
           "patterns": [
             {
@@ -727,17 +694,17 @@
     },
     "markdownPerlFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:perl|pl|pm|pod|t|PL|psgi|vcl)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:perl|pl|pm|pod|t|PL|psgi|vcl)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.perl",
           "patterns": [
             {
@@ -749,17 +716,17 @@
     },
     "markdownRFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:R|r|s|S|Rprofile)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:R|r|s|S|Rprofile)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.r",
           "patterns": [
             {
@@ -771,17 +738,17 @@
     },
     "markdownRubyFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:ruby|rb|rbx|rjs|Rakefile|rake|cgi|fcgi|gemspec|irbrc|Capfile|ru|prawn|Cheffile|Gemfile|Guardfile|Hobofile|Vagrantfile|Appraisals|Rantfile|Berksfile|Berksfile.lock|Thorfile|Puppetfile)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:ruby|rb|rbx|rjs|Rakefile|rake|cgi|fcgi|gemspec|irbrc|Capfile|ru|prawn|Cheffile|Gemfile|Guardfile|Hobofile|Vagrantfile|Appraisals|Rantfile|Berksfile|Berksfile.lock|Thorfile|Puppetfile)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.ruby",
           "patterns": [
             {
@@ -793,17 +760,17 @@
     },
     "markdownPhpFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:php|php3|php4|php5|phpt|phtml|aw|ctp)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:php|php3|php4|php5|phpt|phtml|aw|ctp)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.php",
           "patterns": [
             {
@@ -818,17 +785,17 @@
     },
     "markdownSqlFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:sql|ddl|dml)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:sql|ddl|dml)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.sql",
           "patterns": [
             {
@@ -840,17 +807,17 @@
     },
     "markdownVsNetFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:vb)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:vb)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.vs_net",
           "patterns": [
             {
@@ -862,17 +829,17 @@
     },
     "markdownXmlFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:xml|xsd|tld|jsp|pt|cpt|dtml|rss|opml)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:xml|xsd|tld|jsp|pt|cpt|dtml|rss|opml)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.xml",
           "patterns": [
             {
@@ -884,17 +851,17 @@
     },
     "markdownXslFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:xsl|xslt)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:xsl|xslt)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.xsl",
           "patterns": [
             {
@@ -906,17 +873,17 @@
     },
     "markdownDosbatchFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:bat|batch)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:bat|batch)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.dosbatch",
           "patterns": [
             {
@@ -928,17 +895,17 @@
     },
     "markdownClojureFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:clj|cljs|clojure)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:clj|cljs|clojure)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.clojure",
           "patterns": [
             {
@@ -950,17 +917,17 @@
     },
     "markdownCoffeeFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:coffee|Cakefile|coffee.erb)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:coffee|Cakefile|coffee.erb)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.coffee",
           "patterns": [
             {
@@ -972,17 +939,17 @@
     },
     "markdownCFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:c|h)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:c|h)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.c",
           "patterns": [
             {
@@ -994,17 +961,17 @@
     },
     "markdownCppFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:cpp|c\\+\\+|cxx)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:cpp|c\\+\\+|cxx)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.cpp",
           "patterns": [
             {
@@ -1016,17 +983,17 @@
     },
     "markdownDiffFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:patch|diff|rej)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:patch|diff|rej)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.diff",
           "patterns": [
             {
@@ -1038,17 +1005,17 @@
     },
     "markdownDockerfileFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:dockerfile|Dockerfile)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:dockerfile|Dockerfile)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.dockerfile",
           "patterns": [
             {
@@ -1060,17 +1027,17 @@
     },
     "markdownGitCommitFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:COMMIT_EDITMSG|MERGE_MSG)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:COMMIT_EDITMSG|MERGE_MSG)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.git_commit",
           "patterns": [
             {
@@ -1082,17 +1049,17 @@
     },
     "markdownGitRebaseFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:git-rebase-todo)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:git-rebase-todo)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.git_rebase",
           "patterns": [
             {
@@ -1104,17 +1071,17 @@
     },
     "markdownGoFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:go|golang)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:go|golang)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.go",
           "patterns": [
             {
@@ -1126,17 +1093,17 @@
     },
     "markdownGroovyFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:groovy|gvy)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:groovy|gvy)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.groovy",
           "patterns": [
             {
@@ -1148,17 +1115,17 @@
     },
     "markdownJadeFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:jade|pug)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:jade|pug)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.jade",
           "patterns": [
             {
@@ -1170,17 +1137,17 @@
     },
     "markdownJsRegexpFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:regexp)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:regexp)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.js_regexp",
           "patterns": [
             {
@@ -1192,17 +1159,17 @@
     },
     "markdownLessFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:less)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:less)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.less",
           "patterns": [
             {
@@ -1214,17 +1181,17 @@
     },
     "markdownObjcFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:objectivec|objective-c|mm|objc|obj-c|m|h)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:objectivec|objective-c|mm|objc|obj-c|m|h)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.objc",
           "patterns": [
             {
@@ -1236,17 +1203,17 @@
     },
     "markdownScssFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:scss)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:scss)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.scss",
           "patterns": [
             {
@@ -1258,17 +1225,17 @@
     },
     "markdownPerl6FencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:perl6|p6|pl6|pm6|nqp)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:perl6|p6|pl6|pm6|nqp)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.perl6",
           "patterns": [
             {
@@ -1280,17 +1247,17 @@
     },
     "markdownPowershellFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:powershell|ps1|psm1|psd1)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:powershell|ps1|psm1|psd1)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.powershell",
           "patterns": [
             {
@@ -1302,17 +1269,17 @@
     },
     "markdownRegexpPythonFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:re)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:re)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.regexp_python",
           "patterns": [
             {
@@ -1324,17 +1291,17 @@
     },
     "markdownRustFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:rust|rs)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:rust|rs)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.rust",
           "patterns": [
             {
@@ -1346,17 +1313,17 @@
     },
     "markdownScalaFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:scala|sbt)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:scala|sbt)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.scala",
           "patterns": [
             {
@@ -1368,17 +1335,17 @@
     },
     "markdownTypeScriptFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:typescript|ts)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:typescript|ts)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.typescript",
           "patterns": [
             {
@@ -1390,17 +1357,17 @@
     },
     "markdownTsxFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:tsx)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:tsx)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.typescriptreact",
           "patterns": [
             {
@@ -1412,17 +1379,17 @@
     },
     "markdownCSharpFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:cs|csharp|c#)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:cs|csharp|c#)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.csharp",
           "patterns": [
             {
@@ -1434,17 +1401,17 @@
     },
     "markdownFSharpFencedCode": {
       "name": "markup.fenced_code.block.markdown.gauge",
-      "begin": "(?i)^((\\s*)(`{3,}|~{3,})\\s*(?:fs|fsharp|f#)(?:\\s+[^`~]*)?\\s*)$",
+      "begin": "(?i)(?:^|\\G)((\\s*)(`{3,}|~{3,})\\s*(?:fs|fsharp|f#)(?:\\s+[^`~]*)?\\s*)$",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.raw.markdown.gauge"
         }
       },
-      "end": "^(?:\\2|\\s{0,3})\\3\\s*$",
+      "end": "(?:^|\\G)(?:\\2|\\s{0,3})\\3\\s*$",
       "patterns": [
         {
           "begin": "(?=.)",
-          "while": "^(?!\\s*(?:`{3,}|~{3,})\\s*$)",
+          "while": "(?:^|\\G)(?!\\s*(?:`{3,}|~{3,})\\s*$)",
           "contentName": "meta.embedded.block.fsharp",
           "patterns": [
             {
@@ -1453,6 +1420,219 @@
           ]
         }
       ]
+    },
+    "gaugeLine": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#conceptHeading"
+        },
+        {
+          "include": "#step"
+        },
+        {
+          "include": "#table"
+        },
+        {
+          "include": "#markdownList"
+        },
+        {
+          "include": "#continuationComment"
+        },
+        {
+          "include": "#markdownDecoration"
+        },
+        {
+          "include": "#fallbackComment"
+        }
+      ],
+      "comment": "TextMate capture retokenization needs an inner begin rule to establish the current-position anchor after list indentation. These shared line rules apply at that position or at the start of a line."
+    },
+    "markdownDecoration": {
+      "patterns": [
+        {
+          "include": "#markdownBlockquote"
+        },
+        {
+          "include": "#markdownLinkDefinition"
+        },
+        {
+          "include": "#markdownHtmlBlock"
+        },
+        {
+          "include": "#markdownInline"
+        }
+      ]
+    },
+    "markdownParagraphContext": {
+      "begin": "(?=(.*)$)(?:^|\\G)[ ]{0,3}(?=\\S)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "while": "(?=(.*)$)(?:^|\\G)(?:(?=\\s*[-=]{3,}\\s*$)|[ ]{4,}(?=\\S))",
+      "whileCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "patterns": []
+    },
+    "markdownRawContext": {
+      "begin": "(?=(.*)$)(?:^|\\G)(?:[ ]{4}|\\t)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "while": "(?=(.*)$)(?:^|\\G)(?:[ ]{4}|\\t)",
+      "whileCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "patterns": []
+    },
+    "markdownListParagraphContext": {
+      "begin": "(?=(.*)$)(?:^|\\G)(?=\\S)(?![*+-]\\s|[0-9]+\\.\\s)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "while": "(?=(.*)$)(?:^|\\G)(?!\\s*$|#|[ ]{0,3}([-*_][ ]{2,}){3,}[ \\t]*$\\n?|>|[ ]{0,3}[*+-]|[ ]{0,3}[0-9]+\\.)",
+      "whileCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "patterns": []
+    },
+    "markdownListContext": {
+      "begin": "(?=(.*)$)(?:^|\\G)[ ]{0,3}(?:[*+-]|[0-9]+\\.)(?:[ ]{1,3}|\\t)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "begin": "(?=.)",
+              "end": "$",
+              "patterns": [
+                {
+                  "include": "#gaugeLine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "while": "(?:(?:^|\\G)(?:[ ]{4}|\\t))|(?:^[ \\t]*$)",
+      "patterns": [
+        {
+          "include": "#markdownListParagraphContext"
+        },
+        {
+          "include": "#markdownContextBlock"
+        }
+      ]
+    },
+    "markdownContextBlock": {
+      "patterns": [
+        {
+          "include": "#conceptHeading"
+        },
+        {
+          "include": "#markdownSeparator"
+        },
+        {
+          "include": "#markdownBlockquote"
+        },
+        {
+          "include": "#markdownListContext"
+        },
+        {
+          "include": "#markdown"
+        },
+        {
+          "include": "#markdownRawContext"
+        },
+        {
+          "include": "#markdownLinkDefinition"
+        },
+        {
+          "include": "#markdownHtmlBlock"
+        },
+        {
+          "include": "#markdownParagraphContext"
+        }
+      ],
+      "comment": "Paragraph, list and raw-block continuation follow getgauge/gauge-vscode syntaxes/markdown.tmLanguage. Gauge line decoration is applied inside captures without replacing structural state."
+    },
+    "continuationComment": {
+      "name": "comment.line.gauge",
+      "match": "\\G(?<=\\s)\\S.*$"
     }
   }
 }

@@ -1,0 +1,3866 @@
+[
+  {
+    "prefix": [],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    ```unknown `hint`",
+      "* Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "+ List item"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "- List item"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "1. List item"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "*Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    * Gauge step"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "// Explanation"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "Tags: sample"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "* Gauge step",
+      "plain text"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "plain text",
+      "# Heading"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "\tplain text"
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": false
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "    plain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": " ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "  ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "   ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "    ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "        ",
+    "fence": "```typescript",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "~~~",
+    "opened": true
+  },
+  {
+    "prefix": [
+      "\tplain text",
+      ""
+    ],
+    "indent": "\t",
+    "fence": "```typescript",
+    "opened": true
+  }
+]

@@ -50,7 +50,9 @@ function grammarRegex(source) {
     pattern = pattern.slice("(?i)".length);
     flags += "i";
   }
-  pattern = pattern.replaceAll("\\A", "^");
+  // These single-line checks start at offset zero; retained Oniguruma state
+  // and nonzero capture offsets are exercised by textmateContext.test.js.
+  pattern = pattern.replaceAll("\\A", "^").replaceAll("\\G", "^");
   return new RegExp(pattern, flags);
 }
 
@@ -87,8 +89,8 @@ function assertPatternDoesNotMatch(pattern, text) {
   assert.equal(grammarRegex(source).test(text), false, `${source} should not match ${text}`);
 }
 
-function firstMatchingTopLevelPattern(grammar, text) {
-  for (const include of grammar.patterns) {
+function firstMatchingGaugeLinePattern(grammar, text) {
+  for (const include of grammar.repository.gaugeLine.patterns) {
     const key = include.include && include.include.replace(/^#/, "");
     const entry = key && grammar.repository[key];
     if (!entry) {
@@ -720,19 +722,7 @@ test("extension manifest contributes a Gauge TextMate grammar", () => {
   assert.equal(grammarJson.scopeName, "text.gauge");
   assert.deepEqual(
     grammarJson.patterns.map((entry) => entry.include),
-    [
-      "#frontMatter",
-      "#comments",
-      "#tags",
-      "#tableKeyword",
-      "#specHeading",
-      "#scenarioHeading",
-      "#step",
-      "#teardown",
-      "#table",
-      "#markdown",
-      "#fallbackComment",
-    ],
+    ["#frontMatter", "#markdownContextBlock"],
   );
   for (const key of [
     "comments",
@@ -789,15 +779,7 @@ test("extension manifest contributes a Concept TextMate grammar", () => {
   assert.equal(grammarJson.scopeName, "text.gauge.concept");
   assert.deepEqual(
     grammarJson.patterns.map((entry) => entry.include),
-    [
-      "#frontMatter",
-      "#comments",
-      "#conceptHeading",
-      "#step",
-      "#table",
-      "#markdown",
-      "#fallbackComment",
-    ],
+    ["#frontMatter", "#markdownContextBlock"],
   );
   assert.equal(Object.hasOwn(grammarJson.repository, "tags"), false);
   assert.equal(Object.hasOwn(grammarJson.repository, "tableKeyword"), false);
@@ -808,10 +790,10 @@ test("extension manifest contributes a Concept TextMate grammar", () => {
   assertPatternMatches(grammarJson.repository.markdownTypeScriptFencedCode, "```ts", "```ts");
   assert.equal(grammarJson.repository.markdownTypeScriptFencedCode.patterns[0].contentName, "meta.embedded.block.typescript");
   assert.deepEqual(grammarJson.repository.markdownTypeScriptFencedCode.patterns[0].patterns, [{ include: "source.ts" }]);
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "tags: smoke").include, "#fallbackComment");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "table: users.csv").include, "#fallbackComment");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain <arg>").include, "#fallbackComment");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "tags: smoke").include, "#fallbackComment");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "table: users.csv").include, "#fallbackComment");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "plain <arg>").include, "#fallbackComment");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
   assertPatternMatches(grammarJson.repository.tableRow, "| name |", "|");
   assertPatternMatches(grammarJson.repository.tableRow, "| name", "|");
 });
@@ -827,7 +809,7 @@ test("Gauge TextMate grammar follows Gauge lexer line starts and keywords", () =
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 0), "#Title", "#");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "##Scenario");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 0), "### Notes", "### Notes");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "### Notes").include, "#scenarioHeading");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "### Notes").include, "#scenarioHeading");
   assertPatternMatches(repositoryPattern(grammarJson, "specHeading", 1), "=", "=");
   assertPatternMatches(repositoryPattern(grammarJson, "scenarioHeading", 1), "-", "-");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "specHeading", 1), " = ");
@@ -905,11 +887,11 @@ test("Gauge TextMate grammar handles table and argument lexer edge cases", () =>
   assertPatternMatches(tableSeparatorPipe, "|", "|");
   assertPatternDoesNotMatch(tableSeparatorPipe, "\\|");
   assertPatternMatches(fallbackComment, "plain comment");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain <arg>").include, "#fallbackComment");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "___").include, "#teardown");
-  assert.equal(firstMatchingTopLevelPattern(grammarJson, "  ___").include, "#teardown");
-  assert.notEqual(firstMatchingTopLevelPattern(grammarJson, "___").include, "#markdown");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "plain <arg>").include, "#fallbackComment");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "plain \"arg\"").include, "#fallbackComment");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "___").include, "#teardown");
+  assert.equal(firstMatchingGaugeLinePattern(grammarJson, "  ___").include, "#teardown");
+  assert.notEqual(firstMatchingGaugeLinePattern(grammarJson, "___").include, "#markdown");
 });
 
 test("Gauge TextMate grammar keeps only dynamic arguments reachable in hash concept headings", () => {
@@ -917,9 +899,9 @@ test("Gauge TextMate grammar keeps only dynamic arguments reachable in hash conc
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
 
-  const firstMatch = firstMatchingTopLevelPattern(grammarJson, "# Shared checkout <item> \"card\"");
+  const firstMatch = firstMatchingGaugeLinePattern(grammarJson, "# Shared checkout <item> \"card\"");
 
-  assert.ok(firstMatch, "hash heading should match a top-level pattern");
+  assert.ok(firstMatch, "hash heading should match a Gauge line pattern");
   assert.deepEqual(firstMatch.pattern.patterns, [{ include: "#dynamicArguments" }]);
   assertPatternMatches(repositoryPattern(grammarJson, "dynamicArguments", 0), "<item>");
   assertPatternDoesNotMatch(repositoryPattern(grammarJson, "dynamicArguments", 0), "\\<item>");
@@ -980,8 +962,6 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   const markdownSeparator = repositoryPattern(grammarJson, "markdownSeparator");
 
   assert.deepEqual(grammarJson.repository.markdown.patterns.map((entry) => entry.include), [
-    "#markdownBlockquote",
-    "#markdownSeparator",
     "#markdownKotlinFencedCode",
     "#markdownCssFencedCode",
     "#markdownBasicFencedCode",
@@ -1028,10 +1008,6 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
     "#markdownCSharpFencedCode",
     "#markdownFSharpFencedCode",
     "#markdownFencedCode",
-    "#markdownLinkDefinition",
-    "#markdownHtmlBlock",
-    "#markdownList",
-    "#markdownInline",
   ]);
   assertPatternMatches(markdownCssFence, "```css", "```css");
   assertPatternMatches(markdownCssFence, "~~~css.erb", "~~~css.erb");
