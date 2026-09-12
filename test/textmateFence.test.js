@@ -6,6 +6,15 @@ const test = require("node:test");
 const textmate = require("vscode-textmate");
 const oniguruma = require("vscode-oniguruma");
 
+const embeddedAliases = [
+  "css", "html", "ini", "java", "lua", "makefile", "perl", "r", "ruby", "php",
+  "sql", "vb", "xml", "xsl", "yaml", "bat", "clojure", "coffee", "c", "cpp",
+  "diff", "dockerfile", "COMMIT_EDITMSG", "git-rebase-todo", "go", "groovy",
+  "jade", "js", "regexp", "json", "less", "objectivec", "scss", "perl6",
+  "powershell", "python", "re", "rust", "scala", "shell", "typescript", "tsx",
+  "csharp", "fsharp", "kotlin",
+];
+
 const wasm = fs.readFileSync(require.resolve("vscode-oniguruma/release/onig.wasm"));
 const ready = oniguruma.loadWASM(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
 
@@ -25,14 +34,7 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
     });
     try {
       const grammar = await registry.loadGrammar(raw.scopeName);
-      for (const alias of [
-        "css", "html", "ini", "java", "lua", "makefile", "perl", "r", "ruby", "php",
-        "sql", "vb", "xml", "xsl", "yaml", "bat", "clojure", "coffee", "c", "cpp",
-        "diff", "dockerfile", "COMMIT_EDITMSG", "git-rebase-todo", "go", "groovy",
-        "jade", "js", "regexp", "json", "less", "objectivec", "scss", "perl6",
-        "powershell", "python", "re", "rust", "scala", "shell", "typescript", "tsx",
-        "csharp", "fsharp", "kotlin",
-      ]) {
+      for (const alias of embeddedAliases) {
         for (const fence of ["```", "~~~"]) {
           let state = textmate.INITIAL;
           const tokenize = (line) => {
@@ -97,6 +99,42 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
       } finally {
         registry.dispose();
       }
+    }
+  });
+}
+
+// Real TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage closes a fence only when its marker characters
+// and count equal the opener, including for unknown language labels.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} matches closing fence markers to the opener`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    const registry = new textmate.Registry({
+      onigLib: Promise.resolve(oniguruma),
+      loadGrammar: async (scope) => scope === raw.scopeName ? raw : {
+        scopeName: scope, patterns: [{ match: "payload", name: "source.external.fixture" }],
+        repository: { language: { patterns: [{ match: "payload", name: "source.external.fixture" }] } },
+      },
+    });
+    try {
+      const grammar = await registry.loadGrammar(raw.scopeName);
+      for (const alias of [...embeddedAliases, "unknown", ""]) {
+        for (const opening of ["```", "````", "~~~", "~~~~"]) {
+          for (const closing of ["```", "````", "`````", "~~~", "~~~~", "~~~~~"]) {
+            let state = textmate.INITIAL;
+            let result;
+            for (const line of [opening + alias, "payload", closing, "* After <argument>"]) {
+              result = grammar.tokenizeLine(line, state);
+              state = result.ruleStack;
+            }
+            const isStep = result.tokens.some((token) => token.scopes.includes("keyword.operator.step.gauge"));
+            assert.equal(isStep, opening === closing, JSON.stringify({ alias, opening, closing }));
+          }
+        }
+      }
+    } finally {
+      registry.dispose();
     }
   });
 }
