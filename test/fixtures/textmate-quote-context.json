@@ -1,0 +1,4994 @@
+[
+  {
+    "lines": [
+      "```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```",
+      ">const payload = 1;",
+      ">```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```typescript",
+      ">const payload = 1;",
+      ">```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```unknown title=sample",
+      ">const payload = 1;",
+      ">```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~",
+      ">const payload = 1;",
+      ">~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~typescript",
+      ">const payload = 1;",
+      ">~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~unknown title=sample",
+      ">const payload = 1;",
+      ">~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> ~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```",
+      " > const payload = 1;",
+      " > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```typescript",
+      " > const payload = 1;",
+      " > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```unknown title=sample",
+      " > const payload = 1;",
+      " > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~",
+      " > const payload = 1;",
+      " > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~typescript",
+      " > const payload = 1;",
+      " > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~unknown title=sample",
+      " > const payload = 1;",
+      " > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      " > ~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```",
+      "   > const payload = 1;",
+      "   > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```typescript",
+      "   > const payload = 1;",
+      "   > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```unknown title=sample",
+      "   > const payload = 1;",
+      "   > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~",
+      "   > const payload = 1;",
+      "   > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~typescript",
+      "   > const payload = 1;",
+      "   > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~unknown title=sample",
+      "   > const payload = 1;",
+      "   > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "   > ~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "    > ~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```",
+      "> > const payload = 1;",
+      "> > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```typescript",
+      "> > const payload = 1;",
+      "> > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```unknown title=sample",
+      "> > const payload = 1;",
+      "> > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~",
+      "> > const payload = 1;",
+      "> > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~typescript",
+      "> > const payload = 1;",
+      "> > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~unknown title=sample",
+      "> > const payload = 1;",
+      "> > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      "> > ~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 2
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```",
+      ">\tconst payload = 1;",
+      ">\t```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```typescript",
+      ">\tconst payload = 1;",
+      ">\t```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```unknown title=sample",
+      ">\tconst payload = 1;",
+      ">\t```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~",
+      ">\tconst payload = 1;",
+      ">\t~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~typescript",
+      ">\tconst payload = 1;",
+      ">\t~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~unknown title=sample",
+      ">\tconst payload = 1;",
+      ">\t~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```typescript",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```unknown title=sample",
+      "> const payload = 1;",
+      "> ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~typescript",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~unknown title=sample",
+      "> const payload = 1;",
+      "> ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```typescript",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```unknown title=sample",
+      "const payload = 1;",
+      "```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~typescript",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~unknown title=sample",
+      "const payload = 1;",
+      "~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```typescript",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t```unknown title=sample",
+      "    > const payload = 1;",
+      "    > ```",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~typescript",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  },
+  {
+    "lines": [
+      ">\t~~~unknown title=sample",
+      "    > const payload = 1;",
+      "    > ~~~",
+      "* After <value>"
+    ],
+    "states": [
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": true,
+        "quoteDepth": 1
+      },
+      {
+        "fenced": false,
+        "quoteDepth": 0
+      }
+    ]
+  }
+]

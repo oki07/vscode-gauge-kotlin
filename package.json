@@ -124,6 +124,10 @@
         "language": "gauge-concept",
         "scopeName": "text.gauge.concept",
         "path": "./syntaxes/gauge-concept.tmLanguage.json"
+      },
+      {
+        "scopeName": "text.gauge.quoted.markdown",
+        "path": "./syntaxes/gauge-quoted-markdown.tmLanguage.json"
       }
     ],
     "keybindings": [

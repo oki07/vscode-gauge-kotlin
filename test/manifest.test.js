@@ -930,7 +930,7 @@ test("Gauge TextMate grammar preserves common Markdown constructs", () => {
   const manifest = readPackageJson();
   const grammar = manifest.contributes.grammars.find((entry) => entry.language === "gauge");
   const grammarJson = JSON.parse(fs.readFileSync(path.join(root, grammar.path), "utf8"));
-  const markdownBlockquote = repositoryPattern(grammarJson, "markdownBlockquote");
+  const markdownBlockquote = grammarJson.repository.markdownBlockquote;
   const markdownAutoLink = repositoryPattern(grammarJson, "markdownAutoLink");
   const markdownBasicFence = grammarJson.repository.markdownBasicFencedCode;
   const markdownCSharpFence = grammarJson.repository.markdownCSharpFencedCode;

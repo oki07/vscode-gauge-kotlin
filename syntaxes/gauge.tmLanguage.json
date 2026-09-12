@@ -412,12 +412,18 @@
     },
     "markdownBlockquote": {
       "name": "markup.quote.markdown.gauge",
-      "match": "(?:^|\\G)(>\\s?)",
+      "begin": "(?:^|\\G)[ ]{0,3}(>) ?",
+      "while": "(?:^|\\G)\\s*(>) ?",
       "captures": {
         "1": {
           "name": "punctuation.definition.blockquote.markdown.gauge"
         }
-      }
+      },
+      "patterns": [
+        {
+          "include": "text.gauge.quoted.markdown"
+        }
+      ]
     },
     "markdownSeparator": {
       "name": "meta.separator.markdown.gauge",
