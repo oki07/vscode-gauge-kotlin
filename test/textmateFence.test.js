@@ -138,3 +138,41 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
     }
   });
 }
+
+// Real TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage accepts indented openers. Closing indentation
+// matches the opener or contains at most three whitespace characters.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} preserves opening and closing fence indentation`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    const registry = new textmate.Registry({
+      onigLib: Promise.resolve(oniguruma),
+      loadGrammar: async (scope) => scope === raw.scopeName ? raw : {
+        scopeName: scope, patterns: [{ match: "payload", name: "source.external.fixture" }],
+        repository: { language: { patterns: [{ match: "payload", name: "source.external.fixture" }] } },
+      },
+    });
+    try {
+      const grammar = await registry.loadGrammar(raw.scopeName);
+      for (const alias of [...embeddedAliases, "unknown", ""]) {
+        for (const marker of ["```", "~~~"]) {
+          for (const openingIndent of ["", " ", "  ", "   ", "    ", "        ", "\t", " \t"]) {
+            for (const closingIndent of ["", " ", "  ", "   ", "    ", "        ", "\t"]) {
+              let state = grammar.tokenizeLine(openingIndent + marker + alias, textmate.INITIAL).ruleStack;
+              let result = grammar.tokenizeLine("payload", state);
+              assert.ok(result.tokens.some((token) => token.scopes.includes("markup.fenced_code.block.markdown.gauge")), JSON.stringify({ alias, openingIndent }));
+              state = grammar.tokenizeLine(closingIndent + marker, result.ruleStack).ruleStack;
+              result = grammar.tokenizeLine("* After <argument>", state);
+              const isStep = result.tokens.some((token) => token.scopes.includes("keyword.operator.step.gauge"));
+              assert.equal(isStep, closingIndent === openingIndent || closingIndent.length <= 3,
+                JSON.stringify({ alias, openingIndent, closingIndent }));
+            }
+          }
+        }
+      }
+    } finally {
+      registry.dispose();
+    }
+  });
+}
