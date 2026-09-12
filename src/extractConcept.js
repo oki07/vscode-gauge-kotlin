@@ -1143,6 +1143,14 @@ class ExtractConceptCommandProvider {
           "Unable to apply extract concept changes.",
         );
       }
+      if (typeof this.vscode.window.showTextDocument === "function") {
+        const documents = await this.conceptDocumentsForFile(operation, conceptFile.path);
+        if (documents === DISPOSED_OPERATION) return DISPOSED_OPERATION;
+        const shown = await this.callForOperation(operation, () => (
+          this.vscode.window.showTextDocument(documents[0], { preview: false, preserveFocus: true })
+        ));
+        if (shown === DISPOSED_OPERATION) return DISPOSED_OPERATION;
+      }
       return this.showInformationForOperation(operation, "Concept extracted.");
     } catch (error) {
       if (this.operationStopped(operation)) {

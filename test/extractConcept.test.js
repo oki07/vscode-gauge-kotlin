@@ -3053,3 +3053,33 @@ for (const mode of ["alias", "physical", "both", "dirty-duplicate"]) {
     assert.deepEqual(opened, [], "Reuse open buffers during validation and editing");
   });
 }
+
+// VS Code 1.137.0 saveAll(false) skips an edited document with no editor tab.
+// A pinned destination tab makes the extracted definition part of Save All.
+for (const destination of ["existing", "new"]) {
+  test(`concept extraction pins the ${destination} destination after applying edits`, async () => {
+    const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+    const file = "/workspace/gauge/specs/concepts.cpt";
+    const fake = createFakeVscode({
+      document: createDocument("# Spec\n\n## Scenario\n* Login\n"),
+      conceptDocuments: { [file]: "# Existing\n* Setup\n" },
+      inputResponses: destination === "new" ? ["Shared login", "specs/concepts.cpt"] : ["Shared login"],
+      quickPickSelection: { label: destination === "new" ? "New File" : "concepts.cpt", value: destination === "new" ? "New File" : file },
+      selection: { start: { line: 3, character: 0 }, end: { line: 4, character: 0 } },
+    });
+    const events = [];
+    fake.vscode.workspace.applyEdit = async () => { events.push("apply"); return true; };
+    fake.vscode.window.showTextDocument = async (document, options) => {
+      events.push("show");
+      assert.equal(document.uri.fsPath, file);
+      assert.deepEqual(options, { preview: false, preserveFocus: true });
+    };
+    fake.vscode.window.showInformationMessage = async () => { events.push("information"); };
+    new ExtractConceptCommandProvider(createClients([], destination === "new" ? [] : [file]), {
+      vscode: fake.vscode, pathModule: path.posix,
+    });
+    await fake.commands[0].handler();
+    assert.deepEqual(fake.errors, []);
+    assert.deepEqual(events, ["apply", "show", "information"]);
+  });
+}
