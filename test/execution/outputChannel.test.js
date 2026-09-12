@@ -157,3 +157,19 @@ for (const platform of ["posix", "win32"]) {
     });
   }
 }
+
+for (const terminated of [false, true]) {
+  test(`OutputChannel resolves paths independently of chunk boundaries (${terminated ? "LF" : "tail"})`, () => {
+    const { OutputChannel } = require("../../src/execution/outputChannel");
+    const text = "Specification: specs/example.spec:19\nat Object.<anonymous> (tests/steps.js:24:10)" + (terminated ? "\n" : "");
+    const expected = ["", "Specification: project/specs/example.spec:19", "at Object.<anonymous> (project/tests/steps.js:24:10)", "success"];
+    for (let cut = 0; cut <= text.length; cut++) {
+      const channel = new MockOutputChannel();
+      const output = new OutputChannel(channel, "", "project", { pathModule: path.posix });
+      output.appendOutBuf(text.slice(0, cut));
+      output.appendOutBuf(text.slice(cut));
+      output.onFinish(() => {}, 0, "success", "failure", false);
+      assert.deepEqual(channel.lines, expected, `cut ${cut}`);
+    }
+  });
+}

@@ -11,7 +11,7 @@ class OutputChannel {
     this.pathModule = options.pathModule || nodePath;
     this.outBuffer = new LineBuffer();
     this.errBuffer = new LineBuffer();
-    this.outDecoder = createUtf8Emitter(text => this.outBuffer.append(this.absolutizeOutputPaths(text)));
+    this.outDecoder = createUtf8Emitter(text => this.outBuffer.append(text));
     this.errDecoder = createUtf8Emitter(text => this.errBuffer.append(text));
 
     this.channel.clear();
@@ -19,10 +19,10 @@ class OutputChannel {
     if (options.reveal === true && typeof this.channel.show === "function") {
       this.channel.show(true);
     }
-    this.outBuffer.onLine((line) => this.channel.appendLine(line));
+    this.outBuffer.onLine((line) => this.channel.appendLine(this.absolutizeOutputPaths(line)));
     this.outBuffer.onDone((last) => {
       if (last) {
-        this.channel.appendLine(last);
+        this.channel.appendLine(this.absolutizeOutputPaths(last));
       }
     });
     this.errBuffer.onLine((line) => this.channel.appendLine(line));
