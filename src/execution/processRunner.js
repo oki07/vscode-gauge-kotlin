@@ -2,7 +2,6 @@
 
 const childProcess = require("node:child_process");
 const nodePath = require("node:path");
-const { StringDecoder } = require("node:string_decoder");
 const { envWithGaugeHome } = require("../config/gaugeConfig");
 const { parseMachineReadableEvent } = require("./lineProcessors");
 const { OutputChannel } = require("./outputChannel");
@@ -22,22 +21,25 @@ function createDefaultOutputChannel(vscode) {
   };
 }
 
-// Decode with StringDecoder, not chunk.toString(): Gauge output is UTF-8 and a
-// multi-byte sequence split across a chunk boundary becomes two replacement
-// characters otherwise.
 function createLineEmitter(callback) {
-  const decoder = new StringDecoder("utf8");
   let accumulated = "";
-  return function emitLines(chunk) {
-    const value = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-    const parts = `${accumulated}${decoder.write(value)}`.split(/\r?\n/);
+  const decoder = createUtf8Emitter(text => {
+    const parts = `${accumulated}${text}`.split(/\r?\n/);
     accumulated = parts.pop();
     for (const line of parts) {
       callback(`${line}\n`);
     }
+  });
+  return {
+    write: chunk => decoder.write(chunk),
+    finish() {
+      decoder.finish();
+      const tail = accumulated;
+      accumulated = "";
+      if (tail) callback(tail);
+    },
   };
 }
-
 
 function isMachineReadableCommand(command) {
   return Array.isArray(command && command.args)
@@ -195,6 +197,7 @@ function createGaugeProcessRunner(options = {}) {
           return;
         }
         processFinished = true;
+        emitStdoutLine.finish();
         finishOutputChunks();
         channel.onFinish(resolve, code, SUCCESS_MESSAGE, FAILURE_MESSAGE, aborted);
       };
@@ -223,7 +226,7 @@ function createGaugeProcessRunner(options = {}) {
         if (command.forwardOutput && !machineReadable) {
           emitStdoutChunk.write(chunk);
         }
-        emitStdoutLine(chunk);
+        emitStdoutLine.write(chunk);
       });
       child.stderr.on("data", (chunk) => {
         if (command.forwardOutput) {

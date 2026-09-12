@@ -776,3 +776,65 @@ test("process runner reports a signal-terminated automatic stop as failure", asy
     assert.equal(outputChannel.lines.at(-1), code === 0 ? "Success: Tests passed." : "Error: Tests failed.");
   }
 });
+
+// getgauge/gauge-vscode/src/execution/lineBuffer.ts passes the remaining text
+// to onDone. Process output consumers must receive that tail before run status.
+for (const entry of [
+  { name: "plain tail", payload: "last message", visible: "last message" },
+  { name: "terminated line", payload: "last message\n", visible: "last message" },
+  { name: "empty output", payload: "", visible: undefined },
+  { name: "protocol tail", payload: '{"type":"out","message":"last message"}', visible: "last message", machine: true },
+  { name: "raw protocol fallback", payload: "last message", visible: "last message", machine: true },
+]) {
+  test(`process runner completes ${entry.name} exactly once after pipes close`, async () => {
+    const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+    const child = createChildProcess();
+    child.stdout.readableEnded = false;
+    child.stderr.readableEnded = false;
+    const channel = new FakeOutputChannel();
+    const processed = [];
+    const forwarded = [];
+    const run = createGaugeProcessRunner({ outputChannel: channel, spawn: () => child,
+      processOutputLine: line => processed.push(line), processOutputChunk: text => forwarded.push(text),
+    })({ command: "gauge", args: entry.machine ? ["run", "--machine-readable"] : ["run"], cwd: "/workspace", forwardOutput: true });
+    const cut = Math.floor(entry.payload.length / 2);
+    child.stdout.emit("data", Buffer.from(entry.payload.slice(0, cut)));
+    child.emit("exit", 0);
+    child.stdout.emit("data", Buffer.from(entry.payload.slice(cut)));
+    child.stdout.readableEnded = true;
+    child.stderr.readableEnded = true;
+    child.emit("close", 0);
+    child.emit("close", 0);
+    assert.equal(await run, true);
+    assert.deepEqual(processed, entry.payload ? [entry.payload] : []);
+    assert.deepEqual(channel.lines.slice(1), [...(entry.visible ? [entry.visible] : []), "Success: Tests passed."]);
+    assert.equal(forwarded.join(""), entry.machine && entry.name === "protocol tail" ? "" : entry.payload);
+  });
+}
+
+test("process runner flushes an incomplete UTF-8 stdout tail", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const child = createChildProcess();
+  const channel = new FakeOutputChannel();
+  const processed = [];
+  const run = createGaugeProcessRunner({ outputChannel: channel, spawn: () => child,
+    processOutputLine: line => processed.push(line),
+  })({ command: "gauge", args: ["run"], cwd: "/workspace" });
+  child.stdout.emit("data", Buffer.from([0x61, 0xe2]));
+  child.emit("exit", 1);
+  await run;
+  assert.deepEqual(processed, ["a\ufffd"]);
+  assert.deepEqual(channel.lines.slice(1), ["a\ufffd", "Error: Tests failed."]);
+});
+
+test("process runner preserves an unterminated tail from a real child pipe", async () => {
+  const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+  const channel = new FakeOutputChannel();
+  const processed = [];
+  const run = createGaugeProcessRunner({ outputChannel: channel,
+    processOutputLine: line => processed.push(line),
+  })({ command: process.execPath, args: ["-e", 'process.stdout.write("last message")'], cwd: process.cwd() });
+  assert.equal(await run, true);
+  assert.deepEqual(processed, ["last message"]);
+  assert.deepEqual(channel.lines.slice(1), ["last message", "Success: Tests passed."]);
+});
