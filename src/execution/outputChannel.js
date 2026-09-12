@@ -40,7 +40,12 @@ class OutputChannel {
     for (let index = 0; index < lines.length; index += 1) {
       for (const marker of markers) {
         const match = lines[index].match(marker);
-        if (match && !lines[index].includes(this.projectRoot)) {
+        if (match && this.projectRoot) {
+          const outputPath = lines[index].slice(match.index + match[0].length);
+          if (this.pathModule.isAbsolute(outputPath)
+              || outputPath.startsWith(`${this.projectRoot}${this.pathModule.sep}`)) {
+            continue;
+          }
           lines[index] = lines[index].replace(
             match[0],
             `${match[0]}${this.projectRoot}${this.pathModule.sep}`,

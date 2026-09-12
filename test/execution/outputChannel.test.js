@@ -131,3 +131,29 @@ test("OutputChannel reports finish status", () => {
   assert.equal(resolved, true);
   assert.equal(channel.text, "Success: Tests passed.");
 });
+
+for (const platform of ["posix", "win32"]) {
+  for (const kind of ["specification", "implementation"]) {
+    test(`OutputChannel preserves external absolute ${platform} ${kind} paths`, () => {
+      const { OutputChannel } = require("../../src/execution/outputChannel");
+      const paths = path[platform];
+      const root = platform === "win32" ? "C:\\workspace\\project" : "/workspace/project";
+      const external = platform === "win32" ? "D:\\external\\steps.js:24:10" : "/external/steps.js:24:10";
+      const text = kind === "specification" ? `Specification: ${external}` : `at Object.<anonymous> (${external})`;
+      const channel = new MockOutputChannel();
+      new OutputChannel(channel, "", root, { pathModule: paths }).appendOutBuf(text + "\n");
+      assert.equal(channel.text, text);
+    });
+
+    test(`OutputChannel resolves ${platform} ${kind} filenames containing the project name`, () => {
+      const { OutputChannel } = require("../../src/execution/outputChannel");
+      const paths = path[platform];
+      const relative = paths.join("specs", "project-example.spec:19");
+      const prefix = kind === "specification" ? "Specification: " : "at Object.<anonymous> (";
+      const suffix = kind === "specification" ? "" : ")";
+      const channel = new MockOutputChannel();
+      new OutputChannel(channel, "", "project", { pathModule: paths }).appendOutBuf(prefix + relative + suffix + "\n");
+      assert.equal(channel.text, prefix + paths.join("project", relative) + suffix);
+    });
+  }
+}
