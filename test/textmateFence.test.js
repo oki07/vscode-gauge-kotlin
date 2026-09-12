@@ -176,3 +176,36 @@ for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"
     }
   });
 }
+
+// Real TextMate execution of getgauge/gauge-vscode
+// syntaxes/markdown.tmLanguage accepts arbitrary unknown fence information
+// except backticks and tildes, including spaces, punctuation and attributes.
+for (const filename of ["gauge.tmLanguage.json", "gauge-concept.tmLanguage.json"]) {
+  test(`${filename} accepts unknown fenced-code information strings`, async () => {
+    await ready;
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../syntaxes", filename), "utf8"));
+    const registry = new textmate.Registry({
+      onigLib: Promise.resolve(oniguruma),
+      loadGrammar: async (scope) => scope === raw.scopeName ? raw : null,
+    });
+    try {
+      const grammar = await registry.loadGrammar(raw.scopeName);
+      for (const info of ["unknown title=sample", "foo.bar", "language/c++", "{.demo #id}", "text with spaces", "custom+lang", "unknown\tflag", "unknown `hint`", "unknown ~hint"]) {
+        for (const fence of ["```", "````", "~~~", "~~~~"]) {
+          for (const indent of ["", "    "]) {
+            let state = grammar.tokenizeLine(indent + fence + info, textmate.INITIAL).ruleStack;
+            const body = grammar.tokenizeLine("* Inside <argument>", state);
+            const accepted = !/[`~]/.test(info);
+            assert.equal(body.tokens.some((token) => token.scopes.includes("markup.fenced_code.block.markdown.gauge")), accepted, info);
+            if (accepted) {
+              state = grammar.tokenizeLine(indent + fence, body.ruleStack).ruleStack;
+              assert.ok(grammar.tokenizeLine("* After <argument>", state).tokens.some((token) => token.scopes.includes("keyword.operator.step.gauge")));
+            }
+          }
+        }
+      }
+    } finally {
+      registry.dispose();
+    }
+  });
+}
