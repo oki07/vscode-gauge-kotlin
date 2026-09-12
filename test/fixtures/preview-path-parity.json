@@ -1,0 +1,65 @@
+[
+  {
+    "root": "/physical/project",
+    "file": "/physical/project/specs/example.spec",
+    "relative": "specs/example.spec",
+    "language": "gauge"
+  },
+  {
+    "root": "/alias/project",
+    "file": "/alias/project/specs/example.spec",
+    "relative": "specs/example.spec",
+    "language": "gauge"
+  },
+  {
+    "root": "/physical/project",
+    "file": "/alias/project/specs/example.spec",
+    "relative": "specs/example.spec",
+    "language": "gauge"
+  },
+  {
+    "root": "/alias/project",
+    "file": "/physical/project/specs/example.spec",
+    "relative": "specs/example.spec",
+    "language": "gauge"
+  },
+  {
+    "root": "/alias/project",
+    "file": "/alias/project/specs/space name.md",
+    "relative": "specs/space name.md",
+    "language": "gauge"
+  },
+  {
+    "root": "/alias/project",
+    "file": "/alias/project/concepts/greeting.cpt",
+    "relative": "concepts/greeting.cpt",
+    "language": "gauge-concept"
+  },
+  {
+    "root": "/alias/project",
+    "file": "/alias/project/-preview.spec",
+    "relative": "-preview.spec",
+    "language": "gauge"
+  },
+  {
+    "root": "/alias/project",
+    "file": "/alias/project/specs/concepts",
+    "relative": "specs/concepts",
+    "language": "gauge-concept",
+    "missingPage": true
+  },
+  {
+    "root": "/alias/project",
+    "file": "/alias/project/..linked.spec",
+    "relative": "..linked.spec",
+    "language": "gauge",
+    "target": "/external/actual.spec"
+  },
+  {
+    "root": "/physical/project",
+    "file": "/alias/project/specs/linked.spec",
+    "relative": "specs/linked.spec",
+    "language": "gauge",
+    "target": "/external/actual.spec"
+  }
+]

@@ -89,6 +89,8 @@ function createFakeVscode(overrides = {}) {
   };
 }
 
+// Gauge 1.6.35 / Spectacle 0.2.4 execution accepts dot-relative document paths
+// and keeps specification, Markdown, and concept pages under spectacle_out_dir.
 test("previewGaugeDocument creates Spectacle docs for the active Gauge document", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { opened, vscode } = createFakeVscode();
@@ -132,7 +134,7 @@ test("previewGaugeDocument creates Spectacle docs for the active Gauge document"
   ]);
   assert.deepEqual(spawns, [
     {
-      args: ["docs", "spectacle", "/workspace/gauge/specs/example.spec"],
+      args: ["docs", "spectacle", "./specs/example.spec"],
       options: {
         cwd: "/workspace/gauge",
         env: {
@@ -284,7 +286,7 @@ test("previewGaugeDocument passes project environment to Spectacle", async () =>
 
   assert.deepEqual(spawns, [
     {
-      args: ["docs", "spectacle", "/workspace/gauge/specs/example.spec"],
+      args: ["docs", "spectacle", "./specs/example.spec"],
       options: {
         cwd: "/workspace/gauge",
         env: {
@@ -344,7 +346,7 @@ test("previewGaugeDocument creates Spectacle docs for a Markdown Gauge spec", as
   assert.deepEqual(errors, []);
   assert.deepEqual(spawns, [
     {
-      args: ["docs", "spectacle", "/workspace/gauge/specs/example.md"],
+      args: ["docs", "spectacle", "./specs/example.md"],
       options: {
         cwd: "/workspace/gauge",
         env: {
@@ -403,7 +405,7 @@ test("previewGaugeDocument creates Spectacle docs for concept files by extension
   assert.deepEqual(errors, []);
   assert.deepEqual(spawns, [
     {
-      args: ["docs", "spectacle", "/workspace/gauge/specs/concepts.cpt"],
+      args: ["docs", "spectacle", "./specs/concepts.cpt"],
       options: {
         cwd: "/workspace/gauge",
         env: {
@@ -421,7 +423,9 @@ test("previewGaugeDocument creates Spectacle docs for concept files by extension
   ]);
 });
 
-test("previewGaugeDocument creates Spectacle docs for gauge-concept documents by language id", async () => {
+// Gauge 1.6.35 / Spectacle 0.2.4 emits an index but no page for an
+// extensionless concept input; the controller reports the absent output.
+test("previewGaugeDocument reports missing Spectacle output for extensionless concept documents", async () => {
   const { previewGaugeDocument } = require("../src/preview");
   const { errors, opened, vscode } = createFakeVscode({
     document: {
@@ -445,7 +449,7 @@ test("previewGaugeDocument creates Spectacle docs for gauge-concept documents by
   await previewGaugeDocument({
     cli,
     env: { PATH: "/bin" },
-    fileSystem: { mkdirSync() {} },
+    fileSystem: { mkdirSync() {}, existsSync: (file) => !file.endsWith("/html/specs/concepts.html") },
     pathModule: path.posix,
     projectFactory: {
       getGaugeRootFromFilePath(filename) {
@@ -459,10 +463,11 @@ test("previewGaugeDocument creates Spectacle docs for gauge-concept documents by
     vscode,
   });
 
-  assert.deepEqual(errors, []);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /Spectacle did not produce/);
   assert.deepEqual(spawns, [
     {
-      args: ["docs", "spectacle", "/workspace/gauge/specs/concepts"],
+      args: ["docs", "spectacle", "./specs/concepts"],
       options: {
         cwd: "/workspace/gauge",
         env: {
@@ -472,12 +477,7 @@ test("previewGaugeDocument creates Spectacle docs for gauge-concept documents by
       },
     },
   ]);
-  assert.deepEqual(opened, [
-    {
-      fsPath: "/tmp/gauge-preview/docs/html/specs/concepts.html",
-      scheme: "file",
-    },
-  ]);
+  assert.deepEqual(opened, []);
 });
 
 test("previewGaugeDocument ignores Markdown when the resolved root is not a Gauge project", async () => {
@@ -886,7 +886,7 @@ test("previewGaugeDocument uses the post-install version manifest on the next pr
 
   assert.deepEqual(spawns.map((entry) => entry.args), [
     ["install", "spectacle"],
-    ["docs", "spectacle", "/workspace/gauge/specs/example.spec"],
+    ["docs", "spectacle", "./specs/example.spec"],
   ]);
   assert.equal(errorPrompts.length, 1);
   assert.equal(writes.length, 0);
@@ -1779,4 +1779,31 @@ test("previewGaugeDocument reports an HTML file Spectacle did not produce", asyn
     "Unable to preview example.spec. Spectacle did not produce"
     + " /tmp/gauge-preview/docs/html/specs/example.html.",
   ]);
+});
+
+// Gauge 1.6.35 / Spectacle 0.2.4 execution places pages inside the configured
+// output tree for dot-relative inputs, including Markdown and concept files.
+test("preview paths agree across physical and aliased project documents", async () => {
+  const { previewGaugeDocument } = require("../src/preview");
+  for (const entry of require("./fixtures/preview-path-parity.json")) {
+    const { opened, errors, vscode } = createFakeVscode({ document: {
+      languageId: entry.language, fileName: entry.file, uri: { fsPath: entry.file },
+    } });
+    const spawns = [];
+    await previewGaugeDocument({
+      vscode, pathModule: path.posix,
+      fileSystem: { mkdirSync() {}, existsSync: (file) => !entry.missingPage || !file.endsWith(".html"),
+        realpathSync: (file) => entry.target && file === entry.file ? entry.target : file.replace(/^\/alias\//, "/physical/") },
+      cli: { gaugeCommand: () => ({ spawn(args, options) {
+        spawns.push({ args, cwd: options.cwd });
+        return createChildProcess();
+      } }) },
+      projectFactory: { getGaugeRootFromFilePath: () => entry.root },
+      tempDirProvider: () => "/preview",
+    });
+    assert.equal(errors.length, entry.missingPage ? 1 : 0, JSON.stringify(entry));
+    if (entry.missingPage) assert.match(errors[0], /Spectacle did not produce/);
+    assert.deepEqual(spawns, [{ args: ["docs", "spectacle", `./${entry.relative}`], cwd: entry.root }]);
+    assert.deepEqual(opened.map((uri) => uri.fsPath), entry.missingPage ? [] : [path.posix.join("/preview/docs/html", entry.relative.replace(/\.[^.]+$/, ".html"))]);
+  }
 });

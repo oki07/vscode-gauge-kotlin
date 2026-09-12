@@ -1,6 +1,7 @@
 "use strict";
 
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 
 const nodeFs = require("node:fs");
 const nodeOs = require("node:os");
@@ -387,13 +388,25 @@ function previewFailureMessage(pathModule, filePath, result) {
   return reason ? `${base}. ${reason}` : base;
 }
 
-function htmlPathFor(pathModule, projectRoot, docsDir, filePath) {
-  const relativeParent = pathModule.relative(projectRoot, pathModule.dirname(filePath));
-  const htmlDir = relativeParent && relativeParent !== "."
-    ? pathModule.join(docsDir, "html", relativeParent)
-    : pathModule.join(docsDir, "html");
-  const htmlName = `${pathModule.basename(filePath, pathModule.extname(filePath))}.html`;
-  return pathModule.join(htmlDir, htmlName);
+// Gauge 1.6.35 / Spectacle 0.2.4 derives output paths from the input and cwd.
+// Preserve in-project links while reconciling mixed directory aliases.
+function previewRelativePath(pathModule, fileSystem, root, file) {
+  const physicalRoot = canonicalFilePath(root, fileSystem, pathModule);
+  let parent = pathModule.dirname(file);
+  while (canonicalFilePath(parent, fileSystem, pathModule) !== physicalRoot) {
+    const next = pathModule.dirname(parent);
+    if (next === parent) {
+      parent = root;
+      break;
+    }
+    parent = next;
+  }
+  return pathModule.relative(parent, file);
+}
+
+function htmlPathFor(pathModule, docsDir, relativeFile) {
+  return pathModule.join(docsDir, "html",
+    relativeFile.slice(0, relativeFile.length - pathModule.extname(relativeFile).length) + ".html");
 }
 
 function openHtml(vscode, filename) {
@@ -601,11 +614,15 @@ class GaugePreviewController {
       return DISPOSED_PREVIEW;
     }
 
+    const relativeFile = this.callSyncForOperation(operation, () =>
+      previewRelativePath(this.pathModule, this.fileSystem, projectRoot, filePath));
+    if (relativeFile === DISPOSED_PREVIEW) return DISPOSED_PREVIEW;
+
     const result = await this.awaitOperation(
       operation,
       waitForProcess(
         command,
-        [...GAUGE_DOCS_ARGS, filePath],
+        [...GAUGE_DOCS_ARGS, "." + this.pathModule.sep + relativeFile],
         {
           cwd: projectRoot,
           env: {
@@ -627,7 +644,7 @@ class GaugePreviewController {
       );
     }
 
-    const htmlPath = htmlPathFor(this.pathModule, projectRoot, docsDir, filePath);
+    const htmlPath = htmlPathFor(this.pathModule, docsDir, relativeFile);
     // Spectacle can exit zero and still not produce the file computed here: the
     // plugin decides its own output layout and spectacle_out_dir only names the
     // root. Opening a path that is not there does nothing and says nothing.
