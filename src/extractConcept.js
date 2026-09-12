@@ -1,6 +1,7 @@
 "use strict";
 
 const { isMarkdownGaugeSpecFile } = require("./gaugeSpecScope");
+const { canonicalFilePath } = require("./gaugeExecutionIdentifier");
 const {
   isGaugeTableRowLine,
   isLegacyHeadingText: hasLegacyHeadingText,
@@ -1251,6 +1252,22 @@ class ExtractConceptCommandProvider {
     };
   }
 
+  async conceptDocumentsForFile(operation, file) {
+    const documents = this.callSyncForOperation(operation, () => {
+      const identity = canonicalFilePath(file, this.fileSystem, this.pathModule);
+      return (this.vscode.workspace.textDocuments || []).filter((document) => (
+        (!document.uri || !document.uri.scheme || document.uri.scheme === "file")
+        && canonicalFilePath(documentPath(document), this.fileSystem, this.pathModule) === identity
+      ));
+    });
+    if (documents === DISPOSED_OPERATION || documents.length) return documents;
+    const document = await this.callForOperation(
+      operation,
+      () => this.vscode.workspace.openTextDocument(createUri(this.vscode, file)),
+    );
+    return document === DISPOSED_OPERATION ? document : [document];
+  }
+
   async ensureConceptNameAvailable(operation, conceptName, conceptFiles, writtenHeading) {
     const wanted = this.callSyncForOperation(
       operation,
@@ -1262,22 +1279,21 @@ class ExtractConceptCommandProvider {
       return DISPOSED_OPERATION;
     }
     for (const file of conceptFiles) {
-      const document = await this.callForOperation(
-        operation,
-        () => this.vscode.workspace.openTextDocument(createUri(this.vscode, file)),
-      );
-      if (document === DISPOSED_OPERATION) {
+      const documents = await this.conceptDocumentsForFile(operation, file);
+      if (documents === DISPOSED_OPERATION) {
         return DISPOSED_OPERATION;
       }
-      const text = this.callSyncForOperation(
-        operation,
-        () => (typeof document.getText === "function" ? document.getText() : ""),
-      );
-      if (text === DISPOSED_OPERATION) {
-        return DISPOSED_OPERATION;
-      }
-      if (extractConceptHeadings(text).includes(wanted)) {
-        throw new Error(`Concept \`${conceptName}\` already present`);
+      for (const document of documents) {
+        const text = this.callSyncForOperation(
+          operation,
+          () => (typeof document.getText === "function" ? document.getText() : ""),
+        );
+        if (text === DISPOSED_OPERATION) {
+          return DISPOSED_OPERATION;
+        }
+        if (extractConceptHeadings(text).includes(wanted)) {
+          throw new Error(`Concept \`${conceptName}\` already present`);
+        }
       }
     }
     return undefined;
@@ -1351,24 +1367,23 @@ class ExtractConceptCommandProvider {
       return edit;
     }
 
-    const conceptDocument = await this.callForOperation(
-      operation,
-      () => this.vscode.workspace.openTextDocument(conceptUri),
-    );
-    if (conceptDocument === DISPOSED_OPERATION) {
+    const conceptDocuments = await this.conceptDocumentsForFile(operation, conceptFile.path);
+    if (conceptDocuments === DISPOSED_OPERATION) {
       return DISPOSED_OPERATION;
     }
     const conceptPrepared = this.callSyncForOperation(
       operation,
       () => {
-        const existingText = typeof conceptDocument.getText === "function"
-          ? conceptDocument.getText()
-          : "";
-        edit.replace(
-          conceptUri,
-          documentEndRange(this.vscode, conceptDocument),
-          appendConcept(existingText, conceptDefinition, detectEol(existingText || sourceText)),
-        );
+        for (const conceptDocument of conceptDocuments) {
+          const existingText = typeof conceptDocument.getText === "function"
+            ? conceptDocument.getText()
+            : "";
+          edit.replace(
+            conceptDocument.uri,
+            documentEndRange(this.vscode, conceptDocument),
+            appendConcept(existingText, conceptDefinition, detectEol(existingText || sourceText)),
+          );
+        }
       },
     );
     if (conceptPrepared === DISPOSED_OPERATION) {

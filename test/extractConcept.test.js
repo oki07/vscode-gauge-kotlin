@@ -3008,3 +3008,48 @@ test("ExtractConceptCommandProvider cancels concurrent operations exactly once o
     ],
   });
 });
+
+// VS Code 1.137.0 exposes separate TextDocuments for /tmp and /private/tmp
+// aliases; Gauge 1.6.35 returns the physical concept path from getImplFiles.
+for (const mode of ["alias", "physical", "both", "dirty-duplicate"]) {
+  test(`concept extraction uses open destination documents: ${mode}`, async () => {
+    const { ExtractConceptCommandProvider } = require("../src/extractConcept");
+    const physical = "/workspace/gauge/specs/concepts.cpt";
+    const alias = "/alias/gauge/specs/concepts.cpt";
+    const document = createDocument("# Spec\n\n## Scenario\n* Login\n");
+    const openPaths = mode === "both" ? [alias, physical] : [mode === "physical" ? physical : alias];
+    const openDocuments = openPaths.map(file => ({
+      ...createDocument(mode === "dirty-duplicate" ? "# Shared login\n* Unsaved\n" : "# Unsaved helper\n* Preserve me\n", file, "gauge-concept"),
+      isDirty: true,
+    }));
+    const fake = createFakeVscode({
+      document,
+      conceptDocuments: { [physical]: "# Disk helper\n* Old content\n" },
+      inputResponses: ["Shared login"],
+      quickPickSelection: { label: "concepts.cpt", value: physical },
+      selection: { start: { line: 3, character: 0 }, end: { line: 4, character: 0 } },
+    });
+    fake.vscode.workspace.textDocuments = [document, ...openDocuments];
+    const opened = [];
+    const open = fake.vscode.workspace.openTextDocument;
+    fake.vscode.workspace.openTextDocument = uri => { opened.push(uri.fsPath); return open(uri); };
+    new ExtractConceptCommandProvider(createClients([]), {
+      vscode: fake.vscode, pathModule: path.posix,
+      fileSystem: { realpathSync: file => file.replace(/^\/alias\//, "/workspace/") },
+    });
+    await fake.commands[0].handler();
+    if (mode === "dirty-duplicate") {
+      assert.deepEqual(fake.errors, ["Concept `Shared login` already present"]);
+      assert.equal(fake.appliedEdits.length, 0);
+    } else {
+      assert.deepEqual(fake.errors, []);
+      const edits = fake.appliedEdits[0].replacements.filter(edit => edit.uri.fsPath !== document.uri.fsPath);
+      assert.deepEqual(edits.map(edit => edit.uri.fsPath).sort(), [...openPaths].sort());
+      for (const edit of edits) {
+        assert.ok(edit.newText.startsWith("# Unsaved helper\n* Preserve me\n"));
+        assert.ok(edit.newText.includes("# Shared login\n* Login\n"));
+      }
+    }
+    assert.deepEqual(opened, [], "Reuse open buffers during validation and editing");
+  });
+}

@@ -11,7 +11,7 @@ const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 const outputPath = join(tmpdir(), "vscode-gauge-kotlin-0.0.1.vsix");
 const MAX_VSIX_FILES = 80;
 const MAX_VSIX_BYTES = 1_000_000;
-const MAX_BUNDLE_BYTES = 1_010_000;
+const MAX_BUNDLE_BYTES = 1_011_000;
 const MAX_JAVASCRIPT_FILES = 2;
 
 function run(command, args) {
