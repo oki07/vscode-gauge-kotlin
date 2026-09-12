@@ -24,6 +24,12 @@ First release.
   `@Step` functions, across open and unopened workspace files.
 - A quick fix that writes a missing Kotlin step implementation directly, because
   the Gauge Java runner's stub writer parses its target with a Java parser.
+- Definition navigation and completion for compiled `@Step` methods in
+  dependency JARs and imported class/archive directories, with read-only
+  dependency declarations. Imported module/library scope and exclusions filter
+  candidates; binary changes refresh definitions and diagnostics.
+- Cooperation with Kotlin by JetBrains through its exported workspace model,
+  including source roots outside the workspace and shared dependency consumers.
 - Unreferenced `@Step` functions and unreferenced concepts are faded.
 - Step text resolution through aliases, `typealias` chains, `const val`
   declarations, wildcard imports and Gauge multi-line arguments.

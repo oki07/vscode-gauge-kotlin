@@ -131,8 +131,11 @@ both are bundled with this extension; any Kotlin template you register with
   SWC, APK, EGG, ANE, and KLIB files directly or recursively according to the
   imported option; loose classes
   belong to ordinary class-directory roots. Discovery directories are watched
-  for new and removed archives. Ambiguous library names and unsupported macros
-  retain available execution-classpath candidates. Library exclusions remove
+  for new and removed archives. Library names are resolved against project
+  libraries and libraries owned by the referring module. When both tables
+  contain an eligible library with the same name, the exported dependency
+  cannot identify which one it refers to. Such ambiguities and unsupported
+  macros retain available execution-classpath candidates. Library exclusions remove
   whole library roots, individual classes, or package subtrees from step candidates.
   Shared binary roots contribute the union of each eligible library's unexcluded classes,
   following Gauge annotation-search scope; ordinary Kotlin type navigation can
