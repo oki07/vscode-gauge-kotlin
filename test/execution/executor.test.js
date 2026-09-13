@@ -3556,6 +3556,76 @@ test("executor cancels a multi-project execution once when disposed", async () =
   });
 });
 
+for (const action of ["stop", "supersede"]) {
+  test(`executor suppresses remaining Explorer projects after ${action}`, async () => {
+    const { createGaugeExecutionController } = require("../../src/execution/executor");
+    const entered = deferred();
+    const completed = deferred();
+    const calls = [];
+    let cancellations = 0;
+    const roots = ["/workspace/checkout", "/workspace/accounts", "/workspace/newest"];
+    const { vscode } = createFakeVscode({
+      workspaceFolders: roots.map((root) => ({ uri: { fsPath: root } })),
+    });
+    const controller = createGaugeExecutionController({
+      vscode,
+      pathModule: path.posix,
+      fileSystem: {
+        existsSync(filename) {
+          return filename.endsWith(".spec") || filename.endsWith("manifest.json");
+        },
+      },
+      projectFactory: {
+        get(root) {
+          return { root: () => root };
+        },
+        getGaugeRootFromFilePath(filename) {
+          return roots.find((root) => filename.startsWith(`${root}/`));
+        },
+        isGaugeProject(root) {
+          return roots.includes(root);
+        },
+      },
+      runner(command) {
+        calls.push(command.cwd);
+        if (calls.length !== 1) {
+          return Promise.resolve(true);
+        }
+        entered.resolve();
+        completed.promise.cancel = () => {
+          cancellations += 1;
+        };
+        return completed.promise;
+      },
+    });
+    try {
+      const selection = roots.slice(0, 2).map((root) => ({ fsPath: `${root}/specs/example.spec` }));
+      const batch = controller.handleCommand("gauge.execute.specification", selection[0], selection);
+      await entered.promise;
+      let newest;
+      if (action === "stop") {
+        await controller.handleCommand("gauge.stopExecution");
+      } else {
+        newest = controller.handleCommand("gauge.execute", `${roots[2]}/specs/example.spec`);
+      }
+      assert.equal(cancellations, 1);
+      assert.deepEqual(calls, [roots[0]]);
+      completed.resolve(false);
+      await batch;
+      if (newest) {
+        assert.equal(await newest, true);
+      } else {
+        assert.equal(await controller.handleCommand("gauge.execute", `${roots[2]}/specs/example.spec`), true);
+      }
+      assert.deepEqual(calls, [roots[0], roots[2]]);
+      assert.equal(cancellations, 1);
+    } finally {
+      completed.resolve(false);
+      controller.dispose();
+    }
+  });
+}
+
 test("executor cancels a scenario request that resolves after disposal", async () => {
   const { createGaugeExecutionController } = require("../../src/execution/executor");
   const scenarioRequestEntered = deferred();
