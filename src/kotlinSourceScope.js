@@ -11,9 +11,22 @@ function inside(file, root, pathModule = path) {
   return file === root || file.startsWith(root.endsWith(pathModule.sep) ? root : `${root}${pathModule.sep}`);
 }
 
-function exportedPath(value, directory) {
+function expandExportedPath(value, macros) {
+  return value.replace(/^<(WORKSPACE|HOME|MAVEN_REPO)>(?=\/|$)/,
+    (prefix, name) => macros[name] || prefix);
+}
+
+function snapshotMacros(value) {
+  const names = ["WORKSPACE", "HOME", "MAVEN_REPO"];
+  if (!value || !names.every((name) => typeof value[name] === "string" && path.isAbsolute(value[name]))) {
+    throw new Error("Invalid Kotlin export path context.");
+  }
+  return Object.fromEntries(names.map((name) => [name, value[name]]));
+}
+
+function exportedPath(value, macros) {
   if (typeof value !== "string") throw new Error("Invalid Kotlin source path.");
-  const expanded = value.replace(/^<WORKSPACE>(?=\/|$)/, directory);
+  const expanded = expandExportedPath(value, macros);
   if (!path.isAbsolute(expanded)) throw new Error("Unsupported Kotlin source path.");
   return canonicalFilePath(expanded);
 }
@@ -71,7 +84,7 @@ function ownsContext(module, root) {
   return module.contents.some((content) => inside(content.root, root));
 }
 
-function modulesFrom(model, directory) {
+function modulesFrom(model, macros) {
   if (!Array.isArray(model?.modules)) throw new Error("Invalid Kotlin workspace model.");
   return model.modules.map((module, index) => {
     const contentRoots = module.contentRoots === undefined ? [] : module.contentRoots;
@@ -84,12 +97,12 @@ function modulesFrom(model, directory) {
       if (!Array.isArray(patterns) || !patterns.every((entry) => typeof entry === "string")
         || !Array.isArray(excluded)) throw new Error("Invalid Kotlin source exclusions.");
       return {
-        root: exportedPath(content.path, directory),
+        root: exportedPath(content.path, macros),
         patterns,
-        excluded: excluded.map((entry) => exportedPath(entry, directory)),
+        excluded: excluded.map((entry) => exportedPath(entry, macros)),
         sources: sourceRoots.map((source) => {
           if (!SOURCE_TYPES.has(source.type)) throw new Error("Unsupported Kotlin source root type.");
-          return { root: exportedPath(source.path, directory), resource: source.type.includes("resource") };
+          return { root: exportedPath(source.path, macros), resource: source.type.includes("resource") };
         }),
       };
     });
@@ -286,19 +299,40 @@ class KotlinSourceScope {
       if (this.disposed || !commands.includes("exportWorkspace")) return;
       directory = await fs.mkdtemp(path.join(os.tmpdir(), "gauge-kotlin-model-"));
       if (this.disposed) return;
-      await this.vscode.commands.executeCommand("exportWorkspace", directory);
+      const version = extension.packageJSON?.version;
+      if (this.exportVersion !== version) {
+        this.exportVersion = version;
+        this.legacyExport = false;
+      }
+      let response;
+      if (!this.legacyExport) {
+        try {
+          response = await this.vscode.commands.executeCommand("exportWorkspace", directory, { format: "snapshot" });
+        } catch (error) {
+          if (this.disposed) return;
+          if (error.code !== -32602) throw error;
+          this.legacyExport = true;
+          await this.vscode.commands.executeCommand("exportWorkspace", directory);
+        }
+      } else {
+        await this.vscode.commands.executeCommand("exportWorkspace", directory);
+      }
       if (this.disposed) return;
-      const model = JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8"));
-      const modules = modulesFrom(model, directory);
+      const macros = response == null ? { WORKSPACE: directory } : snapshotMacros(response.pathMacros);
+      const model = response == null
+        ? JSON.parse(await fs.readFile(path.join(directory, "workspace.json"), "utf8"))
+        : response.workspace;
+      if (response == null) this.legacyExport = true;
+      const modules = modulesFrom(model, macros);
       const libraryPath = (value) => {
         if (typeof value !== "string") throw new Error("Invalid Kotlin library path.");
-        try { return exportedPath(value, directory); } catch (_error) { return value; }
+        try { return exportedPath(value, macros); } catch (_error) { return value; }
       };
       const libraries = (model.libraries || []).map((library) => ({ ...library,
         roots: library.roots.map((entry) => ({ ...entry, path: libraryPath(entry.path) })),
         excludedRoots: (library.excludedRoots || []).map((value) => {
           if (typeof value !== "string") throw new Error("Invalid Kotlin library exclusion.");
-          const expanded = value.replace(/^<WORKSPACE>(?=\/|$)/, directory);
+          const expanded = expandExportedPath(value, macros);
           return path.isAbsolute(expanded) ? path.resolve(expanded) : value;
         }),
       }));

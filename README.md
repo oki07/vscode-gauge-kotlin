@@ -135,9 +135,12 @@ both are bundled with this extension; any Kotlin template you register with
   graph also scopes compiled step candidates to eligible library dependencies and
   adds absolute JAR or compiled-class directory roots missing from the execution
   classpath. Imported class directories are searched recursively; source files
-  and oversized or malformed class files do not contribute binary steps. Maven/HOME
-  macro paths are matched to supplied classpath entries; their base directories
-  are not guessed. Archive-directory library roots discover JAR, ZIP, WAR, EAR,
+  and oversized or malformed class files do not contribute binary steps. Servers
+  that return snapshot path context supply authoritative bases for source,
+  library and exclusion paths. Kotlin server 0.0.12 lacks that interface, so its
+  Maven/HOME library paths are matched only to supplied classpath entries and
+  its HOME source-root limitation remains. Base directories are not guessed.
+  Archive-directory library roots discover JAR, ZIP, WAR, EAR,
   SWC, APK, EGG, ANE, and KLIB files directly or recursively according to the
   imported option; loose classes
   belong to ordinary class-directory roots. Discovery directories are watched

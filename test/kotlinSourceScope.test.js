@@ -259,3 +259,151 @@ test("archive discovery macros use supplied archive parents and preserve depth",
     assert.deepEqual(scope.archiveDirectoryRoots(root, [top, nested]), []);
   } finally { scope.dispose(); }
 });
+
+function snapshotFixture() {
+  const state = {
+    calls: [], version: "snapshot-server", error: undefined,
+    response: {
+      pathMacros: { WORKSPACE: "/server-home/project", HOME: "/server-home", MAVEN_REPO: "/custom-repository" },
+      workspace: {
+        modules: [{ name: "project", contentRoots: [{ path: "<HOME>/project",
+          sourceRoots: [{ path: "<WORKSPACE>/src", type: "java-test" }],
+          excludedUrls: ["<HOME>/project/src/generated"],
+        }], dependencies: [{ type: "module", name: "dependency", scope: "compile" },
+          { type: "library", name: "steps", scope: "compile" }] },
+        { name: "dependency", contentRoots: [{ path: "<HOME>/dependency",
+          sourceRoots: [{ path: "<HOME>/dependency/src", type: "java-source" }],
+        }] }],
+        libraries: [{ name: "steps", roots: [{ path: "<MAVEN_REPO>/group/steps.jar" },
+          { path: "<HOME>/archives", inclusionOptions: "archives_under_root_recursively" }],
+        excludedRoots: ["<MAVEN_REPO>/group/steps.jar!/hidden", "<HOME>/archives/skip.jar!"] }],
+      },
+    },
+  };
+  const scope = new KotlinSourceScope({ vscode: {
+    extensions: { getExtension: () => ({ isActive: true, packageJSON: { version: state.version } }) },
+    commands: {
+      getCommands: async () => ["exportWorkspace"],
+      async executeCommand(command, directory, options) {
+        assert.equal(command, "exportWorkspace");
+        state.calls.push({ directory, options });
+        if (state.error) throw state.error;
+        return state.response;
+      },
+    },
+  } });
+  return { state, scope };
+}
+
+test("Kotlin snapshot path context resolves source, dependency, library and exclusion roots", async () => {
+  // JetBrains/kotlin-lsp workspace-import/src/com/jetbrains/ls/imports/json/conversion.kt
+  // uses cached bases for exported paths. Snapshot context supplies those same bases.
+  const { state, scope } = snapshotFixture();
+  try {
+    await scope.refresh();
+    assert.deepEqual(state.calls[0].options, { format: "snapshot" });
+    assert.deepEqual(scope.moduleRoots(), ["/server-home/project", "/server-home/dependency"]);
+    assert.equal(scope.allows("/server-home/project/src/Steps.kt", "/server-home/project"), true);
+    assert.equal(scope.allows("/server-home/project/src/generated/Steps.kt", "/server-home/project"), false);
+    assert.equal(scope.allows("/server-home/project/notes/Steps.kt", "/server-home/project"), false);
+    assert.equal(scope.allows("/server-home/dependency/src/Steps.kt", "/server-home/project"), true);
+    assert.deepEqual(scope.libraryClasspath("/server-home/project", []), ["/custom-repository/group/steps.jar"]);
+    assert.deepEqual(scope.archiveDirectoryRoots("/server-home/project", []), [{ path: "/server-home/archives", recursive: true }]);
+    assert.equal(scope.libraryClassFilter("/server-home/project", "/custom-repository/group/steps.jar")("hidden/Steps.class"), false);
+    assert.equal(scope.libraryClassFilter("/server-home/project", "/custom-repository/group/steps.jar")("kept/Steps.class"), true);
+    assert.equal(scope.libraryClassFilter("/server-home/project", "/server-home/archives/skip.jar")("Steps.class"), false);
+    for (const call of state.calls) await assert.rejects(fs.stat(call.directory), { code: "ENOENT" });
+  } finally { scope.dispose(); }
+});
+
+test("Kotlin snapshot negotiation falls back for unsupported arguments and retries after extension changes", async () => {
+  const { state, scope } = snapshotFixture();
+  const snapshot = scope.vscode.commands.executeCommand;
+  scope.vscode.commands.executeCommand = async (command, directory, options) => {
+    if (state.version === "legacy-server") {
+      state.calls.push({ directory, options });
+      if (options) throw Object.assign(new Error("Expected 1 argument, got: 2"), { code: -32602 });
+      await fs.writeFile(path.join(directory, "workspace.json"), JSON.stringify(model()));
+      return null;
+    }
+    return snapshot(command, directory, options);
+  };
+  try {
+    state.version = "legacy-server";
+    await scope.refresh();
+    assert.equal(scope.allows("/workspace/gauge/src/Steps.kt"), true);
+    await scope.refresh();
+    assert.deepEqual(state.calls.map(call => call.options), [{ format: "snapshot" }, undefined, undefined]);
+    state.version = "snapshot-server";
+    await scope.refresh();
+    assert.equal(scope.allows("/server-home/project/src/Steps.kt"), true);
+    assert.deepEqual(state.calls.at(-1).options, { format: "snapshot" });
+  } finally { scope.dispose(); }
+});
+
+test("Kotlin snapshot context rejects malformed bases and retains the last valid model", async () => {
+  const { state, scope } = snapshotFixture();
+  const valid = structuredClone(state.response);
+  let changes = 0;
+  scope.onDidChange(() => { changes += 1; });
+  try {
+    await scope.refresh();
+    assert.equal(changes, 1);
+    for (const macros of [null, {}, { ...valid.pathMacros, HOME: "relative" }, { ...valid.pathMacros, MAVEN_REPO: 1 }]) {
+      state.response = { workspace: { modules: [] }, pathMacros: macros };
+      await scope.refresh();
+      assert.equal(changes, 1);
+      assert.equal(scope.allows("/server-home/project/src/Steps.kt"), true);
+    }
+    state.response = valid;
+    state.response.pathMacros.HOME = "/different-home";
+    state.response.pathMacros.WORKSPACE = "/different-home/project";
+    await scope.refresh();
+    assert.equal(changes, 2);
+    assert.equal(scope.allows("/different-home/project/src/Steps.kt"), true);
+    assert.equal(scope.allows("/server-home/project/src/Steps.kt"), undefined);
+    assert.ok(state.calls.every(call => call.options?.format === "snapshot"));
+  } finally { scope.dispose(); }
+});
+
+test("Kotlin snapshot transient failures do not trigger legacy exports", async () => {
+  const { state, scope } = snapshotFixture();
+  try {
+    await scope.refresh();
+    state.error = Object.assign(new Error("Import unavailable"), { code: -32000 });
+    await scope.refresh();
+    assert.equal(scope.allows("/server-home/project/src/Steps.kt"), true);
+    state.error = undefined;
+    await scope.refresh();
+    assert.equal(state.calls.length, 3);
+    assert.ok(state.calls.every(call => call.options?.format === "snapshot"));
+  } finally { scope.dispose(); }
+});
+
+test("Kotlin snapshot disposal prevents a rejected capability probe from exporting again", async () => {
+  const { state, scope } = snapshotFixture();
+  scope.vscode.commands.executeCommand = async (command, directory, options) => {
+    state.calls.push({ directory, options });
+    scope.dispose();
+    throw Object.assign(new Error("Expected 1 argument"), { code: -32602 });
+  };
+  await scope.refresh();
+  assert.equal(state.calls.length, 1);
+  assert.deepEqual(state.calls[0].options, { format: "snapshot" });
+  assert.deepEqual(scope.moduleRoots(), []);
+  await assert.rejects(fs.stat(state.calls[0].directory), { code: "ENOENT" });
+});
+
+test("Kotlin snapshot bases preserve literal replacement characters and macro boundaries", async () => {
+  const { state, scope } = snapshotFixture();
+  state.response.pathMacros.HOME = "/server-$&-home";
+  state.response.pathMacros.WORKSPACE = "/server-$&-home/project";
+  try {
+    await scope.refresh();
+    assert.equal(scope.allows("/server-$&-home/project/src/Steps.kt"), true);
+    state.response.workspace.modules[0].contentRoots[0].path = "<HOME_OTHER>/project";
+    await scope.refresh();
+    assert.equal(scope.allows("/server-$&-home/project/src/Steps.kt"), true);
+    assert.equal(scope.allows("/project/src/Steps.kt"), undefined);
+  } finally { scope.dispose(); }
+});

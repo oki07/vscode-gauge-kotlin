@@ -563,3 +563,100 @@ test("multiple content roots agree across module consumers and reverse reference
     }
   } finally { for (const value of [rename, lenses, references, definition, index, store, scope]) value.dispose(); }
 });
+
+test("server path context agrees across imported source consumers", async () => {
+  // JetBrains/kotlin-lsp workspace-import/src/com/jetbrains/ls/imports/json/conversion.kt
+  // serializes model paths using shared bases. All imported-source consumers
+  // resolve external roots, exclusions and dependencies with the supplied bases.
+  const { KotlinSourceScope } = require("../src/kotlinSourceScope");
+  const { WorkspaceDocumentStore } = require("../src/workspaceDocumentStore");
+  const { WorkspaceStepIndex } = require("../src/workspaceStepIndex");
+  const { ReferenceProvider } = require("../src/gaugeReference");
+  const { GaugeClients } = require("../src/gaugeClients");
+  const spec = createDocument("# Context\n\n## Example\n\n* linked\n* dependency\n* excluded\n* notes", "gauge", SPEC_PATH);
+  const sources = [
+    ["linked", "/server-home/shared/src/Steps.kt", true],
+    ["dependency", "/custom-repo/module/src/Steps.kt", true],
+    ["excluded", "/server-home/shared/src/excluded/Steps.kt", false],
+    ["notes", "/server-home/shared/notes/Steps.kt", false],
+  ].map(([name, file, allowed]) => ({ name, allowed, document: createDocument(kotlinSource(name), "kotlin", file) }));
+  const documents = [spec, ...sources.map(source => source.document)];
+  for (const document of documents) document.uri.scheme = "file";
+  const vscode = createFakeVscode([spec]);
+  let opened;
+  vscode.workspace.onDidOpenTextDocument = listener => { opened = listener; return { dispose() {} }; };
+  vscode.Uri.parse = value => vscode.Uri.file(require("node:url").fileURLToPath(value));
+  const content = root => ({ path: root, sourceRoots: [{ path: `${root}/src`, type: "java-test" }] });
+  const model = { modules: [
+    { name: "gauge", contentRoots: [content("<WORKSPACE>"), {
+      ...content("<HOME>/shared"), excludedUrls: ["<HOME>/shared/src/excluded"],
+    }], dependencies: [{ type: "module", name: "dependency", scope: "test" }] },
+    { name: "dependency", contentRoots: [content("<MAVEN_REPO>/module")], dependencies: [] },
+  ] };
+  const requests = [];
+  vscode.extensions = { getExtension: () => ({ isActive: true }) };
+  vscode.commands = {
+    registerCommand: () => ({ dispose() {} }),
+    getCommands: async () => ["exportWorkspace"],
+    executeCommand: async (...args) => {
+      requests.push(args);
+      return { workspace: model, pathMacros: { WORKSPACE: "/workspace/gauge", HOME: "/server-home", MAVEN_REPO: "/custom-repo" } };
+    },
+  };
+  vscode.languages.registerReferenceProvider = () => ({ dispose() {} });
+  vscode.RelativePattern = class { constructor(base, pattern) { this.base = typeof base === "string" ? base : base.fsPath; this.pattern = pattern; } };
+  vscode.workspace.findFiles = async pattern => documents.filter(document => typeof pattern === "string"
+    ? document.uri.fsPath.startsWith("/workspace/") : document.uri.fsPath.startsWith(`${pattern.base}/`)).map(document => document.uri);
+  const projectFactory = createProjectFactory();
+  const fileSystem = { promises: { readFile: async file => documents.find(document => document.uri.fsPath === file).getText() } };
+  const scope = new KotlinSourceScope({ vscode });
+  await scope.refresh();
+  assert.deepEqual(scope.moduleRoots().sort(), ["/custom-repo/module", "/server-home/shared", "/workspace/gauge"]);
+  for (const source of sources) assert.equal(scope.allows(source.document.uri.fsPath, "/workspace/gauge"), source.allowed, source.name);
+  const store = new WorkspaceDocumentStore({ vscode, sourceScope: scope, projectFactory, fileSystem });
+  await store.start();
+  const options = { vscode, documentStore: store, projectFactory, fileSystem };
+  const diagnostics = new GaugeStepDiagnosticsProvider(options);
+  const index = new WorkspaceStepIndex({ ...options, diagnosticsProvider: diagnostics });
+  index.start();
+  options.workspaceStepIndex = index;
+  const definition = new GaugeStepDefinitionProvider(options);
+  const references = new ReferenceProvider(new GaugeClients(), options);
+  const lenses = new GaugeCodeLensProvider(options);
+  const rename = new GaugeRenameProvider(options);
+  try {
+    for (const open of [false, true]) {
+      vscode.workspace.textDocuments = open ? documents : [spec];
+      if (open) for (const source of sources) opened(source.document);
+      const messages = diagnostics.provideDiagnostics(spec, store.documents());
+      for (const [offset, source] of sources.entries()) {
+        const targets = await definition.provideDefinition(spec, { line: 4 + offset, character: 3 });
+        const refs = await references.provideReferences(source.document, { line: 5, character: 12 });
+        const codeLenses = await lenses.provideCodeLenses(source.document);
+        const edits = await rename.provideRenameEdits(source.document, { line: 5, character: 12 }, `${source.name} renamed`);
+        assert.deepEqual({
+          indexed: (await index.definitionEntries(spec, [source.name])).length,
+          definitions: (targets || []).map(entry => entry.uri.fsPath),
+          undefinedStep: messages.some(entry => entry.message === "Undefined Step" && entry.range.start.line === 4 + offset),
+          references: (refs || []).map(entry => entry.uri.fsPath),
+          referenceLenses: (codeLenses || []).map(entry => entry.command?.title).filter(title => title?.includes("reference")),
+          renamesSpec: Boolean(edits?.replacements.some(entry => entry.uri.fsPath === SPEC_PATH)),
+          cached: store.documents().some(document => document.uri.fsPath === source.document.uri.fsPath),
+        }, {
+          indexed: Number(source.allowed),
+          definitions: source.allowed ? [source.document.uri.fsPath] : [],
+          undefinedStep: !source.allowed,
+          references: source.allowed ? [SPEC_PATH] : [],
+          referenceLenses: source.allowed ? ["1 reference(s)"] : [],
+          renamesSpec: source.allowed,
+          cached: source.allowed,
+        }, `${source.name}, open=${open}`);
+      }
+    }
+    assert.equal(requests[0][0], "exportWorkspace");
+    assert.equal(typeof requests[0][1], "string");
+    assert.deepEqual(requests[0][2], { format: "snapshot" });
+  } finally {
+    for (const value of [rename, lenses, references, definition, index, store, scope]) value.dispose();
+  }
+});
