@@ -31,6 +31,7 @@ const { executionKindForRoot, projectForRoot } = require("./projectKind");
 const { isMarkdownGaugeSpecFile } = require("../gaugeSpecScope");
 const { ProjectEnvironmentService } = require("../projectEnvironmentService");
 const { createLspRequestOwner } = require("./lspRequestOwner");
+const { waitForJavaBuild } = require("./javaBuild");
 const { LANGUAGE_CLIENT_UNAVAILABLE } = require("./scenarioProvider");
 
 const EXECUTION_STATUS_REQUEST = "gauge/executionStatus";
@@ -948,6 +949,12 @@ function createGaugeExecutionController(options = {}) {
       const cli = getCli();
       const executionTool = project ? commandFromProject(project, cli) : undefined;
       const usesBuildTool = Boolean(project && typeof project.executionEnvsAsync === "function");
+      if (usesBuildTool) {
+        await waitForJavaBuild(vscode, projectRoot, request);
+        if (request.cancelRequested) {
+          return undefined;
+        }
+      }
       const projectEnv = usesBuildTool
         ? await resolveBuildToolExecutionEnvironment(project, cli)
         : projectExecutionEnvironment(project, cli);
@@ -1184,6 +1191,7 @@ function createGaugeExecutionController(options = {}) {
       const request = {
         activeRunCancellationIssued: false,
         cancelRequested: false,
+        javaBuildCancellation: undefined,
         flags,
         metadata: flags[EXECUTION_METADATA],
         phase: "queued",
@@ -1556,6 +1564,11 @@ function createGaugeExecutionController(options = {}) {
       return undefined;
     }
     request.cancelRequested = true;
+    try {
+      request.javaBuildCancellation?.cancel();
+    } catch (_error) {
+      // Continue stopping the owned execution after cancellation source errors.
+    }
     notifyExecutionRequest(request, notification);
     if (request.phase === "preparing") {
       settleExecutionRequest(request, "resolve", undefined);

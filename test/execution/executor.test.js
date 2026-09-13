@@ -6563,3 +6563,185 @@ for (const selection of ["single", "batch", "specification"]) {
     assert.equal(extra.length, 12, "Launch argument array remains untouched");
   });
 }
+
+// Real Gauge 1.6.35 runs in VS Code 1.82.0 and 1.137.0 lose Kotlin
+// classes after redhat.java serverReady. Awaiting java.project.build before
+// Maven compilation restores source breakpoints and two passing scenarios.
+function javaBuildFixture({ mode = "Standard", autobuild = true, installed = true, root = "/workspace", activationError } = {}) {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { vscode } = createFakeVscode();
+  const calls = [];
+  const ready = deferred();
+  const build = deferred();
+  const configuration = vscode.workspace.getConfiguration;
+  vscode.workspace.getConfiguration = (section, uri) => section === "java"
+    ? { get(key) { assert.equal(key, "autobuild.enabled"); return autobuild; } }
+    : configuration(section, uri);
+  vscode.Uri = { file: fsPath => ({ fsPath }) };
+  vscode.extensions = { getExtension(id) {
+    assert.equal(id, "redhat.java");
+    return installed ? { async activate() {
+      calls.push("activate");
+      if (activationError) throw activationError;
+      return { serverMode: mode, serverReady() { calls.push("ready"); return ready.promise; } };
+    } } : undefined;
+  } };
+  const sources = installCancellationSources(vscode);
+  const executeCommand = vscode.commands.executeCommand;
+  vscode.commands.executeCommand = (command, ...args) => {
+    if (command !== "java.project.build") return executeCommand(command, ...args);
+    assert.equal(args[0].fsPath, root);
+    assert.equal(args[1], false);
+    assert.equal(args[2], sources.at(-1).token);
+    calls.push("java build");
+    return build.promise;
+  };
+  const controller = createGaugeExecutionController({
+    vscode, pathModule: path.posix, fileSystem: { existsSync: () => false },
+    projectFactory: { get: () => ({ executionEnvsAsync() {} }) },
+    projectEnvironmentService: { async executionEnvironmentFor() {
+      calls.push("compile"); return {};
+    } },
+    async runner() { calls.push("gauge"); return true; },
+  });
+  return { controller, calls, ready, build, sources };
+}
+
+for (const command of ["gauge.execute.specification.all", "gauge.execute.failed"]) {
+  test(`executor sequences Java build before preparation: ${command}`, async () => {
+    const fixture = javaBuildFixture();
+    const { controller, calls, ready, build, sources } = fixture;
+    const run = controller.handleCommand(command);
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(calls, ["activate", "ready"]);
+      ready.resolve(true);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(calls, ["activate", "ready", "java build"]);
+      build.resolve(1);
+      assert.equal(await run, true);
+      assert.deepEqual(calls, ["activate", "ready", "java build", "compile", "gauge"]);
+      assert.equal(sources[0].disposeCalls, 1);
+      assert.equal(sources[0].cancelCalls, 0);
+    } finally {
+      ready.resolve(true); build.resolve(1); controller.dispose(); await run;
+    }
+  });
+}
+
+for (const phase of ["ready", "java build"]) {
+  test(`executor stops during Java ${phase} without compiling afterward`, async () => {
+    const { controller, calls, ready, build, sources } = javaBuildFixture();
+    const run = controller.handleCommand("gauge.execute.specification.all");
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      if (phase === "java build") {
+        ready.resolve(true);
+        await new Promise(resolve => setImmediate(resolve));
+      }
+      assert.equal(calls.at(-1), phase);
+      await controller.stopExecution();
+      assert.equal(await run, undefined);
+      assert.equal(sources[0].cancelCalls, 1);
+      ready.resolve(true); build.resolve(1);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(calls.includes("compile"), false);
+      assert.equal(calls.includes("gauge"), false);
+      assert.equal(sources[0].disposeCalls, 1);
+    } finally {
+      ready.resolve(true); build.resolve(1); controller.dispose(); await run;
+    }
+  });
+}
+
+for (const settings of [{installed:false}, {autobuild:false}, {mode:"LightWeight"}]) {
+  test(`executor preserves preparation without Java auto-build: ${JSON.stringify(settings)}`, async () => {
+    const { controller, calls } = javaBuildFixture(settings);
+    try {
+      assert.equal(await controller.handleCommand("gauge.execute.specification.all"), true);
+      assert.deepEqual(calls, settings.mode ? ["activate", "compile", "gauge"] : ["compile", "gauge"]);
+    } finally { controller.dispose(); }
+  });
+}
+
+for (const phase of ["ready", "build"]) {
+  test(`executor rejects Java ${phase} failures before compilation`, async () => {
+    const { controller, calls, ready, build, sources } = javaBuildFixture();
+    const error = new Error("Java preparation failed");
+    const run = controller.handleCommand("gauge.execute.specification.all");
+    const rejected = assert.rejects(run, error);
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      if (phase === "ready") ready.reject(error);
+      else { ready.resolve(true); build.reject(error); }
+      await rejected;
+      assert.equal(calls.includes("compile"), false);
+      assert.equal(calls.includes("gauge"), false);
+      assert.equal(sources[0].disposeCalls, 1);
+    } finally { controller.dispose(); }
+  });
+}
+
+test("executor synchronizes Java on each run after a prior preparation", async () => {
+  const { controller, calls, ready, build } = javaBuildFixture();
+  ready.resolve(true); build.resolve(1);
+  try {
+    for (let index = 0; index < 2; index += 1) {
+      assert.equal(await controller.handleCommand("gauge.execute.specification.all"), true);
+    }
+    assert.deepEqual(calls, Array(2).fill(["activate", "ready", "java build", "compile", "gauge"]).flat());
+  } finally { controller.dispose(); }
+});
+
+test("executor preserves the Java build barrier when superseding a run", async () => {
+  const { controller, calls, ready, build, sources } = javaBuildFixture();
+  ready.resolve(true);
+  const first = controller.handleCommand("gauge.execute.specification.all");
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.at(-1), "java build");
+    const second = controller.handleCommand("gauge.execute.specification.all");
+    assert.equal(await first, undefined);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls, ["activate", "ready", "java build"]);
+    assert.equal(sources[0].cancelCalls, 1);
+    build.resolve(1);
+    assert.equal(await second, true);
+    assert.deepEqual(calls, ["activate", "ready", "java build", "activate", "ready", "java build", "compile", "gauge"]);
+  } finally { build.resolve(1); controller.dispose(); }
+});
+
+test("executor disposal cancels Java preparation and observes a late rejection", async () => {
+  const { controller, calls, ready, build, sources } = javaBuildFixture();
+  ready.resolve(true);
+  const run = controller.handleCommand("gauge.execute.specification.all");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.at(-1), "java build");
+  controller.dispose();
+  assert.equal(await run, undefined);
+  build.reject(new Error("Java build cancelled"));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.includes("compile"), false);
+  assert.equal(sources[0].cancelCalls, 1);
+  assert.equal(sources[0].disposeCalls, 1);
+});
+
+
+test("executor scopes Java preparation to an explicitly selected nested project", async () => {
+  const { controller, calls, ready, build } = javaBuildFixture({ root: "/workspace/nested" });
+  ready.resolve(true); build.resolve(1);
+  try {
+    assert.equal(await controller.handleCommand("gauge.execute.failed", { projectRoot: "/workspace/nested" }), true);
+    assert.deepEqual(calls, ["activate", "ready", "java build", "compile", "gauge"]);
+  } finally { controller.dispose(); }
+});
+
+test("executor surfaces Java activation failure without compiling", async () => {
+  const activationError = new Error("Java language support failed to activate");
+  const { controller, calls, sources } = javaBuildFixture({ activationError });
+  try {
+    await assert.rejects(controller.handleCommand("gauge.execute.specification.all"), activationError);
+    assert.deepEqual(calls, ["activate"]);
+    assert.equal(sources[0].disposeCalls, 1);
+  } finally { controller.dispose(); }
+});
