@@ -6537,3 +6537,29 @@ test("execute active project reads launch options through directory aliases", as
   await controller.handleCommand("gauge.specexplorer.runAllActiveProjectSpecs", { projectRoot: physical });
   assert.deepEqual(calls[0].args, ["run", "--hide-suggestion", "--simple-console", "--tags", "selected"]);
 });
+
+// Real Gauge 1.6.35 runs an explicit line alone, but reports no specs when a
+// conflicting --scenario/--tags (including -vtvalue) remains in its argv.
+for (const selection of ["single", "batch", "specification"]) {
+  test(`executor preserves explicit ${selection} selection over additional filters`, async () => {
+    const { createGaugeExecutionController } = require("../../src/execution/executor");
+    const extra = ["--scenario", "Other", "--scenario=Another", "--tags", "absent", "-t", "absent", "-tabsent", "-vtabsent", "--retry-only=retry", "--log-level", "debug"];
+    const calls = [];
+    const { vscode } = createFakeVscode({ launchConfigurations: [{ type: "gauge", request: "test", args: extra, tags: "typed", scenario: ["typed"], "retry-only": "typed" }] });
+    const controller = createGaugeExecutionController({ vscode, pathModule: path.posix,
+      fileSystem: { existsSync: () => false }, runner: async command => { calls.push(command); return true; },
+    });
+    const base = "/workspace/specs/example.spec";
+    const target = selection === "specification" ? base : base + ":3";
+    await controller.handleCommand("gauge.execute.specification", { file: target },
+      selection === "batch" ? [{ fsPath: target }, { fsPath: base + ":6" }] : undefined);
+    assert.equal(calls.length, 1);
+    if (selection === "specification") {
+      assert.deepEqual(calls[0].args.slice(-extra.length - 1, -1), extra);
+      assert.ok(calls[0].args.includes("typed"));
+    } else {
+      assert.deepEqual(calls[0].args, ["run", "--hide-suggestion", "--simple-console", "-v", "--log-level", "debug", target, ...(selection === "batch" ? [base + ":6"] : [])]);
+    }
+    assert.equal(extra.length, 12, "Launch argument array remains untouched");
+  });
+}

@@ -72,6 +72,63 @@ function additionalArgs(value) {
   return [];
 }
 
+// Gauge run flags use pflag's long values and shorthand clusters
+// (getgauge/gauge/cmd/run.go and cmd/cmd.go). Protect unrelated option values
+// even when their text looks like a selection filter.
+const selectionFilters = new Set(["scenario", "tags", "retry-only"]);
+const valueFlags = new Set([
+  "env", "group", "max-retries-count", "n", "random-seed", "strategy",
+  "table-rows", "dir", "log-level", "only",
+]);
+const shortValueFlags = new Set(["e", "g", "c", "n", "r", "d", "l", "o"]);
+const shortNoValueFlags = new Set(["f", "h", "i", "p", "v", "m", "s"]);
+
+function withoutScenarioFilters(option) {
+  const args = additionalArgs(option.args);
+  const kept = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === "--") {
+      kept.push(...args.slice(index));
+      break;
+    }
+    if (token.startsWith("--")) {
+      const name = token.slice(2).split("=", 1)[0];
+      const separateValue = !token.includes("=");
+      if (selectionFilters.has(name)) {
+        if (separateValue) index += 1;
+        continue;
+      }
+      kept.push(token);
+      if (valueFlags.has(name) && separateValue && index + 1 < args.length) {
+        kept.push(args[++index]);
+      }
+      continue;
+    }
+    let remaining = token;
+    if (token.startsWith("-") && token.length > 1) {
+      for (let offset = 1; offset < token.length; offset += 1) {
+        const name = token[offset];
+        if (name === "t") {
+          remaining = offset > 1 ? token.slice(0, offset) : null;
+          if (offset === token.length - 1) index += 1;
+          break;
+        }
+        if (shortValueFlags.has(name)) {
+          if (offset === token.length - 1 && index + 1 < args.length) {
+            kept.push(token, args[++index]);
+            remaining = null;
+          }
+          break;
+        }
+        if (!shortNoValueFlags.has(name) || token[offset + 1] === "=") break;
+      }
+    }
+    if (remaining !== null) kept.push(remaining);
+  }
+  return { ...option, tags: null, scenario: null, "retry-only": null, args: kept };
+}
+
 function processEnv(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -304,4 +361,5 @@ module.exports = {
   buildRunArgs,
   extractGaugeExecutionOption,
   extractGaugeRunOption,
+  withoutScenarioFilters,
 };

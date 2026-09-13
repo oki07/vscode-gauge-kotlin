@@ -630,3 +630,25 @@ test("extractGaugeRunOption returns empty object for null", () => {
 
   assert.deepEqual(extractGaugeRunOption(null), {});
 });
+
+// Gauge uses pflag value and shorthand boundaries (getgauge/gauge/cmd/run.go).
+test("explicit selection removes filters while preserving argument boundaries", () => {
+  const { withoutScenarioFilters } = require("../../src/execution/runArgs");
+  const cases = [
+    [["--scenario", "Other", "--tags=x", "--retry-only", "failed"], []],
+    [["-t", "x", "-tx", "-vt=x"], ["-v"]],
+    [["--env", "--tags", "-e", "-t", "-etags", "--sort", "-tabsent"], ["--env", "--tags", "-e", "-t", "-etags", "--sort"]],
+    [["--log-level=--tags", "-v=false", "--", "--tags", "x"], ["--log-level=--tags", "-v=false", "--", "--tags", "x"]],
+    [["--only", "--tags", "-o", "-t", "--scenario", "Other"], ["--only", "--tags", "-o", "-t"]],
+    [["", "--tags=x", "--", ""], ["", "--", ""]],
+    [["-svtx", "-pt", "x", "-zty"], ["-sv", "-p", "-zty"]],
+  ];
+  for (const [args, expected] of cases) {
+    const original = structuredClone(args);
+    const input = { args, tags: "x", scenario: ["x"], "retry-only": "x", env: "test" };
+    const actual = withoutScenarioFilters(input);
+    assert.deepEqual(actual, { args: expected, tags: null, scenario: null, "retry-only": null, env: "test" });
+    assert.deepEqual(args, original);
+    assert.equal(input.tags, "x");
+  }
+});

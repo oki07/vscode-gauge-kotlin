@@ -23,6 +23,7 @@ const {
   buildRunArgs,
   extractGaugeExecutionOption,
   extractGaugeRunOption,
+  withoutScenarioFilters,
 } = require("./runArgs");
 const { CLI } = require("../cli");
 const { createProjectFactory } = require("../project/projectFactory");
@@ -962,22 +963,17 @@ function createGaugeExecutionController(options = {}) {
       }
       const launchConfigurations = getLaunchConfigurations(vscode, projectRoot);
       const launchExecutionOption = extractGaugeExecutionOption(launchConfigurations);
-      const option = executionRunOptions(
+      let option = executionRunOptions(
         extractGaugeRunOption(launchConfigurations),
         flags,
       );
       if (launchExecutionOption.args) {
         option.args = launchExecutionOption.args;
       }
-      // A scenario target names an explicit line, so a tags, scenario or
-      // retry-only filter from the launch configuration must not narrow it
-      // further. The Test UI batches a multi-selection into an array, and
-      // leaving the filters on made Gauge discard the very scenarios the user
-      // picked.
+      // An explicit scenario selection takes precedence over launch filters,
+      // including raw argv filters that Gauge otherwise applies to line targets.
       if (namesScenarioLines(spec)) {
-        option.tags = null;
-        option.scenario = null;
-        option["retry-only"] = null;
+        option = withoutScenarioFilters(option);
       }
       const command = {
         command: executionTool ? executionTool.command : commandForProjectKind(projectKind, options),
