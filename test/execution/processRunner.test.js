@@ -838,3 +838,36 @@ test("process runner preserves an unterminated tail from a real child pipe", asy
   assert.deepEqual(processed, ["last message"]);
   assert.deepEqual(channel.lines.slice(1), ["last message", "Success: Tests passed."]);
 });
+
+for (const failure of ["descendant", "lookup", "parent"]) {
+  test(`process runner owns deferred Windows cancellation failure: ${failure}`, async () => {
+    const { createGaugeProcessRunner } = require("../../src/execution/processRunner");
+    const child = createChildProcess();
+    const killed = [];
+    let callback;
+    const error = Object.assign(new Error(`${failure} denied`), { code: "EPERM" });
+    const runner = createGaugeProcessRunner({
+      outputChannel: new FakeOutputChannel(), platform: "win32", spawn: () => child,
+      processTree(_pid, next) { callback = next; },
+      killProcess(pid) {
+        killed.push(pid);
+        if (pid === (failure === "parent" ? 2468 : failure === "descendant" ? 3001 : -1)) throw error;
+      },
+    });
+    const run = runner({ command: "gauge", args: ["run"], cwd: "/workspace" });
+    try {
+      let cancellation;
+      assert.doesNotThrow(() => { cancellation = run.cancel(); });
+      assert.equal(typeof cancellation?.then, "function");
+      const rejected = assert.rejects(cancellation, value => value === error);
+      assert.deepEqual(killed, [2468]);
+      assert.doesNotThrow(() => callback(failure === "lookup" ? error : null, [{ PID: 3001 }, { PID: 3002 }]));
+      await rejected;
+      assert.deepEqual(killed, failure === "lookup" ? [2468] : [2468, 3001, 3002]);
+      let settled = false;
+      run.then(() => { settled = true; });
+      await Promise.resolve();
+      assert.equal(settled, false, "Cancellation failure does not settle the live process");
+    } finally { child.emit("exit", null); await run; }
+  });
+}

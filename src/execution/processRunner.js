@@ -109,14 +109,31 @@ function terminateWindowsProcessTree(child, processTree, killProcess) {
     killPid(child.pid, killProcess);
     return;
   }
-  processTree(child.pid, (error, children) => {
-    if (!error && Array.isArray(children)) {
-      for (const processInfo of children) {
-        killPid(processInfo.PID || processInfo.pid, killProcess);
+  const descendants = new Promise((resolve, reject) => {
+    processTree(child.pid, (error, children) => {
+      let failure = error;
+      if (!error && Array.isArray(children)) {
+        for (const processInfo of children) {
+          try {
+            killPid(processInfo.PID || processInfo.pid, killProcess);
+          } catch (cause) {
+            failure ||= cause;
+          }
+        }
       }
-    }
+      if (failure) reject(failure);
+      else resolve();
+    });
   });
-  killPid(child.pid, killProcess);
+  let parentFailure;
+  try {
+    killPid(child.pid, killProcess);
+  } catch (error) {
+    parentFailure = error;
+  }
+  return descendants.then(() => {
+    if (parentFailure) throw parentFailure;
+  }, error => { throw parentFailure || error; });
 }
 
 function terminateNonWindowsProcessTree(child, killProcess) {
@@ -156,7 +173,7 @@ function createGaugeProcessRunner(options = {}) {
     let child;
     let aborted = false;
     let settle;
-    /** @type {Promise<boolean> & {cancel?: (userAborted?: boolean) => void}} */
+    /** @type {Promise<boolean> & {cancel?: (userAborted?: boolean) => void | Promise<void>}} */
     const run = new Promise((resolve) => {
       settle = resolve;
       const displayArgs = command.tool && typeof command.tool.argsForSpawnType === "function"
@@ -264,7 +281,7 @@ function createGaugeProcessRunner(options = {}) {
     run.cancel = function cancel(userAborted = true) {
       aborted = userAborted;
       if (child && !child.killed && platform === "win32") {
-        terminateWindowsProcessTree(child, processTree, killProcess);
+        return terminateWindowsProcessTree(child, processTree, killProcess);
       } else if (child && !child.killed) {
         terminateNonWindowsProcessTree(child, killProcess);
       } else if (settle) {

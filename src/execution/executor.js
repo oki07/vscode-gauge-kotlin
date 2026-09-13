@@ -822,7 +822,11 @@ function createGaugeExecutionController(options = {}) {
       return undefined;
     }
     request.activeRunCancellationIssued = true;
-    return activeRun.cancel(aborted);
+    const cancellation = activeRun.cancel(aborted);
+    if (cancellation && typeof cancellation.then === "function") {
+      return Promise.resolve(cancellation).catch(observeStopFailure);
+    }
+    return cancellation;
   }
 
   async function waitForPreparation(value) {

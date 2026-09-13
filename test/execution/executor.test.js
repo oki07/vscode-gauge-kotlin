@@ -6815,3 +6815,35 @@ test("executor surfaces Java activation failure without compiling", async () => 
     assert.equal(sources[0].disposeCalls, 1);
   } finally { controller.dispose(); }
 });
+
+test("executor owns deferred process cancellation failures", async () => {
+  const { createGaugeExecutionController } = require("../../src/execution/executor");
+  const { errors, vscode } = createFakeVscode();
+  const processExit = deferred();
+  const cancellation = deferred();
+  let calls = 0;
+  const controller = createGaugeExecutionController({
+    vscode, pathModule: path.posix, fileSystem: { existsSync: () => false },
+    runner() {
+      calls += 1;
+      if (calls > 1) return Promise.resolve(true);
+      processExit.promise.cancel = () => cancellation.promise;
+      return processExit.promise;
+    },
+  });
+  const execution = controller.handleCommand("gauge.execute.specification.all");
+  await new Promise(resolve => setImmediate(resolve));
+  try {
+    const stop = controller.handleCommand("gauge.stopExecution");
+    const observed = assert.doesNotReject(stop);
+    const queued = controller.handleCommand("gauge.execute.specification.all");
+    cancellation.reject(new Error("descendant denied"));
+    await observed;
+    assert.deepEqual(errors, ["Failed to Stop Run: descendant denied"]);
+    assert.equal(calls, 1, "Next execution waits for the existing process exit");
+    processExit.resolve(false);
+    await execution;
+    await queued;
+    assert.equal(calls, 2);
+  } finally { processExit.resolve(false); await execution; controller.dispose(); }
+});
