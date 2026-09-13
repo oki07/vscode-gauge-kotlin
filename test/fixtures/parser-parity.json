@@ -764,5 +764,50 @@
       "Data table should have at least 1 data row"
     ],
     "parserErrorLines": []
+  },
+  {
+    "label": "scenario heading duplicate",
+    "text": "# Specification\n\n## Same\n* first\n\n## Same\n* second\n",
+    "parserErrors": [
+      "Duplicate scenario definition 'Same' found in the same specification"
+    ],
+    "parserErrorLines": [
+      {
+        "message": "Duplicate scenario definition 'Same' found in the same specification",
+        "line": 6
+      }
+    ]
+  },
+  {
+    "label": "scenario heading distinct",
+    "text": "# Specification\n\n## First\n* first\n\n## Second\n* second\n",
+    "parserErrors": [],
+    "parserErrorLines": []
+  },
+  {
+    "label": "scenario heading case difference",
+    "text": "# Specification\n\n## Same\n* first\n\n## same\n* second\n",
+    "parserErrors": [
+      "Duplicate scenario definition 'Same' found in the same specification"
+    ],
+    "parserErrorLines": [
+      {
+        "message": "Duplicate scenario definition 'Same' found in the same specification",
+        "line": 6
+      }
+    ]
+  },
+  {
+    "label": "scenario heading trailing space",
+    "text": "# Specification\n\n## Same\n* first\n\n## Same  \n* second\n",
+    "parserErrors": [
+      "Duplicate scenario definition 'Same' found in the same specification"
+    ],
+    "parserErrorLines": [
+      {
+        "message": "Duplicate scenario definition 'Same' found in the same specification",
+        "line": 6
+      }
+    ]
   }
 ]
