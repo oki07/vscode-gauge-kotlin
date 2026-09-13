@@ -4041,3 +4041,45 @@ test("GaugeTestController keeps directory-alias suite failures under the selecte
   assert.equal(collectionItems(spec.children).filter((item) => item.label === "Before Suite").length, 1);
   assert.equal(controller.items.size, 1);
 });
+
+// getgauge/gauge-vscode/test/execution/execution.test.ts, executed in VS Code,
+// requires direct specification/scenario execution to return true on success
+// and false after Stop. TestRun reporting must preserve that command result.
+for (const command of ["gauge.execute", "gauge.debug", "gauge.execute.inParallel"]) {
+  for (const outcome of [true, false, undefined]) {
+    for (const metadata of [false, true]) {
+      test(`CodeLens preserves execution outcome ${command} ${outcome} metadata=${metadata}`, async () => {
+        const { GaugeTestController } = require("../src/testController");
+        const { calls, vscode } = createFakeVscode();
+        const response = deferred();
+        let dispatched = 0;
+        const execute = () => {
+          dispatched += 1;
+          gaugeTests.handleExecutionEvent({ type: "processStarted" });
+          return response.promise;
+        };
+        const gaugeTests = new GaugeTestController({
+          vscode,
+          executionController: metadata ? {
+            handleCommandWithMetadata(_command, lifecycle) {
+              lifecycle.onStart();
+              return execute();
+            },
+          } : { handleCommand: execute },
+        });
+        gaugeTests.register();
+        let settled = false;
+        const pending = gaugeTests.runCodeLensTarget(command, "/workspace/specs/example.spec:3")
+          .then(result => { settled = true; return result; });
+        await drainMicrotasks();
+        assert.equal(dispatched, 1);
+        assert.equal(settled, false);
+        response.resolve(outcome);
+        assert.equal(await pending, outcome);
+        assert.equal(calls.filter(entry => entry[0] === "end").length, 1);
+        assert.equal(gaugeTests.executionRunContexts.size, 0);
+        gaugeTests.dispose();
+      });
+    }
+  }
+}

@@ -1678,12 +1678,17 @@ class GaugeTestController {
               if (this.runContextCancelled(context, token)) {
                 break;
               }
-              await this.handleExecutionCommand(
+              const result = await this.handleExecutionCommand(
                 context,
                 "gauge.execute",
                 target,
                 flags,
               );
+              if (runnableTargets.length === 1) {
+                return result === CANCELLED_EXECUTION || result === DISPOSED_EXECUTION
+                  ? undefined
+                  : result;
+              }
             }
           }
         }
