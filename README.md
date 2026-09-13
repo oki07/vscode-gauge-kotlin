@@ -75,10 +75,11 @@ both are bundled with this extension; any Kotlin template you register with
   `gauge.execute.failed`, `gauge.execute.repeat`, `gauge.stopExecution`, and
   `gauge.report.html` to open the last HTML report.
 - Debugging attaches to the JVM the runner starts; the port is
-  `gauge.execution.debugPort`. A Kotlin or Java debug extension must be
-  installed for the attach to succeed. A Java adapter is preferred when both
-  types are available; a Kotlin adapter receives the project root and JVM
-  endpoint required for attach.
+  `gauge.execution.debugPort`. Install a Kotlin debug extension for Kotlin
+  source breakpoints. A Kotlin adapter is preferred when both Kotlin and Java
+  types are available and receives the project root and JVM endpoint required
+  for attach. A Java adapter alone can debug Java source; JVM attachment alone
+  does not establish support for Kotlin source breakpoints.
 - A Test Explorer selection of several specifications or scenarios runs in one
   Gauge process. A Kotlin project executes through the Gauge CLI with the
   classpath its build tool computed, and the CLI takes each target as its own
