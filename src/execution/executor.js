@@ -809,7 +809,7 @@ function createGaugeExecutionController(options = {}) {
     }
     activeDebuggerStopRequested = true;
     try {
-      ignoreRejection(activeDebugger.stopDebugger());
+      Promise.resolve(activeDebugger.stopDebugger()).catch(observeStopFailure);
       return undefined;
     } catch (error) {
       return error;

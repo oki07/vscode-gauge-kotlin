@@ -6900,3 +6900,58 @@ for (const order of ["old-first", "new-first", "old-reject"]) {
     }
   });
 }
+
+for (const phase of ["running", "finished", "disposed"]) {
+  test(`executor reports deferred debugger stop failure when ${phase}`, async () => {
+    const { createGaugeExecutionController } = require("../../src/execution/executor");
+    const { createGaugeDebugger } = require("../../src/execution/debug");
+    const { errors, vscode } = createFakeVscode();
+    const entered = deferred();
+    const processExit = deferred();
+    const shutdown = deferred();
+    const starts = [];
+    let debuggerSession;
+    let stoppedSession;
+    let cancellations = 0;
+    vscode.debug = {
+      onDidStartDebugSession(callback) { starts.push(callback); return { dispose() {} }; },
+      onDidTerminateDebugSession: () => ({ dispose() {} }),
+      async startDebugging(_folder, configuration) {
+        const session = { id: "owned", configuration, name: "Gauge Debugger" };
+        vscode.debug.activeDebugSession = session;
+        for (const callback of starts) callback(session);
+        return true;
+      },
+      stopDebugging(session) { stoppedSession = session.id; return shutdown.promise; },
+    };
+    const controller = createGaugeExecutionController({
+      vscode, pathModule: path.posix, fileSystem: { existsSync: () => false },
+      debuggerFactory(options) {
+        debuggerSession = createGaugeDebugger({ ...options, debugStartDelayMs: 0,
+          debugPortProvider: async () => 5005 });
+        return debuggerSession;
+      },
+      runner() {
+        entered.resolve();
+        processExit.promise.cancel = () => { cancellations += 1; };
+        return processExit.promise;
+      },
+    });
+    const execution = controller.handleCommand("gauge.specexplorer.debugNode", {
+      file: "/workspace/specs/example.spec", executionIdentifier: "/workspace/specs/example.spec:8",
+    }, { debug: true });
+    try {
+      await entered.promise;
+      assert.equal(await debuggerSession.startDebugger(), true);
+      await controller.handleCommand("gauge.stopExecution");
+      assert.equal(stoppedSession, "owned");
+      assert.equal(cancellations, 1);
+      if (phase === "finished") { processExit.resolve(false); await execution; }
+      if (phase === "disposed") controller.dispose();
+      shutdown.reject(new Error("Adapter refused disconnect"));
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(errors, phase === "disposed" ? [] : ["Failed to Stop Run: Adapter refused disconnect"]);
+      assert.equal(cancellations, 1);
+    } finally { shutdown.resolve(); processExit.resolve(false); await execution; controller.dispose(); }
+  });
+}
