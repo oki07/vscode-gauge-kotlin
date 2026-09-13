@@ -6847,3 +6847,56 @@ test("executor owns deferred process cancellation failures", async () => {
     assert.equal(calls, 2);
   } finally { processExit.resolve(false); await execution; controller.dispose(); }
 });
+
+for (const order of ["old-first", "new-first", "old-reject"]) {
+  test(`executor releases completed runs while status is pending: ${order}`, async () => {
+    const { createGaugeExecutionController } = require("../../src/execution/executor");
+    const { commandCalls, statusBarItems, vscode } = createFakeVscode();
+    const oldStatus = deferred();
+    const newStatus = deferred();
+    const secondExit = deferred();
+    let statusCalls = 0;
+    let runnerCalls = 0;
+    const status = passed => ({ sceExecuted: passed, scePassed: passed, sceFailed: 0, sceSkipped: 0,
+      specsExecuted: 1, specsPassed: 1, specsFailed: 0, specsSkipped: 0 });
+    const tick = () => new Promise(resolve => setImmediate(resolve));
+    const controller = createGaugeExecutionController({
+      vscode, pathModule: path.posix, fileSystem: { existsSync: () => false },
+      executionStatusProvider: () => ++statusCalls === 1 ? oldStatus.promise : newStatus.promise,
+      runner: () => ++runnerCalls === 1 ? Promise.resolve(true) : secondExit.promise,
+    });
+    let firstResult;
+    const first = controller.handleCommand("gauge.execute.specification.all");
+    first.then(value => { firstResult = value; });
+    let second;
+    try {
+      await tick();
+      assert.equal(statusCalls, 1);
+      assert.equal(firstResult, true, "Status retrieval does not hold the finished execution");
+      assert.deepEqual(commandCalls.at(-1), { command: "setContext", args: ["gauge:executing", false] });
+      second = controller.handleCommand("gauge.execute.specification.all");
+      await tick();
+      assert.equal(runnerCalls, 2);
+      if (order === "old-first") {
+        oldStatus.resolve(status(1));
+        await tick();
+        assert.equal(statusBarItems[1].showCalls, 0, "Old status stays hidden during a new execution");
+      }
+      secondExit.resolve(true);
+      await tick();
+      assert.equal(statusCalls, 2);
+      assert.equal(await second, true);
+      newStatus.resolve(status(2));
+      await tick();
+      assert.equal(statusBarItems[1].text, "$(check) 2  $(x) 0  $(issue-opened) 0");
+      if (order === "old-reject") oldStatus.reject(new Error("Old status unavailable"));
+      else oldStatus.resolve(status(1));
+      await tick();
+      assert.equal(statusBarItems[1].showCalls, 1);
+      assert.equal(statusBarItems[1].text, "$(check) 2  $(x) 0  $(issue-opened) 0");
+    } finally {
+      oldStatus.resolve(undefined); newStatus.resolve(undefined); secondExit.resolve(true);
+      await first; if (second) await second; controller.dispose();
+    }
+  });
+}

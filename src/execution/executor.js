@@ -529,12 +529,14 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
   stopExecution.tooltip = "Click to Stop Run";
   executionStatus.command = SHOW_REPORT_COMMAND;
   let disposed = false;
+  let executionGeneration = 0;
 
   return {
     beforeExecute(command, runningStatus) {
       if (disposed) {
         return;
       }
+      executionGeneration += 1;
       executionStatus.hide();
       if (command.env && command.env.DEBUGGING) {
         return;
@@ -554,13 +556,14 @@ function createExecutionStatusBar(vscode, executionStatusProvider) {
       if (typeof executionStatusProvider !== "function") {
         return undefined;
       }
+      const generation = executionGeneration;
       let status;
       try {
         status = await executionStatusProvider(projectRoot);
       } catch (_error) {
         return undefined;
       }
-      if (disposed || !status) {
+      if (disposed || generation !== executionGeneration || !status) {
         return undefined;
       }
       executionStatus.color = executionStatusColor(status);
@@ -1096,7 +1099,7 @@ function createGaugeExecutionController(options = {}) {
       disposeActiveDebuggerSessionSubscription();
       stopActiveDebugger();
       if (!disposed) {
-        await executionStatusBar.afterExecute(projectRoot, activeRunUserAborted);
+        ignoreRejection(executionStatusBar.afterExecute(projectRoot, activeRunUserAborted));
         await setExecutingContext(vscode, false);
       }
       activeExecutionProjectRoot = undefined;
